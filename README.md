@@ -1,4 +1,4 @@
-# ![Logo](pineapple-ai/app/theme/pineappleai/product_logo_64.png) PineappleAi
+# ![Logo](chrome/app/theme/chromium/product_logo.png)
 
 PineappleAi is an open-source browser project that aims to build a safer, faster,
 and more stable way for all users to experience the web.
