@@ -10,6 +10,7 @@
 #include "ash/components/arc/test/arc_util_test_support.h"
 #include "ash/components/arc/test/fake_app_instance.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/web_app_id_constants.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
@@ -44,7 +45,6 @@
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/ash/components/standalone_browser/feature_refs.h"
@@ -878,7 +878,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceAppWindowSystemWebAppBrowserTest,
   ash::SystemWebAppManager::GetForTest(browser()->profile())
       ->InstallSystemAppsForTesting();
 
-  const std::string app_id = web_app::kOsSettingsAppId;
+  const std::string app_id = ash::kOsSettingsAppId;
   web_app::LaunchWebAppBrowser(browser()->profile(), app_id);
 
   auto instances = app_service_proxy_->InstanceRegistry().GetInstances(app_id);

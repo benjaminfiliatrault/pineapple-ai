@@ -48,14 +48,12 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.metrics.TimingMetric;
 import org.chromium.build.BuildConfig;
 import org.chromium.build.annotations.CheckDiscard;
-import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.util.KeyNavigationUtil;
 import org.chromium.components.browser_ui.share.ShareHelper;
 import org.chromium.components.browser_ui.util.FirstDrawDetector;
 import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.ui.KeyboardVisibilityDelegate;
-import org.chromium.ui.base.WindowDelegate;
 import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.display.DisplayUtil;
 
@@ -100,19 +98,13 @@ public class UrlBar extends AutocompleteEditText {
     private UrlBarTextContextMenuDelegate mTextContextMenuDelegate;
     private Callback<Integer> mUrlDirectionListener;
 
-    /**
-     * The gesture detector is used to detect long presses. Long presses require special treatment
-     * because the URL bar has custom touch event handling. See: {@link #onTouchEvent}.
-     */
-    private final KeyboardHideHelper mKeyboardHideHelper;
-
     private final Rect mClipBounds = new Rect();
     @VisibleForTesting final Runnable mEnforceMaxTextHeight = this::enforceMaxTextHeight;
 
     private boolean mFocused;
     private boolean mFocusEventEmitted;
     private boolean mAllowFocus = true;
-    private boolean mTypingStartedEventSent;
+    private boolean mShouldSendTypingStartedEvent;
 
     private boolean mPendingScroll;
 
@@ -216,6 +208,7 @@ public class UrlBar extends AutocompleteEditText {
         setFocusable(false);
         setFocusableInTouchMode(false);
         setHorizontalFadingEdgeEnabled(true);
+        setVerticalScrollBarEnabled(false);
         // Disable elegant text height for now. We calculate font size at runtime, and try to
         // respect the user's need to increase the font size.
         // Enabling elegant text for UrlBar will likely produce smaller font when users ask for a
@@ -236,15 +229,6 @@ public class UrlBar extends AutocompleteEditText {
         int verticalPadding =
                 getResources().getDimensionPixelSize(R.dimen.url_bar_vertical_padding);
         setPaddingRelative(0, verticalPadding, 0, verticalPadding);
-
-        mKeyboardHideHelper =
-                new KeyboardHideHelper(
-                        this,
-                        () -> {
-                            if (mUrlBarDelegate != null && !BackPressManager.isEnabled()) {
-                                mUrlBarDelegate.backKeyPressed();
-                            }
-                        });
 
         setTextClassifier(TextClassifier.NO_OP);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -281,11 +265,6 @@ public class UrlBar extends AutocompleteEditText {
         mTypingStartedListener = Optional.empty();
     }
 
-    /** Initialize the delegate that allows interaction with the Window. */
-    public void setWindowDelegate(WindowDelegate windowDelegate) {
-        mKeyboardHideHelper.setWindowDelegate(windowDelegate);
-    }
-
     /** Set the delegate to be used for text context menu actions. */
     public void setTextContextMenuDelegate(UrlBarTextContextMenuDelegate delegate) {
         mTextContextMenuDelegate = delegate;
@@ -297,10 +276,6 @@ public class UrlBar extends AutocompleteEditText {
      */
     @Override
     public boolean onKeyPreIme(int keyCode, KeyEvent event) {
-        if (KeyEvent.KEYCODE_BACK == keyCode && event.getAction() == KeyEvent.ACTION_UP) {
-            mKeyboardHideHelper.monitorForKeyboardHidden();
-        }
-
         // NOTE: Do not pass ENTER key to listeners from here. This is because Enter key may also
         // come from a software keyboard.
         // - If we pass the event here, it will be emitted twice (once before IME and once after),
@@ -344,7 +319,6 @@ public class UrlBar extends AutocompleteEditText {
     @Override
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     public void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
-        mTypingStartedEventSent = false;
         mFocused = focused;
         if (!mFocused) mFocusEventEmitted = false;
         super.onFocusChanged(focused, direction, previouslyFocusedRect);
@@ -355,6 +329,8 @@ public class UrlBar extends AutocompleteEditText {
             mPendingScroll = false;
         }
         fixupTextDirection();
+
+        mShouldSendTypingStartedEvent = focused;
     }
 
     @Override
@@ -444,9 +420,9 @@ public class UrlBar extends AutocompleteEditText {
     protected void onTextChanged(CharSequence text, int start, int lengthBefore, int lengthAfter) {
         super.onTextChanged(text, start, lengthBefore, lengthAfter);
 
-        if (!mTypingStartedEventSent && mFocused && lengthAfter > 0) {
+        if (mShouldSendTypingStartedEvent && lengthAfter > 0) {
             mTypingStartedListener.ifPresent(Runnable::run);
-            mTypingStartedEventSent = true;
+            mShouldSendTypingStartedEvent = false;
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -1119,6 +1095,17 @@ public class UrlBar extends AutocompleteEditText {
                 spanLeft,
                 textLength - spanLeft,
                 Editable.SPAN_INCLUSIVE_EXCLUSIVE);
+    }
+
+    @Override
+    public void setTranslationY(float translationY) {
+        // Certain locale (e.g. Burmese) use particularly tall glyphs, which, combined with
+        // font_scale set to 2.0, render outside the Omnibox. We scale these fonts down (see
+        // enforceMaxTextHeight() call below). Despite the computation, Android's ElegantTextHeight
+        // feature imposes an extra margins around the text, forcing the already tall text to
+        // receive additional wide space on top and bottom, shifting the content upwards.
+        // We suppress Y translation here, as the Omnibox is not a vertically scrollable view, and
+        // our font height computation logic appears to produce correct glyph sizes.
     }
 
     @Override

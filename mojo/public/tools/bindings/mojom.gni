@@ -734,6 +734,15 @@ template("mojom") {
   if (defined(invoker.parser_deps)) {
     parser_deps += invoker.parser_deps
   }
+
+  config("${parser_target_name}_inputs") {
+    inputs = sources_list
+  }
+  group("${parser_target_name}_deps") {
+    public_configs = [ ":${parser_target_name}_inputs" ]
+    public_deps = parser_deps
+  }
+
   if (sources_list == []) {
     # Even without sources we generate a parser target to at least forward
     # other parser dependencies.
@@ -1356,6 +1365,9 @@ template("mojom") {
           "--export_header",
           "base/component_export.h",
         ]
+      }
+      if (defined(variant) && variant == "blink") {
+        export_defines += [ "BLINK_MOJO_IMPL=1" ]
       }
 
       generator_cpp_output_suffixes = []

@@ -42,12 +42,15 @@ ToSerializedAcceleratedImage(
   static_bitmap_image->EnsureSyncTokenVerified();
 
   auto image_info = static_bitmap_image->GetSkImageInfo();
+  auto shared_image = static_bitmap_image->GetSharedImage();
+  if (!shared_image) {
+    return nullptr;
+  }
 
   auto result =
       blink::mojom::blink::SerializedStaticBitmapImage::NewAcceleratedImage(
           blink::AcceleratedImageInfo{
-              static_bitmap_image->GetMailboxHolder(),
-              static_bitmap_image->GetUsage(), image_info,
+              shared_image->Export(), image_info,
               static_bitmap_image->IsOriginTopLeft(),
               static_bitmap_image->SupportsDisplayCompositing(),
               static_bitmap_image->IsOverlayCandidate(),
@@ -143,7 +146,8 @@ bool StructTraits<blink::mojom::blink::TransferableMessage::DataView,
       return false;
     }
   }
-  out->message->SetImageBitmapContentsArray(image_bitmap_contents_array);
+  out->message->SetImageBitmapContentsArray(
+      std::move(image_bitmap_contents_array));
   return true;
 }
 

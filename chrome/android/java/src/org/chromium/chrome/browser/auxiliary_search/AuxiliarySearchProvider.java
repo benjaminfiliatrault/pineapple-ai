@@ -4,12 +4,20 @@
 
 package org.chromium.chrome.browser.auxiliary_search;
 
+import android.content.Context;
+import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.os.PersistableBundle;
 import android.text.TextUtils;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.core.util.AtomicFile;
 
 import org.chromium.base.Callback;
+import org.chromium.base.TimeUtils;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchGroupProto.AuxiliarySearchBookmarkGroup;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchGroupProto.AuxiliarySearchEntry;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchGroupProto.AuxiliarySearchTabGroup;
@@ -18,28 +26,106 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
+import org.chromium.components.background_task_scheduler.BackgroundTaskScheduler;
+import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
+import org.chromium.components.background_task_scheduler.TaskIds;
+import org.chromium.components.background_task_scheduler.TaskInfo;
+import org.chromium.components.cached_flags.BooleanCachedFieldTrialParameter;
+import org.chromium.components.cached_flags.IntCachedFieldTrialParameter;
 import org.chromium.url.GURL;
 
+import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /** This class provides information for the auxiliary search. */
 public class AuxiliarySearchProvider {
-    private static final int kNumTabsToSend = 100;
+    /** The callback interface to get results from fetching a favicon. * */
+    public interface FaviconImageFetchedCallback {
+        /** This method will be called when the result favicon is ready. */
+        void onFaviconAvailable(Bitmap image, AuxiliarySearchEntry entry);
+    }
 
     /* Only donate the recent 7 days accessed tabs.*/
     @VisibleForTesting static final String TAB_AGE_HOURS_PARAM = "tabs_max_hours";
+    @VisibleForTesting static final String TASK_CREATED_TIME = "TaskCreatedTime";
+    @VisibleForTesting static final String TAB_DONATE_FILE_NAME = "tabs_donate";
     @VisibleForTesting static final int DEFAULT_TAB_AGE_HOURS = 168;
+    @VisibleForTesting static final int DEFAULT_FAVICON_NUMBER = 5;
+    @VisibleForTesting static final int DEFAULT_SCHEDULE_DELAY_TIME_MS = 0;
 
+    /** The current version of the saved Tab donate metadata file. */
+    private static final int SAVED_STATE_VERSION = 1;
+
+    /** Prevents two AuxiliarySearchProvider from saving the same file simultaneously. */
+    private static final Object SAVE_LIST_LOCK = new Object();
+
+    /**
+     * A comparator to sort Tabs with timestamp descending, i.e., the most recent tab comes first.
+     */
+    @VisibleForTesting
+    static Comparator<Tab> sComparator =
+            (tab1, tab2) -> {
+                long delta = tab1.getTimestampMillis() - tab2.getTimestampMillis();
+                return (int) -Math.signum((float) delta);
+            };
+
+    private static final String MAX_FAVICON_NUMBER_PARAM = "max_favicon_number";
+    public static final IntCachedFieldTrialParameter MAX_FAVICON_NUMBER =
+            ChromeFeatureList.newIntCachedFieldTrialParameter(
+                    ChromeFeatureList.ANDROID_APP_INTEGRATION_WITH_FAVICON,
+                    MAX_FAVICON_NUMBER_PARAM,
+                    DEFAULT_FAVICON_NUMBER);
+
+    private static final String USE_LARGE_FAVICON_PARAM = "use_large_favicon";
+    public static final BooleanCachedFieldTrialParameter USE_LARGE_FAVICON =
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.ANDROID_APP_INTEGRATION_WITH_FAVICON,
+                    USE_LARGE_FAVICON_PARAM,
+                    false);
+
+    private static final String SCHEDULE_DELAY_TIME_MS_PARAM = "schedule_delay_time_ms";
+    public static final IntCachedFieldTrialParameter SCHEDULE_DELAY_TIME_MS =
+            ChromeFeatureList.newIntCachedFieldTrialParameter(
+                    ChromeFeatureList.ANDROID_APP_INTEGRATION_WITH_FAVICON,
+                    SCHEDULE_DELAY_TIME_MS_PARAM,
+                    DEFAULT_SCHEDULE_DELAY_TIME_MS);
+
+    private final Context mContext;
+    private final Profile mProfile;
     private final AuxiliarySearchBridge mAuxiliarySearchBridge;
-    private final TabModelSelector mTabModelSelector;
+    private final @Nullable TabModelSelector mTabModelSelector;
+    private final @NonNull FaviconHelper mFaviconHelper;
+    private final int mDefaultFaviconSize;
+    private final boolean mIsFaviconEnabled;
+    private final int mMaxFaviconNumber;
     private Long mTabMaxAgeMillis;
 
-    public AuxiliarySearchProvider(Profile profile, TabModelSelector tabModelSelector) {
-        mAuxiliarySearchBridge = new AuxiliarySearchBridge(profile);
+    public AuxiliarySearchProvider(
+            @NonNull Context context,
+            @NonNull Profile profile,
+            @Nullable TabModelSelector tabModelSelector) {
+        mContext = context;
+        mProfile = profile;
+        mAuxiliarySearchBridge = new AuxiliarySearchBridge(mProfile);
         mTabModelSelector = tabModelSelector;
         mTabMaxAgeMillis = getTabsMaxAgeMs();
+        mFaviconHelper = new FaviconHelper();
+        Resources resources = mContext.getResources();
+        mDefaultFaviconSize =
+                USE_LARGE_FAVICON.getValue()
+                        ? resources.getDimensionPixelSize(R.dimen.auxiliary_search_favicon_size)
+                        : resources.getDimensionPixelSize(R.dimen.tab_grid_favicon_size);
+        mIsFaviconEnabled = ChromeFeatureList.sAndroidAppIntegrationWithFavicon.isEnabled();
+        mMaxFaviconNumber = MAX_FAVICON_NUMBER.getValue();
     }
 
     /**
@@ -50,32 +136,71 @@ public class AuxiliarySearchProvider {
     }
 
     /**
-     * @param callback {@link Callback} to pass back the AuxiliarySearchGroup for {@link Tab}s.
+     * @param callback {@link Callback} to pass back the AuxiliarySearchGroup for {@link Tab}s with
+     *     favicons.
+     * @param faviconImageFetchedCallback The callback to be called when the fetching of favicon is
+     *     complete.
      */
-    public void getTabsSearchableDataProtoAsync(Callback<AuxiliarySearchTabGroup> callback) {
+    public void getTabsSearchableDataProtoWithFaviconAsync(
+            @NonNull Callback<AuxiliarySearchTabGroup> callback,
+            @Nullable FaviconImageFetchedCallback faviconImageFetchedCallback) {
         long minAccessTime = System.currentTimeMillis() - mTabMaxAgeMillis;
         List<Tab> listTab = getTabsByMinimalAccessTime(minAccessTime);
 
         mAuxiliarySearchBridge.getNonSensitiveTabs(
                 listTab,
-                new Callback<List<Tab>>() {
-                    @Override
-                    public void onResult(List<Tab> tabs) {
-                        var tabGroupBuilder = AuxiliarySearchTabGroup.newBuilder();
-
-                        for (Tab tab : tabs) {
-                            AuxiliarySearchEntry entry = tabToAuxiliarySearchEntry(tab);
-                            if (entry != null) {
-                                tabGroupBuilder.addTab(entry);
-                            }
-                        }
-
-                        callback.onResult(tabGroupBuilder.build());
-                    }
+                tabs -> {
+                    onNonSensitiveTabsAvailable(
+                            mFaviconHelper, callback, faviconImageFetchedCallback, tabs);
                 });
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    @VisibleForTesting
+    void onNonSensitiveTabsAvailable(
+            @NonNull FaviconHelper faviconHelper,
+            @NonNull Callback<AuxiliarySearchTabGroup> callback,
+            @Nullable FaviconImageFetchedCallback faviconImageFetchedCallback,
+            @NonNull List<Tab> tabs) {
+        long startTimeMs = TimeUtils.uptimeMillis();
+        var tabGroupBuilder = AuxiliarySearchTabGroup.newBuilder();
+
+        int count = 0;
+        if (mIsFaviconEnabled) {
+            tabs.sort(sComparator);
+        }
+
+        for (Tab tab : tabs) {
+            AuxiliarySearchEntry entry = tabToAuxiliarySearchEntry(tab);
+            if (entry != null) {
+                tabGroupBuilder.addTab(entry);
+                if (!mIsFaviconEnabled || count >= mMaxFaviconNumber) continue;
+
+                count++;
+                faviconHelper.getLocalFaviconImageForURL(
+                        mProfile,
+                        tab.getUrl(),
+                        mDefaultFaviconSize,
+                        (image, url) -> {
+                            if (faviconImageFetchedCallback != null) {
+                                faviconImageFetchedCallback.onFaviconAvailable(image, entry);
+                            }
+                        });
+            }
+        }
+
+        // Allows to call the callback to start a donation immediately.
+        callback.onResult(tabGroupBuilder.build());
+
+        if (mIsFaviconEnabled && mMaxFaviconNumber < tabs.size()) {
+            saveTabMetadataToFile(getTabDonateFile(mContext), tabs, mMaxFaviconNumber);
+        }
+
+        if (mIsFaviconEnabled) {
+            scheduleBackgroundTask((long) SCHEDULE_DELAY_TIME_MS.getValue(), startTimeMs);
+        }
+    }
+
+    @VisibleForTesting
     static @Nullable AuxiliarySearchEntry tabToAuxiliarySearchEntry(@Nullable Tab tab) {
         if (tab == null) {
             return null;
@@ -83,15 +208,96 @@ public class AuxiliarySearchProvider {
 
         String title = tab.getTitle();
         GURL url = tab.getUrl();
-        if (TextUtils.isEmpty(title) || url == null || !url.isValid()) return null;
+        if (url == null || !url.isValid()) return null;
 
-        var tabBuilder = AuxiliarySearchEntry.newBuilder().setTitle(title).setUrl(url.getSpec());
-        final long lastAccessTime = tab.getTimestampMillis();
-        if (lastAccessTime != Tab.INVALID_TIMESTAMP) {
-            tabBuilder.setLastAccessTimestamp(lastAccessTime);
+        return createAuxiliarySearchEntry(
+                tab.getId(), title, url.getSpec(), tab.getTimestampMillis());
+    }
+
+    @VisibleForTesting
+    static @Nullable AuxiliarySearchEntry createAuxiliarySearchEntry(
+            int id, @NonNull String title, @NonNull String url, long timestamp) {
+        if (TextUtils.isEmpty(title) || url == null) return null;
+
+        var tabBuilder = AuxiliarySearchEntry.newBuilder().setTitle(title).setUrl(url).setId(id);
+        if (timestamp != Tab.INVALID_TIMESTAMP) {
+            tabBuilder.setLastAccessTimestamp(timestamp);
+        }
+        return tabBuilder.build();
+    }
+
+    /** Returns the file to save the metadata for donating tabs. */
+    static File getTabDonateFile(Context context) {
+        return new File(context.getFilesDir(), TAB_DONATE_FILE_NAME);
+    }
+
+    /**
+     * Saves the tabs' metadata to a file.
+     *
+     * @param metadataFile The file to write.
+     * @param tabs A list of tabs to save.
+     * @param startIndex The index of the first tabs to save.
+     */
+    void saveTabMetadataToFile(
+            @NonNull File metadataFile, @NonNull List<Tab> tabs, int startIndex) {
+        synchronized (SAVE_LIST_LOCK) {
+            AtomicFile file = new AtomicFile(metadataFile);
+            FileOutputStream output = null;
+            try {
+                output = file.startWrite();
+                int size = tabs.size();
+
+                DataOutputStream stream = new DataOutputStream(new BufferedOutputStream(output));
+                stream.writeInt(SAVED_STATE_VERSION);
+                stream.writeInt(size - mMaxFaviconNumber);
+
+                for (int i = startIndex; i < size; i++) {
+                    Tab tab = tabs.get(i);
+                    stream.writeInt(tab.getId());
+                    stream.writeUTF(tab.getTitle());
+                    stream.writeUTF(tab.getUrl().getSpec());
+                    stream.writeLong(tab.getTimestampMillis());
+                }
+
+                stream.flush();
+                file.finishWrite(output);
+            } catch (IOException e) {
+                if (output != null) file.failWrite(output);
+            }
+        }
+    }
+
+    /**
+     * Extracts the tab information from a given tab donation metadata stream.
+     *
+     * @param stream The stream pointing to the tab donation metadata file to be parsed.
+     */
+    @Nullable
+    static List<AuxiliarySearchEntry> readSavedMetadataFile(@Nullable DataInputStream stream)
+            throws IOException {
+        if (stream == null) return null;
+
+        final int version = stream.readInt();
+        assert version == SAVED_STATE_VERSION;
+
+        final int count = stream.readInt();
+        if (count < 0) {
+            return null;
         }
 
-        return tabBuilder.build();
+        List<AuxiliarySearchEntry> entryList = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            int id = stream.readInt();
+            String title = stream.readUTF();
+            String url = stream.readUTF();
+            long timeStamp = stream.readLong();
+            AuxiliarySearchEntry entry = createAuxiliarySearchEntry(id, title, url, timeStamp);
+            if (entry != null) {
+                entryList.add(entry);
+            }
+        }
+
+        return entryList;
     }
 
     /**
@@ -100,6 +306,7 @@ public class AuxiliarySearchProvider {
      * @return List of {@link Tab} which is accessed after 'minAccessTime'.
      */
     @VisibleForTesting
+    @NonNull
     List<Tab> getTabsByMinimalAccessTime(long minAccessTime) {
         TabList allTabs = mTabModelSelector.getModel(false).getComprehensiveModel();
         List<Tab> recentAccessedTabs = new ArrayList<>();
@@ -122,5 +329,34 @@ public class AuxiliarySearchProvider {
                         ChromeFeatureList.ANDROID_APP_INTEGRATION, TAB_AGE_HOURS_PARAM, 0);
         if (configuredTabMaxAgeHrs == 0) configuredTabMaxAgeHrs = DEFAULT_TAB_AGE_HOURS;
         return TimeUnit.HOURS.toMillis(configuredTabMaxAgeHrs);
+    }
+
+    /**
+     * Schedule a {@link AuxiliarySearchBackgroundTask} for donating more favicons.
+     *
+     * @param windowStartTimeMs The delay to schedule a background task.
+     * @param startTimeMs The start time when the task is created but not scheduled.
+     */
+    @VisibleForTesting
+    TaskInfo scheduleBackgroundTask(long windowStartTimeMs, long startTimeMs) {
+        if (!mIsFaviconEnabled) return null;
+
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putLong(TASK_CREATED_TIME, startTimeMs);
+
+        BackgroundTaskScheduler scheduler = BackgroundTaskSchedulerFactory.getScheduler();
+        TaskInfo.TimingInfo oneOffTimingInfo =
+                TaskInfo.OneOffInfo.create().setWindowStartTimeMs(windowStartTimeMs).build();
+
+        TaskInfo.Builder builder =
+                TaskInfo.createTask(TaskIds.AUXILIARY_SEARCH_DONATE_JOB_ID, oneOffTimingInfo);
+        builder.setUserInitiated(false)
+                .setUpdateCurrent(true)
+                .setIsPersisted(true)
+                .setExtras(bundle);
+
+        TaskInfo taskInfo = builder.build();
+        scheduler.schedule(mContext, taskInfo);
+        return taskInfo;
     }
 }

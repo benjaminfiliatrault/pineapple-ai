@@ -9,6 +9,7 @@ import logging
 from typing import Dict
 
 from bad_machine_finder import bigquery
+from bad_machine_finder import buganizer
 from bad_machine_finder import detection
 from bad_machine_finder import swarming
 from bad_machine_finder import tasks
@@ -33,11 +34,11 @@ MIXIN_GROUPS = {
         'gpu_samsung_s23_stable',
         'gpu_samsung_s24_stable',
         'linux_amd_rx_5500_xt',
-        'linux_nvidia_gtx_1660_experimental',
-        'linux_nvidia_gtx_1660_stable',
         'linux_intel_uhd_630_experimental',
         'linux_intel_uhd_630_stable',
         'linux_intel_uhd_770_stable',
+        'linux_nvidia_gtx_1660_experimental',
+        'linux_nvidia_gtx_1660_stable',
         'mac_arm64_apple_m1_gpu_experimental',
         'mac_arm64_apple_m1_gpu_stable',
         'mac_arm64_apple_m2_retina_gpu_experimental',
@@ -88,6 +89,18 @@ def ParseArgs() -> argparse.Namespace:
                       help=('The minimum number of detection methods that need '
                             'to flag a machine as bad in order for it to be '
                             'reported.'))
+  # Does not work locally due to auth issues reported in crbug.com/361488152.
+  parser.add_argument('--bug-id',
+                      type=int,
+                      default=0,
+                      help=('A Buganizer bug ID. If specified, the bug will be '
+                            'updated with the script results. DOES NOT '
+                            'CURRENTLY WORK LOCALLY.'))
+  parser.add_argument('--report-grace-period',
+                      type=int,
+                      default=7,
+                      help=('The number of days to wait before reporting the '
+                            'same bot to the bug again'))
 
   detection_modifiers = parser.add_argument_group(
       title='Detection Method Modifiers',
@@ -138,6 +151,10 @@ def _VerifyArgs(parser: argparse.ArgumentParser,
     parser.error('--sample-period must be greater than 0')
   if args.minimum_detection_method_count <= 0:
     parser.error('--minimum-detection-method-count must be greater than 0')
+  if args.bug_id < 0:
+    parser.error('--bug-id must be non-negative')
+  if args.report_grace_period < 0:
+    parser.error('--report-grace-period must be non-negative')
 
 
 def _SetLoggingVerbosity(args: argparse.Namespace) -> None:
@@ -190,24 +207,25 @@ def main() -> None:
   task_stats = swarming.GetTaskStatsForMixins(querier, dimensions_by_mixin,
                                               args.sample_period)
 
+  mixin_grouped_bad_machines = detection.MixinGroupedBadMachines()
+
   for mixin_name, mixin_stats in task_stats.items():
     bad_machine_list = _AnalyzeMixin(mixin_stats, mixin_name, args)
+    bad_machine_list.RemoveLowConfidenceMachines(
+        args.minimum_detection_method_count)
     if not bad_machine_list.bad_machines:
       continue
+    mixin_grouped_bad_machines.AddMixinData(mixin_name, bad_machine_list)
 
-    print(f'\nBad machines for {mixin_name}')
-    bot_ids = sorted(list(bad_machine_list.bad_machines.keys()))
-    for b in bot_ids:
-      reasons = bad_machine_list.bad_machines[b]
-      if len(reasons) < args.minimum_detection_method_count:
-        logging.debug(
-            'Bot %s skipped because it was only flagged by %d detection '
-            'method(s)', b, len(reasons))
-        continue
+  markdown = mixin_grouped_bad_machines.GenerateMarkdown()
+  if not markdown:
+    print('No bad machines detected')
+  else:
+    print(markdown)
 
-      print(f'  {b}')
-      for r in reasons:
-        print(f'    * {r}')
+  if args.bug_id:
+    buganizer.UpdateBug(args.bug_id, mixin_grouped_bad_machines,
+                        args.report_grace_period)
 
 
 if __name__ == '__main__':

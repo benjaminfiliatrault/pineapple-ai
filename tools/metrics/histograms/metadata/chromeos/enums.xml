@@ -188,6 +188,7 @@ chromium-metrics-reviews@google.com.
   <int value="134" label="TilingWindowResizeUp"/>
   <int value="135" label="TilingWindowResizeDown"/>
   <int value="136" label="ToggleMouseKeys"/>
+  <int value="137" label="ResizePipWindow"/>
   <int value="9000" label="DebugClearUseKMeansPref"/>
   <int value="9001" label="DebugKeyboardBacklightToggle"/>
   <int value="9002" label="DebugMicrophoneMuteToggle"/>
@@ -1417,6 +1418,7 @@ chromeos/ash/components/language/language_packs/language_pack_manager.h -->
 <enum name="MahiFeature">
   <int value="0" label="Summary"/>
   <int value="1" label="QA"/>
+  <int value="2" label="Elucidation"/>
 </enum>
 
 <enum name="MahiMenuButton">
@@ -1949,13 +1951,6 @@ https://chromium.googlesource.com/chromiumos/platform2/+/main/secagentd/proto/se
   <int value="5" label="NetworkBandwidth"/>
   <int value="6" label="CameraFrameAnalysis"/>
   <int value="7" label="KeyboardBacklight"/>
-</enum>
-
-<enum name="UmaInitParamsResult">
-  <int value="0" label="Client ID and entropy sources were found"/>
-  <int value="1" label="Only the client ID was found"/>
-  <int value="2" label="Only entropy sources were found"/>
-  <int value="3" label="Neither the client ID nor entropy sources were found"/>
 </enum>
 
 <enum name="WebApkInstallResultChromeOS">

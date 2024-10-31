@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_sync_util.h"
 
 #import "base/test/scoped_feature_list.h"
-#import "components/saved_tab_groups/mock_tab_group_sync_service.h"
+#import "components/saved_tab_groups/test_support/mock_tab_group_sync_service.h"
 #import "components/tab_groups/tab_group_id.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_local_update_observer.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
@@ -495,6 +495,78 @@ TEST_F(TabGroupSyncUtilTest, IsSaveableNavigation) {
   EXPECT_TRUE(IsSaveableNavigation(&navigation));
   profile->SetOffTheRecord(true);
   EXPECT_FALSE(IsSaveableNavigation(&navigation));
+}
+
+// Tests the `IsTabGroupShared` method with a shared group.
+TEST_F(TabGroupSyncUtilTest, IsTabGroupSharedWithShared) {
+  TabGroupId tab_group_id = TabGroupId::GenerateNew();
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  const TabGroup* local_group =
+      web_state_list->CreateGroup({0}, {}, tab_group_id);
+
+  SavedTabGroup saved_group(u"title", tab_groups::TabGroupColorId::kGrey,
+                            /*urls=*/{}, /*position=*/std::nullopt);
+  saved_group.SetCollaborationId("collaboration");
+
+  EXPECT_CALL(*mock_service_, GetGroup(tab_group_id))
+      .WillOnce(testing::Return(saved_group));
+
+  EXPECT_TRUE(IsTabGroupShared(local_group, mock_service_));
+  EXPECT_FALSE(IsTabGroupShared(local_group, nullptr));
+}
+
+// Tests the `IsTabGroupShared` method with a non shared group.
+TEST_F(TabGroupSyncUtilTest, IsTabGroupSharedWithNonShared) {
+  TabGroupId tab_group_id = TabGroupId::GenerateNew();
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  const TabGroup* local_group =
+      web_state_list->CreateGroup({0}, {}, tab_group_id);
+
+  SavedTabGroup saved_group(u"title", tab_groups::TabGroupColorId::kGrey,
+                            /*urls=*/{}, /*position=*/std::nullopt);
+
+  EXPECT_CALL(*mock_service_, GetGroup(tab_group_id))
+      .WillOnce(testing::Return(saved_group));
+
+  EXPECT_FALSE(IsTabGroupShared(local_group, mock_service_));
+  EXPECT_FALSE(IsTabGroupShared(local_group, nullptr));
+}
+
+// Tests the `GetTabGroupCollabID` method with a shared group.
+TEST_F(TabGroupSyncUtilTest, GetTabGroupCollabIDwithShared) {
+  TabGroupId tab_group_id = TabGroupId::GenerateNew();
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  const TabGroup* local_group =
+      web_state_list->CreateGroup({0}, {}, tab_group_id);
+
+  SavedTabGroup saved_group(u"title", tab_groups::TabGroupColorId::kGrey,
+                            /*urls=*/{}, /*position=*/std::nullopt);
+  saved_group.SetCollaborationId("collaboration");
+
+  EXPECT_CALL(*mock_service_, GetGroup(tab_group_id))
+      .WillOnce(testing::Return(saved_group));
+
+  EXPECT_NSEQ(GetTabGroupCollabID(local_group, mock_service_),
+              @"collaboration");
+  EXPECT_NSEQ(GetTabGroupCollabID(local_group, nullptr), nil);
+}
+
+// Tests the `GetTabGroupCollabID` method with a non shared group.
+TEST_F(TabGroupSyncUtilTest, GetTabGroupCollabIDwithNonShared) {
+  TabGroupId tab_group_id = TabGroupId::GenerateNew();
+  WebStateList* web_state_list = browser_->GetWebStateList();
+  const TabGroup* local_group =
+      web_state_list->CreateGroup({0}, {}, tab_group_id);
+
+  SavedTabGroup saved_group(u"title", tab_groups::TabGroupColorId::kGrey,
+                            /*urls=*/{}, /*position=*/std::nullopt);
+
+  EXPECT_CALL(*mock_service_, GetGroup(tab_group_id))
+      .WillOnce(testing::Return(saved_group));
+
+  EXPECT_NSNE(GetTabGroupCollabID(local_group, mock_service_),
+              @"collaboration");
+  EXPECT_NSEQ(GetTabGroupCollabID(local_group, nullptr), nil);
 }
 
 }  // namespace utils

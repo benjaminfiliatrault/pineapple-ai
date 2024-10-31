@@ -7,33 +7,33 @@
 
 #import <UIKit/UIKit.h>
 
-#include <string_view>
+#import <string_view>
 
 #import "base/memory/raw_ptr.h"
 #import "base/observer_list.h"
 #import "base/scoped_observation.h"
 #import "components/keyed_service/core/keyed_service.h"
 #import "components/prefs/pref_change_registrar.h"
+#import "ios/chrome/browser/signin/model/account_profile_mapper.h"
 #import "ios/chrome/browser/signin/model/constants.h"
 #import "ios/chrome/browser/signin/model/pattern_account_restriction.h"
 #import "ios/chrome/browser/signin/model/system_identity.h"
-#import "ios/chrome/browser/signin/model/system_identity_manager.h"
-#import "ios/chrome/browser/signin/model/system_identity_manager_observer.h"
 
 class PrefService;
 @protocol RefreshAccessTokenError;
 @class ResizedAvatarCache;
 
-// Service that provides Chrome identities.
+// Service that provides SystemIdentities for use within a Chrome profile. In
+// particular, it only passes on accounts that AccountProfileMapper has assigned
+// to this profile, and it additionally filters out identities according to the
+// RestrictAccountsToPatterns policy.
 class ChromeAccountManagerService : public KeyedService,
-                                    public SystemIdentityManagerObserver
-
-{
+                                    public AccountProfileMapper::Observer {
  public:
   // Observer handling events related to the ChromeAccountManagerService.
   class Observer : public base::CheckedObserver {
    public:
-    Observer() {}
+    Observer() = default;
     Observer(const Observer&) = delete;
     Observer& operator=(const Observer&) = delete;
     ~Observer() override {}
@@ -59,9 +59,10 @@ class ChromeAccountManagerService : public KeyedService,
         ChromeAccountManagerService* chrome_account_manager_service) {}
   };
 
-  // Initializes the service.
-  // Filter identities according to the profile.
-  explicit ChromeAccountManagerService(PrefService* pref_service);
+  // Initializes the service, getting identities corresponding to `profile_name`
+  // from the AccountProfileMapper.
+  ChromeAccountManagerService(PrefService* local_state,
+                              std::string_view profile_name);
   ChromeAccountManagerService(const ChromeAccountManagerService&) = delete;
   ChromeAccountManagerService& operator=(const ChromeAccountManagerService&) =
       delete;
@@ -70,14 +71,11 @@ class ChromeAccountManagerService : public KeyedService,
   // Returns true if there is at least one identity known by the service.
   bool HasIdentities() const;
 
-  // Returns true if there is at least one restricted identity known by the
-  // service.
-  bool HasRestrictedIdentities() const;
-
   // Returns whether `identity` is valid and known by the service.
   bool IsValidIdentity(id<SystemIdentity> identity) const;
 
-  // Returns whether `email` is restricted.
+  // Returns whether `email` is restricted according to the
+  // RestrictAccountsToPatterns policy.
   bool IsEmailRestricted(std::string_view email) const;
 
   // Returns the SystemIdentity with gaia ID equals to `gaia_id` or nil if
@@ -87,7 +85,7 @@ class ChromeAccountManagerService : public KeyedService,
   id<SystemIdentity> GetIdentityWithGaiaID(std::string_view gaia_id) const;
 
   // Returns all SystemIdentity objects, sorted by the ordering used in the
-  // account manager, which is typically based on the keychain ordering of
+  // SystemIdentityManager, which is typically based on the keychain ordering of
   // accounts.
   NSArray<id<SystemIdentity>>* GetAllIdentities() const;
 
@@ -100,7 +98,7 @@ class ChromeAccountManagerService : public KeyedService,
   UIImage* GetIdentityAvatarWithIdentity(id<SystemIdentity> identity,
                                          IdentityAvatarSize size);
 
-  // Returns true if the service can be used.
+  // Returns whether signin is supported.
   bool IsServiceSupported() const;
 
   // KeyedService implementation.
@@ -118,16 +116,16 @@ class ChromeAccountManagerService : public KeyedService,
       id<RefreshAccessTokenError> error) override;
 
  private:
-  // Updates PatternAccountRestriction with the current pref_service_. If
-  // pref_service_ is null, no identity will be filtered.
+  // Updates PatternAccountRestriction with the current `local_state_`. If
+  // `local_state_` is null, no identity will be filtered.
   void UpdateRestriction();
 
   // Returns a ResizedAvatarCache based on `avatar_size`.
   ResizedAvatarCache* GetAvatarCacheForIdentityAvatarSize(
       IdentityAvatarSize avatar_size);
 
-  // Used to retrieve restricted patterns.
-  raw_ptr<PrefService> pref_service_ = nullptr;
+  // The local-state pref service, used to retrieve restricted patterns.
+  raw_ptr<PrefService> local_state_ = nullptr;
   // Used to filter ChromeIdentities.
   PatternAccountRestriction restriction_;
   // Used to listen pref change.
@@ -143,6 +141,8 @@ class ChromeAccountManagerService : public KeyedService,
   ResizedAvatarCache* regular_avatar_cache_;
   // ResizedAvatarCache for IdentityAvatarSize::Large.
   ResizedAvatarCache* large_avatar_cache_;
+
+  const std::string profile_name_;
 };
 
 #endif  // IOS_CHROME_BROWSER_SIGNIN_MODEL_CHROME_ACCOUNT_MANAGER_SERVICE_H_

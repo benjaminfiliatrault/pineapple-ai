@@ -1,6 +1,5 @@
 <style include="searchbox-shared-style">
   :host {
-    --cr-searchbox-height: 48px;
     --cr-searchbox-shadow: 0 1px 6px 0 var(--color-searchbox-shadow);
     --cr-searchbox-min-width: 250px;
   }
@@ -72,6 +71,7 @@
     inset-inline-end: 24px;
   }
 
+  :host(:not([is-translate-button-enabled])) #translateButtonContainer,
   :host([is-searchbox-focused]) #translateButtonContainer {
     display: none;
   }
@@ -211,6 +211,10 @@
 
   #searchboxContainer {
     --color-searchbox-results-background: #ffffffff;
+    --color-searchbox-google-g-background: var(--color-primary);
+    --cr-searchbox-height: 48px;
+    --cr-searchbox-icon-left-position: 12px;
+    --cr-searchbox-icon-top-position: 0px;
     position: absolute;
     inset-block-start: 36px;
     inset-inline-end: 140px;
@@ -224,8 +228,20 @@
     display: none;
   }
 
-  :host([dark-mode]) #searchboxContainer {
-    --color-searchbox-results-background: #3c3c3cff;
+  cr-searchbox-ghost-loader {
+    display: none;
+    position: absolute;
+    inset-inline-start: 0;
+    inset-inline-end: 0;
+    top: 0;
+  }
+
+  /**
+   * Show the ghost loader when the searchbox is focused and the searchbox
+   * dropdown isn't showing (no results available).
+   */
+  :host([is-searchbox-focused]) #searchboxContainer:has(cr-searchbox:not([dropdown-is-visible])) cr-searchbox-ghost-loader {
+    display: block;
   }
 </style>
 <div class="app-container"
@@ -261,22 +277,24 @@
       on-pointerleave="handlePointerLeaveBackgroundScrim"></div>
   <lens-selection-overlay id="selectionOverlay" theme="[[theme]]"
       is-searchbox-focused="[[isSearchboxFocused]]"
+      are-language-pickers-open="[[areLanguagePickersOpen]]"
       on-pointerenter="handlePointerEnterSelectionOverlay"
       on-pointerleave="handlePointerLeaveSelectionOverlay">
   </lens-selection-overlay>
   <initial-gradient id="initialGradient"></initial-gradient>
-  <template is="dom-if" if="[[isLensOverlayContextualSearchboxEnabled]]">
+  <template is="dom-if" if="[[isLensOverlayContextualSearchboxVisible]]">
     <div id="searchboxContainer">
       <cr-searchbox id="searchbox" on-focus="handleSearchboxFocused"
           on-blur="handleSearchboxBlurred">
       </cr-searchbox>
+      <cr-searchbox-ghost-loader></cr-searchbox-ghost-loader>
     </div>
   </template>
-  <template is="dom-if" if="[[isTranslateButtonEnabled]]">
-    <div id="translateButtonContainer" class="button-container">
-      <translate-button></translate-button>
-    </div>
-  </template>
+  <div id="translateButtonContainer" class="button-container">
+    <translate-button id="translateButton"
+      is-lens-overlay-contextual-searchbox-enabled="[[isLensOverlayContextualSearchboxEnabled]]">
+    </translate-button>
+  </div>
   <div id="optionsButtonContainer" class="button-container">
     <div id="moreOptions">
       <cr-icon-button iron-icon="cr:more-vert" id="moreOptionsButton"

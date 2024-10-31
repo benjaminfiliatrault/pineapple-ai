@@ -10,10 +10,13 @@
 #include "content/public/browser/navigation_throttle.h"
 #include "ui/base/window_open_disposition.h"
 
+class Profile;
+
 namespace web_app {
 
-// Navigation throttle used to handle navigation capturing at the end of a
-// redirect chain.
+// This handler is executed after a redirection chain, and attempts to 'correct'
+// PWA navigation capturing behavior to ensure that the final state resembles
+// as if the final url was the initial url considered.
 class NavigationCapturingRedirectionThrottle
     : public content::NavigationThrottle {
  public:
@@ -39,7 +42,7 @@ class NavigationCapturingRedirectionThrottle
   explicit NavigationCapturingRedirectionThrottle(
       content::NavigationHandle* navigation_handle);
 
-  ThrottleCheckResult HandleRequest();
+  raw_ref<Profile> profile_;
 };
 
 }  // namespace web_app

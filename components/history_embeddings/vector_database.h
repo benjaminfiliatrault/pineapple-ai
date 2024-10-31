@@ -6,6 +6,7 @@
 #define COMPONENTS_HISTORY_EMBEDDINGS_VECTOR_DATABASE_H_
 
 #include <optional>
+#include <unordered_set>
 #include <vector>
 
 #include "base/time/time.h"
@@ -60,6 +61,16 @@ struct SearchParams {
 
   // Used as a term in final score boost divide to normalize for long queries.
   size_t word_match_smoothing_factor = 1;
+
+  // Maximum number of terms a query may have. When term count exceeds this
+  // limit, no text search for the terms occurs.
+  size_t word_match_max_term_count = 3;
+
+  // Makes the total word match boost zero when the ratio of terms matched to
+  // total query terms is less than this required value. A term is considered
+  // matched if there's at least one instance found in all passages.
+  // Stop words are not considered query terms and are not counted.
+  float word_match_required_term_ratio = 1.0f;
 };
 
 struct SearchInfo {
@@ -248,6 +259,12 @@ class VectorDatabaseInMemory : public VectorDatabase {
  private:
   std::vector<UrlPassagesEmbeddings> data_;
 };
+
+// Utility method to split a query into separate query terms for search.
+std::vector<std::string> SplitQueryToTerms(
+    const std::unordered_set<uint32_t>& stop_words_hashes,
+    std::string_view raw_query,
+    size_t min_term_length);
 
 }  // namespace history_embeddings
 

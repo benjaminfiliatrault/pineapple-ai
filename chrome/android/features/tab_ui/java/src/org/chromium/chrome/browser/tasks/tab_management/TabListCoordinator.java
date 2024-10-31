@@ -32,6 +32,7 @@ import androidx.recyclerview.widget.RecyclerView.OnItemTouchListener;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
+import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
@@ -44,8 +45,8 @@ import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tab_ui.RecyclerViewPosition;
 import org.chromium.chrome.browser.tab_ui.TabListFaviconProvider;
 import org.chromium.chrome.browser.tab_ui.ThumbnailProvider;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.ModelType;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.TabActionState;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.UiType;
@@ -67,6 +68,17 @@ import java.util.List;
 public class TabListCoordinator
         implements PriceMessageService.PriceWelcomeMessageProvider, DestroyObserver {
     private static final String TAG = "TabListCoordinator";
+
+    /** Observer interface for the size of tab list items. */
+    public interface TabListItemSizeChangedObserver {
+        /**
+         * Called when the size of the tab list items changes.
+         *
+         * @param spanCount The number of items which span one row.
+         * @param cardSize The size of the tab list item.
+         */
+        void onSizeChanged(int spanCount, @NonNull Size cardSize);
+    }
 
     /**
      * Modes of showing the list of tabs.
@@ -90,14 +102,16 @@ public class TabListCoordinator
     static final int MAX_SCREEN_WIDTH_MEDIUM_DP = 800;
     static final float PERCENTAGE_AREA_OVERLAP_MERGE_THRESHOLD = 0.5f;
 
+    private final ObserverList<TabListItemSizeChangedObserver> mTabListItemSizeChangedObserverList =
+            new ObserverList<>();
     private final TabListMediator mMediator;
     private final TabListRecyclerView mRecyclerView;
     private final SimpleRecyclerViewAdapter mAdapter;
     private final @TabListMode int mMode;
     private final Context mContext;
     private final BrowserControlsStateProvider mBrowserControlsStateProvider;
-    private final ObservableSupplier<TabModelFilter> mCurrentTabModelFilterSupplier;
-    private final TabListModel mModel;
+    private final ObservableSupplier<TabGroupModelFilter> mCurrentTabGroupModelFilterSupplier;
+    private final TabListModel mModelList;
     private final boolean mHasEmptyView;
     private final @DrawableRes int mEmptyStateImageResId;
     private final @StringRes int mEmptyStateHeadingResId;
@@ -124,7 +138,7 @@ public class TabListCoordinator
      * @param browserControlsStateProvider The {@link BrowserControlsStateProvider} for top
      *     controls.
      * @param modalDialogManager Used for managing the modal dialogs.
-     * @param tabModelFilterSupplier The supplier for the current tab model filter.
+     * @param tabGroupModelFilterSupplier The supplier for the current tab model filter.
      * @param thumbnailProvider Provider to provide screenshot related details.
      * @param actionOnRelatedTabs Whether tab-related actions should be operated on all related
      *     tabs.
@@ -156,7 +170,7 @@ public class TabListCoordinator
             Context context,
             @NonNull BrowserControlsStateProvider browserControlsStateProvider,
             @NonNull ModalDialogManager modalDialogManager,
-            @NonNull ObservableSupplier<TabModelFilter> tabModelFilterSupplier,
+            @NonNull ObservableSupplier<TabGroupModelFilter> tabGroupModelFilterSupplier,
             @Nullable ThumbnailProvider thumbnailProvider,
             boolean actionOnRelatedTabs,
             @Nullable ActionConfirmationManager actionConfirmationManager,
@@ -180,10 +194,10 @@ public class TabListCoordinator
         mTabActionState = initialTabActionState;
         mContext = context;
         mBrowserControlsStateProvider = browserControlsStateProvider;
-        mCurrentTabModelFilterSupplier = tabModelFilterSupplier;
-        mModel = new TabListModel();
+        mCurrentTabGroupModelFilterSupplier = tabGroupModelFilterSupplier;
+        mModelList = new TabListModel();
         mAdapter =
-                new SimpleRecyclerViewAdapter(mModel) {
+                new SimpleRecyclerViewAdapter(mModelList) {
                     @Override
                     public void onViewRecycled(SimpleRecyclerViewAdapter.ViewHolder viewHolder) {
                         PropertyModel model = viewHolder.model;
@@ -280,13 +294,12 @@ public class TabListCoordinator
         mMediator =
                 new TabListMediator(
                         context,
-                        mModel,
+                        mModelList,
                         mMode,
                         modalDialogManager,
-                        tabModelFilterSupplier,
+                        tabGroupModelFilterSupplier,
                         thumbnailProvider,
                         tabListFaviconProvider,
-                        new TabGroupColorFaviconProvider(mContext),
                         actionOnRelatedTabs,
                         selectionDelegateProvider,
                         gridCardOnClickListenerProvider,
@@ -368,7 +381,7 @@ public class TabListCoordinator
                             updateGridCardLayout(right - left);
         } else if (mMode == TabListMode.STRIP) {
             mTabStripSnapshotter =
-                    new TabStripSnapshotter(onModelTokenChange, mModel, mRecyclerView);
+                    new TabStripSnapshotter(onModelTokenChange, mModelList, mRecyclerView);
         }
 
         mHasEmptyView = hasEmptyView;
@@ -378,10 +391,10 @@ public class TabListCoordinator
         if (hasEmptyView) {
             mTabListEmptyCoordinator =
                     new TabListEmptyCoordinator(
-                            parentView, mModel, this::runOnItemAnimatorFinished);
+                            parentView, mModelList, this::runOnItemAnimatorFinished);
         }
 
-        configureRecyclerViewTouchHelpers(mMode, mTabActionState);
+        configureRecyclerViewTouchHelpers();
     }
 
     /** Returns the {@link TabListMode} of the coordinator. */
@@ -404,8 +417,19 @@ public class TabListCoordinator
     public void setTabActionState(@TabActionState int tabActionState) {
         assert mMediator != null;
         mTabActionState = tabActionState;
-        configureRecyclerViewTouchHelpers(mMode, mTabActionState);
+        configureRecyclerViewTouchHelpers();
         mMediator.setTabActionState(tabActionState);
+    }
+
+    /** Adds an observer of the tab list item size. Also triggers an observer method. */
+    public void addTabListItemSizeChangedObserver(TabListItemSizeChangedObserver observer) {
+        mTabListItemSizeChangedObserverList.addObserver(observer);
+        observer.onSizeChanged(mMediator.getCurrentSpanCount(), mMediator.getDefaultGridCardSize());
+    }
+
+    /** Remove an observer of the tab list item size. */
+    public void removeTabListItemSizeChangedObserver(TabListItemSizeChangedObserver observer) {
+        mTabListItemSizeChangedObserverList.removeObserver(observer);
     }
 
     @NonNull
@@ -413,7 +437,8 @@ public class TabListCoordinator
         // TODO(crbug.com/40627995): calculate the location before the real one is ready.
         Rect rect =
                 mRecyclerView.getRectOfCurrentThumbnail(
-                        mModel.indexFromId(mMediator.selectedTabId()), mMediator.selectedTabId());
+                        mModelList.indexFromId(mMediator.selectedTabId()),
+                        mMediator.selectedTabId());
         if (rect == null) return new Rect();
         rect.offset(0, 0);
         return rect;
@@ -430,7 +455,7 @@ public class TabListCoordinator
         if (index == TabModel.INVALID_TAB_INDEX) return new Rect();
 
         return mRecyclerView.getRectOfTabThumbnail(
-                index, mModel.get(index).model.get(TabProperties.TAB_ID));
+                index, mModelList.get(index).model.get(TabProperties.TAB_ID));
     }
 
     @NonNull
@@ -455,7 +480,7 @@ public class TabListCoordinator
             return;
         }
         mAwaitingLayoutRunnable = r;
-        mAwaitingTabId = mModel.get(index).model.get(TabProperties.TAB_ID);
+        mAwaitingTabId = mModelList.get(index).model.get(TabProperties.TAB_ID);
         mRecyclerView.runOnNextLayout(this::checkAwaitingLayout);
     }
 
@@ -481,19 +506,18 @@ public class TabListCoordinator
         mRecyclerView.setRecyclerViewPosition(recyclerViewPosition);
     }
 
-    void initWithNative(@NonNull Profile profile) {
+    void initWithNative(@NonNull Profile originalProfile) {
         if (mIsInitialized) return;
 
         try (TraceEvent e = TraceEvent.scoped("TabListCoordinator.initWithNative")) {
             mIsInitialized = true;
 
-            assert !profile.isOffTheRecord() : "Expecting a non-incognito profile.";
-            mMediator.initWithNative(profile);
+            assert !originalProfile.isOffTheRecord() : "Expecting a non-incognito profile.";
+            mMediator.initWithNative(originalProfile);
         }
     }
 
-    private void configureRecyclerViewTouchHelpers(
-            @TabListMode int mode, @TabActionState int tabActionState) {
+    private void configureRecyclerViewTouchHelpers() {
         boolean modeAllowsDragAndDrop = mMode == TabListMode.GRID || mMode == TabListMode.LIST;
         boolean actionStateAllowsDragAndDrop = mTabActionState != TabActionState.SELECTABLE;
         if (mAllowDragAndDrop && modeAllowsDragAndDrop && actionStateAllowsDragAndDrop) {
@@ -591,8 +615,8 @@ public class TabListCoordinator
         if (oldDefaultSize != null && newDefaultSize.equals(oldDefaultSize)) return;
 
         mMediator.setDefaultGridCardSize(newDefaultSize);
-        for (int i = 0; i < mModel.size(); i++) {
-            PropertyModel tabPropertyModel = mModel.get(i).model;
+        for (int i = 0; i < mModelList.size(); i++) {
+            PropertyModel tabPropertyModel = mModelList.get(i).model;
             // Other GTS items might intentionally have different dimensions. For example, the
             // pre-selected tab group divider and the large price tracking message span the width of
             // the recycler view.
@@ -600,6 +624,10 @@ public class TabListCoordinator
                 tabPropertyModel.set(
                         TabProperties.GRID_CARD_SIZE, new Size(cardWidthPx, cardHeightPx));
             }
+        }
+
+        for (TabListItemSizeChangedObserver observer : mTabListItemSizeChangedObserverList) {
+            observer.onSizeChanged(mMediator.getCurrentSpanCount(), newDefaultSize);
         }
     }
 
@@ -704,6 +732,11 @@ public class TabListCoordinator
         }
     }
 
+    /** Returns the handler for showing notifications. */
+    public TabListNotificationHandler getTabListNotificationHandler() {
+        return mMediator;
+    }
+
     void postHiding() {
         unregisterLayoutChangeListener();
         mMediator.postHiding();
@@ -763,32 +796,30 @@ public class TabListCoordinator
      * model list.
      */
     void addSpecialListItemToEnd(@UiType int uiType, PropertyModel model) {
-        mMediator.addSpecialItemToModel(mModel.size(), uiType, model);
+        mMediator.addSpecialItemToModel(mModelList.size(), uiType, model);
     }
 
     /**
-     * Removes a special {@link org.chromium.ui.modelutil.MVCListAdapter.ListItem} that
-     * has the given {@code uiType} and/or its {@link PropertyModel} has the given
-     * {@code itemIdentifier}.
+     * Removes a special {@link org.chromium.ui.modelutil.MVCListAdapter.ListItem} that has the
+     * given {@code uiType} and/or its {@link PropertyModel} has the given {@code itemIdentifier}.
      *
      * @param uiType The uiType to match.
      * @param itemIdentifier The itemIdentifier to match. This can be obsoleted if the {@link
-     *         org.chromium.ui.modelutil.MVCListAdapter.ListItem} does not need additional
-     *         identifier.
+     *     org.chromium.ui.modelutil.MVCListAdapter.ListItem} does not need additional identifier.
      */
     void removeSpecialListItem(@UiType int uiType, int itemIdentifier) {
-        mMediator.removeSpecialItemFromModel(uiType, itemIdentifier);
+        mMediator.removeSpecialItemFromModelList(uiType, itemIdentifier);
     }
 
     // PriceWelcomeMessageService.PriceWelcomeMessageProvider implementation.
     @Override
     public int getTabIndexFromTabId(int tabId) {
-        return mModel.indexFromId(tabId);
+        return mModelList.indexFromId(tabId);
     }
 
     @Override
     public void showPriceDropTooltip(int index) {
-        mModel.get(index).model.set(TabProperties.SHOULD_SHOW_PRICE_DROP_TOOLTIP, true);
+        mModelList.get(index).model.set(TabProperties.SHOULD_SHOW_PRICE_DROP_TOOLTIP, true);
     }
 
     int getIndexOfNthTabCard(int index) {
@@ -801,7 +832,7 @@ public class TabListCoordinator
     }
 
     int getTabListModelSize() {
-        return mModel.size();
+        return mModelList.size();
     }
 
     /**
@@ -820,7 +851,7 @@ public class TabListCoordinator
             SimpleRecyclerViewAdapter.ViewHolder holder =
                     (SimpleRecyclerViewAdapter.ViewHolder)
                             mRecyclerView.findViewHolderForAdapterPosition(
-                                    mModel.indexFromId(mAwaitingTabId));
+                                    mModelList.indexFromId(mAwaitingTabId));
             if (holder == null) return;
             assert holder.model.get(TabProperties.TAB_ID) == mAwaitingTabId;
             Runnable r = mAwaitingLayoutRunnable;
@@ -831,10 +862,10 @@ public class TabListCoordinator
     }
 
     private int getIndexForTabId(int tabId) {
-        int index = mModel.indexFromId(tabId);
+        int index = mModelList.indexFromId(tabId);
         if (index != TabModel.INVALID_TAB_INDEX) return index;
 
-        TabModel tabModel = mCurrentTabModelFilterSupplier.get().getTabModel();
+        TabModel tabModel = mCurrentTabGroupModelFilterSupplier.get().getTabModel();
         Tab tab = tabModel.getTabById(tabId);
         if (tab == null) return TabModel.INVALID_TAB_INDEX;
 

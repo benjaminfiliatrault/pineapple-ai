@@ -107,6 +107,14 @@ class WizardContext {
   // allowing screen to correctly display/handle Back button.
   enum class DataLossBackOptions { kNone, kBackToOnlineAuth, kBackToLocalAuth };
 
+  // The mode in which the PinSetupScreen will be surfaced.
+  enum class PinSetupMode {
+    kSetupAsPrimaryFactor,
+    kSetupAsSecondaryFactor,
+    kRecovery,
+    kAlreadyPerformed,
+  };
+
   struct KnowledgeFactorSetup {
     // Whether usage of local password is forced.
     bool local_password_forced = false;
@@ -116,6 +124,12 @@ class WizardContext {
     DataLossBackOptions data_loss_back_option = DataLossBackOptions::kNone;
 
     AuthFactorsSet modified_factors;
+
+    std::optional<PinSetupMode> pin_setup_mode = std::nullopt;
+
+    // The PasswordSelectionScreeen only has a 'Back' button when the PinSetup
+    // screen was shown before it.
+    bool password_selection_can_go_back_to_pin_setup = false;
   };
 
   enum class OSAuthErrorKind {

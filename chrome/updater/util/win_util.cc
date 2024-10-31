@@ -28,7 +28,6 @@
 #include <vector>
 
 #include "base/base_paths_win.h"
-#include "base/check.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/containers/flat_map.h"
@@ -76,6 +75,7 @@
 #include "chrome/updater/win/scoped_handle.h"
 #include "chrome/updater/win/user_info.h"
 #include "chrome/updater/win/win_constants.h"
+#include "chrome/windows_services/service_program/scoped_client_impersonation.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 
 namespace updater {
@@ -428,19 +428,17 @@ HResultOr<bool> IsUserNonElevatedAdmin() {
 }
 
 HResultOr<bool> IsCOMCallerAdmin() {
-  HRESULT hr = ::CoImpersonateClient();
-  if (hr == RPC_E_CALL_COMPLETE) {
+  ScopedClientImpersonation impersonate_client;
+  if (!impersonate_client.is_valid()) {
     // RPC_E_CALL_COMPLETE indicates that the caller is in-proc.
+    if (impersonate_client.result() != RPC_E_CALL_COMPLETE) {
+      return base::unexpected(impersonate_client.result());
+    }
     return base::ok(::IsUserAnAdmin());
-  }
-
-  if (FAILED(hr)) {
-    return base::unexpected(hr);
   }
 
   HResultOr<ScopedKernelHANDLE> token = []() -> decltype(token) {
     ScopedKernelHANDLE token;
-    absl::Cleanup co_revert_to_self = [] { ::CoRevertToSelf(); };
     if (!::OpenThreadToken(::GetCurrentThread(), TOKEN_QUERY, TRUE,
                            ScopedKernelHANDLE::Receiver(token).get())) {
       HRESULT hr = HRESULTFromLastError();
@@ -638,7 +636,7 @@ HRESULT DisableCOMExceptionHandling() {
 
 std::wstring BuildMsiCommandLine(
     const std::wstring& arguments,
-    const std::optional<base::FilePath>& installer_data_file,
+    std::optional<base::FilePath> installer_data_file,
     const base::FilePath& msi_installer) {
   if (!msi_installer.MatchesExtension(L".msi")) {
     return std::wstring();
@@ -663,7 +661,7 @@ std::wstring BuildMsiCommandLine(
 
 std::wstring BuildExeCommandLine(
     const std::wstring& arguments,
-    const std::optional<base::FilePath>& installer_data_file,
+    std::optional<base::FilePath> installer_data_file,
     const base::FilePath& exe_installer) {
   if (!exe_installer.MatchesExtension(L".exe")) {
     return std::wstring();
@@ -752,21 +750,13 @@ bool CompareOSVersions(const OSVERSIONINFOEX& os_version, BYTE oper) {
 }
 
 bool EnableSecureDllLoading() {
-  static const auto set_default_dll_directories =
-      reinterpret_cast<decltype(&::SetDefaultDllDirectories)>(::GetProcAddress(
-          ::GetModuleHandle(L"kernel32.dll"), "SetDefaultDllDirectories"));
-
-  if (!set_default_dll_directories) {
-    return true;
-  }
-
 #if defined(COMPONENT_BUILD)
   const DWORD directory_flags = LOAD_LIBRARY_SEARCH_DEFAULT_DIRS;
 #else
   const DWORD directory_flags = LOAD_LIBRARY_SEARCH_SYSTEM32;
 #endif
 
-  return set_default_dll_directories(directory_flags);
+  return ::SetDefaultDllDirectories(directory_flags);
 }
 
 bool EnableProcessHeapMetadataProtection() {
@@ -832,7 +822,7 @@ bool IsShutdownEventSignaled(UpdaterScope scope) {
 }
 
 void StopProcessesUnderPath(const base::FilePath& path,
-                            const base::TimeDelta& wait_period) {
+                            base::TimeDelta wait_period) {
   // Filters processes running under `path_prefix`.
   class PathPrefixProcessFilter : public base::ProcessFilter {
    public:
@@ -935,8 +925,9 @@ std::optional<base::CommandLine> CommandLineForLegacyFormat(
 
 std::optional<base::FilePath> GetInstallDirectory(UpdaterScope scope) {
   base::FilePath app_data_dir;
-  if (!base::PathService::Get(IsSystemInstall(scope) ? base::DIR_PROGRAM_FILES
-                                                     : base::DIR_LOCAL_APP_DATA,
+  if (!base::PathService::Get(IsSystemInstall(scope)
+                                  ? base::DIR_PROGRAM_FILESX86
+                                  : base::DIR_LOCAL_APP_DATA,
                               &app_data_dir)) {
     LOG(ERROR) << "Can't retrieve app data directory.";
     return std::nullopt;
@@ -1090,19 +1081,6 @@ void LogClsidEntries(REFCLSID clsid) {
       }
     }
   }
-}
-
-std::optional<base::FilePath> GetInstallDirectoryX86(UpdaterScope scope) {
-  if (!IsSystemInstall(scope)) {
-    return GetInstallDirectory(scope);
-  }
-  base::FilePath install_dir;
-  if (!base::PathService::Get(base::DIR_PROGRAM_FILESX86, &install_dir)) {
-    LOG(ERROR) << "Can't retrieve directory for DIR_PROGRAM_FILESX86.";
-    return std::nullopt;
-  }
-  return install_dir.AppendASCII(COMPANY_SHORTNAME_STRING)
-      .AppendASCII(PRODUCT_FULLNAME_STRING);
 }
 
 std::optional<std::wstring> GetRegKeyContents(const std::wstring& reg_key) {

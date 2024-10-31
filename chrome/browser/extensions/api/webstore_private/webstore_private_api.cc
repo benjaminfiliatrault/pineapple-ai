@@ -205,12 +205,6 @@ const char kWebstoreBlockByPolicy[] =
     "Extension installation is blocked by policy";
 const char kIncognitoError[] =
     "Apps cannot be installed in guest/incognito mode";
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-const char kSecondaryProfileError[] =
-    "Apps may only be installed using the main profile";
-const char kLegacyPackagedAppError[] =
-    "Legacy packaged apps are no longer supported";
-#endif
 
 const char kParentBlockedExtensionInstallError[] =
     "Parent has blocked extension/app installation";
@@ -234,10 +228,6 @@ std::string GetWebstoreLogin(Profile* profile) {
 
 void SetWebstoreLogin(Profile* profile, const std::string& login) {
   profile->GetPrefs()->SetString(kWebstoreLogin, login);
-}
-
-void RecordWebstoreExtensionInstallResult(bool success) {
-  UMA_HISTOGRAM_BOOLEAN("Webstore.ExtensionInstallResult", success);
 }
 
 api::webstore_private::ExtensionInstallStatus
@@ -384,7 +374,7 @@ void ReportWebStoreInstallNotAllowlistedInstalled(bool installed,
 
 // Returns whether the app launcher has been enabled.
 bool IsAppLauncherEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   return true;
 #else
   return false;
@@ -1004,23 +994,6 @@ WebstorePrivateCompleteInstallFunction::Run() {
         Error(kNoPreviousBeginInstallWithManifestError, params->expected_id));
   }
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // TODO(crbug.com/40239506): Centralize logic for disallowing
-  // installation with other installation paths.
-  if (!profile->IsMainProfile()) {
-    bool allowed = approval_->dummy_extension &&
-                   (approval_->dummy_extension->is_extension() ||
-                    approval_->dummy_extension->is_theme());
-    if (!allowed) {
-      return RespondNow(Error(kSecondaryProfileError));
-    }
-  }
-  if (approval_->dummy_extension &&
-      approval_->dummy_extension->is_legacy_packaged_app()) {
-    return RespondNow(Error(kLegacyPackagedAppError));
-  }
-#endif
-
   content::WebContents* web_contents = GetSenderWebContents();
   if (!web_contents) {
     return RespondNow(
@@ -1056,8 +1029,6 @@ void WebstorePrivateCompleteInstallFunction::OnExtensionInstallSuccess(
   VLOG(1) << "Install success, sending response";
   Respond(NoArguments());
 
-  RecordWebstoreExtensionInstallResult(true);
-
   // Matches the AddRef in Run().
   Release();
 }
@@ -1072,8 +1043,6 @@ void WebstorePrivateCompleteInstallFunction::OnExtensionInstallFailure(
 
   VLOG(1) << "Install failed, sending response";
   Respond(Error(error));
-
-  RecordWebstoreExtensionInstallResult(false);
 
   // Matches the AddRef in Run().
   Release();

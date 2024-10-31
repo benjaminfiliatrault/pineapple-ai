@@ -4,9 +4,9 @@
 
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
-import 'chrome://resources/cr_elements/icons_lit.html.js';
+import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/cr_elements/cr_icon/cr_icon.js';
-import './strings.m.js';
+import '/strings.m.js';
 import './shared_style.css.js';
 import './privacy_sandbox_dialog_learn_more.js';
 
@@ -34,43 +34,58 @@ export class PrivacySandboxDialogConsentStepElement extends
     return {
       expanded_: {
         type: Boolean,
-        observer: 'onConsentLearnMoreExpandedChanged',
+        observer: 'onConsentLearnMoreExpanded_',
       },
-      isPrivacySandboxPrivacyPolicyEnabled_: {
+
+      /**
+       * If true, the notice is in dark mode.
+       */
+      isDarkMode_: {
         type: Boolean,
-        value: () =>
-            loadTimeData.getBoolean('isPrivacySandboxPrivacyPolicyEnabled'),
+        value: () => {
+          return loadTimeData.getBoolean('isDarkMode');
+        },
+      },
+
+      /**
+       * If true, the privacy policy text is hyperlinked.
+       */
+      isPrivacyPolicyLinkEnabled_: {
+        type: Boolean,
+        value: false,
+      },
+
+      /**
+       * If true, the consent notice page is hidden.
+       * On load, this page should not be hidden.
+       */
+      hideConsentNoticePage_: {
+        type: Boolean,
+        value: false,
+      },
+
+      /**
+       * If true, the Ads API UX Enhancement should be shown.
+       */
+      shouldShowV2_: {
+        type: Boolean,
+        value: () => {
+          return loadTimeData.getBoolean(
+              'isPrivacySandboxAdsApiUxEnhancementsEnabled');
+        },
       },
     };
   }
 
   private privacyPolicyPageClickStartTime_: number;
   private privacyPolicyPageLoadEndTime_: number;
-  private isPrivacySandboxPrivacyPolicyEnabled_: boolean;
+  private isPrivacyPolicyLinkEnabled_: boolean;
+  private hideConsentNoticePage_: boolean;
+  private isDarkMode_: boolean;
+  private shouldShowV2_: boolean;
 
   override ready() {
     super.ready();
-
-    // Hide pre-loading the privacy policy page behind a flag.
-    if (this.isPrivacySandboxPrivacyPolicyEnabled_) {
-      const button = document.createElement('cr-icon-button');
-      button.id = 'backButton';
-      button.className = 'icon-arrow-back back-button hidden';
-      button.onclick = () => {
-        this.onBackToNotice_();
-      };
-
-      const iframe = document.createElement('iframe');
-      iframe.id = 'privacyPolicy';
-      iframe.className = 'iframe hidden';
-      iframe.tabIndex = -1;
-      iframe.setAttribute('frameBorder', '0');
-
-      this.shadowRoot!.querySelector<HTMLElement>(
-                          '.iframe-container')!.appendChild(button);
-      this.shadowRoot!.querySelector<HTMLElement>(
-                          '.iframe-container')!.appendChild(iframe);
-    }
 
     window.addEventListener('message', event => {
       if (event.data.id === 'privacy-policy-loaded') {
@@ -99,12 +114,56 @@ export class PrivacySandboxDialogConsentStepElement extends
         new CustomEvent('consent-resolved', {bubbles: true, composed: true}));
   }
 
+  private onConsentLearnMoreExpanded_(newValue: boolean, oldValue: boolean) {
+    this.loadPrivacyPolicyOnExpand_(newValue, oldValue);
+    this.onConsentLearnMoreExpandedChanged(newValue, oldValue);
+  }
+
+  private loadPrivacyPolicyOnExpand_(newValue: boolean, oldValue: boolean) {
+    // When the expand is triggered, if the iframe hasn't been loaded yet,
+    // load it the first time the learn more expand section is clicked.
+    if (newValue && !oldValue) {
+      if (!this.shadowRoot!.querySelector<HTMLIFrameElement>(
+              '#privacyPolicy')) {
+        PrivacySandboxDialogBrowserProxy.getInstance()
+            .shouldShowPrivacySandboxPrivacyPolicy()
+            .then(isPrivacyPolicyLinkEnabled => {
+              this.isPrivacyPolicyLinkEnabled_ = isPrivacyPolicyLinkEnabled;
+            });
+      }
+    }
+  }
+
   private recordPrivacyPolicyLoadTime_(privacyPolicyLoadDuration: number) {
     PrivacySandboxDialogBrowserProxy.getInstance().recordPrivacyPolicyLoadTime(
         privacyPolicyLoadDuration);
   }
 
+  private onBackToConsentNotice_() {
+    // Move the privacy policy iframe to the back.
+    const iframeContent =
+        this.shadowRoot!.querySelector<HTMLElement>('#privacyPolicy');
+    iframeContent!.classList.add('hidden');
+    iframeContent!.classList.remove('visible');
+    iframeContent!.tabIndex = -1;
+    this.hideConsentNoticePage_ = false;
+
+    // Send focus back to privacy policy link for a11y screen reader.
+    this.shadowRoot!.querySelector<HTMLElement>('#privacyPolicyLink')!.focus();
+  }
+
   private onPrivacyPolicyLinkClicked_() {
+    // Move the privacy policy iframe to the front.
+    // By manually setting the visibility, the privacy policy page
+    // is able to preload while staying hidden.
+    const iframeContent =
+        this.shadowRoot!.querySelector<HTMLElement>('#privacyPolicy');
+    iframeContent!.classList.add('visible');
+    iframeContent!.classList.remove('hidden');
+    // Make iframe tab-able for a11y.
+    iframeContent!.tabIndex = 0;
+
+    this.hideConsentNoticePage_ = true;
     this.privacyPolicyPageClickStartTime_ = performance.now();
     this.promptActionOccurred(
         PrivacySandboxPromptAction.PRIVACY_POLICY_LINK_CLICKED);
@@ -114,39 +173,14 @@ export class PrivacySandboxDialogConsentStepElement extends
           this.privacyPolicyPageLoadEndTime_ -
           this.privacyPolicyPageClickStartTime_);
     }
-    // Move the consent notice to the back.
-    this.shadowRoot!.querySelector<HTMLElement>(
-                        '#consentNotice')!.style.display = 'none';
 
-    // Move the privacy policy iframe to the front.
-    const iframeContent =
-        this.shadowRoot!.querySelector<HTMLElement>('#privacyPolicy');
-    iframeContent!.classList.add('visible');
-    iframeContent!.classList.remove('hidden');
-
-    // Move the back button to the front.
-    const backButton =
-        this.shadowRoot!.querySelector<HTMLElement>('#backButton');
-    backButton!.classList.add('visible');
-    backButton!.classList.remove('hidden');
+    // Send focus on the first element (back button) for a11y screen reader.
+    this.shadowRoot!.querySelector<HTMLElement>('#backButton')!.focus();
   }
 
-  private onBackToNotice_() {
-    // Move the privacy policy iframe to the back.
-    const iframeContent =
-        this.shadowRoot!.querySelector<HTMLElement>('#privacyPolicy');
-    iframeContent!.classList.add('hidden');
-    iframeContent!.classList.remove('visible');
-
-    // Move the back button to the back.
-    const backButton =
-        this.shadowRoot!.querySelector<HTMLElement>('#backButton');
-    backButton!.classList.add('hidden');
-    backButton!.classList.remove('visible');
-
-    // Move the consent notice to the front.
-    this.shadowRoot!.querySelector<HTMLElement>(
-                        '#consentNotice')!.style.display = 'inline-block';
+  private getBackButtonBorderStyle_(): string {
+    return this.isDarkMode_ ? 'border-bottom: 1px solid #505254;' :
+                              'border-bottom: 1px solid #E1E3E1;';
   }
 }
 

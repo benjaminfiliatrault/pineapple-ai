@@ -859,6 +859,9 @@ are declared in tools/grit/grit_rule.gni.
           <message name="IDS_CONTENT_CONTEXT_GENERATEPASSWORD" desc="The name of the Generate Password command in the content area context menu">
             Suggest password...
           </message>
+          <message name="IDS_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PASSWORDS_USE_PASSKEY_FROM_ANOTHER_DEVICE" desc="The name of the Use passkey from another device command in the content area context menu">
+            Use passkey from another device
+          </message>
           <message name="IDS_CONTENT_CONTEXT_MORE_APPS" desc="The label for the parent item of the submenu in the content area context menu.">
             More
           </message>
@@ -880,6 +883,9 @@ are declared in tools/grit/grit_rule.gni.
           </message>
           <message name="IDS_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PAYMENTS" desc="The name of the Autofill manual fallback for payment methods attribute command in the content area context menu.">
             Payment methods
+          </message>
+          <message name="IDS_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PASSWORD_AND_PASSKEYS" desc="This is a context menu entry. Upon clicking, it opens a submenu with more entries where the user can select a password or use a passkey from another device.">
+            Passwords and passkeys
           </message>
           <message name="IDS_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PASSWORDS_SELECT_PASSWORD" desc="This is a context menu entry in the passwords submenu. It triggers the password selection bubble.">
             Select password
@@ -1196,6 +1202,9 @@ are declared in tools/grit/grit_rule.gni.
           <message name="IDS_CONTENT_CONTEXT_GENERATEPASSWORD" desc="In Title Case: The name of the Generate Password command in the content area context menu">
             Suggest Password...
           </message>
+          <message name="IDS_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PASSWORDS_USE_PASSKEY_FROM_ANOTHER_DEVICE" desc="In Title Case: The name of the Use passkey from another device command in the content area context menu">
+            Use Passkey from Another Device
+          </message>
           <message name="IDS_CONTENT_CONTEXT_AUTOFILL_FEEDBACK" desc="In Title Case: The name of the Autofill Feedback command in the content area context menu">
             Help Improve Autofill
           </message>
@@ -1211,6 +1220,9 @@ are declared in tools/grit/grit_rule.gni.
           </message>
           <message name="IDS_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PAYMENTS" desc="In Title Case: The name of the Autofill manual fallback for payment methods attribute command in the content area context menu.">
             Payment Methods
+          </message>
+          <message name="IDS_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PASSWORD_AND_PASSKEYS" desc="This is a context menu entry. Upon clicking, it opens a submenu with more entries where the user can select a password or use a passkey from another device.">
+            Passwords and Passkeys
           </message>
           <message name="IDS_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PASSWORDS_SELECT_PASSWORD" desc="In Title Case: This is a context menu entry in the passwords submenu. It triggers the password selection bubble.">
             Select Password
@@ -6592,8 +6604,11 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_EXTENSIONS_MENU_CANT_ACCESS_SITE_DATA" desc="Longer explanation for section of extensions that can't access the current site's data">
         These extensions don't need to see and change information on this site.
       </message>
-      <message name="IDS_EXTENSIONS_MENU_SITE_SETTINGS_LABEL" desc="Text of the label next to the site settings toggle button that allows extensions on site pointed by $1.">
+      <message name="IDS_EXTENSIONS_MENU_SITE_SETTINGS_LABEL" desc="Text on the menu that informs the user they can change the site settings of extensions on $1.">
         Allow extensions on <ph name="SITE_NAME">$1<ex>google.com</ex></ph>
+      </message>
+      <message name="IDS_EXTENSIONS_MENU_SITE_SETTINGS_NOT_ALLOWED_LABEL" desc="Text on the menu that informs the user they cannot change the site settings of extensions on $1.">
+        Extensions are not allowed on <ph name="SITE_NAME">$1<ex>google.com</ex></ph>
       </message>
       <message name="IDS_EXTENSIONS_MENU_SITE_SETTINGS_TOGGLE_ON_TOOLTIP" desc="Tooltip text for the site setting toggle button when is on.">
         Extensions allowed on this site
@@ -6604,20 +6619,8 @@ Keep your key file in a safe place. You will need it to create new versions of y
        <message name="IDS_EXTENSIONS_MENU_SITE_SETTINGS_TOGGLE_ACCESSIBLE_NAME" desc="Accessibility string for the site setting toggle button.">
         Allow extensions
       </message>
-      <message name="IDS_EXTENSIONS_MENU_MESSAGE_SECTION_RESTRICTED_ACCESS_TEXT" desc="Text of the message section when this site is restricted to all extensions.">
-        No extensions need access to this site
-      </message>
-      <message name="IDS_EXTENSIONS_MENU_MESSAGE_SECTION_POLICY_BLOCKED_ACCESS_TEXT" desc="Text of the message section when the site is restricted to all non-enterprise extensions.">
-        Extensions are not allowed on this site
-      </message>
-      <message name="IDS_EXTENSIONS_MENU_MESSAGE_SECTION_USER_BLOCKED_ACCESS_TEXT" desc="Text of the message section when the user blocked access to this site to all extensions.">
-        Extensions are not allowed on this site
-      </message>
       <message name="IDS_EXTENSIONS_MENU_MESSAGE_SECTION_ENTERPRISE_TOOLTIP_ICON_TEXT" desc="Text of the info tooltip icon in the message section when the user blocked access to this site to all extensions but extensions installed by admin still have access.">
         Extensions installed by your administrator can still read and change this site
-      </message>
-      <message name="IDS_EXTENSIONS_MENU_MESSAGE_SECTION_USER_CUSTOMIZED_ACCESS_TEXT" desc="Text of the message section when the user can customize access to this site by extensions.">
-        Extensions can request access to this site
       </message>
       <message name="IDS_EXTENSIONS_MENU_MESSAGE_SECTION_RELOAD_CONTAINER_DESCRIPTION_TEXT" desc="Text of the message section when the user has to reload the page to apply the updated user site settings.">
         To apply your updated settings to this site, reload this page
@@ -7132,9 +7135,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_PASSWORD_BUBBLES_FOOTER_SAVING_ON_DEVICE" desc="The footer text of the bubbles that offers users to save, update or manage stored passwords only locally in Chrome.">
         Passwords are saved to <ph name="GOOGLE_PASSWORD_MANAGER">$1<ex>Google Password Manager</ex></ph> on this device.
       </message>
-      <message name="IDS_PASSWORD_GENERATION_CONFIRMATION_GOOGLE_PASSWORD_MANAGER" desc="A message that the browser shows after saving a password it has autogenerated for the user. This message appears in a bubble and contains a link to all the user's saved passwords. The link text is a separate string in the translation console and appears here as placeholder text.">
-          You can view and manage saved passwords in <ph name="GOOGLE_PASSWORD_MANAGER">$1<ex>Google Password Manager</ex></ph>.
-      </message>
       <message name="IDS_PASSWORD_GENERATION_PROMPT_GOOGLE_PASSWORD_MANAGER" desc="Autofill dropdown text describing password generation.">
           You won't need to remember this password. It will be saved to <ph name="GOOGLE_PASSWORD_MANAGER">$1<ex>Google Password Manager</ex></ph> for <ph name="EMAIL">$2<ex>user@gmail.com</ex></ph>.
       </message>
@@ -7628,21 +7628,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
           Pa&amp;ste and Go
         </message>
       </if>
-      <message name="IDS_OMNIBOX_KEYWORD_HINT" desc="Shown to the user when the url in the omnibox has a keyword associated with it. $1 is replaced with an image showing the tab key. $2 is replaced with the description of the keyword.">
-        Press <ph name="SEARCH_KEY">$1<ex>Tab</ex></ph> to search <ph name="SITE_NAME">$2<ex>google.com</ex></ph>
-      </message>
-      <message name="IDS_OMNIBOX_EXTENSION_KEYWORD_HINT" desc="Shown to the user when the word(s) in the omnibox has an extension keyword associated with it. $1 is replaced with an image showing the tab key. $2 is replaced with the description of the keyword.">
-        Press <ph name="SEARCH_KEY">$1<ex>Tab</ex></ph> to send commands to <ph name="EXTENSION_NAME">$2<ex>Google Talk</ex></ph>
-      </message>
-      <message name="IDS_OMNIBOX_KEYWORD_HINT_KEY_ACCNAME" desc="The accessible name of the tab key image">
-        Tab
-      </message>
-      <message name="IDS_OMNIBOX_KEYWORD_HINT_TOUCH" desc="Shown to the user when the url in the omnibox has a keyword associated with it and we are in touch mode (i.e. the on screen keyboard is visible).">
-        Search <ph name="SITE_NAME">$1<ex>google.com</ex></ph>
-      </message>
-      <message name="IDS_OMNIBOX_EXTENSION_KEYWORD_HINT_TOUCH" desc="Shown to the user when the word(s) in the omnibox has an extension keyword associated with it and we are in touch mode (i.e. the onscreen keyboard is visible).">
-        Send commands to <ph name="EXTENSION_NAME">$1<ex>ACME Music App</ex></ph>
-      </message>
       <message name="IDS_OMNIBOX_KEYWORD_TEXT" desc="Text shown in the search button at the front of the omnibox when the user has selected a keyword">
         Search <ph name="SITE_NAME">$1<ex>google.com</ex></ph>:
       </message>
@@ -7695,7 +7680,16 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Add to your search
       </message>
       <message name="IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_CONTEXTUAL" desc="The text displayed in the overlay contextual searchbox when it is empty. It is meant to invite the user to ask a question about their current page and inform them that this is a contextual searchbox.">
-        Ask using this page
+        Ask about this page
+      </message>
+      <message name="IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_LOADING_HINT_PRIMARY" desc="The hint text displayed in the overlay contextual searchbox ghost loader. It is meant to inform the user that suggestions are still being generated.">
+        Generating questions about this page…
+      </message>
+      <message name="IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_LOADING_HINT_SECONDARY" desc="The hint text displayed in the overlay contextual searchbox ghost loader. It is meant to inform the user that they can still ask questions about the page while suggestions are being generated.">
+        You can also ask things like “summarize”
+      </message>
+      <message name="IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_ERROR_TEXT" desc="The error text displayed in the overlay contextual searchbox ghost loader. It is meant to inform the user that they can still ask questions about the page even though suggestions were failed to be generated.">
+        No questions available. Try asking things like “summarize this page” or your own question.
       </message>
       <message name="IDS_GOOGLE_SEARCH_BOX_MULTIMODAL_IMAGE_THUMBNAIL" desc="Aria label for the Lens image selection thumbnail in the multimodal searchbox. Spoken by screen readers when the thumbnail is highlighted, and instructs the user to press enter or backspace to delete the selection.">
         Your Google Lens selection. Press enter or backspace to delete your Google Lens selection
@@ -8618,11 +8612,12 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_NTP_MODULES_DRIVE_DISMISS_BUTTON_TEXT" desc="Text shown on the disable button of a NTP Drive module v2.">
        Hide these files
       </message>
-      <message name="IDS_NTP_MODULES_DRIVE_SENTENCE" desc="Name of the Drive module in sentence case shown in various UIs.">
-        Google Drive files
+      <message name="IDS_NTP_MODULES_DRIVE_NAME" desc="Name of the Drive module in sentence case shown in various UIs.">
+        Google Drive
       </message>
-      <message name="IDS_NTP_MODULES_DRIVE_SENTENCE2" desc="Variant of the name of the Drive module in sentence case shown in various UIs.">
-        Drive files
+      <!-- TODO(crbug.com/372724129): Finalize and translate IDS_NTP_MODULES_SHAREPOINT_SENTENCE. -->
+      <message name="IDS_NTP_MODULES_SHAREPOINT_SENTENCE" translateable="false" desc="Name of the SharePoint module in sentence case shown in various UIs.">
+        SharePoint files
       </message>
       <message name="IDS_NTP_MODULES_DRIVE_FILES_SENTENCE" desc="Name of the files in the Drive module in sentence case shown in various UIs.">
         Files
@@ -8633,14 +8628,19 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_NTP_MODULES_DUMMY_TITLE" translateable="false" desc="Title shown in the header of the dummy module and various other UIs.">
         Super Duper Module
       </message>
-      <message name="IDS_NTP_MODULES_DRIVE_TITLE" desc="Title shown in the header of the drive module and various other UIs.">
-        From your Google Drive
-      </message>
-      <message name="IDS_NTP_MODULES_DRIVE_TITLE_V2" desc="Title shown in the header of the drive module and various other UIs in NTP Launchpad 2.0.">
-        From your Drive
+      <!-- TODO(crbug.com/372724129): Finalize and translate IDS_NTP_MODULES_SHAREPOINT_TITLE. -->
+      <message name="IDS_NTP_MODULES_SHAREPOINT_TITLE" translateable="false" desc="Title shown in the header of the SharePoint module and various other UIs.">
+        From your Microsoft Sharepoint
       </message>
       <message name="IDS_NTP_MODULES_DRIVE_INFO" desc="Text shown in the body of the info dialog of the drive module.">
         You’re seeing suggested files to help you easily get back to your most recent activity in Google Drive.
+        <ph name="BREAK">&lt;br&gt;</ph>
+        <ph name="BREAK">&lt;br&gt;</ph>
+        You can manage settings from the card menu or see more options in Customize Chrome.
+      </message>
+      <!-- TODO(crbug.com/372724129): Finalize and translate IDS_NTP_MODULES_SHAREPOINT_INFO. -->
+      <message name="IDS_NTP_MODULES_SHAREPOINT_INFO" translateable="false" desc="Text shown in the body of the info dialog of the SharePoint module.">
+        You’re seeing suggested files to help you easily get back to your most recent activity in Microsoft Sharepoint.
         <ph name="BREAK">&lt;br&gt;</ph>
         <ph name="BREAK">&lt;br&gt;</ph>
         You can manage settings from the card menu or see more options in Customize Chrome.
@@ -8803,6 +8803,17 @@ Keep your key file in a safe place. You will need it to create new versions of y
       </message>
       <message name="IDS_NTP_MODULES_MOST_RELEVANT_TAB_RESUMPTION_SEE_MORE" desc="A label for the see more button in the most relevant tab resumption module.">
         See more
+      </message>
+
+      <!-- Mobile NTP Middle Slot Promo -->
+      <message name="IDS_NTP_MOBILE_PROMO_HEADER" desc="Header for a promo that shows on the Desktop NTP prompting user to scan a QR code with their mobile device">
+        Get Chrome on your mobile device
+      </message>
+      <message name="IDS_NTP_MOBILE_PROMO_DESCRIPTION" desc="Description for a promo that shows on the Desktop NTP prompting user to scan a QR code with their mobile device">
+        Download Chrome for iOS to access your tabs, bookmarks and passwords on your phone.
+      </message>
+      <message name="IDS_NTP_MOBILE_PROMO_QR_CODE_LABEL" desc="Accessibility label for a QR code that shows on the Desktop NTP that prompts the user to scan it.">
+        Scan QR Code
       </message>
 
       <!-- Extensions NTP Middle Slot Promo -->
@@ -9033,17 +9044,29 @@ Keep your key file in a safe place. You will need it to create new versions of y
       </message>
 
       <!-- Bookmarks strings -->
-      <!-- TODO(crbug.com/363277495): Update and mark translateable. -->
-      <message name="IDS_BOOKMARKS_MOVE_TO_ACCOUNT_DIALOG_TITLE" translateable="false" desc="Title for the dialog that offers the user to move a bookmark from their device to their signed-in account.">
+      <message name="IDS_BOOKMARKS_MOVE_TO_ACCOUNT_DIALOG_TITLE" desc="Title for the dialog that offers the user to move a bookmark from their device to their signed-in account.">
         Save to a folder in your Google Account?
       </message>
-      <!-- TODO(crbug.com/363277495): Update and mark translateable. -->
-      <message name="IDS_BOOKMARKS_MOVE_TO_ACCOUNT_DIALOG_SUBTITLE" translateable="false" desc="Subtitle for the dialog that offers the user to move a bookmark from their device to their signed-in account.">
-        This bookmark is saved only on this device. You can save it in your Google Account.
+      <message name="IDS_BOOKMARKS_MOVE_TO_ACCOUNT_DIALOG_SUBTITLE" desc="Subtitle for the dialog that offers the user to move a bookmark from their device to their signed-in account.">
+        This bookmark is saved only to this device. If you save it to <ph name="ACCOUNT_FOLDER">$1<ex>Account Bookmarks</ex></ph>, this bookmark will also be saved in your account.
       </message>
-      <!-- TODO(crbug.com/363277495): Update and mark translateable. -->
-      <message name="IDS_BOOKMARKS_MOVE_TO_ACCOUNT_DIALOG_OK_BUTTON_LABEL" translateable="false" desc="OK button label for the dialog that offers the user to move a bookmark from their device to their signed-in account.">
+      <message name="IDS_BOOKMARKS_MOVE_TO_ACCOUNT_DIALOG_FOLDER_SUBTITLE" desc="Subtitle for the dialog that offers the user to move a bookmark folder from their device to their signed-in account.">
+        This folder is saved only to this device. If you save it to <ph name="ACCOUNT_FOLDER">$1<ex>Account Bookmarks</ex></ph>, this folder will also be saved in your account.
+      </message>
+      <message name="IDS_BOOKMARKS_MOVE_TO_ACCOUNT_DIALOG_OK_BUTTON_LABEL" desc="OK button label for the dialog that offers the user to move a bookmark from their device to their signed-in account.">
         Save in account
+      </message>
+      <message name="IDS_BOOKMARKS_MOVE_TO_DEVICE_DIALOG_TITLE" desc="Title for the dialog that offers the user to move a bookmark from their signed-in account to their device.">
+        Save to a folder only on this device?
+      </message>
+      <message name="IDS_BOOKMARKS_MOVE_TO_DEVICE_DIALOG_SUBTITLE" desc="Subtitle for the dialog that offers the user to move a bookmark from their signed-in account to their device.">
+        <ph name="LOCAL_FOLDER">$1<ex>Local Bookmarks</ex></ph> is saved only to this device. If you move this bookmark to <ph name="LOCAL_FOLDER">$1<ex>Local Bookmarks</ex></ph>, you’ll no longer get it on your other devices.
+      </message>
+      <message name="IDS_BOOKMARKS_MOVE_TO_DEVICE_DIALOG_FOLDER_SUBTITLE" desc="Subtitle for the dialog that offers the user to move a bookmark folder from their signed-in account to their device.">
+        <ph name="LOCAL_FOLDER">$1<ex>Local Bookmarks</ex></ph> is saved only to this device. If you move this folder to <ph name="LOCAL_FOLDER">$1<ex>Local Bookmarks</ex></ph>, you’ll no longer get it on your other devices.
+      </message>
+      <message name="IDS_BOOKMARKS_MOVE_TO_DEVICE_DIALOG_OK_BUTTON_LABEL" desc="OK button label for the dialog that offers the user to move a bookmark from their signed-in account to their device.">
+        Save to device
       </message>
       <message name="IDS_BOOKMARKS_SORT_BY_TYPE" desc="Menu item label for selecting the bookmarks sort type.">
         Sort by <ph name="SORT_TYPE">$1<ex>Newest</ex></ph>
@@ -9684,6 +9707,12 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_DECLUTTER_BODY" desc="The body text for the declutter UI">
         These tabs have been unused for <ph name="COUNT">$1<ex>7</ex></ph> or more days.
       </message>
+      <message name="IDS_DECLUTTER_EMPTY_TITLE" desc="The header text for the declutter empty state UI">
+        Your tabs are tidy!
+      </message>
+      <message name="IDS_DECLUTTER_EMPTY_BODY" desc="The body text for the declutter empty state UI">
+        No inactive tabs right now
+      </message>
       <message name="IDS_TOOLTIP_TAB_DECLUTTER" desc="The tooltip for the Tab Declutter button.">
         Close unused tabs?
       </message>
@@ -9699,7 +9728,18 @@ Keep your key file in a safe place. You will need it to create new versions of y
           =1 {Visited 1 day ago}
           other {Visited # days ago}}
       </message>
-
+      <if expr="use_titlecase">
+        <then>
+          <message name="IDS_DECLUTTER_MENU" desc="In Title Case: The text label for the declutter app menu item.">
+            Close Unused Tabs
+          </message>
+        </then>
+        <else>
+          <message name="IDS_DECLUTTER_MENU" desc="The text label for the declutter app menu item.">
+            Close unused tabs
+          </message>
+        </else>
+      </if>
       <!-- Strings for tab organization -->
       <message name="IDS_TOOLTIP_TAB_ORGANIZE" desc="The tooltip for the Tab Organization button.">
         Organize tabs?
@@ -10410,6 +10450,32 @@ Keep your key file in a safe place. You will need it to create new versions of y
       </message>
       <message name="IDS_TUTORIAL_PASSWORD_MANAGER_CLICK_INSTALL" desc="The description of the 'click install' step in password manager tutorial">
         Click “Install”
+      </message>
+
+      <!-- Lens Overlay Tutorial Strings -->
+      <message name="IDS_TUTORIAL_LENS_OVERLAY_INTRO_HEADER" desc="Header for the intro of the Lens overlay tutorial">
+        Search what’s on your screen with Google Lens
+      </message>
+      <message name="IDS_TUTORIAL_LENS_OVERLAY_INTRO_BODY" desc="Description for the intro of the Lens overlay tutorial">
+        Learn more about products, places, or text you see on your screen
+      </message>
+      <message name="IDS_TUTORIAL_LENS_OVERLAY_CLICK_ADDRESS_BAR" desc="The description of the 'click the address bar' step in Lens overlay tutorial">
+        Click the address bar
+      </message>
+      <message name="IDS_TUTORIAL_LENS_OVERLAY_CLICK_LENS" desc="The description of the 'select the Google Lens button' step in Lens overlay tutorial">
+        Select the Google Lens button
+      </message>
+      <message name="IDS_TUTORIAL_LENS_OVERLAY_SELECT" desc="The description of the 'click and drag to search' step in Lens overlay tutorial">
+        Click and drag over images or highlight text to search
+      </message>
+      <message name="IDS_TUTORIAL_LENS_OVERLAY_CLICK_SEARCH_BOX" desc="The description of the 'search box' step in Lens overlay tutorial">
+        Add more details or ask a question about your selection to refine your search
+      </message>
+      <message name="IDS_TUTORIAL_LENS_OVERLAY_CLICK_PIN_ICON" desc="The description of the 'pin to toolbar' step in Lens overlay tutorial">
+        Pin Google Lens to your toolbar for easy access next time
+      </message>
+      <message name="IDS_TUTORIAL_LENS_OVERLAY_SUCCESS_BODY" desc="Success text at the end of Lens overlay tutorial">
+        You can now use Google Lens to search anything you see on your screen
       </message>
 
       <!-- Browser Hung Plugin Detector -->
@@ -11808,6 +11874,132 @@ Check your passwords anytime in <ph name="GOOGLE_PASSWORD_MANAGER">$1<ex>Google 
         </message>
       </if>
 
+    <!-- Data Sharing -->
+      <if expr="use_titlecase">
+        <!-- Sign in Sync Flow -->
+        <message name="IDS_DATA_SHARING_NEED_SIGN_IN" desc="The title of dialog that prompts users to sign in and sync.">
+          Sign in and Sync Needed
+        </message>
+        <message name="IDS_DATA_SHARING_NEED_SYNC" desc="The title of dialog that prompts users to sync.">
+          Sync Is Needed
+        </message>
+        <message name="IDS_DATA_SHARING_NEED_SYNC_TAB_GROUPS" desc="The title of dialog that prompts users to sync tab groups.">
+          Sync Your Tab Groups
+        </message>
+        <message name="IDS_DATA_SHARING_NEED_VERIFY_ACCOUNT" desc="The title of dialog that prompts users to verify the account.">
+          Verify Your Account
+        </message>
+        <message name="IDS_DATA_SHARING_NEED_VERIFY_ACCOUNT_BUTTON" desc="The confirm button of dialog that prompts users to verify the account.">
+          Verify It's You
+        </message>
+
+        <!-- errors and warnings -->
+        <message name="IDS_DATA_SHARING_GOT_IT" desc="The general confirm button of informative dialogs.">
+          Got It
+        </message>
+        <message name="IDS_DATA_SHARING_SOMETHING_WRONG" desc="The title of the generic failure dialog.">
+          Something Went Wrong
+        </message>
+        <message name="IDS_DATA_SHARING_ORGANIZATION_DISALLOW_SIGN_IN" desc="The title of the organization disallowing signin dialog.">
+          Your Organization Doesn't Allow You to Sign in
+        </message>
+        <message name="IDS_DATA_SHARING_ORGANIZATION_LIMIT_SAVE" desc="The title of the organization limiting saving to account dialog.">
+          Your Organization Limits What You Can Save
+        </message>
+        <message name="IDS_DATA_SHARING_SIGNED_OUT" desc="The title of the dialog that prompts users to allow Chrome sign in.">
+          You’re Signed out
+        </message>
+        <message name="IDS_DATA_SHARING_GROUP_FULL" desc="The title of the group being full dialog.">
+          This Tab Group Is Full
+        </message>
+      </if>
+
+      <if expr="not use_titlecase">
+        <!-- Sign in Sync Flow -->
+        <message name="IDS_DATA_SHARING_NEED_SIGN_IN" desc="The title of dialog that prompts users to sign in and sync.">
+          Sign in and sync needed
+        </message>
+        <message name="IDS_DATA_SHARING_NEED_SYNC" desc="The title of dialog that prompts users to sync.">
+          Sync is needed
+        </message>
+        <message name="IDS_DATA_SHARING_NEED_SYNC_TAB_GROUPS" desc="The title of dialog that prompts users to sync tab groups.">
+          Sync your tab groups
+        </message>
+        <message name="IDS_DATA_SHARING_NEED_VERIFY_ACCOUNT" desc="The title of dialog that prompts users to verify the account.">
+          Verify your account
+        </message>
+        <message name="IDS_DATA_SHARING_NEED_VERIFY_ACCOUNT_BUTTON" desc="The confirm button of dialog that prompts users to verify the account.">
+          Verify it's you
+        </message>
+
+        <!-- errors and warnings -->
+        <message name="IDS_DATA_SHARING_GOT_IT" desc="The general confirm button of informative dialogs.">
+          Got it
+        </message>
+        <message name="IDS_DATA_SHARING_SOMETHING_WRONG" desc="The title of the generic failure dialog.">
+          Something went wrong
+        </message>
+        <message name="IDS_DATA_SHARING_ORGANIZATION_DISALLOW_SIGN_IN" desc="The title of the organization disallowing signin dialog.">
+          Your organization doesn't allow you to sign in
+        </message>
+        <message name="IDS_DATA_SHARING_ORGANIZATION_LIMIT_SAVE" desc="The title of the organization limiting saving to account dialog.">
+          Your organization limits what you can save
+        </message>
+        <message name="IDS_DATA_SHARING_SIGNED_OUT" desc="The title of the dialog that prompts users to allow Chrome sign in.">
+          You’re signed out
+        </message>
+        <message name="IDS_DATA_SHARING_GROUP_FULL" desc="The title of the group being full dialog when joining.">
+          This tab group is full
+        </message>
+      </if>
+
+      <!-- Sign in Sync Flow -->
+      <message name="IDS_DATA_SHARING_NEED_SIGN_IN_BODY" desc="The body of dialog that prompts users to sign in and sync.">
+        To share or join tab groups, you need to sign in and turn on sync
+      </message>
+      <message name="IDS_DATA_SHARING_NEED_SIGN_IN_CONTINUE_BUTTON" desc="The continue button of dialog that prompts users to sign in and sync.">
+        Continue
+      </message>
+      <message name="IDS_DATA_SHARING_NEED_SYNC_BODY" desc="The body of dialog that prompts users to sync.">
+        To share or join tab groups, you need to turn on sync
+      </message>
+      <message name="IDS_DATA_SHARING_NEED_SYNC_TAB_GROUPS_BODY" desc="The body of dialog that prompts users to sync tab groups.">
+        To share, join, and collaborate in tab groups, sync your tab groups in Settings
+      </message>
+      <message name="IDS_DATA_SHARING_NEED_VERIFY_ACCOUNT_BODY" desc="The body of dialog that prompts users to verify account.">
+        To share, join, and collaborate in tab groups, verify it’s you
+      </message>
+
+      <!-- errors and warnings -->
+      <message name="IDS_DATA_SHARING_SOMETHING_WRONG_BODY" desc="The body text of the generic failure dialog.">
+        There was an error. Try again.
+      </message>
+      <message name="IDS_DATA_SHARING_SHARE_ERROR_BODY" desc="The body text of the share error bubble.">
+        Something went wrong. Try again.
+      </message>
+      <message name="IDS_DATA_SHARING_JOIN_WARNING" desc="The warning at the top of join dialog.">
+        Make sure you trust the person that sent this invitation
+      </message>
+      <message name="IDS_DATA_SHARING_ORGANIZATION_DISALLOW_SIGN_IN_BODY" desc="The body text of the organization disallowing signin dialog.">
+        To share or join tab groups, you must be able to sign in to Chrome
+      </message>
+      <message name="IDS_DATA_SHARING_ORGANIZATION_LIMIT_SAVE_BODY" desc="The body text of the organization limiting saving to account dialog.">
+        When your organization limits saving to your Google Account, you can’t share or join tab groups
+      </message>
+      <message name="IDS_DATA_SHARING_SIGNED_OUT_BODY" desc="The body text of the dialog that prompts users to allow Chrome sign in.">
+        To share, join, and collaborate in tab groups, open settings and turn on Allow Chrome sign-in
+      </message>
+      <message name="IDS_DATA_SHARING_SETTINGS" desc="The generic text on buttons that take users to Chrome settings page.">
+        Settings
+      </message>
+      <message name="IDS_DATA_SHARING_GROUP_FULL_BODY" desc="The body text of the group being full dialog when joining.">
+        Contact the person who sent this link
+      </message>
+      <message name="IDS_DATA_SHARING_OWNER_CANNOT_SHARE" desc="The warning on the manage dialog that warns the owner cannot share the link because group is full.">
+        Your tab group is full, new members can’t join with the link
+      </message>
+    <!-- /Data Sharing -->
+
       <!-- Application window menu -->
       <if expr="not use_titlecase">
         <message name="IDS_APP_MENU_RELOAD" desc="The reload menu in application windows">
@@ -11889,14 +12081,6 @@ Check your passwords anytime in <ph name="GOOGLE_PASSWORD_MANAGER">$1<ex>Google 
       <message name="IDS_MEDIA_SCREEN_CAPTURE_NOTIFICATION_STOP" desc="Text shown on the button that stops screen capture.">
         Stop sharing
       </message>
-      <if expr="chromeos_lacros">
-        <message name="IDS_LACROS_STATUS_TRAY_SCREEN_ACCESS_STOP" desc="screen sharing stop button">
-          Stop
-        </message>
-        <message name="IDS_LACROS_STATUS_TRAY_SCREEN_SHARE_TITLE" desc="The title for screen sharing notification">
-          You're sharing your screen
-        </message>
-      </if>
 
       <!-- Strings for the certificate selection dialog triggered by chrome.platformKeys -->
       <message name="IDS_PLATFORM_KEYS_SELECT_CERT_DIALOG_TEXT" desc="The text in the dialog that prompts the user to select a certificate when an extension requests certificates through the platformKeys API.">
@@ -12642,11 +12826,11 @@ Check your passwords anytime in <ph name="GOOGLE_PASSWORD_MANAGER">$1<ex>Google 
       </message>
 
       <message name="IDS_PAGE_SPECIFIC_SITE_DATA_DIALOG_RELATED_APPS_TITLE" desc="This is a title of a section that displays a list of related installed web applications to the site the user is currently visiting. The label is shown in the `Cookies and site data` dialog.">
-        Related installed applications
+        Related applications
       </message>
 
       <message name="IDS_PAGE_SPECIFIC_SITE_DATA_DIALOG_RELATED_APPS_SUBTITLE" desc="This is a subtitle of a section that displays a list of related installed web applications to the site the user is currently visiting. It provides more information about what related installed web applications means. The label is shown in the `Cookies and site data` dialog.">
-        A site can find out if related web applications are installed on your machine. This info is available to the site and its subdomains.
+        A site and its subdomains can see what related web applications are installed on your device.
       </message>
 
       <message name="IDS_PAGE_SPECIFIC_SITE_DATA_DIALOG_RELATED_APPS_SETTINGS_LINK_TOOLTIP" desc="This is a tooltip for a link to an app settings page displayed on a related installed web application on the on-site data dialog. The label is shown in the `Cookies and site data` dialog.">
@@ -13294,8 +13478,8 @@ This can include information about installed software, files, your browser, and 
             <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_STAY_HERE_BUTTON_LABEL" desc="Label of the cancel button in the web signin interception bubble">
               Stay Here
             </message>
-            <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_TITLE_SUPERVISED" desc="Title of the Signin Bubble intercept that is shown when a signed out user signs in on the web with a supervised account." translateable="false">
-              Be Safe Online
+            <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_TITLE_SUPERVISED" desc="This string is the title of a promotion about signing in to Chrome with the user's Google Account. It explains the overarching user benefit of signing in: Kids of a certain age are motivated to get their parents’ help staying safer online, so the tone should be motivating. We want users to understand why signing in is beneficial, and click 'Continue as name' to sign in to their Google Account.">
+              Be Safer Online
             </message>
           </then>
           <else>
@@ -13311,12 +13495,15 @@ This can include information about installed software, files, your browser, and 
             <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_STAY_HERE_BUTTON_LABEL" desc="Label of the cancel button in the web signin interception bubble">
               Stay here
             </message>
-            <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_TITLE_SUPERVISED" desc="Title of the Signin Bubble intercept that is shown when a signed out user signs in on the web with a supervised account." translateable="false">
-              Be safe online
+            <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_TITLE_SUPERVISED" desc="This string is the title of a promotion about signing in to Chrome with the user's Google Account. It explains the overarching user benefit of signing in: Kids of a certain age are motivated to get their parents’ help staying safer online, so the tone should be motivating. We want users to understand why signing in is beneficial, and click 'Continue as name' to sign in to their Google Account.">
+              Be safer online
             </message>
           </else>
         </if>
 
+        <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_SUBTITLE_SUPERVISED" desc="This string is the body of a promotion about signing in to Chrome with the user's Google Account. It explains the overarching user benefit of signing in: Kids of a certain age are motivated to get their parents’ help staying safer online, so the tone should be motivating. We want users to understand why signing in is beneficial, and click 'Continue as name' to sign in to their Google Account.">
+          To stay safer online with your parent’s choices, sign in as <ph name="USER_EMAIL">$1<ex>john@google.com</ex></ph>
+        </message>
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CANCEL_BUTTON_LABEL" desc="Label of the cancel button in the web signin interception bubble">
           No thanks
         </message>
@@ -13325,6 +13512,9 @@ This can include information about installed software, files, your browser, and 
         </message>
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CONFIRM_SWITCH_BUTTON_LABEL" desc="Label of the profile switch button in the web signin interception bubble">
           Ok
+        </message>
+        <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_DESC_SUPERVISED" desc="This string is the body of a dialog about signing in to Chrome with the user's Google Account. It appears when a kid tries to sign in to a Google service (like Gmail) with their account while using someone else’s Chrome profile. The message explains the overarching user benefit of signing in: Kids of a certain age are motivated to get their parents’ help staying safer online, so the tone should be motivating. The body text is after the 'Sign in to Chrome in a new profile?' string. We want users to understand why signing in to their own profile is beneficial, and click 'Continue as name' to sign in to their Google Account.">
+          To stay safer online with your parent’s choices, sign in to your own profile as <ph name="USER_EMAIL">$1<ex>john@gmail.com</ex></ph>
         </message>
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_CONTINUE_BUTTON_LABEL" desc="This string is the button for a dialog that appears when the user is already signed in to Chrome, but they just tried to sign in to a Google service (like Gmail) with a different Google Account that already has its own Chrome profile on this device. The button is after the 'Switch to existing Chrome profile?' string. When the user clicks this button, they will open a different existing Chrome profile that is already signed in to the other Google Account. The tone should be inviting and helpful.">
           Continue
@@ -14142,26 +14332,26 @@ Please help our engineers fix this problem. Tell us what happened right before y
       <!-- Mac Menubar Menus -->
       <if expr="is_macosx">
         <!-- Menubar Menu Titles -->
-        <!-- NOTE: Some of these exist in context menus with Title Case support, but we use different IDs in case we need slightly different strings in some language due to the different context. -->
-        <message name="IDS_FILE_MENU_MAC" desc="The menu title of the Mac file menu.">
+        <!-- NOTE: Some of these exist in context menus with Title Case support, but we use different IDs and explicit meaning strings so that we can get different strings in some languages due to the different context. -->
+        <message name="IDS_FILE_MENU_MAC" desc="The menu title of the Mac file menu." meaning="Top-level menu">
           File
         </message>
-        <message name="IDS_EDIT_MENU_MAC" desc="The menu title of the Mac edit menu.">
+        <message name="IDS_EDIT_MENU_MAC" desc="The menu title of the Mac edit menu." meaning="Top-level menu">
           Edit
         </message>
-        <message name="IDS_VIEW_MENU_MAC" desc="The menu title of the Mac view menu.">
+        <message name="IDS_VIEW_MENU_MAC" desc="The menu title of the Mac view menu." meaning="Top-level menu">
           View
         </message>
-        <message name="IDS_HISTORY_MENU_MAC" desc="The menu title of the Mac history menu.">
+        <message name="IDS_HISTORY_MENU_MAC" desc="The menu title of the Mac history menu." meaning="Top-level menu">
           History
         </message>
-        <message name="IDS_WINDOW_MENU_MAC" desc="The menu title of the Mac window menu.">
+        <message name="IDS_WINDOW_MENU_MAC" desc="The menu title of the Mac window menu." meaning="Top-level menu">
           Window
         </message>
-        <message name="IDS_TAB_MENU_MAC" desc="The menu title of the Mac tab menu.">
+        <message name="IDS_TAB_MENU_MAC" desc="The menu title of the Mac tab menu." meaning="Top-level menu, tab as in the UI element in the tabstrip containing a website">
           Tab
         </message>
-        <message name="IDS_HELP_MENU_MAC" desc="The menu title of the Mac help menu.">
+        <message name="IDS_HELP_MENU_MAC" desc="The menu title of the Mac help menu." meaning="Top-level menu">
           Help
         </message>
         <!-- App menu -->
@@ -16223,9 +16413,6 @@ Please help our engineers fix this problem. Tell us what happened right before y
       <message name="IDS_WEBAUTHN_TRANSPORT_CABLE" desc="Menu item text. The user selects this to use their phone, once connected to their computer over Bluetooth Low Energy, to sign in to web site on their computer.">
         Your phone
       </message>
-      <message name="IDS_WEBAUTHN_TRANSPORT_AOA" desc="Menu item text. The user selects this to use their phone, once physically connected with a USB cable, to sign in to a web site on their computer. This appears next to the similar string 'Your phone' with TC ID 4865460888230929643.">
-        Your phone with a USB cable
-      </message>
       <message name="IDS_WEBAUTHN_TRANSPORT_WINDOWS_HELLO_OR_SECURITY_KEY" desc="Menu item text. The user selects this to use Windows Hello or a security key (an external physical device for user authentication). Windows Hello is a Microsoft brand and should be translated the same as it is in Windows. If you edit the language code in https://support.microsoft.com/en-us/windows/learn-about-windows-hello-and-set-it-up-dae28983-8242-bb2a-d3d1-87c9d265a5f0 you can see how Microsoft translates it in several languages. (It is often left untranslated.)">
         Windows Hello or external security key
       </message>
@@ -16317,9 +16504,6 @@ Please help our engineers fix this problem. Tell us what happened right before y
       <message name="IDS_WEBAUTHN_TRANSPORT_POPUP_CABLE" desc="Menu item text. The user selects this to verify their identity on a web site (i.e. sign in) using their phone. They wirelessly connect their phone to their computer over Bluetooth Low Energy, and then use the phone to sign in to web sites on their computer.">
         Verify via your phone
       </message>
-      <message name="IDS_WEBAUTHN_TRANSPORT_POPUP_AOA" desc="Menu item text. The user selects this to verify their identity on a web site (i.e. sign in) using their phone. They physically connect the phone with a USB cable. This appears next to the similar string 'Verify via your phone' with TC ID 4577976468067558540.">
-        Verify via your phone with a USB cable
-      </message>
       <message name="IDS_WEBAUTHN_CABLE_ACTIVATE_TITLE" desc="Title of the dialog shown when the user tries to sign-in using a phone as a security key.">
         Check your phone
       </message>
@@ -16345,18 +16529,6 @@ Please help our engineers fix this problem. Tell us what happened right before y
         Close
       </message>
 
-      <message name="IDS_WEBAUTHN_CABLEV2_SERVERLINK_TROUBLE" desc="This message is shown as a link below IDS_WEBAUTHN_CABLEV2_SERVERLINK_DESCRIPTION. The 'it' referenced here is the notification mentioned in that message.">
-        Didn't get it?
-      </message>
-      <message name="IDS_WEBAUTHN_CABLEV2_AOA_TITLE" desc="Contents of the dialog shown when the user tries to sign-in using a phone as a security key. The 'cable' is a physical USB cable.">
-        Connect your phone with a cable
-      </message>
-      <message name="IDS_WEBAUTHN_CABLEV2_AOA_DESCRIPTION" desc="Contents of the dialog shown when the user tries to sign-in using a phone as a security key.">
-        Use a USB cable to connect your phone to your computer. If your phone is already connected, unplug it and plug it back in.
-      </message>
-      <message name="IDS_WEBAUTHN_CABLEV2_AOA_REQUEST_DESCRIPTION" desc="Potentially displayed in a permissions dialog on Android to describe the type of request that a computer, that is connected over USB, is making. In this context the request from the computer is to use the Android device as a security key. A 'security key' is typically a physical USB token used for authentication (e.g. a gNubby) but in this case the phone is acting as one. The translation of 'security key' should match the phrase used in TC IDs such as 1685482178220389035 and 7775033610159191691">
-        Security key request
-      </message>
       <message name="IDS_WEBAUTHN_PASSKEY_PHONE_OR_TABLET_LABEL" desc="The label on a button-like element in a list of options. Clicking this causes Chrome to show a QR code that the user can scan with their phone to use that phone for signing into a website. Here 'phone' is used as a short hand for smartphone.">
         Use a phone or tablet
       </message>
@@ -16373,9 +16545,6 @@ Please help our engineers fix this problem. Tell us what happened right before y
         Use a passkey from <ph name="DEVICE_NAME">$1<ex>Ted's Pixel 6 Pro</ex></ph> to sign in to <ph name="WEBSITE">$2<ex>accounts.google.com</ex></ph>
       </message>
 
-      <message name="IDS_WEBAUTHN_CABLE_ACTIVATE_DESCRIPTION_SHORT" desc="Second line of text in an item letting the user know that they can use their phone as a security key. The user needs to check their phone and respond to a notification that will ask them to press a button on the phone's screen to confirm that they're logging in.">
-        Unlock your phone and confirm it's you
-      </message>
       <!-- WebAuthn authenticator PIN entry/setup -->
       <message name="IDS_WEBAUTHN_PIN_ENTRY_TITLE" desc="Title of the dialog shown when instructing the user to enter the PIN code to use a security key (an external physical device for user authentication) with their computer.">
         PIN required
@@ -16507,12 +16676,6 @@ Please help our engineers fix this problem. Tell us what happened right before y
       <message name="IDS_WEBAUTHN_CREATE_PASSKEY_EXTRA_INCOGNITO" desc="Additional body text on a dialog prompting the user to create a passkey for signing into a website. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'.">
          This passkey will only be saved on this device. It will remain on this device after you close all Incognito windows.
       </message>
-      <message name="IDS_WEBAUTHN_CREATE_PASSKEY_EXTRA_WIN" desc="Additional body text on a dialog prompting the user to create a passkey for signing into a website. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'. 'Windows Hello' is a feature of the Microsoft Windows operating system (https://support.microsoft.com/en-us/windows/learn-about-windows-hello-and-set-it-up-dae28983-8242-bb2a-d3d1-87c9d265a5f0).">
-         This passkey will only be saved in Windows Hello
-      </message>
-      <message name="IDS_WEBAUTHN_CREATE_PASSKEY_EXTRA_WIN_INCOGNITO" desc="Additional body text on a dialog prompting the user to create a passkey for signing into a website. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'. 'Windows Hello' is a feature of the Microsoft Windows operating system (https://support.microsoft.com/en-us/windows/learn-about-windows-hello-and-set-it-up-dae28983-8242-bb2a-d3d1-87c9d265a5f0).">
-         This passkey will be saved only in Windows Hello. It will remain on this device after you close all Incognito windows.
-      </message>
       <message name="IDS_WEBAUTHN_CREATE_PASSKEY_CHOOSE_DEVICE_TITLE" desc="The title of a dialog prompting the user to create a passkey for signing into a website. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'.">
         Choose where to save your passkey for <ph name="APP_NAME">$1<ex>example.com</ex></ph>
       </message>
@@ -16595,6 +16758,30 @@ Please help our engineers fix this problem. Tell us what happened right before y
       </message>
       <message name="IDS_WEBAUTHN_SOURCE_PHONE" desc="The subtitle shown in a button that lets the user select a passkey to sign in, indicating that the passkey resides in their phone.">
         From "<ph name="PHONE_NAME">$1<ex>Pixel 7</ex></ph>"
+      </message>
+      <message name="IDS_WEBAUTHN_PASSKEYS_AND_SECURITY_KEYS" desc="The title of a dialog prompting the user to create or use a passkey on their phones by scanning a QR code or on a security key. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'">
+        Passkeys &amp; Security Keys
+      </message>
+      <message name="IDS_WEBAUTHN_PASSKEYS" desc="The title of a dialog prompting the user to create or use a passkey on their phones by scanning a QR code. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'">
+        Passkeys
+      </message>
+      <message name="IDS_WEBAUTHN_USE_YOUR_PHONE_OR_TABLET" desc="The header of a section prompting the user to create or use a passkey on their phone or tablet by scanning a QR code.">
+        Use your phone or tablet
+      </message>
+      <message name="IDS_WEBAUTHN_USE_YOUR_PHONE_OR_TABLET_CREATE_DESCRIPTION" desc="The description of a section prompting the user to create a passkey on their phone or tablet by scanning a QR code.">
+        Scan this QR code with the camera on the device where you want to create and save your passkey for <ph name="APP_NAME">$1<ex>example.com</ex></ph>
+      </message>
+      <message name="IDS_WEBAUTHN_USE_YOUR_PHONE_OR_TABLET_SIGN_IN_DESCRIPTION" desc="The description of a section prompting the user to use a passkey on their phone or tablet by scanning a QR code.">
+        Scan this QR code with the camera on the device that has your passkey for <ph name="APP_NAME">$1<ex>example.com</ex></ph>
+      </message>
+      <message name="IDS_WEBAUTHN_USE_YOUR_SECURITY_KEY" desc="The header of a section prompting the user to create or use a passkey on a security key.">
+        Use your security key
+      </message>
+      <message name="IDS_WEBAUTHN_USE_YOUR_SECURITY_KEY_CREATE_DESCRIPTION" desc="The description of a section prompting the user to create a passkey on a security key.">
+        Insert and touch your security key to set it up for <ph name="APP_NAME">$1<ex>example.com</ex></ph>
+      </message>
+      <message name="IDS_WEBAUTHN_USE_YOUR_SECURITY_KEY_SIGN_IN_DESCRIPTION" desc="The description of a section prompting the user to use a passkey on a security key.">
+        Insert and touch your security key to use it for <ph name="APP_NAME">$1<ex>example.com</ex></ph>
       </message>
 
       <!-- WebAuthn GPM desktop passkeys -->
@@ -16744,32 +16931,26 @@ Please help our engineers fix this problem. Tell us what happened right before y
       <message name="IDS_WEBAUTHN_GPM_PASSKEY_SAVED_LINK" desc="Link text within a bubble that is displayed as a confirmation that a passkey was created and saved in Google Password Manager. See IDS_WEBAUTHN_GPM_PASSKEY_SAVED_LABEL for more details.">
         Google Password Manager
       </message>
-      <message name="IDS_WEBAUTHN_GPM_PASSKEY_UPDATE_NEEDED_TITLE" desc="The title of a bubble that is displayed to notify that the creation of a new passkey is necessary because the old passkey was deleted from Google Password Manager.">
-        Passkey update needed
+      <message name="IDS_WEBAUTHN_GPM_PASSKEY_UPDATE_NEEDED_TITLE" desc="The title of a bubble that is displayed to notify that the passkey the user tried to use was deleted from the site, explaining to the user that they need to sign in with some other method. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'">
+        This passkey was deleted from this site
       </message>
-      <message name="IDS_WEBAUTHN_GPM_PASSKEY_UPDATE_NEEDED_LABEL" desc="The label in a bubble that is displayed as a confirmation that a passkey was deleted in Google Password Manager, explaining to the user to sign in to create a new one. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'">
-        Sign in to this site to create a new passkey. The old one was deleted from Google Password Manager.
-      </message>
-      <message name="IDS_WEBAUTHN_GPM_MANAGE_PASSKEYS_BUTTON" desc="The label of the 'Manage passkeys' button in the passkey-deleted-confirmation bubble. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'">
-        Manage passkeys
-      </message>
-      <message name="IDS_WEBAUTHN_GPM_GOT_IT_BUTTON" desc="The label of the 'Got it' button in the passkey-deleted-confirmation bubble.">
-        Got it
+      <message name="IDS_WEBAUTHN_GPM_PASSKEY_UPDATE_NEEDED_LABEL" desc="The label in a bubble that is displayed to notify that the passkey the user tried to use was deleted from the site, explaining to the user that they need to sign in with some other method. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'">
+        Sign in using a password or other recovery method
       </message>
       <message name="IDS_WEBAUTHN_GPM_PASSKEY_UPDATED_TITLE" desc="The title of a bubble that is displayed as a confirmation that a passkey was updated with the current user details in Google Password Manager. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'">
-        Passkey updated
+        Updated passkey
       </message>
       <message name="IDS_WEBAUTHN_GPM_PASSKEY_UPDATED_LABEL" desc="The label in a bubble that is displayed as a confirmation that a passkey was updated with the current user details in Google Password Manager, explaining that the passkeys can be managed in Google Password Manager. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'">
-        You can view and manage your passkeys saved in <ph name="GOOGLE_PASSWORD_MANAGER">$1<ex>Google Password Manager</ex></ph>
+        Manage your passwords &amp; passkeys in <ph name="GOOGLE_PASSWORD_MANAGER">$1<ex>Google Password Manager</ex></ph>
       </message>
       <message name="IDS_WEBAUTHN_GPM_PASSKEY_UPDATED_LINK" desc="Link text that directs the user to the Google Password Manager passwords page within a bubble that is displayed as a confirmation that a passkey was updated with the current user details in Google Password Manager. See IDS_WEBAUTHN_GPM_PASSKEY_UPDATED_LABEL for more details.">
         Google Password Manager
       </message>
       <message name="IDS_WEBAUTHN_GPM_PASSKEY_DELETED_TITLE" desc="The title of a bubble that is displayed as a confirmation that a passkey was deleted in Google Password Manager. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'">
-        Passkey deleted
+        Deleted passkey
       </message>
       <message name="IDS_WEBAUTHN_GPM_PASSKEY_DELETED_LABEL" desc="The label in a bubble that is displayed as a confirmation that a passkey was deleted in Google Password Manager, explaining that the passkeys can be managed in Google Password Manager. Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'">
-        You can view and manage your passkeys saved in <ph name="GOOGLE_PASSWORD_MANAGER">$1<ex>Google Password Manager</ex></ph>
+        Manage your passwords &amp; passkeys in <ph name="GOOGLE_PASSWORD_MANAGER">$1<ex>Google Password Manager</ex></ph>
       </message>
       <message name="IDS_WEBAUTHN_GPM_PASSKEY_DELETED_LINK" desc="Link text that directs the user to the Google Password Manager passwords page within a bubble that is displayed as a confirmation that a passkey was deleted in Google Password Manager. See IDS_WEBAUTHN_GPM_PASSKEY_DELETED_LABEL for more details.">
         Google Password Manager
@@ -16829,46 +17010,7 @@ Please help our engineers fix this problem. Tell us what happened right before y
     <message name="IDS_WEB_DIGITAL_CREDENTIALS_INTERSTITIAL_REQUEST_ABORTED_DIALOG_TEXT" translateable="false">
       <ph name="WEBSITE_ORIGIN">$1<ex>www.cheapalcohol.com</ex></ph> has canceled the request for identity information.
     </message>
-
-      <!-- Side Search -->
-      <message name="IDS_ACCNAME_SIDE_SEARCH_TOOL" desc="The accessible name for the side search tool.">
-        Side Search
-      </message>
-      <message name="IDS_ACCNAME_SIDE_SEARCH_TOOLBAR_BUTTON_ACTIVATED" desc="The accessible name for the side search toolbar button when the button is active and the side panel is open.">
-        Close search in side panel. Search is open in the side panel.
-      </message>
-      <message name="IDS_ACCNAME_SIDE_SEARCH_TOOLBAR_BUTTON_NOT_ACTIVATED" desc="The accessible name for the side search toolbar button when the button is not active and the side panel is not open.">
-        Open search in side panel. Search is not open in the side panel.
-      </message>
-      <message name="IDS_ACCNAME_SIDE_SEARCH_CLOSE_BUTTON" desc="The accessible name for the side search header close button.">
-        Close search in side panel
-      </message>
-      <message name="IDS_ACCNAME_SIDE_SEARCH_FEEDBACK_BUTTON" desc="The accessible name for the side search header feedback button.">
-        Submit Feedback
-      </message>
-      <message name="IDS_SIDE_SEARCH_ENTRYPOINT_LABEL" desc="The label text that is animated-in when the omnibox entrypoint is first shown.">
-        See more search results
-      </message>
-      <message name="IDS_TOOLTIP_SIDE_SEARCH_TOOLBAR_BUTTON_ACTIVATED" desc="The tooltip for the side search toolbar button when the button is active and the side panel is open.">
-        Close search in side panel
-      </message>
-      <message name="IDS_TOOLTIP_SIDE_SEARCH_TOOLBAR_BUTTON_NOT_ACTIVATED" desc="The tooltip for the side search toolbar button when the button is not active and the side panel is not open.">
-        Open search in side panel
-      </message>
-      <message name="IDS_TOOLTIP_SIDE_SEARCH_CLOSE_BUTTON" desc="The tooltip for the side search header close button.">
-        Close search in side panel
-      </message>
-      <message name="IDS_TOOLTIP_SIDE_SEARCH_FEEDBACK_BUTTON" desc="The tooltip for the side search header feedback button.">
-        Submit Feedback
-      </message>
    </if>
-
-   <message name="IDS_CABLEV2_MAKE_CREDENTIAL_NOTIFICATION_TITLE" desc="The title of a notification shown on Android that informs the user that a website wishes to register their phone for signing into that website." formatter_data="android_java">
-     Verify with this phone
-   </message>
-   <message name="IDS_CABLEV2_GET_ASSERTION_NOTIFICATION_TITLE" desc="The title of a notification shown on Android that informs the user that a website wishes to use their phone to sign them in on another computer." formatter_data="android_java">
-     Verify your identity
-   </message>
 
    <!-- Incognito Profile Menu bubble. -->
     <message name="IDS_INCOGNITO_PROFILE_MENU_TITLE" desc="The title of the Incognito version of profile menu.">

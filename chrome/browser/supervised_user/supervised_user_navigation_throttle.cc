@@ -4,6 +4,8 @@
 
 #include "chrome/browser/supervised_user/supervised_user_navigation_throttle.h"
 
+#include <utility>
+
 #include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -223,9 +225,9 @@ void SupervisedUserNavigationThrottle::OnInterstitialResult(
         CancelDeferredNavigation(
             content::NavigationThrottle::ThrottleCheckResult(
                 CANCEL, net::ERR_BLOCKED_BY_CLIENT,
-                supervised_user::CreateReauthenticationInterstitial(
-                    *navigation_handle(),
-                    GetVerificationPurposeFromFilteringReason(reason_))));
+                supervised_user::
+                    CreateReauthenticationInterstitialForBlockedSites(
+                        *navigation_handle(), reason_)));
         return;
       }
 #endif
@@ -238,29 +240,13 @@ void SupervisedUserNavigationThrottle::OnInterstitialResult(
               profile->GetPrefs(), reason_, already_sent_request, is_main_frame,
               g_browser_process->GetApplicationLocale());
       CancelDeferredNavigation(content::NavigationThrottle::ThrottleCheckResult(
-          CANCEL, net::ERR_BLOCKED_BY_CLIENT, interstitial_html));
+          CANCEL, net::ERR_BLOCKED_BY_CLIENT, std::move(interstitial_html)));
     }
   }
 }
 
 namespace supervised_user {
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-SupervisedUserVerificationPage::VerificationPurpose
-GetVerificationPurposeFromFilteringReason(FilteringBehaviorReason reason) {
-  switch (reason) {
-    case FilteringBehaviorReason::DEFAULT:
-      return SupervisedUserVerificationPage::VerificationPurpose::
-          DEFAULT_BLOCKED_SITE;
-    case FilteringBehaviorReason::ASYNC_CHECKER:
-      return SupervisedUserVerificationPage::VerificationPurpose::
-          SAFE_SITES_BLOCKED_SITE;
-    case FilteringBehaviorReason::MANUAL:
-      return SupervisedUserVerificationPage::VerificationPurpose::
-          MANUAL_BLOCKED_SITE;
-    default:
-      NOTREACHED_NORETURN();
-  }
-}
 
 bool ShouldShowReAuthInterstitial(content::NavigationHandle& navigation_handle,
                                   bool is_main_frame) {

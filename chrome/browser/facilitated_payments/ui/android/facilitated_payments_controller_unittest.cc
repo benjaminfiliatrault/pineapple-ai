@@ -33,10 +33,14 @@ class MockFacilitatedPaymentsBottomSheetBridge
 
   MOCK_METHOD(bool, IsInLandscapeMode, (), (override));
   MOCK_METHOD(
-      bool,
+      void,
       RequestShowContent,
       (base::span<const autofill::BankAccount> bank_account_suggestions),
       (override));
+  MOCK_METHOD(void,
+              RequestShowContentForEwallet,
+              (base::span<const autofill::Ewallet> ewallet_suggestions),
+              (override));
   MOCK_METHOD(void, ShowProgressScreen, (), (override));
   MOCK_METHOD(void, ShowErrorScreen, (), (override));
   MOCK_METHOD(void, Dismiss, (), (override));
@@ -68,42 +72,25 @@ class FacilitatedPaymentsControllerTest
   const std::vector<autofill::BankAccount> bank_accounts_ = {
       autofill::test::CreatePixBankAccount(100L),
       autofill::test::CreatePixBankAccount(200L)};
+  const std::vector<autofill::Ewallet> ewallets_ = {
+      autofill::test::CreateEwalletAccount(100L),
+      autofill::test::CreateEwalletAccount(200L)};
 };
 
-// Test Show method returns true when FacilitatedPaymentsBottomSheetBridge
-// is able to show.
-TEST_F(FacilitatedPaymentsControllerTest, Show_BridgeWasAbleToShow) {
-  ON_CALL(*mock_view_, RequestShowContent).WillByDefault(Return(true));
-
+// Test controller forwards call for showing the Pix FOP selector to the view.
+TEST_F(FacilitatedPaymentsControllerTest, Show_UserHasPixAccounts) {
   EXPECT_CALL(*mock_view_,
               RequestShowContent(testing::ElementsAreArray(bank_accounts_)));
 
-  // Verify that the `Show` returns true when the bridge is able to show the
-  // bottom sheet.
-  EXPECT_TRUE(controller_->Show(bank_accounts_, base::DoNothing()));
+  controller_->Show(bank_accounts_, base::DoNothing());
 }
 
-// Test Show method returns false when FacilitatedPaymentsBottomSheetBridge
-// returns false.
-TEST_F(FacilitatedPaymentsControllerTest, Show_BridgeWasNotAbleToShow) {
-  ON_CALL(*mock_view_, RequestShowContent).WillByDefault(Return(false));
-
-  // The bottom sheet could not be shown, verify that the view is informed about
-  // this failure.
-  EXPECT_CALL(*mock_view_,
-              RequestShowContent(testing::ElementsAreArray(bank_accounts_)));
-  EXPECT_CALL(*mock_view_, OnDismissed);
-
-  // The call should return false when bridge fails to show a bottom sheet.
-  EXPECT_FALSE(controller_->Show(bank_accounts_, base::DoNothing()));
-}
-
-// Test Show method returns false when there's no bank account.
-TEST_F(FacilitatedPaymentsControllerTest, Show_NoBankAccounts) {
+// Test controller does not forward call for showing the Pix FOP selector to the
+// view when there are no Pix accounts.
+TEST_F(FacilitatedPaymentsControllerTest, Show_UserHasNoPixAccounts) {
   EXPECT_CALL(*mock_view_, RequestShowContent).Times(0);
 
-  // The call should return false when there's no bank account.
-  EXPECT_FALSE(controller_->Show({}, base::DoNothing()));
+  controller_->Show({}, base::DoNothing());
 }
 
 // Test OnDismissed method.
@@ -111,12 +98,13 @@ TEST_F(FacilitatedPaymentsControllerTest, OnDismissed) {
   // Show the bottom sheet and set the user decision callback.
   base::MockCallback<base::OnceCallback<void(bool, int64_t)>>
       mock_on_user_decision_callback;
-  ON_CALL(*mock_view_, RequestShowContent).WillByDefault(Return(true));
   controller_->Show(bank_accounts_, mock_on_user_decision_callback.Get());
 
   // Verify that dismissal event is forwarded to the view. Also verify that the
-  // manager is informed of the diamissal via the callback.
-  EXPECT_CALL(*mock_view_, OnDismissed);
+  // manager is informed of the diamissal via the callback. The second
+  // OnDismissed call is triggered when the test fixture destroys the
+  // `controller`.
+  EXPECT_CALL(*mock_view_, OnDismissed).Times(2);
   EXPECT_CALL(mock_on_user_decision_callback,
               Run(/*is_selected=*/false, /*selected_bank_account_id=*/-1L));
 
@@ -127,7 +115,6 @@ TEST_F(FacilitatedPaymentsControllerTest, OnDismissed) {
 TEST_F(FacilitatedPaymentsControllerTest, onBankAccountSelected) {
   base::MockCallback<base::OnceCallback<void(bool, int64_t)>>
       mock_on_user_decision_callback;
-  ON_CALL(*mock_view_, RequestShowContent).WillByDefault(Return(true));
 
   // view_ is assigned when the bottom sheet is shown.
   controller_->Show(bank_accounts_, mock_on_user_decision_callback.Get());
@@ -178,4 +165,59 @@ TEST_F(FacilitatedPaymentsControllerTest, IsInLandscapeMode) {
   EXPECT_CALL(*mock_view_, IsInLandscapeMode);
 
   controller_->IsInLandscapeMode();
+}
+
+// Test controller forwards call for showing the eWallet FOP selector to the
+// view.
+TEST_F(FacilitatedPaymentsControllerTest,
+       ShowForEwallet_UserHasEwalletAccounts) {
+  EXPECT_CALL(*mock_view_, RequestShowContentForEwallet(
+                               testing::ElementsAreArray(ewallets_)));
+
+  controller_->ShowForEwallet(ewallets_, base::DoNothing());
+}
+
+// Test controller does not forward call for showing the eWallet FOP selector to
+// the view when there are no eWallet accounts.
+TEST_F(FacilitatedPaymentsControllerTest,
+       ShowForEwallet_UserHasNoEwalletAccounts) {
+  EXPECT_CALL(*mock_view_, RequestShowContentForEwallet).Times(0);
+
+  controller_->ShowForEwallet({}, base::DoNothing());
+}
+
+// Test OnDismissed method for eWallet.
+TEST_F(FacilitatedPaymentsControllerTest, ShowForEwallet_OnDismissed) {
+  // Show the bottom sheet and set the user decision callback.
+  base::MockCallback<base::OnceCallback<void(bool, int64_t)>>
+      mock_on_user_decision_callback;
+  controller_->ShowForEwallet(ewallets_, mock_on_user_decision_callback.Get());
+
+  // Verify that dismissal event is forwarded to the view. Also verify that the
+  // manager is informed of the diamissal via the callback. The second
+  // OnDismissed call is triggered when the test fixture destroys the
+  // `controller`.
+  EXPECT_CALL(*mock_view_, OnDismissed).Times(2);
+  EXPECT_CALL(mock_on_user_decision_callback,
+              Run(/*is_ewallet_selected=*/false,
+                  /*selected_ewallet_instrument_id=*/-1L));
+
+  controller_->OnDismissed(nullptr);
+}
+
+// Test OnEwalletSelected method.
+TEST_F(FacilitatedPaymentsControllerTest, OnEwalletSelected) {
+  base::MockCallback<base::OnceCallback<void(bool, int64_t)>>
+      mock_on_user_decision_callback;
+
+  // view_ is assigned when the bottom sheet is shown.
+  controller_->ShowForEwallet(ewallets_, mock_on_user_decision_callback.Get());
+
+  // When an eWallet is selected, call back should be called with true and
+  // instrument id from selected eWallet.
+  EXPECT_CALL(
+      mock_on_user_decision_callback,
+      Run(/*is_selected=*/true, /*selected_ewallet_instrument_id=*/100L));
+
+  controller_->OnEwalletSelected(nullptr, 100L);
 }

@@ -125,10 +125,11 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kOff = 0,
     kDusk = 1,
     kDesert = 2,
-    kBlack = 3,
+    kNightSky = 3,
     kWhite = 4,
     kHighContrast = 5,
-    kMaxValue = kHighContrast,
+    kAquatic = 6,
+    kMaxValue = kAquatic,
   };
 
   // OS-level preferred color scheme. (Ex. high contrast or dark mode color
@@ -574,6 +575,22 @@ class NATIVE_THEME_EXPORT NativeTheme {
     return should_use_system_accent_color_;
   }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // This should only be used by the ChromeOS Accessibility system.
+  static void SetPrefersAlwaysShowScrollbar(
+      bool prefers_always_show_scrollbar) {
+    prefers_always_show_scrollbar_ = prefers_always_show_scrollbar;
+  }
+  // Determines whether the user desires to always show scrollbars.
+  static bool GetPrefersAlwaysShowScrollbar() {
+    return prefers_always_show_scrollbar_;
+  }
+#endif
+
+  static bool IsOverlayScrollbarEnabledByOSSetting() {
+    return !prefers_always_show_scrollbar_;
+  }
+
   // On certain platforms, currently only Mac, there is a unique visual for
   // pressed states.
   virtual SkColor GetSystemButtonPressedColor(SkColor base_color) const;
@@ -673,6 +690,10 @@ class NATIVE_THEME_EXPORT NativeTheme {
   PreferredColorScheme preferred_color_scheme_ = PreferredColorScheme::kLight;
   PreferredContrast preferred_contrast_ = PreferredContrast::kNoPreference;
   std::optional<base::TimeDelta> caret_blink_interval_;
+
+  // Obtaining the PrefersAlwaysShowScrollbar system setting can be expensive,
+  // so it is cached in this boolean.
+  static bool prefers_always_show_scrollbar_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };

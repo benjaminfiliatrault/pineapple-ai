@@ -938,8 +938,6 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case AcceleratorAction::kScaleUiReset:
     case AcceleratorAction::kScaleUiUp:
       return true;
-    case AcceleratorAction::kTogglePicker:
-      return accelerators::CanTogglePicker();
     case AcceleratorAction::kToggleStylusTools:
       return accelerators::CanShowStylusTools();
     case AcceleratorAction::kStartAssistant:
@@ -977,7 +975,7 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case AcceleratorAction::kToggleClipboardHistory:
       return true;
     case AcceleratorAction::kEnableSelectToSpeak:
-      return ::features::IsAccessibilitySelectToSpeakShortcutEnabled();
+      return true;
     case AcceleratorAction::kEnableOrToggleDictation:
       return accelerators::CanEnableOrToggleDictation();
     case AcceleratorAction::kToggleDockedMagnifier:
@@ -1030,6 +1028,8 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case AcceleratorAction::kLockPressed:
     case AcceleratorAction::kLockReleased:
       return CanHandleLockButton(accelerator);
+    case AcceleratorAction::kResizePipWindow:
+      return accelerators::CanResizePipWindow();
 
     // The following are always enabled.
     case AcceleratorAction::kBrightnessDown:
@@ -1073,6 +1073,7 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case AcceleratorAction::kRotateWindow:
     case AcceleratorAction::kShowEmojiPicker:
     case AcceleratorAction::kToggleImeMenuBubble:
+    case AcceleratorAction::kTogglePicker:
     case AcceleratorAction::kShowShortcutViewer:
     case AcceleratorAction::kShowTaskManager:
     case AcceleratorAction::kSuspend:
@@ -1675,6 +1676,9 @@ void AcceleratorControllerImpl::PerformAction(
       break;
     case kTouchFingerprintSensor3:
       accelerators::TouchFingerprintSensor(3);
+      break;
+    case AcceleratorAction::kResizePipWindow:
+      accelerators::ResizePipWindow();
       break;
   }
 

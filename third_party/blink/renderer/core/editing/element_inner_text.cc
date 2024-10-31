@@ -174,11 +174,6 @@ bool ElementInnerTextCollector::IsDisplayBlockLevel(const Node& node) {
   // we should check at first.
   if (layout_object->IsAtomicInlineLevel())
     return false;
-  if (layout_object->IsRubyText()) {
-    // RT isn't consider as block-level.
-    // e.g. <ruby>abc<rt>def</rt>.innerText == "abcdef"
-    return false;
-  }
   // Note: CAPTION is associated to |LayoutTableCaption| in LayoutNG or
   // |LayoutBlockFlow| in legacy layout.
   return true;
@@ -282,7 +277,7 @@ void ElementInnerTextCollector::ProcessNode(const Node& node) {
 
   // 3. If node's computed value of 'visibility' is not 'visible', then return
   // items.
-  const ComputedStyle* style = node.GetComputedStyle();
+  const ComputedStyle* style = node.GetComputedStyleForElementOrLayoutObject();
   if (style && style->UsedVisibility() != EVisibility::kVisible) {
     return ProcessChildren(node);
   }

@@ -54,7 +54,7 @@ public class HubToolbarViewRenderTest {
     public ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
                     .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_HUB)
-                    .setRevision(6)
+                    .setRevision(7)
                     .build();
 
     @Mock private TabSwitcherDrawable.Observer mTabSwitcherDrawableObserver;
@@ -286,6 +286,7 @@ public class HubToolbarViewRenderTest {
                     mPropertyModel.set(
                             HubToolbarProperties.PANE_SWITCHER_BUTTON_DATA, paneSwitcherButtonData);
                     mPropertyModel.set(HubToolbarProperties.SEARCH_BOX_VISIBLE, true);
+                    mPropertyModel.set(HubToolbarProperties.IS_INCOGNITO, false);
                 });
         mRenderTestRule.render(mToolbar, "searchBox");
     }

@@ -51,15 +51,6 @@ class TranslateIconViewTest : public InProcessBrowserTest {
     views::Widget::InitParams params(ownership,
                                      views::Widget::InitParams::TYPE_WINDOW);
     widget->Init(std::move(params));
-    // TODO(https://crbug.com/329235190): The bubble child of a widget that is
-    // invisible will not be mapped through wayland and hence never shown so
-    // widget must be shown. However, showing widget causes
-    // RunAccessibilityPaintChecks() to fail when this feature is disabled due
-    // to node_data.GetNameFrom() == kContents.
-    if (views::test::IsOzoneBubblesUsingPlatformWidgets()) {
-      widget->Show();
-    }
-
     return widget;
   }
 };
@@ -90,7 +81,7 @@ IN_PROC_BROWSER_TEST_F(TranslateIconViewTest, ClosePartialTranslateBubble) {
   // Clicking the icon should close the Partial Translate bubble and should not
   // open the Full Page Translate bubble.
   base::RunLoop loop;
-  ui_test_utils::MoveMouseToCenterAndPress(translate_icon, ui_controls::LEFT,
+  ui_test_utils::MoveMouseToCenterAndClick(translate_icon, ui_controls::LEFT,
                                            ui_controls::DOWN | ui_controls::UP,
                                            loop.QuitClosure());
   loop.Run();

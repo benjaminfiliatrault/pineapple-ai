@@ -40,9 +40,10 @@ class GPU_EXPORT GpuMemoryBufferManager {
       gfx::GpuMemoryBufferHandle buffer_handle,
       base::UnsafeSharedMemoryRegion memory_region,
       base::OnceCallback<void(bool)> callback) = 0;
-  virtual bool CopyGpuMemoryBufferSync(
-      gfx::GpuMemoryBufferHandle buffer_handle,
-      base::UnsafeSharedMemoryRegion memory_region) = 0;
+
+  // Checks if the GpuMemoryBufferManager is connected to the GPU Service
+  // Currently on GPU process crash the connection isn't restored.
+  virtual bool IsConnected() = 0;
 };
 
 }  // namespace gpu

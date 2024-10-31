@@ -130,15 +130,17 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   [super setUp];
   // Remove closed tab history to make sure the sign-in promo is always visible
   // in recent tabs.
-  [ChromeEarlGrey clearBrowsingHistory];
+  if (![ChromeTestCase forceRestartAndWipe]) {
+    [ChromeEarlGrey clearBrowsingHistory];
+  }
   [BookmarkEarlGrey waitForBookmarkModelLoaded];
   [BookmarkEarlGrey clearBookmarks];
   GREYAssertNil([MetricsAppInterface setupHistogramTester],
                 @"Failed to set up histogram tester.");
 }
 
-- (void)tearDown {
-  [super tearDown];
+- (void)tearDownHelper {
+  [super tearDownHelper];
   [BookmarkEarlGrey clearBookmarksPositionCache];
   GREYAssertNil([MetricsAppInterface releaseHistogramTester],
                 @"Cannot reset histogram tester.");
@@ -146,8 +148,6 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config = [super appConfigurationForTestCase];
-
-  config.features_enabled.push_back(kClearDeviceDataOnSignOutForManagedUsers);
 
   if ([self isRunningTest:@selector(testOpenManageSyncSettingsFromNTP)] ||
       [self isRunningTest:@selector

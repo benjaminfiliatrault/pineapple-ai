@@ -417,4 +417,14 @@ public interface TabObserver {
      * Retrieve the current animation state using the Tab's WebContents.
      */
     default void didBackForwardTransitionAnimationChange() {}
+
+    /** Called when the content sensitivity of the tab changes. */
+    default void onTabContentSensitivityChanged(Tab tab, boolean contentIsSensitive) {}
+
+    /**
+     * Called when the tab is unarchived from archived tab model.
+     *
+     * @param tab the {@link Tab} has been unarchived
+     */
+    default void onTabUnarchived(Tab tab) {}
 }

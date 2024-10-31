@@ -25,8 +25,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/crostini/crostini_export_import.h"
+#include "chrome/browser/ash/crostini/crostini_export_import_factory.h"
 #include "chrome/browser/ash/crostini/crostini_features.h"
 #include "chrome/browser/ash/crostini/crostini_package_service.h"
+#include "chrome/browser/ash/crostini/crostini_package_service_factory.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/extensions/file_manager/private_api_util.h"
@@ -41,6 +43,7 @@
 #include "chrome/browser/ash/fileapi/recent_file.h"
 #include "chrome/browser/ash/fileapi/recent_model.h"
 #include "chrome/browser/ash/fileapi/recent_model_factory.h"
+#include "chrome/browser/ash/guest_os/guest_os_session_tracker_factory.h"
 #include "chrome/browser/ash/guest_os/guest_os_share_path.h"
 #include "chrome/browser/ash/guest_os/guest_os_share_path_factory.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_service.h"
@@ -735,16 +738,17 @@ FileManagerPrivateInternalImportCrostiniImageFunction::Run() {
       file_system_context->CrackURLInFirstPartyContext(GURL(params->url))
           .path();
 
-  crostini::CrostiniExportImport::GetForProfile(profile)->ImportContainer(
-      crostini::DefaultContainerId(), path,
-      base::BindOnce(
-          [](base::FilePath path, crostini::CrostiniResult result) {
-            if (result != crostini::CrostiniResult::SUCCESS) {
-              LOG(ERROR) << "Error importing crostini image " << Redact(path)
-                         << ": " << (int)result;
-            }
-          },
-          path));
+  crostini::CrostiniExportImportFactory::GetForProfile(profile)
+      ->ImportContainer(
+          crostini::DefaultContainerId(), path,
+          base::BindOnce(
+              [](base::FilePath path, crostini::CrostiniResult result) {
+                if (result != crostini::CrostiniResult::SUCCESS) {
+                  LOG(ERROR) << "Error importing crostini image "
+                             << Redact(path) << ": " << (int)result;
+                }
+              },
+              path));
   return RespondNow(NoArguments());
 }
 
@@ -766,7 +770,7 @@ FileManagerPrivateInternalSharePathsWithCrostiniFunction::Run() {
   }
 
   auto vm_info =
-      guest_os::GuestOsSessionTracker::GetForProfile(profile)->GetVmInfo(
+      guest_os::GuestOsSessionTrackerFactory::GetForProfile(profile)->GetVmInfo(
           params->vm_name);
   auto* share_service =
       guest_os::GuestOsSharePathFactory::GetForProfile(profile);
@@ -874,12 +878,14 @@ FileManagerPrivateInternalGetLinuxPackageInfoFunction::Run() {
       file_manager::util::GetFileSystemContextForRenderFrameHost(
           profile, render_frame_host());
 
-  crostini::CrostiniPackageService::GetForProfile(profile)->GetLinuxPackageInfo(
-      crostini::DefaultContainerId(),
-      file_system_context->CrackURLInFirstPartyContext(GURL(params->url)),
-      base::BindOnce(&FileManagerPrivateInternalGetLinuxPackageInfoFunction::
-                         OnGetLinuxPackageInfo,
-                     this));
+  crostini::CrostiniPackageServiceFactory::GetForProfile(profile)
+      ->GetLinuxPackageInfo(
+          crostini::DefaultContainerId(),
+          file_system_context->CrackURLInFirstPartyContext(GURL(params->url)),
+          base::BindOnce(
+              &FileManagerPrivateInternalGetLinuxPackageInfoFunction::
+                  OnGetLinuxPackageInfo,
+              this));
   return RespondLater();
 }
 
@@ -911,7 +917,7 @@ FileManagerPrivateInternalInstallLinuxPackageFunction::Run() {
       file_manager::util::GetFileSystemContextForRenderFrameHost(
           profile, render_frame_host());
 
-  crostini::CrostiniPackageService::GetForProfile(profile)
+  crostini::CrostiniPackageServiceFactory::GetForProfile(profile)
       ->QueueInstallLinuxPackage(
           crostini::DefaultContainerId(),
           file_system_context->CrackURLInFirstPartyContext(GURL(params->url)),

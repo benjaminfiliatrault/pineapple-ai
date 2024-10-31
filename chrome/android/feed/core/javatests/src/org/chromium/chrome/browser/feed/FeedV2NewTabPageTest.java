@@ -96,6 +96,7 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
+import org.chromium.components.signin.test.util.TestAccounts;
 import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -332,7 +333,7 @@ public class FeedV2NewTabPageTest {
                 .perform(RecyclerViewActions.scrollToPosition(SIGNIN_PROMO_POSITION));
         onView(withId(R.id.signin_promo_view_container)).check(matches(isDisplayed()));
 
-        mSigninTestRule.addAccountThenSignin(AccountManagerTestRule.TEST_ACCOUNT_1);
+        mSigninTestRule.addAccountThenSignin(TestAccounts.ACCOUNT1);
 
         onView(withId(R.id.feed_stream_recycler_view))
                 .perform(RecyclerViewActions.scrollToPosition(SIGNIN_PROMO_POSITION));

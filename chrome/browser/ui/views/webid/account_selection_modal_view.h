@@ -17,7 +17,9 @@
 #include "third_party/blink/public/mojom/webid/federated_auth_request.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/progress_bar.h"
+#include "ui/views/controls/throbber.h"
 #include "ui/views/window/dialog_delegate.h"
 
 class AccountSelectionModalView : public views::DialogDelegateView,
@@ -86,6 +88,8 @@ class AccountSelectionModalView : public views::DialogDelegateView,
   std::u16string GetQueuedAnnouncementForTesting();
 
  private:
+  friend class AccountSelectionModalViewTest;
+
   // Returns a View for header of an account chooser. It contains text to prompt
   // the user to sign in to an RP with an account from an IDP.
   std::unique_ptr<views::View> CreateHeader();
@@ -123,6 +127,9 @@ class AccountSelectionModalView : public views::DialogDelegateView,
   // `ConfigureBrandImageView`.
   std::unique_ptr<views::View> CreateIconHeaderView();
 
+  // Returns a BoxLayoutView containing a spinner.
+  std::unique_ptr<views::BoxLayoutView> CreateSpinnerIconView();
+
   // Returns a BoxLayoutView containing the IDP icon. If the image cannot be
   // fetched, a globe icon is shown.
   std::unique_ptr<views::BoxLayoutView> CreateIdpIconView();
@@ -131,18 +138,32 @@ class AccountSelectionModalView : public views::DialogDelegateView,
   // that order, horizontally.
   std::unique_ptr<views::BoxLayoutView> CreateCombinedIconsView();
 
-  // Hides `idp_brand_icon_` and shows `combined_icons_` upon successful IDP and
-  // RP icon fetches.
+  // Hides `header_icon_spinner_` and shows `idp_brand_icon_` upon successful
+  // IDP icon fetch.
+  void OnIdpBrandIconFetched();
+
+  // Hides `header_icon_spinner_`, `idp_brand_icon_` and shows `combined_icons_`
+  // upon successful IDP and RP icon fetches.
   void OnCombinedIconsFetched();
 
-  // Adds a progress bar at the top of the modal dialog.
-  void AddProgressBar();
-
-  // Removes all child views and dangling pointers.
-  void RemoveNonHeaderChildViews();
+  // Removes all child views and dangling pointers and adjust header with
+  // progress bar and body label if needed.
+  void RemoveNonHeaderChildViewsAndUpdateHeaderIfNeeded();
 
   // Removes `combined_icons_` and all its child views, if available.
   void MaybeRemoveCombinedIconsView();
+
+  // Notifies the observer of the account selection and updates the continue
+  // button into a spinner button.
+  void OnContinueButtonClicked(const content::IdentityRequestAccount& account,
+                               const content::IdentityProviderData& idp_data,
+                               const ui::Event& event);
+
+  // Updates the button to have a spinner appear in the middle of it.
+  void ReplaceButtonWithSpinner(
+      views::MdTextButton* button,
+      ui::ColorId spinner_color = ui::kColorButtonForeground,
+      ui::ColorId button_color = ui::kColorButtonBackground);
 
   // View containing the header.
   raw_ptr<views::View> header_view_ = nullptr;
@@ -151,13 +172,13 @@ class AccountSelectionModalView : public views::DialogDelegateView,
   raw_ptr<views::View> header_icon_view_ = nullptr;
 
   // View containing the use other account button.
-  raw_ptr<views::View> use_other_account_button_ = nullptr;
+  raw_ptr<views::MdTextButton> use_other_account_button_ = nullptr;
 
   // View containing the back button.
   raw_ptr<views::View> back_button_ = nullptr;
 
   // View containing the continue button.
-  raw_ptr<views::View> continue_button_ = nullptr;
+  raw_ptr<views::MdTextButton> continue_button_ = nullptr;
 
   // View containing the cancel button.
   raw_ptr<views::View> cancel_button_ = nullptr;
@@ -175,6 +196,10 @@ class AccountSelectionModalView : public views::DialogDelegateView,
   // loading dialog but is only visible after the loading dialog.
   raw_ptr<BrandIconImageView> idp_brand_icon_ = nullptr;
 
+  // View containing the spinner in the header. This spinner is shown until the
+  // IDP brand icon is fetched.
+  raw_ptr<views::Throbber> header_icon_spinner_ = nullptr;
+
   // View containing the IDP brand icon image meant to be shown in the request
   // permission dialog together with the RP icon. This icon is a smaller version
   // of `idp_brand_icon_` because it has to share the space in the header with
@@ -189,8 +214,8 @@ class AccountSelectionModalView : public views::DialogDelegateView,
   // will be made visible only in the request permission dialog.
   raw_ptr<views::BoxLayoutView> combined_icons_ = nullptr;
 
-  // Whether a progress bar is present.
-  bool has_progress_bar_{false};
+  // Whether a spinner is present.
+  bool has_spinner_{false};
 
   // Whether the title has been announced for accessibility.
   bool has_announced_title_{false};

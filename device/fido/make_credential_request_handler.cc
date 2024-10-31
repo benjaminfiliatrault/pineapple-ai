@@ -181,7 +181,6 @@ base::flat_set<FidoTransportProtocol> GetTransportsAllowedByRP(
           FidoTransportProtocol::kBluetoothLowEnergy,
           FidoTransportProtocol::kNearFieldCommunication,
           FidoTransportProtocol::kHybrid,
-          FidoTransportProtocol::kAndroidAccessory,
       };
     case AuthenticatorAttachment::kAny:
       return {
@@ -190,7 +189,6 @@ base::flat_set<FidoTransportProtocol> GetTransportsAllowedByRP(
           FidoTransportProtocol::kUsbHumanInterfaceDevice,
           FidoTransportProtocol::kBluetoothLowEnergy,
           FidoTransportProtocol::kHybrid,
-          FidoTransportProtocol::kAndroidAccessory,
       };
   }
 
@@ -559,7 +557,7 @@ void MakeCredentialRequestHandler::AuthenticatorRemoved(
       state_ = State::kFinished;
       std::move(completion_callback_)
           .Run(MakeCredentialStatus::kAuthenticatorRemovedDuringPINEntry,
-               std::nullopt, nullptr);
+               std::nullopt, authenticator);
     }
   }
 }
@@ -884,7 +882,7 @@ void MakeCredentialRequestHandler::OnEnrollmentError(
   state_ = State::kFinished;
   std::move(completion_callback_)
       .Run(MakeCredentialStatus::kAuthenticatorResponseInvalid, std::nullopt,
-           nullptr);
+           bio_enroller_->authenticator());
 }
 
 void MakeCredentialRequestHandler::OnEnrollmentDismissed() {

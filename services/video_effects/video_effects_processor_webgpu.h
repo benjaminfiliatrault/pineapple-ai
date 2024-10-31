@@ -62,20 +62,22 @@ class VideoEffectsProcessorWebGpu {
 
   void OnRequestAdapter(wgpu::RequestAdapterStatus status,
                         wgpu::Adapter adapter,
-                        char const* message);
+                        wgpu::StringView message);
 
   void OnRequestDevice(wgpu::RequestDeviceStatus status,
                        wgpu::Device device,
-                       char const* message);
+                       wgpu::StringView message);
 
-  void OnDeviceLost(WGPUDeviceLostReason reason, char const* message);
+  void OnDeviceLost(const wgpu::Device& device,
+                    wgpu::DeviceLostReason reason,
+                    wgpu::StringView message);
 
-  static void ErrorCallback(WGPUErrorType type,
-                            char const* message,
-                            void* userdata);
+  static void ErrorCallback(const wgpu::Device& device,
+                            wgpu::ErrorType type,
+                            wgpu::StringView message);
 
   static void LoggingCallback(WGPULoggingType type,
-                              char const* message,
+                              WGPUStringView message,
                               void* userdata);
 
   void QueryDone(

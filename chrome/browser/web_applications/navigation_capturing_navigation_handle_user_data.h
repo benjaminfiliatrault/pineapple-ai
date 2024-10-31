@@ -10,7 +10,12 @@
 #include "base/memory/raw_ptr.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/navigation_handle_user_data.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "ui/base/window_open_disposition.h"
+
+namespace base {
+class Value;
+}
 
 namespace content {
 class NavigationHandle;
@@ -22,42 +27,127 @@ namespace web_app {
 
 // TODO(crbug.com/336371044): Support web apps that open in a new tab.
 // The initial result of navigation handling, stored as an enum to prevent
-// transferring a `Browser` instance everywhere. The possible use-cases are:
-// 1. The web app system does not handle the navigation, so a new browser tab
-// opens.
-// 2. The web app system handles the navigation and captures it as part of a
-// left click with a new top level browsing context. Launch parameters are
-// enqueued.
-// 3. The web app system handles the navigation and launches a new app, but it
-// wasn't captured as it was triggered by a shift or middle click. Launch
-// parameters are enqueued.
-// 4. The web app system handles the navigation and opens a new app window as
-// part of a navigation that created an auxiliary browsing context. This is not
-// an app launch, and as such, launch parameters are not enqueued.
+// transferring a `Browser` instance everywhere.
+// Note: Apps can be configured to open in a browser tab or open in a standalone
+// window.
 enum class NavigationHandlingInitialResult {
+  // A browser tab was opened that wasn't the result of web app navigation
+  // capturing, but due to redirection the final behavior could change.
+  // Note: New context & capturable behavior for open-in-browser-tab apps apply
+  // to the cases below, and are not part of this category.
   kBrowserTab = 0,
-  kAppWindowNavigationCaptured = 1,
-  kAppWindowLaunchHandling = 2,
-  kAppWindowAuxContext = 3,
-  kMaxValue = kAppWindowAuxContext
+  // The navigation was captured by an app and it resulted in the creation of a
+  // new app window for the navigation. This can only occur when the app opens
+  // in a standalone window.
+  kNavigateCapturedNewAppWindow = 1,
+  // The navigation was captured and it resulted in the creation of a new
+  // browser tab for the navigation. This can only occur when the app opens in a
+  // browser tab.
+  kNavigateCapturedNewBrowserTab = 2,
+  // The navigation was captured and it resulted in a existing web contents
+  // (either in an app window or browser tab) to be navigated.
+  kNavigateCapturingNavigateExisting = 3,
+  // The capturing logic forced this to launch the app in a new app window
+  // context, with the same behavior of `navigate-new`. This is used when it was
+  // a user-modified navigation, triggered by a shift or middle click. Launch
+  // parameters are enqueued.
+  kForcedNewAppContextAppWindow = 4,
+  // Same as above but for an app that opens in a browser tab.
+  kForcedNewAppContextBrowserTab = 5,
+  // The navigation open an auxiliary context, and thus the 'window container'
+  // (app or browser) needs to stay the same.
+  kAuxContext = 6,
+  // This navigation should be excluded from redirection handling.
+  kNotHandledByNavigationHandling = 7,
+  kMaxValue = kNotHandledByNavigationHandling
 };
 
 // Information that will be used to make decisions regarding redirection.
-// Includes:
-// 1. The app_id of the source app browser if the navigation was triggered from
-// an app browser window or from a web app that is set to open in a new tab,
-// std::nullopt otherwise.
-// 2. The initial result of navigation handling by the web app system.
-// 3. The initial `WindowOpenDisposition` of the navigation.
-struct NavigationCapturingRedirectionInfo {
-  NavigationCapturingRedirectionInfo();
-  ~NavigationCapturingRedirectionInfo();
-  NavigationCapturingRedirectionInfo(
-      const NavigationCapturingRedirectionInfo& navigation_info);
+class NavigationCapturingRedirectionInfo {
+ public:
+  NavigationCapturingRedirectionInfo(const NavigationCapturingRedirectionInfo&);
+  NavigationCapturingRedirectionInfo& operator=(
+      const NavigationCapturingRedirectionInfo&);
 
-  std::optional<webapps::AppId> app_id_initial_browser;
-  NavigationHandlingInitialResult initial_nav_handling_result;
-  WindowOpenDisposition disposition = WindowOpenDisposition::UNKNOWN;
+  static NavigationCapturingRedirectionInfo Disabled();
+
+  static NavigationCapturingRedirectionInfo AuxiliaryContext(
+      const std::optional<webapps::AppId>& source_browser_app_id,
+      WindowOpenDisposition disposition);
+
+  // Created for user-modified or capturable navigations that don't have an
+  // initial controlling app of the first url.
+  static NavigationCapturingRedirectionInfo
+  NoInitialActionRedirectionHandlingEligible(
+      const std::optional<webapps::AppId>& source_browser_app_id,
+      WindowOpenDisposition disposition);
+
+  // Created for non-user modified navigations that usually launch a new app
+  // window.
+  static NavigationCapturingRedirectionInfo ForcedNewContext(
+      const std::optional<webapps::AppId>& source_browser_app_id,
+      const webapps::AppId& capturing_app_id,
+      blink::mojom::DisplayMode capturing_display_mode,
+      WindowOpenDisposition disposition);
+
+  // Created for non user modified navigations that result in a capturable
+  // navigation launching a new app container (window or tab).
+  static NavigationCapturingRedirectionInfo CapturedNewContext(
+      const std::optional<webapps::AppId>& source_browser_app_id,
+      const webapps::AppId& capturing_app_id,
+      blink::mojom::DisplayMode capturing_display_mode,
+      WindowOpenDisposition disposition);
+
+  // Created for non user modified navigations that result in a capturable
+  // navigation opening an existing app container (window or tab). This is
+  // triggered if there is a guarantee that an existing app container was
+  // already open for the controlling app.
+  static NavigationCapturingRedirectionInfo CapturedNavigateExisting(
+      const std::optional<webapps::AppId>& source_browser_app_id,
+      const webapps::AppId& capturing_app_id,
+      WindowOpenDisposition disposition);
+
+  ~NavigationCapturingRedirectionInfo();
+
+  // The initial result of navigation capturing on this navigation, on the
+  // initial url.
+  NavigationHandlingInitialResult initial_nav_handling_result() const {
+    return initial_nav_handling_result_;
+  }
+
+  // If the navigation occurred in a standalone PWA window, then this is the
+  // app_id of that PWA. Otherwise this is `std::nullopt`. Note that this will
+  // be `std::nullopt` if the navigation came from a browser tab of an
+  // open-in-browser-tab app.
+  const std::optional<webapps::AppId>& app_id_source_browser() const {
+    return app_id_source_browser_;
+  }
+
+  // The id of the capturing app_id of the first navigation, if this was
+  // captured or a forced new window.
+  // Note: This is currently not populated for aux context navigations, as it's
+  // not needed.
+  const std::optional<webapps::AppId>& first_navigation_app_id() const {
+    return first_navigation_app_id_;
+  }
+
+  // The `WindowOpenDisposition` of the first navigation.
+  WindowOpenDisposition disposition() const { return disposition_; }
+
+  base::Value ToDebugData() const;
+
+ private:
+  NavigationCapturingRedirectionInfo(
+      const std::optional<webapps::AppId>& source_browser_app_id,
+      NavigationHandlingInitialResult initial_nav_handling_result,
+      const std::optional<webapps::AppId>& first_navigation_app_id,
+      WindowOpenDisposition disposition);
+
+  std::optional<webapps::AppId> app_id_source_browser_;
+  NavigationHandlingInitialResult initial_nav_handling_result_ =
+      NavigationHandlingInitialResult::kBrowserTab;
+  std::optional<webapps::AppId> first_navigation_app_id_;
+  WindowOpenDisposition disposition_ = WindowOpenDisposition::UNKNOWN;
 };
 
 // Data that is tied to the NavigationHandle. Used in the

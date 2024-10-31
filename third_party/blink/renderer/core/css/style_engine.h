@@ -152,6 +152,19 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
     base::AutoReset<bool> in_detach_scope_;
   };
 
+  class AttachScrollMarkersScope {
+    STACK_ALLOCATED();
+
+   public:
+    explicit AttachScrollMarkersScope(StyleEngine& engine)
+        : in_scroll_markers_attachment_scope_(
+              &engine.in_scroll_markers_attachment_,
+              true) {}
+
+   private:
+    base::AutoReset<bool> in_scroll_markers_attachment_scope_;
+  };
+
   // There are a few instances where we are marking nodes style dirty from
   // within style recalc. That is generally not allowed, and if allowed we must
   // make sure we mark inside the subtree we are currently traversing, be sure
@@ -326,7 +339,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void SetStyleAffectedByLayout() { style_affected_by_layout_ = true; }
   bool StyleAffectedByLayout() { return style_affected_by_layout_; }
 
-  bool StyleMaybeAffectedByLayout(const Node&);
+  bool StyleMaybeAffectedByLayout(const Element&);
 
   bool SkippedContainerRecalc() const { return skipped_container_recalc_ != 0; }
   void IncrementSkippedContainerRecalc() { ++skipped_container_recalc_; }
@@ -517,14 +530,11 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
       bool invalidate_slotted,
       bool invalidate_part);
   void ScheduleCustomElementInvalidations(HashSet<AtomicString> tag_names);
-  void ScheduleInvalidationsForHasPseudoAffectedByInsertion(
-      Element* parent,
+  void ScheduleInvalidationsForHasPseudoAffectedByInsertionOrRemoval(
+      ContainerNode* parent,
       Node* node_before_change,
-      Element& element);
-  void ScheduleInvalidationsForHasPseudoAffectedByRemoval(
-      Element* parent,
-      Node* node_before_change,
-      Element& element);
+      Element& changed_element,
+      bool removal);
   void ScheduleInvalidationsForHasPseudoWhenAllChildrenRemoved(Element& parent);
 
   void NodeWillBeRemoved(Node&);
@@ -919,6 +929,16 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   inline void InvalidateChangedElementAffectedByLogicalCombinationsInHas(
       Element& changed_element,
       bool for_element_affected_by_pseudo_in_has);
+  void ScheduleInvalidationsForHasPseudoAffectedByInsertion(
+      Element* parent_or_shadow_host,
+      Element* previous_sibling,
+      Element& inserted_element,
+      bool insert_shadow_root_child);
+  void ScheduleInvalidationsForHasPseudoAffectedByRemoval(
+      Element* parent_or_shadow_host,
+      Element* previous_sibling,
+      Element& removed_element,
+      bool remove_shadow_root_child);
 
   // Initialization value for SkipStyleRecalcScope.
   bool AllowSkipStyleRecalcForScope() const;

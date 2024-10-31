@@ -4,26 +4,42 @@
 
 #include "ash/scanner/scanner_controller.h"
 
+#include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
-#include "ash/public/cpp/scanner/scanner_action.h"
+#include "ash/public/cpp/scanner/scanner_delegate.h"
+#include "ash/scanner/fake_scanner_profile_scoped_delegate.h"
+#include "ash/scanner/scanner_action_view_model.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/auto_reset.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
+#include "components/manta/manta_status.h"
+#include "components/manta/proto/scanner.pb.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace ash {
 
 namespace {
 
+using ::base::test::RunOnceCallback;
 using ::testing::IsEmpty;
-using ::testing::Not;
+using ::testing::SizeIs;
+
+FakeScannerProfileScopedDelegate* GetFakeScannerProfileScopedDelegate(
+    ScannerController& scanner_controller) {
+  return static_cast<FakeScannerProfileScopedDelegate*>(
+      scanner_controller.delegate_for_testing()->GetProfileScopedDelegate());
+}
 
 class ScannerControllerTest : public AshTestBase {
  public:
@@ -39,19 +55,25 @@ class ScannerControllerTest : public AshTestBase {
 };
 
 TEST_F(ScannerControllerTest, FetchesActionsDuringActiveSession) {
-  base::test::TestFuture<std::vector<ScannerAction>> actions_future;
+  base::test::TestFuture<std::vector<ScannerActionViewModel>> actions_future;
   ScannerController* scanner_controller = Shell::Get()->scanner_controller();
   ASSERT_TRUE(scanner_controller);
   EXPECT_TRUE(scanner_controller->StartNewSession());
+  auto output = std::make_unique<manta::proto::ScannerOutput>();
+  output->add_objects()->add_actions()->mutable_new_event()->set_title(
+      "Event title");
+  EXPECT_CALL(*GetFakeScannerProfileScopedDelegate(*scanner_controller),
+              FetchActionsForImage)
+      .WillOnce(RunOnceCallback<1>(std::move(output), manta::MantaStatus()));
 
   scanner_controller->FetchActionsForImage(/*jpeg_bytes=*/nullptr,
                                            actions_future.GetCallback());
 
-  EXPECT_THAT(actions_future.Take(), Not(IsEmpty()));
+  EXPECT_THAT(actions_future.Take(), SizeIs(1));
 }
 
 TEST_F(ScannerControllerTest, NoActionsFetchedWhenNoActiveSession) {
-  base::test::TestFuture<std::vector<ScannerAction>> actions_future;
+  base::test::TestFuture<std::vector<ScannerActionViewModel>> actions_future;
   ScannerController* scanner_controller = Shell::Get()->scanner_controller();
   ASSERT_TRUE(scanner_controller);
 

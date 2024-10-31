@@ -66,6 +66,7 @@ import org.chromium.chrome.browser.toolbar.KeyboardNavigationListener;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
+import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonCoordinator;
@@ -264,7 +265,6 @@ public class ToolbarPhone extends ToolbarLayout
 
     private float mPreTextureCaptureAlpha = 1f;
     private int mPreTextureCaptureVisibility;
-    private @BrandedColorScheme int mOverlayTabStackDrawableScheme;
 
     private boolean mOptionalButtonAnimationRunning;
     private int mUrlFocusTranslationX;
@@ -362,7 +362,8 @@ public class ToolbarPhone extends ToolbarLayout
             BooleanSupplier partnerHomepageEnabledSupplier,
             ToolbarTablet.OfflineDownloader offlineDownloader,
             UserEducationHelper userEducationHelper,
-            ObservableSupplier<Tracker> trackerSupplier) {
+            ObservableSupplier<Tracker> trackerSupplier,
+            ToolbarProgressBar progressBar) {
         super.initialize(
                 toolbarDataProvider,
                 tabController,
@@ -372,7 +373,8 @@ public class ToolbarPhone extends ToolbarLayout
                 partnerHomepageEnabledSupplier,
                 offlineDownloader,
                 userEducationHelper,
-                trackerSupplier);
+                trackerSupplier,
+                progressBar);
         mUserEducationHelper = userEducationHelper;
         mTrackerSupplier = trackerSupplier;
 

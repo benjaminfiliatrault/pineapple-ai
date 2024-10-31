@@ -42,7 +42,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncController.TabCreationDelegate;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
 import org.chromium.components.tab_group_sync.ClosingSource;
 import org.chromium.components.tab_group_sync.EventDetails;
@@ -80,7 +80,6 @@ public class LocalTabGroupMutationHelperUnitTest {
     @Mock private TabGroupModelFilter mTabGroupModelFilter;
     @Mock private TabGroupSyncService mTabGroupSyncService;
     @Mock private TabGroupSyncUtilsJni mTabGroupSyncUtilsJni;
-    private NavigationTracker mNavigationTracker;
     private LocalTabGroupMutationHelper mLocalMutationHelper;
     private TestTabCreationDelegate mTabCreationDelegate;
 
@@ -93,14 +92,10 @@ public class LocalTabGroupMutationHelperUnitTest {
         mJniMocker.mock(TabGroupSyncUtilsJni.TEST_HOOKS, mTabGroupSyncUtilsJni);
         mTabModel = spy(new MockTabModel(mProfile, null));
         when(mTabGroupModelFilter.getTabModel()).thenReturn(mTabModel);
-        mNavigationTracker = new NavigationTracker();
         mTabCreationDelegate = spy(new TestTabCreationDelegate());
         mLocalMutationHelper =
                 new LocalTabGroupMutationHelper(
-                        mTabGroupModelFilter,
-                        mTabGroupSyncService,
-                        mTabCreationDelegate,
-                        mNavigationTracker);
+                        mTabGroupModelFilter, mTabGroupSyncService, mTabCreationDelegate);
 
         when(mTabGroupModelFilter.getRootIdFromStableId(any())).thenReturn(Tab.INVALID_TAB_ID);
         when(mTabGroupModelFilter.getRootIdFromStableId(eq(TOKEN_1))).thenReturn(ROOT_ID_1);

@@ -34,12 +34,34 @@ using visited_url_ranking::URLVisitsMetadata;
 using visited_url_ranking::VisitedURLRankingService;
 using visited_url_ranking::VisitedURLRankingServiceFactory;
 
+using URLType = visited_url_ranking::URLVisitAggregate::URLType;
+using testing::_;
+
 namespace {
+
+constexpr char kDismissedVisitsPrefName[] =
+    "NewTabPage.MostRelevantTabResumption.DismissedVisits";
+
+const base::Time timestamp_1_day_ago = base::Time::Now() - base::Days(1);
+
+void ExpectURLTypesInFetchOptions(const FetchOptions& options,
+                                  const std::set<URLType>& expected_url_types) {
+  std::set<URLType> url_type_set;
+  for (const auto& kv : options.result_sources) {
+    url_type_set.insert(kv.first);
+  }
+
+  EXPECT_EQ(expected_url_types, url_type_set);
+}
+
+}  // namespace
 
 class MostRelevantTabResumptionPageHandlerTest
     : public BrowserWithTestWindowTest {
  public:
   MostRelevantTabResumptionPageHandlerTest() = default;
+
+  void RemoveOldDismissedTabs() { Handler()->RemoveOldDismissedTabs(); }
 
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
@@ -104,21 +126,6 @@ class MostRelevantTabResumptionPageHandlerTest
   std::unique_ptr<MostRelevantTabResumptionPageHandler> handler_;
 };
 
-void ExpectURLTypesInFetchOptions(
-    const FetchOptions& options,
-    const std::set<FetchOptions::URLType>& expected_url_types) {
-  std::set<FetchOptions::URLType> url_type_set;
-  for (const auto& kv : options.result_sources) {
-    url_type_set.insert(kv.first);
-  }
-
-  EXPECT_EQ(expected_url_types, url_type_set);
-}
-
-}  // namespace
-
-using testing::_;
-
 TEST_F(MostRelevantTabResumptionPageHandlerTest, GetFakeTabs) {
   base::test::ScopedFeatureList features;
   features.InitWithFeaturesAndParameters(
@@ -143,10 +150,9 @@ TEST_F(MostRelevantTabResumptionPageHandlerTest, GetURLVisits_TabURLTypesOnly) {
       {
           {ntp_features::kNtpMostRelevantTabResumptionModule,
            {{ntp_features::kNtpMostRelevantTabResumptionModuleDataParam,
-             base::StringPrintf(
-                 "%d,%d",
-                 static_cast<int>(FetchOptions::URLType::kActiveLocalTab),
-                 static_cast<int>(FetchOptions::URLType::kActiveRemoteTab))}}},
+             base::StringPrintf("%d,%d",
+                                static_cast<int>(URLType::kActiveLocalTab),
+                                static_cast<int>(URLType::kActiveRemoteTab))}}},
       },
       {});
   ClearHandler();
@@ -163,8 +169,7 @@ TEST_F(MostRelevantTabResumptionPageHandlerTest, GetURLVisits_TabURLTypesOnly) {
           [](const FetchOptions& options,
              VisitedURLRankingService::GetURLVisitAggregatesCallback callback) {
             ExpectURLTypesInFetchOptions(
-                options, {FetchOptions::URLType::kActiveLocalTab,
-                          FetchOptions::URLType::kActiveRemoteTab});
+                options, {URLType::kActiveLocalTab, URLType::kActiveRemoteTab});
 
             std::vector<URLVisitAggregate> url_visit_aggregates = {};
             url_visit_aggregates.emplace_back(
@@ -221,8 +226,7 @@ TEST_F(MostRelevantTabResumptionPageHandlerTest, GetURLVisits) {
           [](const FetchOptions& options,
              VisitedURLRankingService::GetURLVisitAggregatesCallback callback) {
             ExpectURLTypesInFetchOptions(
-                options, {FetchOptions::URLType::kActiveRemoteTab,
-                          FetchOptions::URLType::kRemoteVisit});
+                options, {URLType::kActiveRemoteTab, URLType::kRemoteVisit});
 
             std::vector<URLVisitAggregate> url_visit_aggregates = {};
             url_visit_aggregates.emplace_back(
@@ -291,13 +295,7 @@ TEST_F(MostRelevantTabResumptionPageHandlerTest, DismissAndRestoreURLVisit) {
             url_visit_aggregates.emplace_back(
                 visited_url_ranking::CreateSampleURLVisitAggregate(
                     GURL(visited_url_ranking::kSampleSearchUrl), 1.0f,
-                    base::Time::FromDeltaSinceWindowsEpoch(
-                        base::Microseconds(12345)),
-                    {Fetcher::kSession}));
-            url_visit_aggregates.emplace_back(
-                visited_url_ranking::CreateSampleURLVisitAggregate(
-                    GURL(visited_url_ranking::kSampleSearchUrl), 1.0f,
-                    base::Time::Now(), {Fetcher::kHistory}));
+                    timestamp_1_day_ago, {Fetcher::kSession}));
             URLVisitsMetadata url_visits_metadata;
 
             std::move(callback).Run(ResultStatus::kSuccess, url_visits_metadata,
@@ -339,16 +337,17 @@ TEST_F(MostRelevantTabResumptionPageHandlerTest, DismissAndRestoreURLVisit) {
           }));
 
   auto url_visits_mojom = RunGetURLVisits();
-  ASSERT_EQ(2u, url_visits_mojom.size());
+  ASSERT_EQ(1u, url_visits_mojom.size());
   Handler()->DismissURLVisit(mojo::Clone(url_visits_mojom[0]));
   ASSERT_EQ(visited_url_ranking::ScoredURLUserAction::kDismissed,
             expected_action);
+  // Assert dismiss histogram.
   auto dismissed_url_visits_mojom = RunGetURLVisits();
-  ASSERT_EQ(1u, dismissed_url_visits_mojom.size());
+  ASSERT_EQ(0u, dismissed_url_visits_mojom.size());
   Handler()->RestoreURLVisit(mojo::Clone(url_visits_mojom[0]));
   ASSERT_EQ(visited_url_ranking::ScoredURLUserAction::kSeen, expected_action);
   auto restored_url_visits_mojom = RunGetURLVisits();
-  ASSERT_EQ(2u, restored_url_visits_mojom.size());
+  ASSERT_EQ(1u, restored_url_visits_mojom.size());
 }
 
 TEST_F(MostRelevantTabResumptionPageHandlerTest, DismissAndRestoreAll) {
@@ -366,14 +365,13 @@ TEST_F(MostRelevantTabResumptionPageHandlerTest, DismissAndRestoreAll) {
             url_visit_aggregates.emplace_back(
                 visited_url_ranking::CreateSampleURLVisitAggregate(
                     GURL(visited_url_ranking::kSampleSearchUrl), 1.0f,
-                    base::Time::FromDeltaSinceWindowsEpoch(
-                        base::Microseconds(12345)),
+                    base::Time::FromDeltaSinceWindowsEpoch(base::Days(2)),
                     {Fetcher::kSession}));
             url_visit_aggregates.emplace_back(
                 visited_url_ranking::CreateSampleURLVisitAggregate(
-                    GURL(visited_url_ranking::kSampleSearchUrl), 1.0f,
-                    base::Time::FromDeltaSinceWindowsEpoch(
-                        base::Microseconds(123456)),
+                    GURL(visited_url_ranking::kSampleSearchUrl +
+                         std::string("1")),
+                    1.0f, base::Time::FromDeltaSinceWindowsEpoch(base::Days(3)),
                     {Fetcher::kHistory}));
             URLVisitsMetadata url_visits_metadata;
 
@@ -459,7 +457,8 @@ TEST_F(MostRelevantTabResumptionPageHandlerTest,
                     base::Time::Now() - base::Minutes(5), {Fetcher::kHistory}));
             URLVisitsMetadata url_visits_metadata;
 
-            std::move(callback).Run(ResultStatus::kSuccess, url_visits_metadata,
+            std::move(callback).Run(ResultStatus::kSuccess,
+                                    std::move(url_visits_metadata),
                                     std::move(url_visit_aggregates));
           }));
 
@@ -498,4 +497,17 @@ TEST_F(MostRelevantTabResumptionPageHandlerTest,
   ASSERT_EQ(
       ntp::most_relevant_tab_resumption::mojom::DecorationType::kVisitedXAgo,
       url_visits_mojom[1]->decoration->type);
+}
+
+TEST_F(MostRelevantTabResumptionPageHandlerTest, RemoveOldDismissedTabs) {
+  base::Time last_year = base::Time::Now() - base::Days(365);
+  double last_year_micros = static_cast<double>(
+      last_year.ToDeltaSinceWindowsEpoch().InMicroseconds());
+  base::Value::Dict dismissed_urls_dict;
+  dismissed_urls_dict.Set("http://www.google.com/", last_year_micros);
+  dismissed_urls_dict.Set("http://www.google2.com/", last_year_micros);
+  profile()->GetPrefs()->SetDict(kDismissedVisitsPrefName,
+                                 std::move(dismissed_urls_dict));
+  RemoveOldDismissedTabs();
+  ASSERT_EQ(0u, dismissed_urls_dict.size());
 }

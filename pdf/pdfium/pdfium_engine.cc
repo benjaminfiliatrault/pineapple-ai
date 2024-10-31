@@ -2006,8 +2006,7 @@ void PDFiumEngine::SearchUsingICU(const std::u16string& term,
     return;
 
   std::vector<PDFiumEngineClient::SearchStringResult> results =
-      client_->SearchString(adjusted_page_text.c_str(), adjusted_term.c_str(),
-                            case_sensitive);
+      client_->SearchString(adjusted_term, adjusted_page_text, case_sensitive);
   for (const auto& result : results) {
     // Need to convert from adjusted page text start to page text start, by
     // incrementing for all the characters adjusted before it in the string.
@@ -2365,8 +2364,11 @@ void PDFiumEngine::SelectAll() {
 #endif  // BUILDFLAG(ENABLE_PDF_INK2)
 
   if (focus_field_type_ == FocusFieldType::kText) {
-    if (PageIndexInBounds(last_focused_page_))
-      FORM_SelectAllText(form(), pages_[last_focused_page_]->GetPage());
+    if (PageIndexInBounds(last_focused_page_)) {
+      FPDF_PAGE page = pages_[last_focused_page_]->GetPage();
+      FORM_SelectAllText(form(), page);
+      SetFormSelectedText(form(), page);
+    }
     return;
   }
 
@@ -2591,10 +2593,6 @@ int PDFiumEngine::GetMostVisiblePage() {
   return most_visible_page_;
 }
 
-gfx::Rect PDFiumEngine::GetPageBoundsRect(int index) {
-  return pages_[index]->rect();
-}
-
 gfx::Rect PDFiumEngine::GetPageContentsRect(int index) {
   return GetScreenRect(pages_[index]->rect());
 }
@@ -2619,59 +2617,9 @@ void PDFiumEngine::HandleLongPress(const blink::WebTouchEvent& event) {
   OnMouseDown(mouse_event);
 }
 
-int PDFiumEngine::GetCharCount(int page_index) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetCharCount();
-}
-
-gfx::RectF PDFiumEngine::GetCharBounds(int page_index, int char_index) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetCharBounds(char_index);
-}
-
-uint32_t PDFiumEngine::GetCharUnicode(int page_index, int char_index) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetCharUnicode(char_index);
-}
-
-std::optional<AccessibilityTextRunInfo> PDFiumEngine::GetTextRunInfo(
-    int page_index,
-    int start_char_index) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetTextRunInfo(start_char_index);
-}
-
-std::vector<AccessibilityLinkInfo> PDFiumEngine::GetLinkInfo(
-    int page_index,
-    const std::vector<AccessibilityTextRunInfo>& text_runs) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetLinkInfo(text_runs);
-}
-
-std::vector<AccessibilityImageInfo> PDFiumEngine::GetImageInfo(
-    int page_index,
-    uint32_t text_run_count) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetImageInfo(text_run_count);
-}
-
 SkBitmap PDFiumEngine::GetImageForOcr(int page_index, int image_index) {
   DCHECK(PageIndexInBounds(page_index));
   return pages_[page_index]->GetImageForOcr(image_index);
-}
-
-std::vector<AccessibilityHighlightInfo> PDFiumEngine::GetHighlightInfo(
-    int page_index,
-    const std::vector<AccessibilityTextRunInfo>& text_runs) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetHighlightInfo(text_runs);
-}
-
-std::vector<AccessibilityTextFieldInfo> PDFiumEngine::GetTextFieldInfo(
-    int page_index,
-    uint32_t text_run_count) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetTextFieldInfo(text_run_count);
 }
 
 bool PDFiumEngine::GetPrintScaling() {
@@ -3199,12 +3147,24 @@ bool PDFiumEngine::ContinuePaint(size_t progressive_index,
   const gfx::Rect& dirty = paint.rect();
   const gfx::Rect pdfium_rect = GetPDFiumRect(paint.page_index(), dirty);
 
-  bool has_alpha = !!FPDFPage_HasTransparency(page);
+  const bool has_alpha = !!FPDFPage_HasTransparency(page);
+  uint32_t fill_color;
+  if (base::FeatureList::IsEnabled(features::kPdfPaintManagerDrawsBackground)) {
+    // When `has_alpha` is true, use a transparent bitmap to render correctly.
+    // If the bitmap was painted white, then certain blend operations would
+    // blend into the white color and draw incorrectly. Instead, PaintManager
+    // will draw the white page under this bitmap.
+    fill_color = has_alpha ? 0x00000000 : 0xFFFFFFFF;
+  } else {
+    // In the old code, which is here as a fallback, `fill_color` is always
+    // white, as PaintManager does not draw the page's background.
+    fill_color = 0xFFFFFFFF;
+  }
   ScopedFPDFBitmap new_bitmap = CreateBitmap(dirty, has_alpha, image_data);
   FPDF_BITMAP new_bitmap_ptr = new_bitmap.get();
   paint.SetBitmapAndImageData(std::move(new_bitmap), image_data);
   FPDFBitmap_FillRect(new_bitmap_ptr, pdfium_rect.x(), pdfium_rect.y(),
-                      pdfium_rect.width(), pdfium_rect.height(), 0xFFFFFFFF);
+                      pdfium_rect.width(), pdfium_rect.height(), fill_color);
   return FPDF_RenderPageBitmap_Start(
              new_bitmap_ptr, page, pdfium_rect.x(), pdfium_rect.y(),
              pdfium_rect.width(), pdfium_rect.height(),
@@ -3466,14 +3426,6 @@ gfx::Rect PDFiumEngine::GetPageScreenRect(int page_index) const {
 
 gfx::Rect PDFiumEngine::GetScreenRect(const gfx::Rect& rect) const {
   return draw_utils::GetScreenRect(rect, position_, current_zoom_);
-}
-
-gfx::RectF PDFiumEngine::GetPageBoundingBox(int page_index) {
-  PDFiumPage* page = GetPage(page_index);
-  if (!page) {
-    return gfx::RectF();
-  }
-  return page->GetBoundingBox();
 }
 
 void PDFiumEngine::Highlight(const RegionData& region,
@@ -4310,7 +4262,7 @@ void PDFiumEngine::ScheduleSearchifyIfNeeded(PDFiumPage* page) {
 
 void PDFiumEngine::CancelPendingSearchify(int page_index) {
   if (searchifier_) {
-    searchifier_->RemovePageFromQueue(page_index);
+    searchifier_->CancelPage(page_index);
   }
 }
 #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)

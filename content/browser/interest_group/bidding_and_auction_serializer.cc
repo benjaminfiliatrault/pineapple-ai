@@ -134,7 +134,7 @@ size_t MaxLengthOfTaggedData(uint64_t length) {
   } else if (length <= 0xFFFF + 1 + 2) {
     // 1 byte tag, 2 bytes length.
     lol_x = 2;
-  } else if (length <= 0xFFFFFFFF + 1 + 4) {
+  } else if (length <= static_cast<uint64_t>(0xFFFFFFFF) + 1 + 4) {
     // 1 byte tag, 4 bytes length.
     lol_x = 4;
   } else {
@@ -287,15 +287,15 @@ ValueAndSize SerializeInterestGroup(base::Time start_time,
   browser_signals_elements_size +=
       TaggedStringLength(constexpr_strlen("joinCount")) +
       TaggedSIntLength(group->bidding_browser_signals->join_count);
-  int32_t recency = (start_time - group->join_time).InSeconds();
+  int64_t recency = (start_time - group->join_time).InMilliseconds();
   if (recency < 0) {
     // It doesn't make sense to say that the browser joined the interest group
     // in the future, so just truncate to the present.
     recency = 0;
   }
-  browser_signals[cbor::Value("recency")] = cbor::Value(recency);
+  browser_signals[cbor::Value("recencyMs")] = cbor::Value(recency);
   browser_signals_elements_size +=
-      TaggedStringLength(constexpr_strlen("recency")) +
+      TaggedStringLength(constexpr_strlen("recencyMs")) +
       TaggedSIntLength(recency);
 
   cbor::Value::ArrayValue prev_wins;

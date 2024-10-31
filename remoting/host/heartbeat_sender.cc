@@ -159,7 +159,7 @@ void HeartbeatSender::OnSignalStrategyStateChange(SignalStrategy::State state) {
       break;
     case SignalStrategy::State::DISCONNECTED:
       service_client_->CancelPendingRequests();
-      heartbeat_timer_.AbandonAndStop();
+      heartbeat_timer_.Stop();
       break;
     default:
       // Do nothing
@@ -187,7 +187,7 @@ void HeartbeatSender::OnHostOfflineReasonAck() {
   }
 
   DCHECK(host_offline_reason_timeout_timer_.IsRunning());
-  host_offline_reason_timeout_timer_.AbandonAndStop();
+  host_offline_reason_timeout_timer_.Stop();
 
   std::move(host_offline_reason_ack_callback_).Run(true);
 }
@@ -196,7 +196,7 @@ void HeartbeatSender::ClearHeartbeatTimer() {
   // Drop previous heartbeat and timer so that it doesn't interfere with the
   // current one.
   service_client_->CancelPendingRequests();
-  heartbeat_timer_.AbandonAndStop();
+  heartbeat_timer_.Stop();
 }
 
 void HeartbeatSender::SendFullHeartbeat() {
@@ -208,13 +208,14 @@ void HeartbeatSender::SendFullHeartbeat() {
     return;
   }
 
-  VLOG(1) << "About to send full heartbeat.";
+  HOST_LOG << "Sending full heartbeat.";
 
   ClearHeartbeatTimer();
 
   std::optional<std::string> offline_reason;
   if (!host_offline_reason_.empty()) {
     offline_reason = host_offline_reason_;
+    HOST_LOG << "Sending offline reason: " << host_offline_reason_;
   }
   std::optional<std::string> signaling_id;
   auto signaling_id_str = signal_strategy_->GetLocalAddress().id();
@@ -239,7 +240,7 @@ void HeartbeatSender::SendLiteHeartbeat(bool useLiteHeartbeat) {
     return;
   }
 
-  VLOG(1) << "About to send lite heartbeat.";
+  HOST_LOG << "Sending heartbeat.";
 
   ClearHeartbeatTimer();
 

@@ -8,20 +8,21 @@
 #include <set>
 #include <string>
 
+#include "base/functional/callback_forward.h"
 #include "base/values.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/sync_stop_metadata_fate.h"
 #include "components/sync/engine/configure_reason.h"
-#include "components/sync/model/sync_error.h"
-#include "components/sync/service/data_type_controller.h"
-#include "components/sync/service/data_type_status_table.h"
+#include "components/sync/model/type_entities_count.h"
+#include "components/sync/service/local_data_description.h"
+#include "components/sync/service/sync_error.h"
 #include "components/sync/service/type_status_map_for_debugging.h"
 
 namespace syncer {
 
 struct ConfigureContext;
 class DataTypeConfigurer;
-struct LocalDataDescription;
+class DataTypeController;
 
 // This interface is for managing the start up and shut down life cycle
 // of many different syncable data types.
@@ -46,7 +47,6 @@ class DataTypeManager {
   struct ConfigureResult {
     ConfigureStatus status = ABORTED;
     DataTypeSet requested_types;
-    DataTypeStatusTable data_type_status_table;
   };
 
   virtual ~DataTypeManager() = default;
@@ -108,9 +108,10 @@ class DataTypeManager {
   // completes the set will be updated.
   virtual DataTypeSet GetActiveDataTypes() const = 0;
 
-  // Returns the datatypes that are stopped that are known to have cleared their
-  // local sync metadata.
-  virtual DataTypeSet GetPurgedDataTypes() const = 0;
+  // Returns the datatypes that are stopped, with or without having cleared
+  // metadata. This function never returns Nigori, which is a control type and
+  // hence never fully stopped.
+  virtual DataTypeSet GetStoppedDataTypesExcludingNigori() const = 0;
 
   // Returns the datatypes that are configured but not connected to the sync
   // engine. Note that during configuration, this will be empty.
@@ -152,6 +153,17 @@ class DataTypeManager {
   // triggered for upload.
   virtual void TriggerLocalDataMigration(DataTypeSet types) = 0;
 
+  // Requests sync service to move the local data to account for `types` data
+  // types that matches the `syncer::LocalDataItemModel::DataId` in `items`.
+  // This is an asynchronous method which moves the local data for all `types`
+  // to the account store locally. Upload to the server will happen as part of
+  // the regular commit process, and is NOT part of this method. Note: Only data
+  // types that are enabled and support this functionality are triggered for
+  // upload.
+  virtual void TriggerLocalDataMigration(
+      std::map<DataType, std::vector<syncer::LocalDataItemModel::DataId>>
+          items) = 0;
+
   // The current state of the data type manager.
   virtual State state() const = 0;
 
@@ -165,10 +177,7 @@ class DataTypeManager {
       base::RepeatingCallback<void(const TypeEntitiesCount&)> callback)
       const = 0;
 
-  // Exposes direct access to underlying controllers. Avoid using if possible,
-  // as DataTypeManager usually offers higher-level APIs.
-  // TODO(crbug.com/40901755): Remove this getter.
-  virtual const DataTypeController::TypeMap& GetControllerMap() const = 0;
+  virtual DataTypeController* GetControllerForTest(DataType type) = 0;
 };
 
 }  // namespace syncer

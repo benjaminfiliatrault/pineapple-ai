@@ -199,7 +199,7 @@ struct NET_EXPORT QuicParams {
       kMaxMigrationsToNonDefaultNetworkOnPathDegrading;
   // If true, allows migration of QUIC connections to a server-specified
   // alternate server address.
-  bool allow_server_migration = false;
+  bool allow_server_migration = true;
   // If true, allows QUIC to use alternative services with a different
   // hostname from the origin.
   bool allow_remote_alt_svc = true;
@@ -264,6 +264,13 @@ class NET_EXPORT_PRIVATE QuicContext {
   const quic::ParsedQuicVersionVector& supported_versions() {
     return params_.supported_versions;
   }
+
+  // Returns the first quic::ParsedQuicVersion that has been advertised in
+  // `advertised_versions` and is supported, following the order of
+  // `advertised_versions`.  If no mutually supported version is found,
+  // quic::ParsedQuicVersion::Unsupported() will be returned.
+  quic::ParsedQuicVersion SelectQuicVersion(
+      const quic::ParsedQuicVersionVector& advertised_versions);
 
   void SetHelperForTesting(
       std::unique_ptr<quic::QuicConnectionHelperInterface> helper) {

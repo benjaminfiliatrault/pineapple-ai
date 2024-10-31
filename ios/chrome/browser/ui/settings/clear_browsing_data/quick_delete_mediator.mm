@@ -20,6 +20,7 @@
 #import "ios/chrome/browser/browsing_data/model/browsing_data_remover.h"
 #import "ios/chrome/browser/browsing_data/model/tabs_counter.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service.h"
+#import "ios/chrome/browser/ui/scoped_ui_blocker/ui_blocker_target.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/browsing_data_counter_wrapper_producer.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/quick_delete_consumer.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/quick_delete_presentation_commands.h"
@@ -152,6 +153,9 @@ void RecordCookieOrCacheDeletedFromDialogHistogram(
 
   // Indicates if deletion has been triggered before.
   BOOL _deletionTriggered;
+
+  // Used to check whether this scene is blocked before blocking other scenes.
+  id<UIBlockerTarget> _uiBlockerTarget;
 }
 
 - (instancetype)initWithPrefs:(PrefService*)prefs
@@ -160,8 +164,11 @@ void RecordCookieOrCacheDeletedFromDialogHistogram(
                        identityManager:(signin::IdentityManager*)identityManager
                    browsingDataRemover:(BrowsingDataRemover*)browsingDataRemover
                    discoverFeedService:(DiscoverFeedService*)discoverFeedService
-        canPerformTabsClosureAnimation:(BOOL)canPerformTabsClosureAnimation {
+        canPerformTabsClosureAnimation:(BOOL)canPerformTabsClosureAnimation
+                       uiBlockerTarget:(id<UIBlockerTarget>)uiBlockerTarget {
   if ((self = [super init])) {
+    CHECK(uiBlockerTarget);
+    _uiBlockerTarget = uiBlockerTarget;
     _prefs = prefs;
     _counterWrapperProducer = counterWrapperProducer;
     _identityManager = identityManager;
@@ -181,6 +188,39 @@ void RecordCookieOrCacheDeletedFromDialogHistogram(
     [self observePreferences];
 
     _canPerformTabsClosureAnimation = canPerformTabsClosureAnimation;
+  }
+  return self;
+}
+
+- (instancetype)initWithPrefs:(PrefService*)prefs
+    browsingDataCounterWrapperProducer:
+        (BrowsingDataCounterWrapperProducer*)counterWrapperProducer
+                       identityManager:(signin::IdentityManager*)identityManager
+                   browsingDataRemover:(BrowsingDataRemover*)browsingDataRemover
+                   discoverFeedService:(DiscoverFeedService*)discoverFeedService
+                             timeRange:(browsing_data::TimePeriod)timeRange
+                       uiBlockerTarget:(id<UIBlockerTarget>)uiBlockerTarget {
+  if ((self = [super init])) {
+    CHECK(uiBlockerTarget);
+    _uiBlockerTarget = uiBlockerTarget;
+    _prefs = prefs;
+    _counterWrapperProducer = counterWrapperProducer;
+    _identityManager = identityManager;
+    _identityManagerObserver =
+        std::make_unique<signin::IdentityManagerObserverBridge>(
+            _identityManager, self);
+    _browsingDataRemover = browsingDataRemover;
+    _discoverFeedService = discoverFeedService;
+
+    _prefChangeRegistrar.Init(_prefs);
+    _prefObserverBridge.reset(new PrefObserverBridge(self));
+
+    _selectedTimeRange = timeRange;
+
+    // Start observing preferences.
+    [self observePreferences];
+
+    _canPerformTabsClosureAnimation = NO;
   }
   return self;
 }
@@ -235,9 +275,14 @@ void RecordCookieOrCacheDeletedFromDialogHistogram(
   }
 
   _selectedTimeRange = timeRange;
+  [self restartCounters];
 }
 
-- (void)triggerDeletion {
+- (void)triggerDeletionIfPossible {
+  if (_uiBlockerTarget.isUIBlocked) {
+    // This could occur due to race condition with multiple windows and
+    // simultaneous taps. See crbug.com/368310663.
+  }
   browsing_data::RecordDeleteBrowsingDataAction(
       browsing_data::DeleteBrowsingDataAction::kClearBrowsingDataDialog);
 

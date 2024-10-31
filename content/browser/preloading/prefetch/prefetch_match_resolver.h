@@ -128,6 +128,8 @@ class CONTENT_EXPORT PrefetchMatchResolver2 final
 
   // PrefetchContainer::Observer implementation
   void OnWillBeDestroyed(PrefetchContainer& prefetch_container) override;
+  void OnGotInitialEligibility(PrefetchContainer& prefetch_container,
+                               PreloadingEligibility eligibility) override;
   void OnDeterminedHead(PrefetchContainer& prefetch_container) override;
 
   // Finds prefetch that matches to a navigation and is servable.
@@ -138,6 +140,7 @@ class CONTENT_EXPORT PrefetchMatchResolver2 final
   // This method is async. `callback` will be called when it is done.
   // `bool(reader)` is true iff a matching servable prefetch is found.
   static void FindPrefetch(PrefetchContainer::Key navigated_key,
+                           bool is_nav_prerender,
                            PrefetchService& prefetch_service,
                            base::WeakPtr<PrefetchServingPageMetricsContainer>
                                serving_page_metrics_container,
@@ -149,15 +152,6 @@ class CONTENT_EXPORT PrefetchMatchResolver2 final
     ~CandidateData();
 
     base::WeakPtr<PrefetchContainer> prefetch_container;
-    // `PrefetchContainer::GetServableState()` depends on
-    // `base::TimeTicks::now()` and can expires (can become `kServable` to
-    // `kNotServable`) in the minute between two calls. Deciding something with
-    // multiple `PrefetchContainer::GetServableState()` calls can lead
-    // inconsistent state. To avoid that, we record `ServableState` at the
-    // beginning of `FindPrefethInternal()` and refer to it in the method.
-    //
-    // One can use this field only during `FindPrefethInternal()`.
-    PrefetchContainer::ServableState cached_servable_state;
     std::unique_ptr<base::OneShotTimer> timeout_timer;
   };
 
@@ -180,7 +174,8 @@ class CONTENT_EXPORT PrefetchMatchResolver2 final
   // - This implementation has timeout: `CandidateData::timeout_timer`.
   // - This implementation collects candidate prefetches first. So, it doesn't
   //   handle prefetches started after this method started.
-  void FindPrefetchInternal(PrefetchService& prefetch_service,
+  void FindPrefetchInternal(bool is_nav_prerender,
+                            PrefetchService& prefetch_service,
                             base::WeakPtr<PrefetchServingPageMetricsContainer>
                                 serving_page_metrics_container);
   // Each candidate `PrefetchContainer` proceeds to
@@ -189,11 +184,9 @@ class CONTENT_EXPORT PrefetchMatchResolver2 final
   // -> `StartWaitFor()` (optional, if servable state is
   //    `kShouldBlockUntilHead`)
   // -> `UnregisterCandidate()` (required)
-  void RegisterCandidate(PrefetchContainer& prefetch_container,
-                         PrefetchContainer::ServableState servable_state);
-  // `StartWaitFor()` should be called only from `FindPrefetchInternal()`
-  // (because it uses `CandidateData::cached_servable_state`).
-  void StartWaitFor(const PrefetchContainer::Key& prefetch_key);
+  void RegisterCandidate(PrefetchContainer& prefetch_container);
+  void StartWaitFor(const PrefetchContainer::Key& prefetch_key,
+                    PrefetchContainer::ServableState servable_state);
   void UnregisterCandidate(const PrefetchContainer::Key& prefetch_key,
                            bool is_served);
   void OnTimeout(PrefetchContainer::Key prefetch_key);
@@ -251,6 +244,7 @@ concept MatchCandidate =
       t.GetServableState(cacheable_duration);
       t.GetNoVarySearchHint();
       t.IsNoVarySearchHeaderMatch(url);
+      t.ShouldWaitForNoVarySearchHeader(url);
       t.HasPrefetchStatus();
       t.GetPrefetchStatus();
       t.HasPrefetchBeenConsideredToServe();
@@ -260,113 +254,157 @@ concept MatchCandidate =
       ostream << t;
     };
 
+// Do not use it outside of this header.
+//
+// Collects "potentially matching" `PrefetchContainer`s.
+//
+// "potentially matching" is either:
+//
+// - Exact match
+// - No-Vary-Search header match.
+// - No-Vary-Search hint match and non redirect header is not still arrived.
+template <class T>
+  requires MatchCandidate<T>
+std::vector<T*> CollectPotentialMatchPrefetchContainers(
+    const std::map<PrefetchContainer::Key, std::unique_ptr<T>>& prefetches,
+    const PrefetchContainer::Key& navigated_key) {
+  std::vector<T*> result;
+
+  // Note that exact match one is at the head if exists by the property of
+  // `IterateCandidates()`.
+  no_vary_search::IterateCandidates(
+      navigated_key, prefetches,
+      base::BindRepeating(
+          [](const PrefetchContainer::Key& navigated_key,
+             std::vector<T*>* result,
+             const std::unique_ptr<T>& prefetch_container,
+             no_vary_search::MatchType match_type) {
+            switch (match_type) {
+              case no_vary_search::MatchType::kExact:
+              case no_vary_search::MatchType::kNoVarySearchHeader:
+              case no_vary_search::MatchType::kNoVarySearchHint:
+                result->push_back(prefetch_container.get());
+                break;
+              case no_vary_search::MatchType::kOther:
+                break;
+            }
+            return no_vary_search::IterateCandidateResult::kContinue;
+          },
+          navigated_key, base::Unretained(&result)));
+
+  return result;
+}
+
+// Do not use it outside of this header.
+//
+// Returns "availability" of a `PrefetchContainer`.
+//
+// "Available" here is not a technical term. It means that the
+// `PrefetchContainer` is able to be used or has the possibility in the near
+// future. See implementation for the detailed conditions.
+template <class T>
+  requires MatchCandidate<T>
+bool IsCandidateAvailable(const T& candidate,
+                          PrefetchContainer::ServableState servable_state,
+                          bool is_nav_prerender) {
+  if (candidate.HasPrefetchBeenConsideredToServe()) {
+    DVLOG(1) << "CollectMatchCandidatesGeneric: skipped because already "
+                "considered to serve: candidate = "
+             << candidate;
+    return false;
+  }
+
+  switch (servable_state) {
+    case PrefetchContainer::ServableState::kNotServable:
+      DVLOG(1) << "CollectMatchCandidatesGeneric: skipped because not "
+                  "servable: candidate = "
+               << candidate;
+      return false;
+    case PrefetchContainer::ServableState::kShouldBlockUntilEligibilityGot:
+    case PrefetchContainer::ServableState::kShouldBlockUntilHeadReceived:
+    case PrefetchContainer::ServableState::kServable:
+      break;
+  }
+
+  switch (servable_state) {
+    case PrefetchContainer::ServableState::kShouldBlockUntilEligibilityGot:
+      if (!is_nav_prerender) {
+        DVLOG(1)
+            << "CollectMatchCandidatesGeneric: skipped because it's checking "
+               "eligibility and the navigation is not a prerender: candidate = "
+            << candidate;
+        return false;
+      }
+      break;
+    case PrefetchContainer::ServableState::kServable:
+    case PrefetchContainer::ServableState::kNotServable:
+    case PrefetchContainer::ServableState::kShouldBlockUntilHeadReceived:
+      break;
+  }
+
+  if (candidate.IsDecoy()) {
+    DVLOG(1) << "CollectMatchCandidatesGeneric: skipped because prefetch is a "
+                "decoy: candidate = "
+             << candidate;
+    return false;
+  }
+
+  if (candidate.HasPrefetchStatus() &&
+      candidate.GetPrefetchStatus() ==
+          PrefetchStatus::kPrefetchNotUsedCookiesChanged) {
+    // Note: This codepath is only be reached in practice if we create a
+    // second NavigationRequest to this prefetch's URL. The first
+    // NavigationRequest would call GetPrefetch, which might set this
+    // PrefetchContainer's status to kPrefetchNotUsedCookiesChanged.
+    DVLOG(1) << "CollectMatchCandidatesGeneric: skipped because cookies for "
+                "url have changed since prefetch completed: candidate = "
+             << candidate;
+    return false;
+  }
+
+  DVLOG(1) << "CollectMatchCandidatesGeneric: matched: candidate = "
+           << candidate;
+  return true;
+}
+
 // Collects `PrefetchContainer`s that are expected to match to `navigated_key`.
 //
 // This is defined with the template for testing the first phase of
 // `PrefetchMatchResolver2::FindPrefetch()` with mock `PrefetchContainer`.
 template <class T>
   requires MatchCandidate<T>
-std::vector<T*> CollectMatchCandidatesGeneric(
+std::pair<
+    std::vector<T*>,
+    base::flat_map<PrefetchContainer::Key, PrefetchContainer::ServableState>>
+CollectMatchCandidatesGeneric(
     const std::map<PrefetchContainer::Key, std::unique_ptr<T>>& prefetches,
     const PrefetchContainer::Key& navigated_key,
+    bool is_nav_prerender,
     base::WeakPtr<PrefetchServingPageMetricsContainer>
         serving_page_metrics_container) {
-  std::vector<T*> matches;
-  std::vector<T*> hint_matches;
-  DVLOG(1) << "CollectMatchCandidatesGeneric(" << navigated_key << ")";
-  // Search for an exact or No-Vary-Search match first.
-  no_vary_search::IterateCandidates(
-      navigated_key, prefetches,
-      base::BindRepeating(
-          [](const PrefetchContainer::Key& navigated_key,
-             std::vector<T*>* matches, std::vector<T*>* hint_matches,
-             const std::unique_ptr<T>& prefetch_container,
-             no_vary_search::MatchType match_type) {
-            switch (match_type) {
-              case no_vary_search::MatchType::kExact:
-              case no_vary_search::MatchType::kNoVarySearch:
-                matches->push_back(prefetch_container.get());
-                break;
-              case no_vary_search::MatchType::kOther:
-                if (const auto& nvs_expected =
-                        prefetch_container->GetNoVarySearchHint()) {
-                  // We cannot match based on the NVS hint once we have the
-                  // response headers. If we have matching NVS header,
-                  // the entry would have matched with kNoVarySearch above.
-                  // We only match based on the hint if we have not yet
-                  // received the headers.
-                  if (prefetch_container->GetServableState(
-                          PrefetchCacheableDuration()) ==
-                          PrefetchContainer::ServableState::
-                              kShouldBlockUntilHeadReceived &&
-                      nvs_expected->AreEquivalent(
-                          navigated_key.url(), prefetch_container->GetURL())) {
-                    hint_matches->push_back(prefetch_container.get());
-                  }
-                }
-                break;
-            }
-            return no_vary_search::IterateCandidateResult::kContinue;
-          },
-          navigated_key, base::Unretained(&matches),
-          base::Unretained(&hint_matches)));
+  std::vector<T*> candidates =
+      CollectPotentialMatchPrefetchContainers(prefetches, navigated_key);
 
-  // Insert the No-Vary-Search hint matches at the end of `matches`.
-  matches.insert(matches.end(), hint_matches.begin(), hint_matches.end());
-
-  for (T* prefetch_container : matches) {
-    prefetch_container->SetServingPageMetrics(serving_page_metrics_container);
-    prefetch_container->UpdateServingPageMetrics();
+  for (T* candidate : candidates) {
+    candidate->SetServingPageMetrics(serving_page_metrics_container);
+    candidate->UpdateServingPageMetrics();
   }
 
-  std::erase_if(matches, [](const auto* prefetch_container) {
-    if (prefetch_container->HasPrefetchBeenConsideredToServe()) {
-      DVLOG(1) << "CollectMatchCandidatesGeneric: skipped "
-               << "because already considered to serve: "
-               << *prefetch_container;
-      return true;
+  std::vector<T*> candidates_available;
+  // See the comment of `PrefetchService::CollectMatchCandidates()`.
+  base::flat_map<PrefetchContainer::Key, PrefetchContainer::ServableState>
+      servable_states;
+  for (T* candidate : candidates) {
+    PrefetchContainer::ServableState servable_state =
+        candidate->GetServableState(PrefetchCacheableDuration());
+    if (IsCandidateAvailable(*candidate, servable_state, is_nav_prerender)) {
+      candidates_available.push_back(candidate);
+      servable_states.emplace(candidate->key(), servable_state);
     }
+  }
 
-    switch (prefetch_container->GetServableState(PrefetchCacheableDuration())) {
-      case PrefetchContainer::ServableState::kNotServable:
-        DVLOG(1) << "CollectMatchCandidatesGeneric: skipped "
-                    "because not servable: "
-                 << *prefetch_container;
-        return true;
-      case PrefetchContainer::ServableState::kServable:
-      case PrefetchContainer::ServableState::kShouldBlockUntilHeadReceived:
-        break;
-    }
-
-    if (prefetch_container->IsDecoy()) {
-      DVLOG(1) << "CollectMatchCandidatesGeneric: "
-                  "skipped because "
-                  "prefetch is a decoy: "
-               << *prefetch_container;
-      return true;
-    }
-
-    // Note: This codepath is only be reached in practice if we create a
-    // second NavigationRequest to this prefetch's URL. The first
-    // NavigationRequest would call GetPrefetch, which might set this
-    // PrefetchContainer's status to kPrefetchNotUsedCookiesChanged.
-    CHECK(prefetch_container->HasPrefetchStatus());
-    if (prefetch_container->GetPrefetchStatus() ==
-        PrefetchStatus::kPrefetchNotUsedCookiesChanged) {
-      DVLOG(1) << "CollectMatchCandidatesGeneric: "
-                  "skipped because "
-                  "cookies for url have changed since prefetch completed: "
-               << *prefetch_container;
-      return true;
-    }
-
-    DVLOG(1) << "CollectMatchCandidatesGeneric:"
-                " matched: "
-             << *prefetch_container;
-    return false;
-  });
-
-  return matches;
+  return std::make_pair(std::move(candidates_available),
+                        std::move(servable_states));
 }
 
 }  // namespace content

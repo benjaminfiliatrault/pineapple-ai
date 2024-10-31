@@ -233,7 +233,7 @@ void ProfileManagerIOSImpl::LoadProfiles() {
   // LoadProfiles() must load at least one profile, so if there is no
   // recently active Profile, create one with a default name.
   if (profiles.empty()) {
-    profiles.insert(kIOSChromeInitialBrowserState);
+    profiles.insert(kIOSChromeInitialProfile);
   }
 
   // Take care of the legacy profiles.
@@ -258,7 +258,7 @@ void ProfileManagerIOSImpl::LoadProfiles() {
 
 ProfileIOS* ProfileManagerIOSImpl::GetProfileWithName(std::string_view name) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // If the browser state is already loaded, just return it.
+  // If the profile is already loaded, just return it.
   auto iter = profiles_map_.find(name);
   if (iter != profiles_map_.end()) {
     ProfileInfo& profile_info = iter->second;
@@ -469,8 +469,15 @@ bool ProfileManagerIOSImpl::CreateProfileWithMode(
     }
   }
 
+  // If this is the first profile ever loaded, mark it as the personal profile.
+  // TODO(crbug.com/331783685): Handle the (theoretical) case where the pref
+  // does have a value, but no profile with that name actually exists.
+  if (profile_attributes_storage_.GetPersonalProfileName().empty()) {
+    profile_attributes_storage_.SetPersonalProfileName(name);
+  }
+
   // If asked to load synchronously but an asynchronous load was already in
-  // progress, pretend the load failed, as we cannot return an unitialized
+  // progress, pretend the load failed, as we cannot return an uninitialized
   // Profile, nor can we wait for the asynchronous initialisation to complete.
   if (creation_mode == CreationMode::kSynchronous) {
     if (!inserted && !profile_info.is_loaded()) {

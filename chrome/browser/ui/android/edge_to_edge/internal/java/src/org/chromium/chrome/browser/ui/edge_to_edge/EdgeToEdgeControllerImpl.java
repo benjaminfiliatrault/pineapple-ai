@@ -32,6 +32,8 @@ import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabSupplierObserver;
+import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
+import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeStateProvider;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.InsetObserver;
@@ -65,6 +67,8 @@ public class EdgeToEdgeControllerImpl
     private final Callback<LayoutManager> mOnLayoutManagerCallback =
             new ValueChangedCallback<>(this::updateLayoutStateProvider);
     private final FullscreenManager mFullscreenManager;
+    private final @NonNull EdgeToEdgeStateProvider mEdgeToEdgeStateProvider;
+    private final int mEdgeToEdgeToken;
 
     // Cached rects used for adding under fullscreen.
     private final Rect mCachedWindowVisibleRect = new Rect();
@@ -110,6 +114,8 @@ public class EdgeToEdgeControllerImpl
      * @param tabObservableSupplier A supplier for Tab changes so this implementation can adjust
      *     whether to draw under or not for each page.
      * @param edgeToEdgeOsWrapper An optional wrapper for OS calls for testing etc.
+     * @param edgeToEdgeStateProvider Provides the edge-to-edge state and allows for requests to
+     *     draw edge-to-edge.
      * @param browserControlsStateProvider Provides the state of the BrowserControls for Totally
      *     Edge to Edge.
      * @param layoutManagerSupplier The supplier to {@link LayoutManager} for checking the active
@@ -121,6 +127,7 @@ public class EdgeToEdgeControllerImpl
             @NonNull WindowAndroid windowAndroid,
             @NonNull ObservableSupplier<Tab> tabObservableSupplier,
             @Nullable EdgeToEdgeOSWrapper edgeToEdgeOsWrapper,
+            @NonNull EdgeToEdgeStateProvider edgeToEdgeStateProvider,
             @NonNull BrowserControlsStateProvider browserControlsStateProvider,
             @NonNull ObservableSupplier<LayoutManager> layoutManagerSupplier,
             @NonNull FullscreenManager fullscreenManager) {
@@ -128,6 +135,7 @@ public class EdgeToEdgeControllerImpl
         mWindowAndroid = windowAndroid;
         mEdgeToEdgeOsWrapper =
                 edgeToEdgeOsWrapper == null ? new EdgeToEdgeOSWrapperImpl() : edgeToEdgeOsWrapper;
+        mEdgeToEdgeStateProvider = edgeToEdgeStateProvider;
         mPxToDp = 1.f / mActivity.getResources().getDisplayMetrics().density;
         mTabSupplierObserver =
                 new TabSupplierObserver(tabObservableSupplier) {
@@ -141,6 +149,9 @@ public class EdgeToEdgeControllerImpl
                     @Override
                     public void onWebContentsSwapped(
                             Tab tab, boolean didStartLoad, boolean didFinishLoad) {
+                        drawToEdge(
+                                EdgeToEdgeUtils.isPageOptedIntoEdgeToEdge(mCurrentTab),
+                                /* changedWindowState= */ false);
                         updateWebContentsObserver(tab);
                     }
 
@@ -149,10 +160,12 @@ public class EdgeToEdgeControllerImpl
                         assert tab.getWebContents() != null
                                 : "onContentChanged called on tab w/o WebContents: "
                                         + tab.getTitle();
+                        drawToEdge(
+                                EdgeToEdgeUtils.isPageOptedIntoEdgeToEdge(mCurrentTab),
+                                /* changedWindowState= */ false);
                         updateWebContentsObserver(tab);
                     }
                 };
-        mInsetObserver = mWindowAndroid.getInsetObserver();
         mBrowserControlsStateProvider = browserControlsStateProvider;
         mBrowserControlsStateProvider.addObserver(this);
 
@@ -166,6 +179,10 @@ public class EdgeToEdgeControllerImpl
         mFullscreenManager = fullscreenManager;
         mFullscreenManager.addObserver(this);
 
+        mInsetObserver = mWindowAndroid.getInsetObserver();
+        assert mInsetObserver != null
+                : "The EdgeToEdgeControllerImpl needs access to a valid InsetObserver to listen to"
+                        + " the system insets!";
         mWindowInsetsConsumer = this::handleWindowInsets;
         mInsetObserver.addInsetsConsumer(mWindowInsetsConsumer);
 
@@ -173,7 +190,7 @@ public class EdgeToEdgeControllerImpl
                 : "The inset observer should have non-null insets by the time the"
                         + " EdgeToEdgeControllerImpl is initialized.";
         mSystemInsets = getSystemInsets(mInsetObserver.getLastRawWindowInsets());
-        mEdgeToEdgeOsWrapper.setDecorFitsSystemWindows(mActivity.getWindow(), false);
+        mEdgeToEdgeToken = mEdgeToEdgeStateProvider.acquireSetDecorFitsSystemWindowToken();
         drawToEdge(
                 EdgeToEdgeUtils.isPageOptedIntoEdgeToEdge(mCurrentTab),
                 /* changedWindowState= */ true);
@@ -522,6 +539,7 @@ public class EdgeToEdgeControllerImpl
         if (mFullscreenManager != null) {
             mFullscreenManager.removeObserver(this);
         }
+        mEdgeToEdgeStateProvider.releaseSetDecorFitsSystemWindowToken(mEdgeToEdgeToken);
     }
 
     public void setOsWrapperForTesting(EdgeToEdgeOSWrapper testOsWrapper) {
@@ -532,6 +550,10 @@ public class EdgeToEdgeControllerImpl
     @Nullable
     WebContentsObserver getWebContentsObserver() {
         return mWebContentsObserver;
+    }
+
+    TabObserver getTabObserverForTesting() {
+        return mTabObserver;
     }
 
     public void setIsOptedIntoEdgeToEdgeForTesting(boolean toEdge) {

@@ -98,10 +98,7 @@
 #include "third_party/blink/renderer/core/layout/layout_object_inl.h"
 #include "third_party/blink/renderer/core/layout/layout_object_inlines.h"
 #include "third_party/blink/renderer/core/layout/layout_result.h"
-#include "third_party/blink/renderer/core/layout/layout_ruby.h"
 #include "third_party/blink/renderer/core/layout/layout_ruby_as_block.h"
-#include "third_party/blink/renderer/core/layout/layout_ruby_column.h"
-#include "third_party/blink/renderer/core/layout/layout_ruby_text.h"
 #include "third_party/blink/renderer/core/layout/layout_text_combine.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
@@ -416,17 +413,11 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
     case EDisplay::kBlockMath:
       return MakeGarbageCollected<LayoutMathMLBlock>(element);
     case EDisplay::kRuby:
-      if (RuntimeEnabledFeatures::RubyLineBreakableEnabled()) {
-        return MakeGarbageCollected<LayoutInline>(element);
-      }
-      return MakeGarbageCollected<LayoutRuby>(element);
+      return MakeGarbageCollected<LayoutInline>(element);
     case EDisplay::kBlockRuby:
       return MakeGarbageCollected<LayoutRubyAsBlock>(element);
     case EDisplay::kRubyText:
-      if (RuntimeEnabledFeatures::RubyLineBreakableEnabled()) {
-        return MakeGarbageCollected<LayoutInline>(element);
-      }
-      return MakeGarbageCollected<LayoutRubyText>(element);
+      return MakeGarbageCollected<LayoutInline>(element);
     case EDisplay::kLayoutCustom:
     case EDisplay::kInlineLayoutCustom:
       return MakeGarbageCollected<LayoutCustom>(element);
@@ -502,14 +493,12 @@ bool LayoutObject::IsDescendantOf(const LayoutObject* obj) const {
 
 bool LayoutObject::IsInlineRuby() const {
   NOT_DESTROYED();
-  return RuntimeEnabledFeatures::RubyLineBreakableEnabled() &&
-         IsLayoutInline() && StyleRef().Display() == EDisplay::kRuby;
+  return IsLayoutInline() && StyleRef().Display() == EDisplay::kRuby;
 }
 
 bool LayoutObject::IsInlineRubyText() const {
   NOT_DESTROYED();
-  return RuntimeEnabledFeatures::RubyLineBreakableEnabled() &&
-         IsLayoutInline() && StyleRef().Display() == EDisplay::kRubyText;
+  return IsLayoutInline() && StyleRef().Display() == EDisplay::kRubyText;
 }
 
 bool LayoutObject::IsHR() const {
@@ -1718,23 +1707,6 @@ void LayoutObject::InvalidateSubtreeLayoutForFontUpdates() {
   }
 }
 
-void LayoutObject::DeprecatedInvalidateIntersectionObserverCachedRects() {
-  NOT_DESTROYED();
-  if (!RuntimeEnabledFeatures::IntersectionOptimizationEnabled()) {
-    InvalidateIntersectionObserverCachedRects();
-  }
-}
-
-void LayoutObject::InvalidateIntersectionObserverCachedRects() {
-  NOT_DESTROYED();
-  if (const auto* element = DynamicTo<Element>(GetNode())) {
-    if (auto* data = element->IntersectionObserverData()) {
-      data->InvalidateCachedRects();
-    }
-  }
-  GetFrameView()->SetIntersectionObservationState(LocalFrameView::kDesired);
-}
-
 static inline bool ShouldInvalidateBeyond(LayoutObject* o) {
   // We don't work on individual inline objects, instead at an IFC level. We
   // never clear these bits on inline elements so invalidate past them.
@@ -2006,7 +1978,8 @@ PhysicalRect LayoutObject::AbsoluteBoundingBoxRectForScrollIntoView() const {
           DynamicTo<ScrollMarkerPseudoElement>(GetNode())) {
     // Scroll markers are reparented into a scroll marker group. We want the
     // rectangle of the originating element (or column).
-    const Element* originating_element = scroll_marker->OriginatingElement();
+    const Element* originating_element =
+        scroll_marker->UltimateOriginatingElement();
     const auto* originating_object = originating_element->GetLayoutObject();
     const auto* column_pseudo =
         DynamicTo<ColumnPseudoElement>(scroll_marker->parentNode());
@@ -2275,19 +2248,6 @@ void LayoutObject::InvalidatePaint(
   ObjectPaintInvalidatorWithContext(*this, context).InvalidatePaint();
 }
 
-PhysicalRect LayoutObject::VisualRectInDocument(VisualRectFlags flags) const {
-  NOT_DESTROYED();
-  PhysicalRect rect = LocalVisualRect();
-  MapToVisualRectInAncestorSpace(View(), rect, flags);
-  return rect;
-}
-
-PhysicalRect LayoutObject::LocalVisualRectIgnoringVisibility() const {
-  NOT_DESTROYED();
-  NOTREACHED_IN_MIGRATION();
-  return PhysicalRect();
-}
-
 bool LayoutObject::MapToVisualRectInAncestorSpaceInternalFastPath(
     const LayoutBoxModelObject* ancestor,
     gfx::RectF& rect,
@@ -2448,11 +2408,6 @@ HitTestResult LayoutObject::HitTestForOcclusion(
                                                           this, true);
 }
 
-HitTestResult LayoutObject::HitTestForOcclusion() const {
-  NOT_DESTROYED();
-  return HitTestForOcclusion(VisualRectInDocument());
-}
-
 std::ostream& operator<<(std::ostream& out, const LayoutObject& object) {
   String info;
 #if DCHECK_IS_ON()
@@ -2584,13 +2539,19 @@ const ComputedStyle& LayoutObject::SlowEffectiveStyle(
       if (IsInline() && IsAtomicInlineLevel())
         return StyleRef();
       return FirstLineStyleRef();
-    case StyleVariant::kEllipsis:
+    case StyleVariant::kStandardEllipsis:
       // The ellipsis is styled according to the line style.
       // https://www.w3.org/TR/css-overflow-3/#ellipsing-details
-      // Use first-line style if exists since most cases it is the first line.
       DCHECK(IsInline());
-      if (LayoutObject* block = ContainingBlock())
+      if (const LayoutObject* block = ContainingBlock()) {
+        return block->StyleRef();
+      }
+      return StyleRef();
+    case StyleVariant::kFirstLineEllipsis:
+      DCHECK(IsInline());
+      if (const LayoutObject* block = ContainingBlock()) {
         return block->FirstLineStyleRef();
+      }
       return FirstLineStyleRef();
   }
   NOTREACHED_IN_MIGRATION();
@@ -2674,6 +2635,7 @@ void LayoutObject::SetPseudoElementStyle(const LayoutObject& owner,
   NOT_DESTROYED();
   const ComputedStyle* pseudo_style = owner.Style();
   DCHECK(pseudo_style->StyleType() == kPseudoIdBefore ||
+         pseudo_style->StyleType() == kPseudoIdCheck ||
          pseudo_style->StyleType() == kPseudoIdAfter ||
          pseudo_style->StyleType() == kPseudoIdMarker ||
          pseudo_style->StyleType() == kPseudoIdFirstLetter ||
@@ -3800,13 +3762,8 @@ PhysicalOffset LayoutObject::OffsetFromAncestor(
   return offset;
 }
 
-PhysicalRect LayoutObject::LocalCaretRect(
-    int,
-    LayoutUnit* extra_width_to_end_of_line) const {
+PhysicalRect LayoutObject::LocalCaretRect(int) const {
   NOT_DESTROYED();
-  if (extra_width_to_end_of_line)
-    *extra_width_to_end_of_line = LayoutUnit();
-
   return PhysicalRect();
 }
 
@@ -3996,22 +3953,13 @@ void LayoutObject::WillBeRemovedFromTree() {
     FindReferencingScrollAnchors(this, kClear);
   }
 
-  if (LocalFrameView* frame_view = GetFrameView())
+  if (LocalFrameView* frame_view = GetFrameView()) {
     frame_view->GetPaintTimingDetector().LayoutObjectWillBeDestroyed(*this);
-
-  InvalidateIntersectionObserverCachedRects();
+    frame_view->SetIntersectionObservationState(LocalFrameView::kDesired);
+  }
 }
 
 void LayoutObject::SetNeedsPaintPropertyUpdate() {
-  NOT_DESTROYED();
-  if (bitfields_.NeedsPaintPropertyUpdate()) {
-    return;
-  }
-  SetNeedsPaintPropertyUpdatePreservingCachedRects();
-  DeprecatedInvalidateIntersectionObserverCachedRects();
-}
-
-void LayoutObject::SetNeedsPaintPropertyUpdatePreservingCachedRects() {
   NOT_DESTROYED();
   DCHECK(!GetDocument().InvalidationDisallowed());
   if (bitfields_.NeedsPaintPropertyUpdate())
@@ -4104,13 +4052,6 @@ void LayoutObject::DestroyAndCleanupAnonymousWrappers(
     if (destroy_root_parent->Parent() &&
         destroy_root_parent->Parent()->IsFieldset()) {
       break;
-    }
-    // RubyBase should be kept if RubyText exists
-    if (destroy_root_parent->IsRubyBase()) {
-      auto* ruby_run =
-          DynamicTo<LayoutRubyColumn>(destroy_root_parent->Parent());
-      if (ruby_run && ruby_run->HasRubyText())
-        break;
     }
 
     // We need to keep the anonymous parent, if it won't become empty by the
@@ -4347,6 +4288,7 @@ const ComputedStyle* LayoutObject::GetCachedPseudoElementStyle(
     PseudoId pseudo) const {
   NOT_DESTROYED();
   DCHECK_NE(pseudo, kPseudoIdBefore);
+  DCHECK_NE(pseudo, kPseudoIdCheck);
   DCHECK_NE(pseudo, kPseudoIdAfter);
   if (!GetNode())
     return nullptr;
@@ -4362,6 +4304,7 @@ const ComputedStyle* LayoutObject::GetUncachedPseudoElementStyle(
     const StyleRequest& request) const {
   NOT_DESTROYED();
   DCHECK_NE(request.pseudo_id, kPseudoIdBefore);
+  DCHECK_NE(request.pseudo_id, kPseudoIdCheck);
   DCHECK_NE(request.pseudo_id, kPseudoIdAfter);
   if (!GetNode())
     return nullptr;
@@ -4692,7 +4635,6 @@ void LayoutObject::SetShouldDoFullPaintInvalidation(
   DCHECK(IsLayoutFullPaintInvalidationReason(reason));
   SetShouldCheckForPaintInvalidation();
   SetShouldDoFullPaintInvalidationWithoutLayoutChangeInternal(reason);
-  DeprecatedInvalidateIntersectionObserverCachedRects();
 }
 
 void LayoutObject::SetShouldDoFullPaintInvalidationWithoutLayoutChange(

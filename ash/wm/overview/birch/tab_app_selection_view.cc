@@ -4,18 +4,25 @@
 
 #include "ash/wm/overview/birch/tab_app_selection_view.h"
 
-#include "ash/birch/birch_coral_item.h"
+#include "ash/birch/birch_coral_provider.h"
+#include "ash/birch/coral_util.h"
 #include "ash/public/cpp/saved_desk_delegate.h"
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ash/style/close_button.h"
+#include "ash/style/icon_button.h"
+#include "ash/style/style_util.h"
 #include "ash/style/typography.h"
 #include "base/task/cancelable_task_tracker.h"
-#include "components/services/app_service/public/cpp/app_registry_cache.h"
-#include "components/services/app_service/public/cpp/app_registry_cache_wrapper.h"
+#include "chromeos/ash/services/coral/public/mojom/coral_service.mojom.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -28,27 +35,35 @@ namespace ash {
 
 namespace {
 
-// TODO(http://b/361326120): The below are hardcoded temporary values.
-constexpr int kScrollViewMaxHeight = 400;
+constexpr int kScrollViewMaxHeight = 358;
+// The space between the user feedback view and the tab app items view.
+constexpr int kChildSpacing = 8;
 
 constexpr int kItemChildSpacing = 16;
 constexpr gfx::Insets kItemInsets = gfx::Insets::VH(8, 16);
 constexpr int kImageSize = 20;
 constexpr gfx::Size kImagePreferredSize(20, 20);
 
+// UserFeedbackView.
+constexpr int kUserFeedbackChildSpacing = 8;
+constexpr gfx::Insets kUserFeedbackInsets(16);
+constexpr gfx::RoundedCornersF kUserFeedbackContainerCornerRadius(20.f);
+
 constexpr gfx::Insets kContentsInsets = gfx::Insets::VH(8, 0);
 
-constexpr gfx::RoundedCornersF kContainerCornerRadius(20.f, 20.f, 0.f, 0.f);
+constexpr gfx::RoundedCornersF kTabAppItemsContainerCornerRadius(20.f,
+                                                                 20.f,
+                                                                 0.f,
+                                                                 0.f);
 
 constexpr gfx::Insets kSubtitleMargins = gfx::Insets::VH(8, 16);
 
 // If the menu has two items or less, do not allow deleting.
 constexpr int kMinItems = 2;
 
-std::unique_ptr<views::Label> CreateSubtitle(const std::u16string& text,
-                                             int id) {
+std::unique_ptr<views::Label> CreateSubtitle(int text_message_id, int id) {
   return views::Builder<views::Label>()
-      .SetText(text)
+      .SetText(l10n_util::GetStringUTF16(text_message_id))
       .SetHorizontalAlignment(gfx::ALIGN_LEFT)
       .SetEnabledColorId(cros_tokens::kCrosSysOnSurface)
       .SetProperty(views::kMarginsKey, kSubtitleMargins)
@@ -99,21 +114,33 @@ class TabAppSelectionView::TabAppSelectionItemView
     // will use the favicon and app services to fetch the favicon and app icon.
     std::string identifier;
 
+    // Title of the tab or app.
+    std::string title;
+
     raw_ptr<TabAppSelectionView> owner;
 
     bool show_close_button = true;
+
+    // Used by accessibility to speak "Menu item pos in size".
+    // Indicates the initial position of this item in the parent selector view
+    // and the number of elements in the parent selector view. Used by
+    // accessibility to give spoken feedback: "Menu item `position_in_selector`
+    // in `num_selector_elements`". The view accessibility will be updated when
+    // an item is closed.
+    int position_in_selector = 0;
+    int num_selector_elements = 0;
   };
 
   explicit TabAppSelectionItemView(InitParams params)
-      : type_(params.type), owner_(params.owner) {
-    // TODO(http://b/361326120): Add a default icon.
-    views::Label* title;
+      : type_(params.type),
+        identifier_(params.identifier),
+        owner_(params.owner) {
     views::Builder<views::BoxLayoutView>(this)
         .SetAccessibleRole(ax::mojom::Role::kMenuItem)
         .SetAccessibleName(u"TempAccessibleName")
         .SetBetweenChildSpacing(kItemChildSpacing)
         .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
-        .SetFocusBehavior(views::View::FocusBehavior::ALWAYS)
+        .SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY)
         .SetInsideBorderInsets(kItemInsets)
         .SetNotifyEnterExitOnChild(true)
         .SetOrientation(views::LayoutOrientation::kHorizontal)
@@ -125,7 +152,7 @@ class TabAppSelectionView::TabAppSelectionItemView
                 .SetImageSize(gfx::Size(kImageSize, kImageSize))
                 .SetPreferredSize(kImagePreferredSize),
             views::Builder<views::Label>()
-                .CopyAddressTo(&title)
+                .SetText(base::UTF8ToUTF16(params.title))
                 .SetHorizontalAlignment(gfx::ALIGN_LEFT)
                 .SetProperty(views::kBoxLayoutFlexKey,
                              views::BoxLayoutFlexSpecification())
@@ -134,6 +161,9 @@ class TabAppSelectionView::TabAppSelectionItemView
                       TypographyToken::kCrosButton2, *label);
                 })))
         .BuildChildren();
+
+    SetPositionAndSetSize(params.position_in_selector,
+                          params.num_selector_elements);
 
     if (params.show_close_button) {
       close_button_ = AddChildView(std::make_unique<CloseButton>(
@@ -147,9 +177,11 @@ class TabAppSelectionView::TabAppSelectionItemView
     auto* delegate = Shell::Get()->saved_desk_delegate();
     auto set_icon_image_callback = base::BindOnce(
         [](const base::WeakPtr<TabAppSelectionItemView>& item_view,
-           const gfx::ImageSkia& favicon) {
+           const gfx::ImageSkia& icon) {
           if (item_view) {
-            item_view->image_->SetImage(favicon);
+            item_view->image_->SetImage(
+                icon.isNull() ? ui::ImageModel::FromVectorIcon(kDefaultAppIcon)
+                              : ui::ImageModel::FromImageSkia(icon));
           }
         },
         weak_ptr_factory_.GetWeakPtr());
@@ -159,24 +191,12 @@ class TabAppSelectionView::TabAppSelectionItemView
         delegate->GetFaviconForUrl(params.identifier, /*lacros_profile_id=*/0,
                                    std::move(set_icon_image_callback),
                                    &cancelable_favicon_task_tracker_);
-        title->SetText(base::UTF8ToUTF16(params.identifier));
         return;
       }
       case InitParams::Type::kApp: {
         //  The callback may be called synchronously.
         delegate->GetIconForAppId(params.identifier, kImageSize,
                                   std::move(set_icon_image_callback));
-
-        // Retrieve the title from the app registry cache, which may be null in
-        // tests.
-        if (apps::AppRegistryCache* cache =
-                apps::AppRegistryCacheWrapper::Get().GetAppRegistryCache(
-                    Shell::Get()->session_controller()->GetActiveAccountId())) {
-          cache->ForOneApp(params.identifier,
-                           [&title](const apps::AppUpdate& update) {
-                             title->SetText(base::UTF8ToUTF16(update.Name()));
-                           });
-        }
         return;
       }
     }
@@ -186,6 +206,13 @@ class TabAppSelectionView::TabAppSelectionItemView
   ~TabAppSelectionItemView() override = default;
 
   InitParams::Type type() const { return type_; }
+  std::string identifier() const { return identifier_; }
+
+  void SetPositionAndSetSize(int position_in_selector,
+                             int num_selector_elements) {
+    GetViewAccessibility().SetPosInSet(position_in_selector);
+    GetViewAccessibility().SetSetSize(num_selector_elements);
+  }
 
   bool selected() const { return selected_; }
   void SetSelected(bool selected) {
@@ -200,6 +227,9 @@ class TabAppSelectionView::TabAppSelectionItemView
     SetBackground(selected_ ? views::CreateThemedSolidBackground(
                                   cros_tokens::kCrosSysHoverOnSubtle)
                             : nullptr);
+    if (selected_) {
+      GetViewAccessibility().NotifyEvent(ax::mojom::Event::kSelection);
+    }
   }
 
   void RemoveCloseButton() {
@@ -216,6 +246,11 @@ class TabAppSelectionView::TabAppSelectionItemView
   void OnMouseExited(const ui::MouseEvent& event) override {
     SetSelected(false);
   }
+  void OnGestureEvent(ui::GestureEvent* event) override {
+    if (event->type() == ui::EventType::kGestureTap) {
+      owner_->OnItemTapped(this);
+    }
+  }
   void OnFocus() override { SetSelected(true); }
   void OnBlur() override { SetSelected(false); }
 
@@ -226,6 +261,7 @@ class TabAppSelectionView::TabAppSelectionItemView
   }
 
   const InitParams::Type type_;
+  const std::string identifier_;
 
   // True when the mouse is hovered over this view. The background is painted
   // differently.
@@ -245,30 +281,141 @@ BEGIN_METADATA(TabAppSelectionView, TabAppSelectionItemView)
 END_METADATA
 
 // -----------------------------------------------------------------------------
+// UserFeedbackView:
+// A view that allows users to give feedback via the thumb up and thumb down
+// buttons.
+//
+//   +-------------------------------------------+
+//   |  +-----------------------+  +----++-+--+  |
+//   |  |                       |  |    ||    |  |
+//   |  +-----------------------+  +----++----+  |
+//   +--^--------------------------^-----^-------+
+//   ^  |                          |     |
+//   |  `Label`                    |     'IconButton'(thumb down)
+//   |                             'IconButton'(thumb up)
+//   |
+//   `UserFeedbackView`
+// TODO(crbug.com/374117101): Add hover state for thumb up/down buttons.
+// TODO(crbug.com/374116829): Localization and proper accessibility names.
+class UserFeedbackView : public views::BoxLayoutView {
+  METADATA_HEADER(UserFeedbackView, views::BoxLayoutView)
+
+ public:
+  UserFeedbackView() {
+    SetOrientation(views::BoxLayout::Orientation::kHorizontal);
+    SetInsideBorderInsets(kUserFeedbackInsets);
+    SetMainAxisAlignment(views::LayoutAlignment::kCenter);
+    SetBackground(views::CreateThemedRoundedRectBackground(
+        cros_tokens::kCrosSysSystemOnBaseOpaque,
+        kUserFeedbackContainerCornerRadius, 0));
+    SetBetweenChildSpacing(kUserFeedbackChildSpacing);
+    SetBorder(std::make_unique<views::HighlightBorder>(
+        kUserFeedbackContainerCornerRadius,
+        views::HighlightBorder::Type::kHighlightBorderNoShadow));
+
+    auto* feedback_label = AddChildView(std::make_unique<views::Label>());
+    feedback_label->SetText(l10n_util::GetStringUTF16(
+        IDS_ASH_BIRCH_CORAL_USER_FEEDBACK_DESCRIPTION));
+    feedback_label->SetEnabledColorId(cros_tokens::kCrosSysOnSurfaceVariant);
+    feedback_label->SetMultiLine(true);
+    feedback_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    TypographyProvider::Get()->StyleLabel(TypographyToken::kCrosAnnotation2,
+                                          *feedback_label);
+    SetFlexForView(feedback_label, 1);
+
+    auto* thumb_buttons_container =
+        AddChildView(std::make_unique<views::BoxLayoutView>());
+    thumb_buttons_container->SetOrientation(
+        views::BoxLayout::Orientation::kHorizontal);
+    auto* thumb_up_button =
+        thumb_buttons_container->AddChildView(std::make_unique<IconButton>(
+            base::BindOnce(&UserFeedbackView::OnThumbUpButtonPressed,
+                           base::Unretained(this)),
+            IconButton::Type::kMediumFloating, &kThumbUpIcon,
+            l10n_util::GetStringUTF16(
+                IDS_ASH_BIRCH_CORAL_THUMB_UP_ACCESSIBLE_NAME),
+            /*is_togglable=*/false, /*has_border=*/false));
+    StyleUtil::SetUpInkDropForButton(thumb_up_button, gfx::Insets(),
+                                     /*highlight_on_hover=*/true,
+                                     /*highlight_on_focus=*/false);
+
+    auto* thumb_down_button =
+        thumb_buttons_container->AddChildView(std::make_unique<IconButton>(
+            base::BindOnce(&UserFeedbackView::OnThumbDownButtonPressed,
+                           base::Unretained(this)),
+            IconButton::Type::kMediumFloating, &kThumbDownIcon,
+            l10n_util::GetStringUTF16(
+                IDS_ASH_BIRCH_CORAL_THUMB_DOWN_ACCESSIBLE_NAME),
+            /*is_togglable=*/false, /*has_border=*/false));
+    StyleUtil::SetUpInkDropForButton(thumb_down_button, gfx::Insets(),
+                                     /*highlight_on_hover=*/true,
+                                     /*highlight_on_focus=*/false);
+  }
+
+  UserFeedbackView(const UserFeedbackView&) = delete;
+  UserFeedbackView& operator=(const UserFeedbackView&) = delete;
+  ~UserFeedbackView() override = default;
+
+ private:
+  void OnThumbUpButtonPressed() {
+    base::UmaHistogramBoolean("Ash.Birch.Coral.UserFeedback", true);
+  }
+
+  // TODO(crbug.com/374116757): Open user feedback dialog on thumb down
+  // button pressed.
+  void OnThumbDownButtonPressed() {
+    base::UmaHistogramBoolean("Ash.Birch.Coral.UserFeedback", false);
+  }
+};
+
+BEGIN_METADATA(UserFeedbackView)
+END_METADATA
+
+// -----------------------------------------------------------------------------
 // TabAppSelectionView:
-TabAppSelectionView::TabAppSelectionView(BirchCoralItem* coral_item) {
+TabAppSelectionView::TabAppSelectionView(const base::Token& group_id)
+    : group_id_(group_id) {
   SetCrossAxisAlignment(views::BoxLayout::CrossAxisAlignment::kStretch);
   SetOrientation(views::BoxLayout::Orientation::kVertical);
+  SetBetweenChildSpacing(kChildSpacing);
+  GetViewAccessibility().SetIsVertical(true);
+  GetViewAccessibility().SetRole(ax::mojom::Role::kMenu);
+  GetViewAccessibility().SetName(
+      l10n_util::GetStringUTF16(IDS_ASH_BIRCH_CORAL_SELECTOR_ACCESSIBLE_NAME));
 
-  scroll_view_ = AddChildView(std::make_unique<views::ScrollView>(
-      views::ScrollView::ScrollWithLayers::kEnabled));
+  AddChildView(std::make_unique<UserFeedbackView>());
+
+  auto* tab_app_items_view =
+      AddChildView(std::make_unique<views::BoxLayoutView>());
+  tab_app_items_view->SetCrossAxisAlignment(
+      views::BoxLayout::CrossAxisAlignment::kStretch);
+  tab_app_items_view->SetOrientation(views::BoxLayout::Orientation::kVertical);
+  tab_app_items_view->SetBackground(views::CreateThemedRoundedRectBackground(
+      cros_tokens::kCrosSysSystemOnBaseOpaque,
+      kTabAppItemsContainerCornerRadius, 0));
+
+  scroll_view_ =
+      tab_app_items_view->AddChildView(std::make_unique<views::ScrollView>(
+          views::ScrollView::ScrollWithLayers::kEnabled));
   scroll_view_->ClipHeightTo(/*min_height=*/0,
                              /*max_height=*/kScrollViewMaxHeight);
-  // TODO(http://b/361326120): This applies a rectangle themed background. We
-  // will need to set this to std::nullopt and apply a rounded rectangle
-  // background elsewhere, or clip the contents after it has been set (painted
-  // to a layer).
-  scroll_view_->SetBackgroundThemeColorId(
-      cros_tokens::kCrosSysSystemOnBaseOpaque);
+  // This applies a non-rounded rectangle themed background. We set this to
+  // std::nullopt and apply a rounded rectangle background above on the whole
+  // view. We still need to set the viewport rounded corner radius to clip the
+  // child backgrounds when they are hovered over.
+  scroll_view_->SetBackgroundThemeColorId(std::nullopt);
   scroll_view_->SetBorder(std::make_unique<views::HighlightBorder>(
-      kContainerCornerRadius,
+      kTabAppItemsContainerCornerRadius,
       views::HighlightBorder::Type::kHighlightBorderOnShadow));
-  scroll_view_->SetViewportRoundedCornerRadius(kContainerCornerRadius);
+  scroll_view_->SetViewportRoundedCornerRadius(
+      kTabAppItemsContainerCornerRadius);
+  scroll_view_->SetDrawOverflowIndicator(false);
 
-  AddChildView(views::Builder<views::Separator>()
-                   .SetColorId(cros_tokens::kCrosSysSeparator)
-                   .SetOrientation(views::Separator::Orientation::kHorizontal)
-                   .Build());
+  tab_app_items_view->AddChildView(
+      views::Builder<views::Separator>()
+          .SetColorId(cros_tokens::kCrosSysSeparator)
+          .SetOrientation(views::Separator::Orientation::kHorizontal)
+          .Build());
 
   auto contents =
       views::Builder<views::BoxLayoutView>()
@@ -277,37 +424,49 @@ TabAppSelectionView::TabAppSelectionView(BirchCoralItem* coral_item) {
           .SetInsideBorderInsets(kContentsInsets)
           .Build();
 
-  // TODO(http://b/361326120): Grab the lists of tabs and apps from the model or
-  // provider.
-  const size_t num_tabs = coral_item->page_urls().size();
-  const size_t num_apps = coral_item->app_ids().size();
+  // Grab the lists of tabs and apps from data provider.
+  const coral::mojom::GroupPtr& group =
+      BirchCoralProvider::Get()->GetGroupById(group_id_);
+  coral_util::TabsAndApps tabs_apps =
+      coral_util::SplitContentData(group->entities);
+
+  const size_t num_tabs = tabs_apps.tabs.size();
+  const size_t num_apps = tabs_apps.apps.size();
   item_views_.reserve(num_tabs + num_apps);
   const bool show_close_button = (num_tabs + num_apps) > kMinItems;
-  auto create_item_view =
-      [&](TabAppSelectionItemView::InitParams::Type type,
-          const std::string& identifier) {
-        TabAppSelectionItemView::InitParams params;
-        params.type = type;
-        params.identifier = identifier;
-        params.owner = this;
-        params.show_close_button = show_close_button;
-        auto* item_view = contents->AddChildView(
-            std::make_unique<TabAppSelectionItemView>(std::move(params)));
-        item_views_.push_back(item_view);
-      };
+  auto create_item_view = [&](TabAppSelectionItemView::InitParams::Type type,
+                              const std::string& identifier,
+                              const std::string& title,
+                              int position_in_selector) {
+    TabAppSelectionItemView::InitParams params;
+    params.type = type;
+    params.identifier = identifier;
+    params.title = title;
+    params.owner = this;
+    params.show_close_button = show_close_button;
+    params.position_in_selector = position_in_selector;
+    params.num_selector_elements = static_cast<int>(num_tabs + num_apps);
+    auto* item_view = contents->AddChildView(
+        std::make_unique<TabAppSelectionItemView>(std::move(params)));
+    item_views_.push_back(item_view);
+  };
 
+  int position = 1;
   if (num_tabs > 0) {
-    contents->AddChildView(CreateSubtitle(u"Tabs", kTabSubtitleID));
-    for (const GURL& gurl : coral_item->page_urls()) {
+    contents->AddChildView(CreateSubtitle(
+        IDS_ASH_BIRCH_CORAL_SELECTOR_TAB_SUBTITLE, kTabSubtitleID));
+    for (const coral::mojom::Tab& tab : tabs_apps.tabs) {
       create_item_view(TabAppSelectionItemView::InitParams::Type::kTab,
-                       gurl.spec());
+                       tab.url.spec(), tab.title, position++);
     }
   }
 
   if (num_apps > 0) {
-    contents->AddChildView(CreateSubtitle(u"Apps", kAppSubtitleID));
-    for (const std::string& app_id : coral_item->app_ids()) {
-      create_item_view(TabAppSelectionItemView::InitParams::Type::kApp, app_id);
+    contents->AddChildView(CreateSubtitle(
+        IDS_ASH_BIRCH_CORAL_SELECTOR_APP_SUBTITLE, kAppSubtitleID));
+    for (const coral::mojom::App& app : tabs_apps.apps) {
+      create_item_view(TabAppSelectionItemView::InitParams::Type::kApp, app.id,
+                       app.title, position++);
     }
   }
 
@@ -315,6 +474,12 @@ TabAppSelectionView::TabAppSelectionView(BirchCoralItem* coral_item) {
 }
 
 TabAppSelectionView::~TabAppSelectionView() = default;
+
+void TabAppSelectionView::ClearSelection() {
+  for (TabAppSelectionItemView* item : item_views_) {
+    item->SetSelected(false);
+  }
+}
 
 void TabAppSelectionView::ProcessKeyEvent(ui::KeyEvent* event) {
   switch (event->key_code()) {
@@ -374,6 +539,8 @@ void TabAppSelectionView::AdvanceSelection(bool reverse) {
 
 void TabAppSelectionView::OnCloseButtonPressed(
     TabAppSelectionItemView* sender) {
+  BirchCoralProvider::Get()->RemoveItemFromGroup(group_id_,
+                                                 sender->identifier());
   TabAppSelectionItemView::InitParams::Type sender_type = sender->type();
   std::erase(item_views_, sender);
   scroll_view_->contents()->RemoveChildViewT(sender);
@@ -401,14 +568,21 @@ void TabAppSelectionView::OnCloseButtonPressed(
     scroll_view_->contents()->RemoveChildViewT(GetViewByID(*id));
   }
 
-  if (item_views_.size() > kMinItems) {
-    return;
+  // Update the items' accessibility and remove all close buttons once if we
+  // have `kMinItems` left. This function won't be called again.
+  const int num_items = static_cast<int>(item_views_.size());
+  for (int i = 0; i < num_items; ++i) {
+    item_views_[i]->SetPositionAndSetSize(i + 1, num_items);
+    if (num_items <= kMinItems) {
+      item_views_[i]->RemoveCloseButton();
+    }
   }
+}
 
-  // Remove all close buttons if we have 3 elements or less. This function won't
-  // be called again.
+void TabAppSelectionView::OnItemTapped(TabAppSelectionItemView* sender) {
+  // Toggle selection for `sender`; clear selection otherwise.
   for (TabAppSelectionItemView* item : item_views_) {
-    item->RemoveCloseButton();
+    item->SetSelected(item == sender && !item->selected());
   }
 }
 

@@ -32,6 +32,8 @@
 
 #include <string>
 
+#include "base/run_loop.h"
+#include "base/test/bind.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
@@ -126,13 +128,19 @@ class FrameSerializerTest
     for (; frame; frame = frame->Tree().TraverseNext()) {
       // This is safe, because tests do not do cross-site navigation
       // (and therefore don't have remote frames).
-      FrameSerializer::SerializeFrame(resources_, *this,
-                                      *To<LocalFrame>(frame));
-      // Don't serialize the same resource on subsequent frames. This mimics how
-      // FrameSerializer is actually used.
-      for (auto& res : GetResources()) {
-        skip_urls_.insert(res.url);
-      }
+      base::RunLoop run_loop;
+      FrameSerializer::SerializeFrame(
+          *this, *To<LocalFrame>(frame),
+          base::BindLambdaForTesting([&](Deque<SerializedResource> resources) {
+            for (auto& res : resources) {
+              resources_.push_back(res);
+              // Don't serialize the same resource on subsequent frames. This
+              // mimics how FrameSerializer is actually used.
+              skip_urls_.insert(res.url);
+            }
+            run_loop.Quit();
+          }));
+      run_loop.Run();
     }
   }
 
@@ -538,6 +546,28 @@ TEST_F(FrameSerializerTest, markOfTheWebDeclaration) {
   EXPECT_EQ("saved from url=(0026)http://foo.com/#bar-%2Dbaz",
             FrameSerializer::MarkOfTheWebDeclaration(
                 KURL("http://foo.com#bar--baz")));
+}
+
+TEST_F(FrameSerializerTest, ReplaceAllCaseInsensitive) {
+  auto transform = [](const String& from) { return String("</HI>"); };
+  EXPECT_EQ(
+      blink::internal::ReplaceAllCaseInsensitive("", "</style>", transform),
+      "");
+  EXPECT_EQ(
+      blink::internal::ReplaceAllCaseInsensitive("test", "</style>", transform),
+      "test");
+  EXPECT_EQ(blink::internal::ReplaceAllCaseInsensitive("</Style>", "</style>",
+                                                       transform),
+            "</HI>");
+  EXPECT_EQ(blink::internal::ReplaceAllCaseInsensitive("x</Style>", "</style>",
+                                                       transform),
+            "x</HI>");
+  EXPECT_EQ(blink::internal::ReplaceAllCaseInsensitive("</Style>x", "</style>",
+                                                       transform),
+            "</HI>x");
+  EXPECT_EQ(blink::internal::ReplaceAllCaseInsensitive(
+                "test</Style>test</Style>testagain", "</style>", transform),
+            "test</HI>test</HI>testagain");
 }
 
 }  // namespace blink

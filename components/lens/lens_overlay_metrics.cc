@@ -29,6 +29,22 @@ std::string InvocationSourceToString(
   }
 }
 
+std::string FirstInteractionTypeToString(
+    LensOverlayFirstInteractionType interaction_type) {
+  switch (interaction_type) {
+    case LensOverlayFirstInteractionType::kPermissionDialog:
+      return "Permission";
+    case LensOverlayFirstInteractionType::kLensMenu:
+      return "LensMenu";
+    case LensOverlayFirstInteractionType::kRegionSelect:
+      return "RegionSelect";
+    case LensOverlayFirstInteractionType::kTextSelect:
+      return "TextSelect";
+    case LensOverlayFirstInteractionType::kSearchbox:
+      return "Searchbox";
+  }
+}
+
 void RecordPermissionRequestedToBeShown(
     bool shown,
     LensOverlayInvocationSource invocation_source) {
@@ -110,9 +126,11 @@ void RecordSessionForegroundDuration(
                                 /*max=*/base::Minutes(10), /*buckets=*/50);
 }
 
-void RecordTimeToFirstInteraction(LensOverlayInvocationSource invocation_source,
-                                  base::TimeDelta time_to_first_interaction,
-                                  ukm::SourceId source_id) {
+void RecordTimeToFirstInteraction(
+    LensOverlayInvocationSource invocation_source,
+    base::TimeDelta time_to_first_interaction,
+    LensOverlayFirstInteractionType first_interaction_type,
+    ukm::SourceId source_id) {
   // UMA unsliced TimeToFirstInteraction.
   base::UmaHistogramCustomTimes("Lens.Overlay.TimeToFirstInteraction",
                                 time_to_first_interaction,
@@ -127,6 +145,16 @@ void RecordTimeToFirstInteraction(LensOverlayInvocationSource invocation_source,
                                 /*min=*/base::Milliseconds(1),
                                 /*max=*/base::Minutes(10), /*buckets=*/50);
 
+  // UMA TimeToFirstInteraction sliced by interaction type.
+  const auto interaction_type_histogram_name =
+      "Lens.Overlay.TimeToFirstInteraction." +
+      FirstInteractionTypeToString(first_interaction_type);
+
+  base::UmaHistogramCustomTimes(interaction_type_histogram_name,
+                                time_to_first_interaction,
+                                /*min=*/base::Milliseconds(1),
+                                /*max=*/base::Minutes(10), /*buckets=*/50);
+
   if (source_id == ukm::kInvalidSourceId) {
     return;
   }
@@ -134,6 +162,7 @@ void RecordTimeToFirstInteraction(LensOverlayInvocationSource invocation_source,
   // UKM unsliced TimeToFirstInteraction.
   ukm::builders::Lens_Overlay_TimeToFirstInteraction(source_id)
       .SetAllEntryPoints(time_to_first_interaction.InMilliseconds())
+      .SetFirstInteractionType(static_cast<int64_t>(first_interaction_type))
       .Record(ukm::UkmRecorder::Get());
   // UKM TimeToFirstInteraction sliced by entry point.
   ukm::builders::Lens_Overlay_TimeToFirstInteraction event(source_id);
@@ -160,18 +189,40 @@ void RecordTimeToFirstInteraction(LensOverlayInvocationSource invocation_source,
       event.SetOmnibox(time_to_first_interaction.InMilliseconds());
       break;
   }
-  event.Record(ukm::UkmRecorder::Get());
+  event.SetFirstInteractionType(static_cast<int64_t>(first_interaction_type))
+      .Record(ukm::UkmRecorder::Get());
 }
 
-void RecordUKMSessionEndMetrics(ukm::SourceId source_id,
-                                LensOverlayInvocationSource invocation_source,
-                                bool search_performed_in_session,
-                                base::TimeDelta session_duration) {
+void RecordNewTabGenerated(LensOverlayNewTabSource tab_source) {
+  base::UmaHistogramEnumeration("Lens.Overlay.GeneratedTab", tab_source);
+}
+
+void RecordGeneratedTabCount(int generated_tab_count) {
+  base::UmaHistogramCounts100("Lens.Overlay.GeneratedTab.SessionCount",
+                              generated_tab_count);
+}
+
+void RecordUKMSessionEndMetrics(
+    ukm::SourceId source_id,
+    LensOverlayInvocationSource invocation_source,
+    bool search_performed_in_session,
+    base::TimeDelta session_duration,
+    std::optional<base::TimeDelta> session_foreground_duration,
+    std::optional<int> generated_tab_count) {
   if (source_id == ukm::kInvalidSourceId) {
     return;
   }
-  ukm::builders::Lens_Overlay_SessionEnd(source_id)
-      .SetInvocationSource(static_cast<int64_t>(invocation_source))
+  ukm::builders::Lens_Overlay_SessionEnd event(source_id);
+
+  if (session_foreground_duration.has_value()) {
+    event.SetSessionForegroundDuration(
+        session_foreground_duration->InMilliseconds());
+  }
+  if (generated_tab_count.has_value()) {
+    event.SetGeneratedTabCount(*generated_tab_count);
+  }
+
+  event.SetInvocationSource(static_cast<int64_t>(invocation_source))
       .SetInvocationResultedInSearch(search_performed_in_session)
       .SetSessionDuration(session_duration.InMilliseconds())
       .Record(ukm::UkmRecorder::Get());

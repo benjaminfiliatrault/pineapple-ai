@@ -57,8 +57,10 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/profiles/profiles_state.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/profiles/profile_picker.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -216,9 +218,7 @@ bool VerifyCodeDirectoryHash(
   }
 
   return AppShimRegistry::Get()->VerifyCdHashForApp(
-      base::SysCFStringRefToUTF8(app_id),
-      base::make_span(CFDataGetBytePtr(cd_hash),
-                      base::checked_cast<size_t>(CFDataGetLength(cd_hash))));
+      base::SysCFStringRefToUTF8(app_id), base::apple::CFDataToSpan(cd_hash));
 }
 
 // Returns whether |app_shim_audit_token|'s code signature is trusted. Since an

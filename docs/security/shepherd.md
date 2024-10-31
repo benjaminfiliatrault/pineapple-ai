@@ -216,8 +216,9 @@ of time reproducing bugs. Here are some tips in doing so:
 * For any sort of a crash, CHECK/DCHECK or memory safety problem
   [use ClusterFuzz](clusterfuzz-for-shepherds.md). As well as reproducing bugs,
   ClusterFuzz will help you with lots of subsequent bisection and labelling
-  tasks. Currently ClusterFuzz cannot guard against malicious test cases,
-  so be just as paranoid as if you were running a test case locally.
+  tasks. Currently ClusterFuzz only supports untrusted inputs on Linux. If you
+  use ClusterFuzz to reproduce on any other platform, you should be just as
+  paranoid as if you were running a test case locally.
 * [Instructions for using an Android emulator can be found
   here](/docs/android_emulator.md). If you're inside Google, we have a
   [guide for testing using Google infrastructure](https://goto.google.com/android-for-chrome-shepherds).
@@ -556,7 +557,7 @@ remove any PII.
 
 For cases in which we are just delaying public disclosure (such as when a
 security issue impacts other products or vendors), please add the
-`SecurityEmbargo` hotlist (hotlistID: 1053360) and set a date in the `Next
+`SecurityEmbargo` hotlist (hotlistID: 5432549) and set a date in the `Next
 Action` field so that disclosure can be re-evaluated at that time.
 
 ### Protecting researcher identities

@@ -369,8 +369,8 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
                   int length) override;
   std::unique_ptr<UrlLoader> CreateUrlLoader() override;
   v8::Isolate* GetIsolate() override;
-  std::vector<SearchStringResult> SearchString(const char16_t* string,
-                                               const char16_t* term,
+  std::vector<SearchStringResult> SearchString(const std::u16string& needle,
+                                               const std::u16string& haystack,
                                                bool case_sensitive) override;
   void DocumentLoadComplete() override;
   void DocumentLoadFailed() override;
@@ -395,7 +395,7 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
   void MoveRangeSelectionExtent(const gfx::PointF& extent) override;
   void SetSelectionBounds(const gfx::PointF& base,
                           const gfx::PointF& extent) override;
-  void GetPdfBytes(GetPdfBytesCallback callback) override;
+  void GetPdfBytes(uint32_t size_limit, GetPdfBytesCallback callback) override;
 
   // UrlLoader::Client:
   bool IsValid() const override;
@@ -437,6 +437,7 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
   float GetZoom() const override;
   bool IsPageVisible(int page_index) override;
   void OnAnnotationModeToggled(bool enable) override;
+  void PostMessage(base::Value::Dict message) override;
   void StrokeFinished() override;
   void UpdateInkCursorImage(SkBitmap bitmap) override;
   void UpdateThumbnail(int page_index) override;

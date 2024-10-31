@@ -242,7 +242,7 @@ TEST_P(ParkableStringTest, DontCompressRandomString) {
   // test deterministic.
   Vector<unsigned char> data(kSizeKb * 1000);
   base::RandBytes(data);
-  ParkableString parkable(String(data.data(), data.size()).ReleaseImpl());
+  ParkableString parkable(String(base::span(data)).ReleaseImpl());
 
   EXPECT_TRUE(
       parkable.Impl()->Park(ParkableStringImpl::ParkingMode::kCompress));
@@ -271,7 +271,7 @@ TEST_P(ParkableStringTest, DecompressUtf16String) {
     data[i * 2 + 1] = emoji_grinning_face[1];
   }
 
-  String large_string = String(&data[0], size_in_chars);
+  String large_string = String(data);
   String copy = String(large_string.Impl()->IsolatedCopy());
   ParkableString parkable(large_string.ReleaseImpl());
   large_string = String();
@@ -1322,7 +1322,7 @@ TEST_P(ParkableStringTest, EncodingAndDeduplication) {
   for (size_t i = 0; i < size_in_chars; ++i) {
     data_16[i] = 0x2020;
   }
-  String large_string_16 = String(&data_16[0], size_in_chars);
+  String large_string_16 = String(data_16);
 
   ParkableString parkable_16(large_string_16.Impl());
   ASSERT_TRUE(parkable_16.Impl()->digest());
@@ -1332,7 +1332,7 @@ TEST_P(ParkableStringTest, EncodingAndDeduplication) {
   for (size_t i = 0; i < 2 * size_in_chars; ++i) {
     data_8[i] = 0x20;
   }
-  String large_string_8 = String(&data_8[0], 2 * size_in_chars);
+  String large_string_8 = String(base::span(data_8));
 
   ParkableString parkable_8(large_string_8.Impl());
   ASSERT_TRUE(parkable_8.Impl()->digest());
@@ -1508,7 +1508,7 @@ TEST_P(ParkableStringTestLessAggressiveMode, NoParkingWhileLoading) {
   EXPECT_FALSE(parkable.Impl()->is_parked());
   CheckOnlyCpuCostTaskRemains();
 
-  manager.OnRAILModeChanged(RAILMode::kIdle);
+  manager.OnRAILModeChanged(RAILMode::kDefault);
   // A tick task has been posted.
   EXPECT_EQ(2u, task_environment_.GetPendingMainThreadTaskCount());
   // Aging restarts.
@@ -1524,7 +1524,7 @@ TEST_P(ParkableStringTestLessAggressiveMode, NoParkingWhileLoading) {
   CheckOnlyCpuCostTaskRemains();
 
   // Back to idle, pick up where we left off.
-  manager.OnRAILModeChanged(RAILMode::kIdle);
+  manager.OnRAILModeChanged(RAILMode::kDefault);
   EXPECT_EQ(2u, task_environment_.GetPendingMainThreadTaskCount());
   WaitForAging();
   EXPECT_TRUE(parkable.Impl()->is_parked());
@@ -1553,19 +1553,13 @@ TEST_P(ParkableStringTestLessAggressiveMode,
   EXPECT_FALSE(parkable.Impl()->is_parked());
   CheckOnlyCpuCostTaskRemains();
 
-  // Idle in foreground, no parking.
+  // Not loading in foreground, no parking.
   manager.SetRendererBackgrounded(false);
-  manager.OnRAILModeChanged(RAILMode::kIdle);
-  CheckOnlyCpuCostTaskRemains();
-
-  // Animation in foreground, no parking.
-  manager.SetRendererBackgrounded(false);
-  manager.OnRAILModeChanged(RAILMode::kAnimation);
+  manager.OnRAILModeChanged(RAILMode::kDefault);
   CheckOnlyCpuCostTaskRemains();
 
   // Not loading in background, restarting the tick.
   manager.SetRendererBackgrounded(true);
-  manager.OnRAILModeChanged(RAILMode::kAnimation);
   // A tick task has been posted.
   EXPECT_EQ(2u, task_environment_.GetPendingMainThreadTaskCount());
   WaitForDelayedParking();

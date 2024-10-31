@@ -235,6 +235,8 @@ TEST_F(
 TEST_F(
     ComposeManagerImplTest,
     SuggestionGeneration_HasSession_ControlElementClicked_ApplyExpectedTextAndLabel) {
+  compose::Config& config = compose::GetMutableConfigForTesting();
+  config.proactive_nudge_compact_ui = true;
   std::optional<Suggestion> suggestion = GetSuggestion(
       autofill::AutofillSuggestionTriggerSource::kFormControlElementClicked,
       /*has_session=*/true);

@@ -41,6 +41,7 @@ if (is_chromeos_ash) {
     "chromeos/services/network_health/public/mojom/network_diagnostics.mojom-webui.js",
     "chromeos/services/network_health/public/mojom/network_health.mojom-webui.js",
     "chromeos/services/network_health/public/mojom/network_health_types.mojom-webui.js",
+    "mojo/public/mojom/base/absl_status.mojom-webui.js",
     "mojo/public/mojom/base/big_string.mojom-webui.js",
     "mojo/public/mojom/base/big_buffer.mojom-webui.js",
     "mojo/public/mojom/base/file.mojom-webui.js",
@@ -48,7 +49,6 @@ if (is_chromeos_ash) {
     "mojo/public/mojom/base/int128.mojom-webui.js",
     "mojo/public/mojom/base/process_id.mojom-webui.js",
     "mojo/public/mojom/base/read_only_buffer.mojom-webui.js",
-    "mojo/public/mojom/base/read_only_file.mojom-webui.js",
     "mojo/public/mojom/base/safe_base_name.mojom-webui.js",
     "mojo/public/mojom/base/string16.mojom-webui.js",
     "mojo/public/mojom/base/text_direction.mojom-webui.js",
@@ -75,6 +75,7 @@ if (is_chromeos_ash) {
   ]
 } else {
   mojo_ts_files += [
+    "mojo/public/mojom/base/absl_status.mojom-webui.ts",
     "mojo/public/mojom/base/big_string.mojom-webui.ts",
     "mojo/public/mojom/base/big_buffer.mojom-webui.ts",
     "mojo/public/mojom/base/file.mojom-webui.ts",
@@ -82,7 +83,6 @@ if (is_chromeos_ash) {
     "mojo/public/mojom/base/int128.mojom-webui.ts",
     "mojo/public/mojom/base/process_id.mojom-webui.ts",
     "mojo/public/mojom/base/read_only_buffer.mojom-webui.ts",
-    "mojo/public/mojom/base/read_only_file.mojom-webui.ts",
     "mojo/public/mojom/base/safe_base_name.mojom-webui.ts",
     "mojo/public/mojom/base/string16.mojom-webui.ts",
     "mojo/public/mojom/base/text_direction.mojom-webui.ts",

@@ -99,23 +99,47 @@ ClientSharedImage::ScopedMapping::~ScopedMapping() {
 // static
 std::unique_ptr<ClientSharedImage::ScopedMapping>
 ClientSharedImage::ScopedMapping::Create(
-    gfx::GpuMemoryBuffer* gpu_memory_buffer) {
+    gfx::GpuMemoryBuffer* gpu_memory_buffer,
+    bool is_already_mapped) {
   auto scoped_mapping = base::WrapUnique(new ScopedMapping());
-  if (!scoped_mapping->Init(gpu_memory_buffer)) {
+  if (!scoped_mapping->Init(gpu_memory_buffer, is_already_mapped)) {
     LOG(ERROR) << "ScopedMapping init failed.";
     return nullptr;
   }
   return scoped_mapping;
 }
 
+// static
+void ClientSharedImage::ScopedMapping::StartCreateAsync(
+    gfx::GpuMemoryBuffer* gpu_memory_buffer,
+    base::OnceCallback<void(std::unique_ptr<ScopedMapping>)> result_cb) {
+  gpu_memory_buffer->MapAsync(
+      base::BindOnce(&ClientSharedImage::ScopedMapping::FinishCreateAsync,
+                     gpu_memory_buffer, std::move(result_cb)));
+}
+
+// static
+void ClientSharedImage::ScopedMapping::FinishCreateAsync(
+    gfx::GpuMemoryBuffer* gpu_memory_buffer,
+    base::OnceCallback<void(std::unique_ptr<ScopedMapping>)> result_cb,
+    bool success) {
+  std::unique_ptr<ClientSharedImage::ScopedMapping> mapping;
+  if (success) {
+    mapping = ClientSharedImage::ScopedMapping::Create(
+        gpu_memory_buffer, /*is_already_mapped=*/true);
+  }
+  std::move(result_cb).Run(std::move(mapping));
+}
+
 bool ClientSharedImage::ScopedMapping::Init(
-    gfx::GpuMemoryBuffer* gpu_memory_buffer) {
+    gfx::GpuMemoryBuffer* gpu_memory_buffer,
+    bool is_already_mapped) {
   if (!gpu_memory_buffer) {
     LOG(ERROR) << "No GpuMemoryBuffer.";
     return false;
   }
 
-  if (!gpu_memory_buffer->Map()) {
+  if (!is_already_mapped && !gpu_memory_buffer->Map()) {
     LOG(ERROR) << "Failed to map the buffer.";
     return false;
   }
@@ -123,13 +147,10 @@ bool ClientSharedImage::ScopedMapping::Init(
   return true;
 }
 
-void* ClientSharedImage::ScopedMapping::Memory(const uint32_t plane_index) {
-  CHECK(buffer_);
-  return buffer_->memory(plane_index);
-}
-
 base::span<uint8_t> ClientSharedImage::ScopedMapping::GetMemoryForPlane(
     const uint32_t plane_index) {
+  CHECK(buffer_);
+
   size_t height_in_pixels;
   size_t row_size_in_bytes;
 
@@ -152,7 +173,14 @@ base::span<uint8_t> ClientSharedImage::ScopedMapping::GetMemoryForPlane(
   // the start of the plane, as that region is by definition the memory storing
   // the data of the plane.
   return UNSAFE_BUFFERS(base::span<uint8_t>(
-      reinterpret_cast<uint8_t*>(Memory(plane_index)), span_length));
+      reinterpret_cast<uint8_t*>(buffer_->memory(plane_index)), span_length));
+}
+
+SkPixmap ClientSharedImage::ScopedMapping::GetSkPixmapForPlane(
+    const uint32_t plane_index,
+    SkImageInfo sk_image_info) {
+  return SkPixmap(sk_image_info, GetMemoryForPlane(plane_index).data(),
+                  Stride(plane_index));
 }
 
 size_t ClientSharedImage::ScopedMapping::Stride(const uint32_t plane_index) {
@@ -278,11 +306,18 @@ ClientSharedImage::~ClientSharedImage() {
 }
 
 std::unique_ptr<ClientSharedImage::ScopedMapping> ClientSharedImage::Map() {
-  auto scoped_mapping = ScopedMapping::Create(gpu_memory_buffer_.get());
+  auto scoped_mapping = ScopedMapping::Create(gpu_memory_buffer_.get(),
+                                              /*is_already_mapped=*/false);
   if (!scoped_mapping) {
     LOG(ERROR) << "Unable to create ScopedMapping";
   }
   return scoped_mapping;
+}
+
+void ClientSharedImage::MapAsync(
+    base::OnceCallback<void(std::unique_ptr<ScopedMapping>)> result_cb) {
+  ScopedMapping::StartCreateAsync(gpu_memory_buffer_.get(),
+                                  std::move(result_cb));
 }
 
 #if BUILDFLAG(IS_APPLE)
@@ -367,14 +402,15 @@ std::unique_ptr<SharedImageTexture> ClientSharedImage::CreateGLTexture(
 
 // static
 scoped_refptr<ClientSharedImage> ClientSharedImage::CreateForTesting() {
-  return CreateForTesting(GL_TEXTURE_2D);
+  return CreateForTesting(viz::SinglePlaneFormat::kRGBA_8888, GL_TEXTURE_2D);
 }
 
 // static
 scoped_refptr<ClientSharedImage> ClientSharedImage::CreateForTesting(
+    viz::SharedImageFormat format,
     uint32_t texture_target) {
   SharedImageMetadata metadata;
-  metadata.format = viz::SinglePlaneFormat::kRGBA_8888;
+  metadata.format = format;
   metadata.color_space = gfx::ColorSpace::CreateSRGB();
   metadata.surface_origin = kTopLeft_GrSurfaceOrigin;
   metadata.alpha_type = kOpaque_SkAlphaType;
@@ -404,18 +440,22 @@ void ClientSharedImage::HelperGpuMemoryBufferManager::CopyGpuMemoryBufferAsync(
     gfx::GpuMemoryBufferHandle buffer_handle,
     base::UnsafeSharedMemoryRegion memory_region,
     base::OnceCallback<void(bool)> callback) {
-  // Will be implemented in follow up CLs once IPC changes to perform this
-  // operation are done.
-  NOTIMPLEMENTED();
+  auto sii = GetSharedImageInterface();
+  if (!sii) {
+    DLOG(WARNING) << "No SharedImageInterface.";
+    return;
+  }
+  sii->CopyNativeGmbToSharedMemoryAsync(
+      std::move(buffer_handle), std::move(memory_region), std::move(callback));
 }
 
-bool ClientSharedImage::HelperGpuMemoryBufferManager::CopyGpuMemoryBufferSync(
-    gfx::GpuMemoryBufferHandle buffer_handle,
-    base::UnsafeSharedMemoryRegion memory_region) {
-  // Will be implemented in follow up CLs once IPC changes to perform this
-  // operations are done.
-  NOTIMPLEMENTED();
-  return true;
+bool ClientSharedImage::HelperGpuMemoryBufferManager::IsConnected() {
+  auto sii = GetSharedImageInterface();
+  if (!sii) {
+    DLOG(WARNING) << "No SharedImageInterface.";
+    return false;
+  }
+  return sii->IsConnected();
 }
 
 // Access the SharedImageInterface via the SharedImageInterfaceHolder.

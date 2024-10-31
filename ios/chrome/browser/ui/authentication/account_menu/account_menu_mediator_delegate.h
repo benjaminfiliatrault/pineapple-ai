@@ -11,6 +11,7 @@
 #import "ios/chrome/browser/ui/settings/google_services/sync_error_settings_command_handler.h"
 
 @class AccountMenuMediator;
+@class AuthenticationFlow;
 @protocol SystemIdentity;
 
 @protocol AccountMenuMediatorDelegate <SyncErrorSettingsCommandHandler>
@@ -18,25 +19,23 @@
 // Requests to dismiss the account menu.
 - (void)mediatorWantsToBeDismissed:(AccountMenuMediator*)mediator;
 
-// Requests to dismiss the account menu view. Keeps the coordinator open and
-// show a spinner instead.
-- (void)mediatorWantsToDismissTheView:(AccountMenuMediator*)mediator;
+// Starts the sign-in flow. Then call `completion`, with a parameter stating
+// whether the the sign-out was done.
+- (AuthenticationFlow*)
+    triggerSigninWithSystemIdentity:(id<SystemIdentity>)identity
+                         completion:
+                             (signin_ui::SigninCompletionCallback)completion;
 
-// Start managed account switch.
-// `viewWillBeDismissedAfterSignout`: Whether we expect the NTP to be reloaded
-// after sign out, causing the account menu to be closed.
-// `userDecisionCompletion`: Callback when the user can’t cancel anymore.
-- (void)triggerAccountSwitchWithTargetRect:(CGRect)targetRect
-                               newIdentity:(id<SystemIdentity>)newIdentity
-           viewWillBeDismissedAfterSignout:(BOOL)viewWillBeDismissedAfterSignout
-                    userDecisionCompletion:(void (^)())userDecisionCompletion
-                          signInCompletion:(ShowSigninCommandCompletionCallback)
-                                               signInCompletion;
+// Displays the identity snackbar with `systemIdentity`.
+- (void)triggerAccountSwitchSnackbarWithIdentity:
+    (id<SystemIdentity>)systemIdentity;
 
 // Sign out, display a toast, and call `callback` with argument stating whether
 // it’s a success.
+// It should only be called when the current scene is not blocked.
 - (void)signOutFromTargetRect:(CGRect)targetRect
-                     callback:(void (^)(BOOL))callback;
+                    forSwitch:(BOOL)forSwith
+                   completion:(void (^)(BOOL))completion;
 
 // Shows https://myaccount.google.com/ for the account currently signed-in
 // to Chrome. The content is displayed in a new view in the stack, i.e.
@@ -44,16 +43,17 @@
 - (void)didTapManageYourGoogleAccount;
 
 // The user tapped on "Edit account list".
-- (void)didTapEditAccountList;
+- (void)didTapManageAccounts;
 
 // The user tapped on "Add account…".
-- (void)didTapAddAccount:(ShowSigninCommandCompletionCallback)callback;
+- (void)didTapAddAccountWithCompletion:
+    (ShowSigninCommandCompletionCallback)completion;
 
-// Blocks the user from using Chromium.
-- (void)blockOtherScene;
+// Blocks the user from using Chromium. Returns whether the block was possible.
+- (BOOL)blockOtherScenesIfPossible;
 
-// Stops the `blockOtherScene`.
-- (void)unblockOtherScene;
+// Stops the `blockOtherScenesIfPossible`.
+- (void)unblockOtherScenes;
 
 @end
 

@@ -18,17 +18,11 @@ BASE_FEATURE(kAutoApproveSharedPasswordUpdatesFromSameSender,
 BASE_FEATURE(kAutofillPasswordUserPerceptionSurvey,
              "AutofillPasswordUserPerceptionSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
+// Default enabled in M131. Remove in or after M134.
+BASE_FEATURE(kWebAuthnUsePasskeyFromAnotherDeviceInContextMenu,
+             "WebAuthnUsePasskeyFromAnotherDeviceInContextMenu",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-
-#if BUILDFLAG(IS_WIN)
-BASE_FEATURE(kAuthenticateUsingUserConsentVerifierInteropApi,
-             "AuthenticateUsingUserConsentVerifierInteropApi",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kAuthenticateUsingUserConsentVerifierApi,
-             "AuthenticateUsingUserConsentVerifierApi",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
 
 BASE_FEATURE(kBiometricTouchToFill,
              "BiometricTouchToFill",
@@ -59,9 +53,20 @@ BASE_FEATURE(kFillOnAccountSelect,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_IOS)
+BASE_FEATURE(kIosCleanupHangingPasswordFormExtractionRequests,
+             "IosCleanupHangingPasswordFormExtractionRequests",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<int> kIosPasswordFormExtractionRequestsTimeoutMs = {
+    &kIosCleanupHangingPasswordFormExtractionRequests,
+    /*name=*/"period-ms", /*default_value=*/250};
+
 BASE_FEATURE(kIosDetectUsernameInUff,
              "IosSaveUsernameInUff",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kIOSPasswordBottomSheetV2,
+             "IOSPasswordBottomSheetV2",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kIOSProactivePasswordGenerationBottomSheet,
              "kIOSProactivePasswordGenerationBottomSheet",
@@ -70,6 +75,14 @@ BASE_FEATURE(kIOSProactivePasswordGenerationBottomSheet,
 
 BASE_FEATURE(kLocalStateEnterprisePasswordHashes,
              "LocalStateEnterprisePasswordHashes",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPasswordFormGroupedAffiliations,
+             "PasswordFormGroupedAffiliations",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPasswordFormClientsideClassifier,
+             "PasswordFormClientsideClassifier",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)  // Desktop
@@ -90,6 +103,10 @@ BASE_FEATURE(kPasswordManagerLogToTerminal,
 
 BASE_FEATURE(kPasswordManualFallbackAvailable,
              "PasswordManualFallbackAvailable",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kReuseDetectionBasedOnPasswordHashes,
+             "ReuseDetectionBasedOnPasswordHashes",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
@@ -138,26 +155,12 @@ BASE_FEATURE(kBiometricAuthIdentityCheck,
 
 BASE_FEATURE(kClearLoginDatabaseForAllMigratedUPMUsers,
              "ClearLoginDatabaseForAllMigratedUPMUsers",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 BASE_FEATURE(kUsernameFirstFlowFallbackCrowdsourcing,
              "UsernameFirstFlowFallbackCrowdsourcing",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kUsernameFirstFlowStoreSeveralValues,
-             "UsernameFirstFlowStoreSeveralValues",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-extern const base::FeatureParam<int> kMaxSingleUsernameFieldsToStore{
-    &kUsernameFirstFlowStoreSeveralValues, /*name=*/"max_elements",
-    /*default_value=*/10};
-
-BASE_FEATURE(kUsernameFirstFlowWithIntermediateValues,
-             "UsernameFirstFlowWithIntermediateValues",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-extern const base::FeatureParam<int> kSingleUsernameTimeToLive{
-    &kUsernameFirstFlowWithIntermediateValues, /*name=*/"ttl",
-    /*default_value=*/5};
 
 BASE_FEATURE(kUsernameFirstFlowWithIntermediateValuesPredictions,
              "UsernameFirstFlowWithIntermediateValuesPredictions",

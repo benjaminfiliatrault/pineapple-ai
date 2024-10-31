@@ -5,6 +5,7 @@
 #import <XCTest/XCTest.h>
 
 #import "base/strings/sys_string_conversions.h"
+#import "base/test/ios/wait_util.h"
 #import "base/test/metrics/histogram_tester.h"
 #import "components/browsing_data/core/browsing_data_utils.h"
 #import "components/browsing_data/core/cookie_or_cache_deletion_choice.h"
@@ -42,6 +43,7 @@
 
 namespace {
 
+using base::test::ios::kWaitForClearBrowsingDataTimeout;
 using browsing_data::DeleteBrowsingDataDialogAction;
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::ClearBrowsingDataButton;
@@ -59,7 +61,7 @@ using chrome_test_util::TabGroupCreationView;
 constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 
 // GURL inserted into the history service to mock history entries.
-const GURL mockURL("http://not-a-real-site.test/");
+const GURL kMockURL("http://not-a-real-site.test/");
 
 // Link for my activity page.
 const char kMyActivityURL[] = "myactivity.google.com";
@@ -227,19 +229,26 @@ NSString* CapitalizeFirstLetter(NSString* string) {
       [ChromeEarlGrey localStateIntegerPref:prefs::kInactiveTabsTimeThreshold],
       @"Inactive tabs preference is not set to default value.");
 
-  [AutofillAppInterface clearCreditCardStore];
-  [PasswordSettingsAppInterface clearPasswordStores];
-  [ChromeEarlGrey clearBrowsingHistory];
-  [ChromeEarlGrey resetBrowsingDataPrefs];
+  if (![ChromeTestCase forceRestartAndWipe]) {
+    [AutofillAppInterface clearCreditCardStore];
+    [PasswordSettingsAppInterface clearPasswordStores];
+    [ChromeEarlGrey clearBrowsingHistory];
+    [ChromeEarlGrey resetBrowsingDataPrefs];
+  }
 
-  if (![self isRunningTest:@selector(testInactiveTabsForDeletion)]) {
+  // Disable tab selection so the tab closure animation is not ran in all the
+  // tests.
+  [ChromeEarlGrey setBoolValue:false
+                   forUserPref:browsing_data::prefs::kCloseTabs];
+
+  if (![self isRunningTest:@selector(DISABLED_testInactiveTabsForDeletion)]) {
     GREYAssertNil([MetricsAppInterface setupHistogramTester],
                   @"Cannot setup histogram tester.");
     [MetricsAppInterface overrideMetricsAndCrashReportingForTesting];
   }
 }
 
-- (void)tearDown {
+- (void)tearDownHelper {
   // Ensure that inactive tabs preference settings is set to its default state.
   [ChromeEarlGrey setIntegerValue:0
                 forLocalStatePref:prefs::kInactiveTabsTimeThreshold];
@@ -253,7 +262,11 @@ NSString* CapitalizeFirstLetter(NSString* string) {
   [ChromeEarlGrey clearBrowsingHistory];
   [ChromeEarlGrey resetBrowsingDataPrefs];
 
-  if (![self isRunningTest:@selector(testInactiveTabsForDeletion)]) {
+  // Reenable the tab selection so it goes back to the default state.
+  [ChromeEarlGrey setBoolValue:true
+                   forUserPref:browsing_data::prefs::kCloseTabs];
+
+  if (![self isRunningTest:@selector(DISABLED_testInactiveTabsForDeletion)]) {
     [MetricsAppInterface stopOverridingMetricsAndCrashReportingForTesting];
     GREYAssertNil([MetricsAppInterface releaseHistogramTester],
                   @"Cannot reset histogram tester.");
@@ -263,7 +276,7 @@ NSString* CapitalizeFirstLetter(NSString* string) {
   // deleting browsing history.
   [ChromeEarlGrey killWebKitNetworkProcess];
 
-  [super tearDown];
+  [super tearDownHelper];
 }
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
@@ -282,10 +295,7 @@ NSString* CapitalizeFirstLetter(NSString* string) {
   AppLaunchConfiguration config;
   config.relaunch_policy = ForceRelaunchByCleanShutdown;
   config.features_enabled.push_back(kIOSQuickDelete);
-  config.additional_args.push_back(
-      "--enable-features=" + std::string(kTabInactivityThreshold.name) + ":" +
-      kTabInactivityThresholdParameterName + "/" +
-      kTabInactivityThresholdImmediateDemoParam);
+  config.features_enabled.push_back(kInactiveTabsIPadFeature);
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
 }
 
@@ -339,7 +349,14 @@ NSString* CapitalizeFirstLetter(NSString* string) {
 
   // Wait for Quick Delete to disappear marking that the deletion has finished.
   [ChromeEarlGrey
-      waitForUIElementToDisappearWithMatcher:ClearBrowsingDataView()];
+      waitForUIElementToDisappearWithMatcher:ClearBrowsingDataView()
+                                     timeout:
+                                         base::test::ios::
+                                             kWaitForClearBrowsingDataTimeout];
+
+  // Wait for the tabs closure animation to finish if it's trigger by the
+  // deletion.
+  [ChromeEarlGreyUI waitForAppToIdle];
 }
 
 - (void)signIn {
@@ -585,7 +602,7 @@ NSString* CapitalizeFirstLetter(NSString* string) {
       @"Incorrect local pref value.");
 
   // Tap the browsing data button.
-  [ChromeEarlGreyUI tapClearBrowsingDataMenuButton:ClearBrowsingDataButton()];
+  [self triggerDeletionFromQuickDelete];
 
   // Confirm that only after the user has gone through with the deletion, the
   // pref has been saved with the new value of last 15 minutes.
@@ -599,13 +616,64 @@ NSString* CapitalizeFirstLetter(NSString* string) {
       DeleteBrowsingDataDialogAction::kLast15MinutesSelected);
 }
 
+// Tests that the browsing data summary is updated when the time range changes.
+- (void)testSummaryUpdatesWhenTimeRangeChanges {
+  // Set pref to the last hour.
+  [ChromeEarlGrey
+      setIntegerValue:static_cast<int>(browsing_data::TimePeriod::LAST_HOUR)
+          forUserPref:browsing_data::prefs::kDeleteTimePeriod];
+
+  // Create an entry in History which took place half an hour ago on `URL`.
+  const base::Time halfAnHourAgo = base::Time::Now() - base::Minutes(30);
+  [ChromeEarlGrey addHistoryServiceTypedURL:kMockURL
+                             visitTimestamp:halfAnHourAgo];
+
+  [self openQuickDeleteFromThreeDotMenu];
+
+  // Check that Quick Delete is presented.
+  [[EarlGrey selectElementWithMatcher:ClearBrowsingDataView()]
+      assertWithMatcher:grey_notNil()];
+
+  // Check that the correct time range, last hour, is selected.
+  [[EarlGrey selectElementWithMatcher:
+                 PopupCellWithTimeRange(l10n_util::GetNSString(
+                     IDS_IOS_CLEAR_BROWSING_DATA_TIME_RANGE_OPTION_PAST_HOUR))]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Check that the browsing data summary shows there is an history entry in
+  // scope of the deletion.
+  [[EarlGrey selectElementWithMatcher:
+                 ContainsPartialText(l10n_util::GetPluralNSStringF(
+                     IDS_IOS_DELETE_BROWSING_DATA_SUMMARY_SITES, 1))]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Tap on the time range button and tap on the last 15 minutes option on the
+  // popup menu.
+  [[EarlGrey selectElementWithMatcher:
+                 grey_text(l10n_util::GetNSString(
+                     IDS_IOS_CLEAR_BROWSING_DATA_TIME_RANGE_SELECTOR_TITLE))]
+      performAction:grey_tap()];
+  [[EarlGrey
+      selectElementWithMatcher:
+          PopupCellMenuItemWithTimeRange(l10n_util::GetNSString(
+              IDS_IOS_CLEAR_BROWSING_DATA_TIME_RANGE_OPTION_LAST_15_MINUTES))]
+      performAction:grey_tap()];
+
+  // Confirm that the browsing data summary no longer shows any history in scope
+  // of the deletion.
+  [[EarlGrey selectElementWithMatcher:
+                 ContainsPartialText(l10n_util::GetPluralNSStringF(
+                     IDS_IOS_DELETE_BROWSING_DATA_SUMMARY_SITES, 1))]
+      assertWithMatcher:grey_nil()];
+}
+
 // Tests that the number of browsing history items is shown on the browsing data
 // row when browsing history is selected as a data type to be deleted. It also
 // tests that the history entries get deleted when the deletion of browsing data
 // is selected.
 - (void)testBrowsingHistoryForDeletion {
   // Add entry to the history service.
-  [ChromeEarlGrey addHistoryServiceTypedURL:mockURL];
+  [ChromeEarlGrey addHistoryServiceTypedURL:kMockURL];
 
   // Set pref to select deletion of browsing history.
   [ChromeEarlGrey setBoolValue:true
@@ -664,8 +732,8 @@ NSString* CapitalizeFirstLetter(NSString* string) {
   [self signInAndEnableHistorySync];
 
   // Add entry to the history service and wait for it to show up on the server.
-  [ChromeEarlGrey addHistoryServiceTypedURL:mockURL];
-  [ChromeEarlGrey waitForSyncServerHistoryURLs:@[ net::NSURLWithGURL(mockURL) ]
+  [ChromeEarlGrey addHistoryServiceTypedURL:kMockURL];
+  [ChromeEarlGrey waitForSyncServerHistoryURLs:@[ net::NSURLWithGURL(kMockURL) ]
                                        timeout:kSyncOperationTimeout];
 
   // Set pref to select deletion of browsing history.
@@ -702,7 +770,7 @@ NSString* CapitalizeFirstLetter(NSString* string) {
 // of browsing data is selected.
 - (void)testKeepBrowsingHistory {
   // Add entry to the history service.
-  [ChromeEarlGrey addHistoryServiceTypedURL:mockURL];
+  [ChromeEarlGrey addHistoryServiceTypedURL:kMockURL];
 
   // Set pref to keep browsing history.
   [ChromeEarlGrey setBoolValue:false
@@ -811,10 +879,17 @@ NSString* CapitalizeFirstLetter(NSString* string) {
                 @"Privacy.DeleteBrowsingData.Action histogram was not logged.");
 }
 
-// Tests that when Quick Delete is opened from Privacy Settings and tabs are
-// selected as a data type, that the privacy settings are still visible after
-// the deletion.
-- (void)testTabsForDeletionFromPrivacySettings {
+// Tests that when Quick Delete is opened from Privacy Settings, from an iPhone
+// and tabs are selected as a data type, that the privacy settings are still
+// visible after the deletion. This test is only for iPhones. on iPads the
+// animation is still run.
+- (void)testTabsForDeletionFromPrivacySettingsForIphones {
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Skipped for iPads. In iPads, the tabs clsoure animation is ran even "
+        @"if Quick Delete is triggered on top of privacy settings.");
+  }
+
   // Set pref to close tabs.
   [ChromeEarlGrey setBoolValue:true
                    forUserPref:browsing_data::prefs::kCloseTabs];
@@ -845,16 +920,52 @@ NSString* CapitalizeFirstLetter(NSString* string) {
       assertWithMatcher:grey_notNil()];
 }
 
+// Tests that when Quick Delete is opened from Privacy Settings, from an iPad
+// and tabs are selected as a data type, that the privacy settings are not
+// visible after the deletion. This test is only for iPads. on iPhones the
+// animation is not run.
+- (void)testTabsForDeletionFromPrivacySettingsForiPads {
+  if (![ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Skipped for iPhones. In iPhones, the tabs clsoure animation is not "
+        @"run if Quick Delete is triggered on top of privacy settings.");
+  }
+
+  // Set pref to close tabs.
+  [ChromeEarlGrey setBoolValue:true
+                   forUserPref:browsing_data::prefs::kCloseTabs];
+
+  // Load page in tab.
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  [ChromeEarlGrey loadURL:self.testServer->GetURL("/echo")];
+  [ChromeEarlGrey waitForWebStateContainingText:"Echo"];
+
+  [self openQuickDeleteFromPrivacySettings];
+
+  // Check that Quick Delete is presented.
+  [[EarlGrey selectElementWithMatcher:ClearBrowsingDataView()]
+      assertWithMatcher:grey_notNil()];
+
+  // Tap the browsing data button.
+  [self triggerDeletionFromQuickDelete];
+
+  // Check that the tab has been closed.
+  [ChromeEarlGrey waitForWebStateNotContainingText:"Echo"];
+  GREYAssertTrue([ChromeEarlGrey mainTabCount] == 0, @"Tabs were not closed.");
+
+  // Check that the privacy settings are not opened, since the animation was
+  // run.
+  [ChromeEarlGrey
+      waitForUIElementToDisappearWithMatcher:
+          grey_text(l10n_util::GetNSString(IDS_IOS_SETTINGS_PRIVACY_TITLE))];
+}
+
 // Tests that inactive tabs are shown as a possible type to be deleted on the
 // browsing data row when tabs are selected as a data type for deletion. It also
 // tests that the inactive tabs get closed when the deletion of tabs is
 // selected.
-- (void)testInactiveTabsForDeletion {
-  if ([ChromeEarlGrey isIPadIdiom]) {
-    EARL_GREY_TEST_SKIPPED(@"Skipped for iPad. The Inactive Tabs feature is "
-                           @"only supported on iPhone.");
-  }
-
+// TODO(crbug.com/374048360): Re-enable test.
+- (void)DISABLED_testInactiveTabsForDeletion {
   // Set pref to close tabs.
   [ChromeEarlGrey setBoolValue:true
                    forUserPref:browsing_data::prefs::kCloseTabs];
@@ -1081,7 +1192,7 @@ NSString* CapitalizeFirstLetter(NSString* string) {
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Tap the browsing data button so the time range pref is saved.
-  [ChromeEarlGreyUI tapClearBrowsingDataMenuButton:ClearBrowsingDataButton()];
+  [self triggerDeletionFromQuickDelete];
 
   // Focus on the second window.
   [EarlGrey setRootMatcherForSubsequentInteractions:chrome_test_util::
@@ -1416,7 +1527,9 @@ NSString* CapitalizeFirstLetter(NSString* string) {
 // types, that the placeholder summary for no data is shown.
 - (void)testNoDataForDeletion {
   // Make sure there isn't any history items.
-  [ChromeEarlGrey clearBrowsingHistory];
+  if (![ChromeTestCase forceRestartAndWipe]) {
+    [ChromeEarlGrey clearBrowsingHistory];
+  }
 
   // Set pref to keep browsing history.
   [ChromeEarlGrey setBoolValue:false

@@ -43,7 +43,8 @@ class StubArImageTransport : public ArImageTransport {
         shared_buffer_(std::make_unique<WebXrSharedBuffer>()) {}
 
   void Initialize(WebXrPresentationState*,
-                  XrInitStatusCallback callback) override {
+                  XrInitStatusCallback callback,
+                  bool webgpu_session) override {
     std::move(callback).Run(true);
   }
 
@@ -259,7 +260,7 @@ class StubCompositorFrameSink
   void InitializeCompositorFrameSinkType(
       viz::mojom::CompositorFrameSinkType type) override {}
   void BindLayerContext(viz::mojom::PendingLayerContextPtr context) override {}
-  void SetThreadIds(const std::vector<int32_t>& thread_ids) override {}
+  void SetThreads(const std::vector<viz::Thread>& threads) override {}
 
   // mojom::ExternalBeginFrameController implementation.
   void IssueExternalBeginFrame(

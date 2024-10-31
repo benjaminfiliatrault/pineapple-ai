@@ -49,7 +49,7 @@
 #include "components/autofill/core/browser/payments/full_card_request.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
-#include "components/autofill/core/browser/single_field_form_fill_router.h"
+#include "components/autofill/core/browser/single_field_fill_router.h"
 #include "components/autofill/core/browser/suggestions_context.h"
 #include "components/autofill/core/browser/ui/fast_checkout_delegate.h"
 #include "components/autofill/core/browser/ui/suggestion_hiding_reason.h"
@@ -62,10 +62,6 @@
 #include "components/autofill/core/common/signatures.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
-
-namespace optimization_guide::proto {
-class UserAnnotationsEntry;
-}
 
 namespace autofill {
 
@@ -110,8 +106,7 @@ class BrowserAutofillManager : public AutofillManager {
       std::optional<autofill_metrics::SuggestionRankingContext>
           ranking_context)>;
 
-  BrowserAutofillManager(AutofillDriver* driver,
-                         const std::string& app_locale);
+  BrowserAutofillManager(AutofillDriver* driver, const std::string& app_locale);
 
   BrowserAutofillManager(const BrowserAutofillManager&) = delete;
   BrowserAutofillManager& operator=(const BrowserAutofillManager&) = delete;
@@ -137,7 +132,7 @@ class BrowserAutofillManager : public AutofillManager {
   virtual void FillOrPreviewCreditCardForm(
       mojom::ActionPersistence action_persistence,
       const FormData& form,
-      const FormFieldData& field,
+      const FieldGlobalId& field_id,
       const CreditCard& credit_card,
       const std::u16string& cvc,
       const AutofillTriggerDetails& trigger_details);
@@ -160,8 +155,8 @@ class BrowserAutofillManager : public AutofillManager {
   // merged
   virtual void OnDidFillAddressFormFillingSuggestion(
       const AutofillProfile& profile,
-      const FormData& form,
-      const FormFieldData& field,
+      const FormGlobalId& form_id,
+      const FieldGlobalId& field_id,
       AutofillTriggerSource trigger_source);
 
   // Calls UndoAutofillImpl and logs metrics. Virtual for testing.
@@ -172,7 +167,7 @@ class BrowserAutofillManager : public AutofillManager {
   virtual void DidShowSuggestions(
       DenseSet<SuggestionType> shown_suggestion_types,
       const FormData& form,
-      const FormFieldData& field);
+      const FieldGlobalId& field_id);
 
   // Fills or previews the profile form.
   // Assumes the form and field are valid.
@@ -180,7 +175,7 @@ class BrowserAutofillManager : public AutofillManager {
   virtual void FillOrPreviewProfileForm(
       mojom::ActionPersistence action_persistence,
       const FormData& form,
-      const FormFieldData& field,
+      const FieldGlobalId& field_id,
       const AutofillProfile& profile,
       const AutofillTriggerDetails& trigger_details);
 
@@ -188,27 +183,26 @@ class BrowserAutofillManager : public AutofillManager {
   // TODO(crbug.com/40227071): Clean up the API.
   virtual void AuthenticateThenFillCreditCardForm(
       const FormData& form,
-      const FormFieldData& field,
+      const FieldGlobalId& field_id,
       const CreditCard& credit_card,
       const AutofillTriggerDetails& trigger_details);
 
   /////////////////
   // DO NOT USE! //
   /////////////////
-  // See `FormFiller::FillOrPreviewFormExperimental()`.
-  // TODO(crbug.com/40227071): Clean up the API.
-  virtual void FillOrPreviewFormExperimental(
+  // See `FormFiller::FillOrPreviewFormWithPredictionImprovements()`.
+  // TODO(crbug.com/40227071): Clean up the API and remove this function.
+  virtual void FillOrPreviewFormWithPredictionImprovements(
       mojom::ActionPersistence action_persistence,
-      FillingProduct filling_product,
       const FieldTypeSet& field_types_to_fill,
       const DenseSet<FieldFillingSkipReason>& ignorable_skip_reasons,
       const FormData& form,
       const FormFieldData& trigger_field,
       const base::flat_map<FieldGlobalId, std::u16string>& values_to_fill);
 
-  // Remove the credit card or Autofill profile that matches |backend_id|
-  // from the database. Returns true if deletion is allowed.
-  bool RemoveAutofillProfileOrCreditCard(Suggestion::BackendId backend_id);
+  // Remove the credit card or Autofill profile that matches the `guid` in
+  // `payload` from the database. Returns true if deletion is allowed.
+  bool RemoveAutofillProfileOrCreditCard(const Suggestion::Payload& payload);
 
   // Remove the specified suggestion from single field filling.
   // `type` is the SuggestionType of the suggestion.
@@ -221,11 +215,6 @@ class BrowserAutofillManager : public AutofillManager {
   void OnSingleFieldSuggestionSelected(const Suggestion& suggestion,
                                        const FormData& form,
                                        const FormFieldData& field);
-
-  // Invoked when the user selects the "Hide Suggestions" item in the
-  // Autocomplete drop-down.
-  virtual void OnUserHideSuggestions(const FormData& form,
-                                     const FormFieldData& field);
 
   const std::string& app_locale() const { return app_locale_; }
 
@@ -277,8 +266,7 @@ class BrowserAutofillManager : public AutofillManager {
                                      const base::TimeTicks timestamp) override;
   void OnDidEndTextFieldEditingImpl() override;
   void OnHidePopupImpl() override;
-  void OnSelectOrSelectListFieldOptionsDidChangeImpl(
-      const FormData& form) override;
+  void OnSelectFieldOptionsDidChangeImpl(const FormData& form) override;
   void OnJavaScriptChangedAutofilledValueImpl(const FormData& form,
                                               const FieldGlobalId& field_id,
                                               const std::u16string& old_value,
@@ -471,23 +459,9 @@ class BrowserAutofillManager : public AutofillManager {
   };
 
   // Triggers the possible import of submitted data at submission time.
-  void MaybeImportFromSubmittedForm(
-      const FormData& form,
-      const FormStructure* const form_structure,
-      bool attempt_to_import_into_form_data_importer);
-
-  // Event handler for
-  // `AutofillPredictionImprovementsDelegate::MaybeImportForm()` which is bound
-  // on form submission if the delegate exists.
-  void OnUserAnnotationsMaybeImportableFormFound(
-      const FormData& form,
-      mojom::SubmissionSource source,
-      base::TimeTicks form_submitted_timestamp,
-      std::unique_ptr<FormStructure> submitted_form,
-      std::vector<optimization_guide::proto::UserAnnotationsEntry>
-          to_be_upserted_entries,
-      base::OnceCallback<void(bool prompt_was_accepted)>
-          prompt_acceptance_callback);
+  void MaybeImportFromSubmittedForm(const FormData& form,
+                                    const FormStructure* const form_structure,
+                                    bool autofill_ai_shows_bubble);
 
   // Method containing logic to be run in `OnFormSubmittedImpl()` after any
   // import attempts of the submitted form occurred.
@@ -505,7 +479,7 @@ class BrowserAutofillManager : public AutofillManager {
   // `credit_card` is filled.
   void OnCreditCardFetched(
       const FormData& form,
-      const FormFieldData& field,
+      const FieldGlobalId& field_id,
       AutofillTriggerSource fetched_credit_card_trigger_source,
       CreditCardFetchResult result,
       const CreditCard* credit_card);
@@ -549,7 +523,8 @@ class BrowserAutofillManager : public AutofillManager {
       const FormStructure* form_structure,
       const FormFieldData& trigger_field,
       const AutofillField* trigger_autofill_field,
-      AutofillSuggestionTriggerSource trigger_source);
+      AutofillSuggestionTriggerSource trigger_source,
+      std::optional<std::string> plus_address_email_override);
 
   // Returns a list of values from the stored credit cards that match
   // `trigger_field_type` and the value of `trigger_field` and returns the
@@ -614,6 +589,7 @@ class BrowserAutofillManager : public AutofillManager {
       const FormFieldData& field,
       AutofillField* autofill_field,
       AutofillSuggestionTriggerSource trigger_source,
+      std::optional<std::string> plus_address_email_override,
       SuggestionsContext& context,
       autofill_metrics::SuggestionRankingContext& ranking_context);
 
@@ -638,19 +614,17 @@ class BrowserAutofillManager : public AutofillManager {
       const FormData& form,
       const FormFieldData& field,
       AutofillSuggestionTriggerSource trigger_source,
-      SuggestionsContext& context,
+      SuggestionsContext context,
       OnGenerateSuggestionsCallback callback,
       AutofillPredictionImprovementsDelegate::HasData
           has_prediction_improvements_data);
   void GenerateSuggestionsAndMaybeShowUIPhase2(
       const FormData& form,
-      const FormStructure* form_structure,
       const FormFieldData& field,
-      AutofillField* autofill_field,
       AutofillSuggestionTriggerSource trigger_source,
       AutofillPredictionImprovementsDelegate::HasData
           has_prediction_improvements_data,
-      SuggestionsContext& context,
+      SuggestionsContext context,
       OnGenerateSuggestionsCallback callback,
       std::vector<std::string> plus_addresses);
 
@@ -673,6 +647,13 @@ class BrowserAutofillManager : public AutofillManager {
       const AutofillField* autofill_field,
       AutofillSuggestionTriggerSource trigger_source,
       SuppressReason suppress_reason);
+
+  // Triggered when the user undoes the filling of an address profile using an
+  // email override.
+  void OnEmailOverrideUndone(const std::u16string& original_email,
+                             const FormGlobalId& form_id,
+                             const FieldGlobalId& field_id,
+                             const FormFieldData& field_after_last_autofill);
 
   // The function receives a the list of `suggestions` from
   // `GenerateSuggestionsAndMaybeShowUIPhase2` and displays them if
@@ -748,8 +729,8 @@ class BrowserAutofillManager : public AutofillManager {
 
   // Handles routing single-field form filling requests, such as for
   // Autocomplete and merchant promo codes.
-  std::unique_ptr<SingleFieldFormFillRouter> single_field_form_fill_router_ =
-      std::make_unique<SingleFieldFormFillRouter>(
+  std::unique_ptr<SingleFieldFillRouter> single_field_fill_router_ =
+      std::make_unique<SingleFieldFillRouter>(
           client().GetAutocompleteHistoryManager(),
           client().GetPaymentsAutofillClient()->GetIbanManager(),
           client().GetPaymentsAutofillClient()->GetMerchantPromoCodeManager());

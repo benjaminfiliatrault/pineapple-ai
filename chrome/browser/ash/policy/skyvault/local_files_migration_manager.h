@@ -44,17 +44,6 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
     virtual void OnMigrationSucceeded() = 0;
   };
 
-  // Possible states of the migration. Should not be re-ordered as it's
-  // persisted to a pref.
-  enum class State {
-    kUninitialized,
-    kPending,
-    kInProgress,
-    kCleanup,
-    kCompleted,
-    kFailure,
-  };
-
   // Creates an instance of LocalFilesMigrationManager with overridden
   // dependencies.
   static LocalFilesMigrationManager* CreateForTesting(
@@ -120,11 +109,14 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
   // Handles the completion of the migration process (success or failure).
   // If the migration was successful, starts the cleanup process, and handles
   // the errors otherwise.
-  void OnMigrationDone(std::map<base::FilePath, MigrationUploadError> errors);
+  void OnMigrationDone(std::map<base::FilePath, MigrationUploadError> errors,
+                       base::FilePath upload_root_path,
+                       std::optional<base::FilePath> error_log_path);
 
   // Completes the migration process, taking into account any errors that
   // occurred during the migration.
-  void ProcessErrors(std::map<base::FilePath, MigrationUploadError> errors);
+  void ProcessErrors(std::map<base::FilePath, MigrationUploadError> errors,
+                     std::optional<base::FilePath> error_log_path);
 
   // Cleans up any remaining files from the device after a successful migration.
   void CleanupLocalFiles();
@@ -142,7 +134,7 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
       std::optional<user_data_auth::SetUserDataStorageWriteEnabledReply> reply);
 
   // Stops the migration if currently ongoing.
-  void MaybeStopMigration();
+  void MaybeStopMigration(CloudProvider previous_provider);
 
   // Sets and stores the state on the device.
   void SetState(State new_state);
@@ -162,6 +154,9 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
   // Cloud provider to which files are uploaded. If not specified, no migration
   // happens.
   CloudProvider cloud_provider_ = CloudProvider::kNotSpecified;
+
+  // The name of the device-unique upload root folder on Drive
+  std::string upload_root_;
 
   // The time at which the migration will start automatically.
   base::Time migration_start_time_;

@@ -102,6 +102,7 @@
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/user_education/browser_user_education_interface.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_tabbed_utils.h"
@@ -145,7 +146,7 @@
 #include "components/reading_list/core/reading_list_entry.h"
 #include "components/reading_list/core/reading_list_model.h"
 #include "components/reading_list/core/reading_list_pref_names.h"
-#include "components/saved_tab_groups/tab_group_sync_service.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/sessions/core/live_tab_context.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -154,7 +155,7 @@
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/common/translate_constants.h"
-#include "components/user_education/common/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_controller.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/webapps/common/web_app_id.h"
 #include "components/zoom/page_zoom.h"
@@ -246,8 +247,6 @@ namespace {
 
 const char kOsOverrideForTabletSite[] = "Linux; Android 9; Chrome tablet";
 const char kChPlatformOverrideForTabletSite[] = "Android";
-const char kBackForwardNavigationIsTriggered[] =
-    "back_forward_navigation_is_triggered";
 
 // Creates a new tabbed browser window, with the same size, type and profile as
 // |original_browser|'s window, inserts |contents| into it, and shows it.
@@ -720,8 +719,6 @@ void GoBack(Browser* browser, WindowOpenDisposition disposition) {
     WebContents* new_tab = GetTabAndRevertIfNecessary(browser, disposition);
     new_tab->GetController().GoBack();
     MaybeShowFeatureBackNavigationMenuPromo(browser, new_tab);
-    browser->window()->NotifyFeatureEngagementEvent(
-        kBackForwardNavigationIsTriggered);
   }
 }
 
@@ -732,8 +729,6 @@ void GoBack(content::WebContents* web_contents) {
     web_contents->GetController().GoBack();
     Browser* browser = chrome::FindBrowserWithTab(web_contents);
     if (browser) {
-      browser->window()->NotifyFeatureEngagementEvent(
-          kBackForwardNavigationIsTriggered);
       MaybeShowFeatureBackNavigationMenuPromo(browser, web_contents);
     }
   }
@@ -756,8 +751,6 @@ void GoForward(Browser* browser, WindowOpenDisposition disposition) {
     GetTabAndRevertIfNecessary(browser, disposition)
         ->GetController()
         .GoForward();
-    browser->window()->NotifyFeatureEngagementEvent(
-        kBackForwardNavigationIsTriggered);
   }
 }
 
@@ -765,11 +758,6 @@ void GoForward(content::WebContents* web_contents) {
   base::RecordAction(UserMetricsAction("Forward"));
   if (CanGoForward(web_contents)) {
     web_contents->GetController().GoForward();
-    Browser* browser = chrome::FindBrowserWithTab(web_contents);
-    if (browser) {
-      browser->window()->NotifyFeatureEngagementEvent(
-          kBackForwardNavigationIsTriggered);
-    }
   }
 }
 
@@ -1614,7 +1602,7 @@ void StartTabOrganizationRequest(Browser* browser) {
       TabOrganizationServiceFactory::GetForProfile(browser->profile());
   UMA_HISTOGRAM_BOOLEAN("Tab.Organization.AllEntrypoints.Clicked", true);
   UMA_HISTOGRAM_BOOLEAN("Tab.Organization.ThreeDotMenu.Clicked", true);
-  browser->window()->NotifyPromoFeatureUsed(features::kTabOrganization);
+  browser->window()->NotifyNewBadgeFeatureUsed(features::kTabOrganization);
 
   service->RestartSessionAndShowUI(browser,
                                    TabOrganizationEntryPoint::kThreeDotMenu);
@@ -1666,15 +1654,15 @@ void ShowTranslateBubble(Browser* browser) {
 }
 
 void ManagePasswordsForPage(Browser* browser) {
-  browser->window()->EndFeaturePromo(
+  browser->window()->NotifyFeaturePromoFeatureUsed(
       feature_engagement::kIPHPasswordsManagementBubbleAfterSaveFeature,
-      user_education::EndFeaturePromoReason::kFeatureEngaged);
-  browser->window()->EndFeaturePromo(
+      FeaturePromoFeatureUsedAction::kClosePromoIfPresent);
+  browser->window()->NotifyFeaturePromoFeatureUsed(
       feature_engagement::kIPHPasswordsManagementBubbleDuringSigninFeature,
-      user_education::EndFeaturePromoReason::kFeatureEngaged);
-  browser->window()->EndFeaturePromo(
+      FeaturePromoFeatureUsedAction::kClosePromoIfPresent);
+  browser->window()->NotifyFeaturePromoFeatureUsed(
       feature_engagement::kIPHPasswordManagerShortcutFeature,
-      user_education::EndFeaturePromoReason::kFeatureEngaged);
+      FeaturePromoFeatureUsedAction::kClosePromoIfPresent);
   WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
   ManagePasswordsUIController* controller =
@@ -1873,13 +1861,19 @@ void FindInPage(Browser* browser, bool find_next, bool forward_direction) {
 }
 
 void ShowTabSearch(Browser* browser) {
-  const int tab_search_tab_index = 0;
   browser->window()->CreateTabSearchBubble(
-      tab_search_tab_index, tab_search::mojom::TabOrganizationFeature::kNone);
+      tab_search::mojom::TabSearchSection::kSearch,
+      tab_search::mojom::TabOrganizationFeature::kNone);
 }
 
 void CloseTabSearch(Browser* browser) {
   browser->window()->CloseTabSearchBubble();
+}
+
+void ShowTabDeclutter(Browser* browser) {
+  browser->window()->CreateTabSearchBubble(
+      tab_search::mojom::TabSearchSection::kOrganize,
+      tab_search::mojom::TabOrganizationFeature::kDeclutter);
 }
 
 bool CanCloseFind(Browser* browser) {
@@ -2168,37 +2162,10 @@ Browser* OpenInChrome(Browser* hosted_app_browser) {
         Browser::CreateParams(hosted_app_browser->profile(), true));
   }
 
-  TabStripModel* source_tabstrip = hosted_app_browser->tab_strip_model();
-
-  // Clear bounds once a PWA with window controls overlay display override opens
-  // in browser.
-  if (hosted_app_browser->app_controller()->IsWindowControlsOverlayEnabled()) {
-    source_tabstrip->GetActiveWebContents()->UpdateWindowControlsOverlay(
-        gfx::Rect());
-  }
-
-  std::unique_ptr<tabs::TabModel> tab_model =
-      source_tabstrip->DetachTabAtForInsertion(source_tabstrip->active_index());
-  std::unique_ptr<content::WebContents> contents_move =
-      tabs::TabModel::DestroyAndTakeWebContents(std::move(tab_model));
-  // This method moves a WebContents from a non-normal browser window to a
-  // normal browser window. We cannot move the Tab over directly since TabModel
-  // enforces the requirement that it cannot move between window types.
-  // https://crbug.com/334281979): Non-normal browser windows should not have a
-  // tab to begin with.
-  target_browser->tab_strip_model()->AppendWebContents(std::move(contents_move),
-                                                       true);
-  auto* web_contents =
-      target_browser->tab_strip_model()->GetActiveWebContents();
-  CHECK(web_contents);
-  IntentPickerTabHelper* helper =
-      IntentPickerTabHelper::FromWebContents(web_contents);
-  CHECK(helper);
-  helper->MaybeShowIntentPickerIcon();
-#if !BUILDFLAG(IS_CHROMEOS)
-  apps::EnableLinkCapturingInfoBarDelegate::RemoveInfoBar(web_contents);
-#endif
-  target_browser->window()->Show();
+  web_app::ReparentWebContentsIntoBrowserImpl(
+      hosted_app_browser,
+      hosted_app_browser->tab_strip_model()->GetActiveWebContents(),
+      target_browser);
   return target_browser;
 }
 
@@ -2325,7 +2292,7 @@ void ExecLensOverlay(Browser* browser) {
       LensOverlayController::GetController(web_contents);
   CHECK(controller);
   controller->ShowUI(lens::LensOverlayInvocationSource::kAppMenu);
-  browser->window()->NotifyPromoFeatureUsed(lens::features::kLensOverlay);
+  browser->window()->NotifyNewBadgeFeatureUsed(lens::features::kLensOverlay);
 }
 
 void ExecLensRegionSearch(Browser* browser) {
@@ -2372,7 +2339,8 @@ void OpenCommerceProductSpecificationsTab(Browser* browser,
           commerce::kProductSpecificationsAcceptedDisclosureVersion) !=
           static_cast<int>(shopping_service::mojom::
                                ProductSpecificationsDisclosureVersion::kV1)) {
-    commerce::DialogArgs dialog_args(urls, std::string(), /*in_new_tab=*/true);
+    commerce::DialogArgs dialog_args(urls, std::string(), /*set_id=*/"",
+                                     /*in_new_tab=*/true);
     commerce::ProductSpecificationsDisclosureDialog::ShowDialog(
         browser->profile(), browser->tab_strip_model()->GetActiveWebContents(),
         std::move(dialog_args));

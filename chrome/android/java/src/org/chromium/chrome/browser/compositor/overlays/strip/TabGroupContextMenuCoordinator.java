@@ -31,31 +31,33 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeatures;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
-import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncUtils;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilterObserver;
+import org.chromium.chrome.browser.tabmodel.TabGroupTitleUtils;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilterObserver;
 import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager;
 import org.chromium.chrome.browser.tasks.tab_management.ColorPickerCoordinator;
 import org.chromium.chrome.browser.tasks.tab_management.ColorPickerCoordinator.ColorPickerLayoutType;
 import org.chromium.chrome.browser.tasks.tab_management.ColorPickerType;
 import org.chromium.chrome.browser.tasks.tab_management.ColorPickerUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabGroupOverflowMenuCoordinator;
-import org.chromium.chrome.browser.tasks.tab_management.TabGroupTitleEditor;
+import org.chromium.chrome.browser.tasks.tab_management.TabShareUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiUtils;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
 import org.chromium.components.data_sharing.DataSharingService;
 import org.chromium.components.data_sharing.DataSharingService.GroupDataOrFailureOutcome;
+import org.chromium.components.data_sharing.member_role.MemberRole;
 import org.chromium.components.signin.identitymanager.IdentityManager;
-import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
 import org.chromium.components.tab_groups.TabGroupColorId;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.listmenu.BasicListMenu.ListMenuItemType;
+import org.chromium.ui.listmenu.ListMenuItemProperties;
 import org.chromium.ui.listmenu.ListSectionDividerProperties;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -104,6 +106,7 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
             Supplier<TabModel> tabModelSupplier,
             TabGroupModelFilter tabGroupModelFilter,
             ActionConfirmationManager actionConfirmationManager,
+            ModalDialogManager modalDialogManager,
             TabCreator tabCreator,
             WindowAndroid windowAndroid,
             TabGroupSyncService tabGroupSyncService,
@@ -118,6 +121,7 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
                         windowAndroid.getActivity().get(),
                         tabGroupModelFilter,
                         actionConfirmationManager,
+                        modalDialogManager,
                         tabCreator,
                         dataSharingTabManager,
                         onGroupSharedCallback,
@@ -153,6 +157,7 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
             TabModel tabModel,
             TabGroupModelFilter tabGroupModelFilter,
             ActionConfirmationManager actionConfirmationManager,
+            ModalDialogManager modalDialogManager,
             TabCreator tabCreator,
             WindowAndroid windowAndroid,
             DataSharingTabManager dataSharingTabManager,
@@ -174,6 +179,7 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
                 () -> tabModel,
                 tabGroupModelFilter,
                 actionConfirmationManager,
+                modalDialogManager,
                 tabCreator,
                 windowAndroid,
                 tabGroupSyncService,
@@ -189,6 +195,7 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
             Activity activity,
             TabGroupModelFilter tabGroupModelFilter,
             ActionConfirmationManager actionConfirmationManager,
+            ModalDialogManager modalDialogManager,
             TabCreator tabCreator,
             DataSharingTabManager dataSharingTabManager,
             Callback<Boolean> onGroupSharedCallback,
@@ -224,13 +231,10 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
                         tabGroupModelFilter, tabCreator, tabId, TabLaunchType.FROM_TAB_GROUP_UI);
                 recordUserAction("NewTabInGroup");
             } else if (menuId == org.chromium.chrome.R.id.share_group) {
-                LocalTabGroupId localTabGroupId =
-                        TabGroupSyncUtils.getLocalTabGroupId(tabGroupModelFilter, tabId);
-
                 // Get user assigned group title or the default title "N tabs" if no title is
                 // assigned.
                 String tabGroupDisplayName =
-                        TabGroupTitleEditor.getDisplayableTitle(
+                        TabGroupTitleUtils.getDisplayableTitle(
                                 activity, tabGroupModelFilter, tabId);
 
                 // Create the group share flow and display the share bottom sheet.
@@ -243,6 +247,29 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
                         tabId,
                         tabGroupDisplayName,
                         onGroupSharedCallback);
+                recordUserAction("ShareGroup");
+            } else if (menuId == R.id.manage_sharing) {
+                dataSharingTabManager.showManageSharing(activity, collaborationId);
+                recordUserAction("ManageSharing");
+            } else if (menuId == R.id.recent_activity) {
+                dataSharingTabManager.showRecentActivity(collaborationId);
+                recordUserAction("RecentActivity");
+            } else if (menuId == R.id.delete_shared_group) {
+                TabUiUtils.deleteSharedTabGroup(
+                        activity,
+                        tabGroupModelFilter,
+                        actionConfirmationManager,
+                        modalDialogManager,
+                        tabId);
+                recordUserAction("DeleteSharedGroup");
+            } else if (menuId == R.id.leave_group) {
+                TabUiUtils.leaveTabGroup(
+                        activity,
+                        tabGroupModelFilter,
+                        actionConfirmationManager,
+                        modalDialogManager,
+                        tabId);
+                recordUserAction("LeaveSharedGroup");
             }
         };
     }
@@ -284,15 +311,7 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
             boolean isIncognito,
             boolean shouldShowDeleteGroup,
             boolean hasCollaborationData) {
-        PropertyModel.Builder builder =
-                new PropertyModel.Builder(ListSectionDividerProperties.ALL_KEYS)
-                        .with(
-                                ListSectionDividerProperties.LEFT_PADDING_DIMEN_ID,
-                                R.dimen.list_menu_item_horizontal_padding)
-                        .with(
-                                ListSectionDividerProperties.RIGHT_PADDING_DIMEN_ID,
-                                R.dimen.list_menu_item_horizontal_padding);
-        itemList.add(new ListItem(ListMenuItemType.DIVIDER, builder.build()));
+        itemList.add(getDivider());
         itemList.add(
                 BrowserUiListMenuUtils.buildMenuListItemWithIncognitoBranding(
                         R.string.open_new_tab_in_group_context_menu_item,
@@ -335,7 +354,7 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
 
         // Delete does not make sense for incognito since the tab group is not saved to sync.
         if (shouldShowDeleteGroup && !isIncognito && !hasCollaborationData) {
-            itemList.add(new ListItem(ListMenuItemType.DIVIDER, builder.build()));
+            itemList.add(getDivider());
             itemList.add(
                     BrowserUiListMenuUtils.buildMenuListItem(
                             R.string.tab_grid_dialog_toolbar_delete_group,
@@ -347,9 +366,61 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
         setListViewHeightBasedOnChildren();
     }
 
+    @Override
+    public void buildCollaborationMenuItems(
+            ModelList itemList,
+            IdentityManager identityManager,
+            GroupDataOrFailureOutcome outcome) {
+        @MemberRole int memberRole = TabShareUtils.getSelfMemberRole(outcome, identityManager);
+        // TODO(crbug.com/372752719): Replace the old ids(e.g. close_tab, delete tab) with
+        // close_tab_group, delete_tab_group.
+        if (memberRole != MemberRole.UNKNOWN) {
+            int insertionIndex = getMenuItemIndex(itemList, R.id.close_tab);
+            itemList.add(
+                    insertionIndex++,
+                    BrowserUiListMenuUtils.buildMenuListItem(
+                            R.string.tab_grid_dialog_toolbar_manage_sharing,
+                            R.id.manage_sharing,
+                            R.drawable.ic_group_24dp,
+                            /* enabled= */ true));
+            itemList.add(
+                    insertionIndex++,
+                    BrowserUiListMenuUtils.buildMenuListItem(
+                            R.string.tab_grid_dialog_toolbar_recent_activity,
+                            R.id.recent_activity,
+                            R.drawable.ic_update_24dp,
+                            /* enabled= */ true));
+        }
+
+        if (memberRole == MemberRole.OWNER) {
+            itemList.add(getDivider());
+            itemList.add(
+                    BrowserUiListMenuUtils.buildMenuListItem(
+                            R.string.tab_grid_dialog_toolbar_delete_group,
+                            R.id.delete_shared_group,
+                            R.drawable.material_ic_delete_24dp,
+                            /* enabled= */ true));
+        } else if (memberRole == MemberRole.MEMBER) {
+            itemList.add(getDivider());
+            itemList.add(
+                    BrowserUiListMenuUtils.buildMenuListItem(
+                            R.string.tab_grid_dialog_toolbar_leave_group,
+                            R.id.leave_group,
+                            R.drawable.material_ic_delete_24dp,
+                            /* enabled= */ true));
+        }
+
+        // Manually set the ListView height after adding items, as it's nested in a ScrollView. The
+        // menu must be resized explicitly after new items are added since the ListView height
+        // are set after data change.
+        setListViewHeightBasedOnChildren();
+        resizeMenu();
+    }
+
     /**
-     * Calculates and sets the total height of the action menu ListView to prevent the ListView from
-     * collapsing when nested inside a parent ScrollView.
+     * Calculates and sets the ListView height to prevent collapse when nested in a ScrollView. The
+     * ListView behaves like a LinearLayout and relies on the ScrollView for proper scrolling to
+     * ensure scrolling for the custom views.
      */
     public void setListViewHeightBasedOnChildren() {
         assert mContentView != null : "Menu view should not be null";
@@ -374,12 +445,15 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
         listView.setLayoutParams(params);
     }
 
-    @Override
-    public void buildCollaborationMenuItems(
-            ModelList itemList,
-            IdentityManager identityManager,
-            GroupDataOrFailureOutcome outcome) {
-        // TODO(crbug.com/348728333):Add collaboration items. e.g. manage sharing, recent activity.
+    private int getMenuItemIndex(ModelList itemList, int menuItemId) {
+        for (int i = 0; i < itemList.size(); i++) {
+            PropertyModel model = itemList.get(i).model;
+            if (model.containsKey(ListMenuItemProperties.MENU_ITEM_ID)
+                    && model.get(ListMenuItemProperties.MENU_ITEM_ID) == menuItemId) {
+                return i;
+            }
+        }
+        return itemList.size();
     }
 
     @Override
@@ -431,7 +505,7 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
     }
 
     private String getDefaultTitle() {
-        return TabGroupTitleEditor.getDefaultTitle(
+        return TabGroupTitleUtils.getDefaultTitle(
                 mContext, mTabGroupModelFilter.getRelatedTabCountForRootId(mGroupRootId));
     }
 
@@ -508,6 +582,18 @@ public class TabGroupContextMenuCoordinator extends TabGroupOverflowMenuCoordina
             mTabGroupModelFilter.removeTabGroupObserver(mTabGroupModelFilterObserver);
             mTabGroupModelFilter = null;
         }
+    }
+
+    private ListItem getDivider() {
+        PropertyModel.Builder builder =
+                new PropertyModel.Builder(ListSectionDividerProperties.ALL_KEYS)
+                        .with(
+                                ListSectionDividerProperties.LEFT_PADDING_DIMEN_ID,
+                                R.dimen.list_menu_item_horizontal_padding)
+                        .with(
+                                ListSectionDividerProperties.RIGHT_PADDING_DIMEN_ID,
+                                R.dimen.list_menu_item_horizontal_padding);
+        return new ListItem(ListMenuItemType.DIVIDER, builder.build());
     }
 
     private static void recordUserAction(String action) {

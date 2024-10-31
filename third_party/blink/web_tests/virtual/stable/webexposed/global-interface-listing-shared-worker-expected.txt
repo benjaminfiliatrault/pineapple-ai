@@ -4,6 +4,11 @@ On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE
 
 Starting worker: resources/global-interface-listing-worker.js
 [Worker] [INTERFACES]
+[Worker] interface AICreateMonitor : EventTarget
+[Worker]     attribute @@toStringTag
+[Worker]     getter ondownloadprogress
+[Worker]     method constructor
+[Worker]     setter ondownloadprogress
 [Worker] interface AbortController
 [Worker]     attribute @@toStringTag
 [Worker]     getter signal
@@ -540,7 +545,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter isFallbackAdapter
 [Worker]     getter limits
 [Worker]     method constructor
-[Worker]     method requestAdapterInfo
 [Worker]     method requestDevice
 [Worker] interface GPUAdapterInfo
 [Worker]     attribute @@toStringTag
@@ -576,6 +580,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter canvas
 [Worker]     method configure
 [Worker]     method constructor
+[Worker]     method getConfiguration
 [Worker]     method getCurrentTexture
 [Worker]     method unconfigure
 [Worker] interface GPUCommandBuffer
@@ -1449,6 +1454,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter url
 [Worker]     method arrayBuffer
 [Worker]     method blob
+[Worker]     method bytes
 [Worker]     method clone
 [Worker]     method constructor
 [Worker]     method formData
@@ -1469,6 +1475,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter url
 [Worker]     method arrayBuffer
 [Worker]     method blob
+[Worker]     method bytes
 [Worker]     method clone
 [Worker]     method constructor
 [Worker]     method formData

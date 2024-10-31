@@ -65,7 +65,7 @@ class ReadableStream::PullAlgorithm final : public StreamAlgorithm {
                              v8::Local<v8::Value> argv[]) override {
     DCHECK_EQ(argc, 0);
     DCHECK(controller_);
-    ScriptPromiseUntyped promise;
+    ScriptPromise<IDLUndefined> promise;
     if (script_state->ContextIsValid()) {
       v8::TryCatch try_catch(script_state->GetIsolate());
       {
@@ -113,15 +113,14 @@ class ReadableStream::CancelAlgorithm final : public StreamAlgorithm {
                              int argc,
                              v8::Local<v8::Value> argv[]) override {
     DCHECK_EQ(argc, 1);
-    ScriptPromiseUntyped promise;
+    ScriptPromise<IDLUndefined> promise;
     if (script_state->ContextIsValid()) {
       v8::TryCatch try_catch(script_state->GetIsolate());
       {
         // This is needed because the realm of the underlying source can be
         // different from the realm of the readable stream.
         ScriptState::Scope scope(underlying_byte_source_->GetScriptState());
-        promise = underlying_byte_source_->Cancel(
-            argv[0], PassThroughException(script_state->GetIsolate()));
+        promise = underlying_byte_source_->Cancel(argv[0]);
       }
       if (try_catch.HasCaught()) {
         return PromiseReject(script_state, try_catch.Exception());
@@ -252,7 +251,7 @@ void ReadableStream::IterationSource::AsyncIteratorReturn(ScriptValue arg) {
     // 4.2. Perform ! ReadableStreamDefaultReaderRelease(reader).
     ReadableStreamDefaultReader::Release(script_state, reader_);
     // 4.3. Return result.
-    TakePendingPromiseResolver()->Resolve(result.V8Value());
+    TakePendingPromiseResolver()->Resolve(result.V8Promise());
     return;
   }
 
@@ -881,9 +880,10 @@ void ReadableStream::CloseStream(ScriptState* script_state,
           DynamicTo<ReadableByteStreamController>(
               readable_stream_controller_.Get())) {
     // 1. Perform ! ReadableByteStreamControllerClose(stream.[[controller]]).
-    readable_byte_stream_controller->Close(
-        script_state, readable_byte_stream_controller, exception_state);
-    if (exception_state.HadException()) {
+    TryRethrowScope rethrow_scope(script_state->GetIsolate(), exception_state);
+    readable_byte_stream_controller->Close(script_state,
+                                           readable_byte_stream_controller);
+    if (rethrow_scope.HasCaught()) {
       return;
     }
 

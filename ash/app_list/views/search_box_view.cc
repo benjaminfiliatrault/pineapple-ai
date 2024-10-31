@@ -64,7 +64,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
-#include "ui/base/models/simple_menu_model.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/color/color_id.h"
@@ -77,6 +77,7 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_host.h"
@@ -301,20 +302,16 @@ class CheckBoxMenuItemView : public views::MenuItemView {
         view_delegate_(view_delegate) {
     // Set the role of the toggleable menu items to checkbox.
     GetViewAccessibility().SetRole(ax::mojom::Role::kMenuItemCheckBox);
+    // The title of the menu is not focusable but included in the position
+    // counting. Explicitly set the hierarchical level of the toggleable menu
+    // items to exclude the title.
+    GetViewAccessibility().SetHierarchicalLevel(1);
   }
 
   CheckBoxMenuItemView(const CheckBoxMenuItemView&) = delete;
   CheckBoxMenuItemView& operator=(const CheckBoxMenuItemView&) = delete;
 
   ~CheckBoxMenuItemView() override = default;
-
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    views::MenuItemView::GetAccessibleNodeData(node_data);
-    // The title of the menu is not focusable but included in the position
-    // counting. Explicitly set the hierarchical level of the toggleable menu
-    // items to exclude the title.
-    node_data->AddIntAttribute(ax::mojom::IntAttribute::kHierarchicalLevel, 1);
-  }
 
   void UpdateAccessibleCheckedState() override {
     bool category_enabled = view_delegate_->IsCategoryEnabled(
@@ -427,7 +424,7 @@ class FilterMenuAdapter : public views::MenuModelAdapter {
         search_box->GetWidget(), nullptr /*button_controller*/,
         search_box->filter_button()->GetBoundsInScreen(),
         views::MenuAnchorPosition::kBubbleBottomRight,
-        ui::MenuSourceType::MENU_SOURCE_NONE);
+        ui::mojom::MenuSourceType::kNone);
   }
 
   // Returns true if the category filter menu is opened.
@@ -558,7 +555,7 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
 
   CreateEndButtonContainer();
 
-  if (features::IsSunfishFeatureEnabled()) {
+  if (features::CanStartSunfishSession()) {
     views::ImageButton* sunfish_button =
         CreateSunfishButton(base::BindRepeating(
             &SearchBoxView::SunfishButtonPressed, base::Unretained(this)));
@@ -814,7 +811,7 @@ void SearchBoxView::OnThemeChanged() {
       views::ImageButton::STATE_NORMAL,
       ui::ImageModel::FromVectorIcon(views::kIcCloseIcon, button_icon_color,
                                      GetSearchBoxIconSize()));
-  if (features::IsSunfishFeatureEnabled()) {
+  if (features::CanStartSunfishSession()) {
     sunfish_button()->SetImageModel(
         views::ImageButton::STATE_NORMAL,
         ui::ImageModel::FromVectorIcon(kSearchIcon, button_icon_color,

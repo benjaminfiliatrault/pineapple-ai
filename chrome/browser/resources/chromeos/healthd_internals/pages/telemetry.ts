@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '//resources/ash/common/cr_elements/cr_button/cr_button.js';
 import '../info_card/cpu_card.js';
 import '../info_card/fan_card.js';
 import '../info_card/memory_card.js';
@@ -10,7 +11,8 @@ import '../info_card/thermal_card.js';
 
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {HealthdApiTelemetryResult} from '../externs.js';
+import type {CpuUsage} from '../cpu_usage_helper.js';
+import {HealthdApiTelemetryResult, SystemZramInfo} from '../externs.js';
 import type {HealthdInternalsCpuCardElement} from '../info_card/cpu_card.js';
 import type {HealthdInternalsFanCardElement} from '../info_card/fan_card.js';
 import type {HealthdInternalsMemoryCardElement} from '../info_card/memory_card.js';
@@ -41,6 +43,13 @@ export class HealthdInternalsTelemetryElement extends PolymerElement implements
     return getTemplate();
   }
 
+  static get properties() {
+    return {
+      lastUpdateTime: {type: String},
+    };
+  }
+
+
   override connectedCallback() {
     super.connectedCallback();
 
@@ -55,6 +64,9 @@ export class HealthdInternalsTelemetryElement extends PolymerElement implements
   // Helper for updating UI regularly. Init in `connectedCallback`.
   private updateHelper: UiUpdateHelper;
 
+  // The time that the telemetry data is last updated.
+  private lastUpdateTime: string = '';
+
   updateTelemetryData(data: HealthdApiTelemetryResult) {
     const isInitilized: boolean = this.healthdData !== undefined;
     this.healthdData = data;
@@ -62,6 +74,15 @@ export class HealthdInternalsTelemetryElement extends PolymerElement implements
       // Display data as soon as we first receive it.
       this.refreshTelemetryPage();
     }
+    this.lastUpdateTime = new Date().toLocaleTimeString();
+  }
+
+  updateCpuUsageData(physcialCpuUsage: (CpuUsage|null)[][]) {
+    this.$.cpuCard.updateCpuUsageData(physcialCpuUsage);
+  }
+
+  updateZramData(zram: SystemZramInfo) {
+    this.$.memoryCard.updateZramData(zram);
   }
 
   updateVisibility(isVisible: boolean) {
@@ -81,6 +102,22 @@ export class HealthdInternalsTelemetryElement extends PolymerElement implements
     this.$.memoryCard.updateTelemetryData(this.healthdData);
     this.$.powerCard.updateTelemetryData(this.healthdData);
     this.$.thermalCard.updateTelemetryData(this.healthdData);
+  }
+
+  private onExpandAllButtonClick() {
+    this.updateCardsExpanded(true);
+  }
+
+  private onCollapseAllButtonClicked() {
+    this.updateCardsExpanded(false);
+  }
+
+  private updateCardsExpanded(isExpanded: boolean) {
+    this.$.cpuCard.updateExpanded(isExpanded);
+    this.$.fanCard.updateExpanded(isExpanded);
+    this.$.memoryCard.updateExpanded(isExpanded);
+    this.$.powerCard.updateExpanded(isExpanded);
+    this.$.thermalCard.updateExpanded(isExpanded);
   }
 }
 

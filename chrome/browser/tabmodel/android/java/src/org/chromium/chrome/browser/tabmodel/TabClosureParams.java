@@ -47,6 +47,7 @@ public class TabClosureParams {
         private boolean mAllowUndo = true;
         private boolean mUponExit;
         private @Nullable Tab mRecommendedNextTab;
+        private @Nullable Runnable mUndoRunnable;
 
         private CloseTabBuilder(Tab tab) {
             mTab = tab;
@@ -70,6 +71,12 @@ public class TabClosureParams {
             return this;
         }
 
+        /** Sets the undo runnable. */
+        public CloseTabBuilder withUndoRunnable(Runnable undoRunnable) {
+            mUndoRunnable = undoRunnable;
+            return this;
+        }
+
         /** Builds the params. */
         public TabClosureParams build() {
             return new TabClosureParams(
@@ -80,7 +87,8 @@ public class TabClosureParams {
                     mAllowUndo,
                     /* hideTabGroups= */ false,
                     /* saveToTabRestoreService= */ true,
-                    TabCloseType.SINGLE);
+                    TabCloseType.SINGLE,
+                    mUndoRunnable);
         }
     }
 
@@ -90,6 +98,7 @@ public class TabClosureParams {
         private boolean mAllowUndo = true;
         private boolean mHideTabGroups;
         private boolean mSaveToTabRestoreService = true;
+        private @Nullable Runnable mUndoRunnable;
 
         private CloseTabsBuilder(List<Tab> tabs) {
             mTabs = tabs;
@@ -113,6 +122,12 @@ public class TabClosureParams {
             return this;
         }
 
+        /** Sets the undo runnable. */
+        public CloseTabsBuilder withUndoRunnable(Runnable undoRunnable) {
+            mUndoRunnable = undoRunnable;
+            return this;
+        }
+
         /** Builds the params. */
         public TabClosureParams build() {
             return new TabClosureParams(
@@ -123,7 +138,8 @@ public class TabClosureParams {
                     mAllowUndo,
                     mHideTabGroups,
                     mSaveToTabRestoreService,
-                    TabCloseType.MULTIPLE);
+                    TabCloseType.MULTIPLE,
+                    mUndoRunnable);
         }
     }
 
@@ -134,6 +150,7 @@ public class TabClosureParams {
     public static class CloseAllTabsBuilder {
         private boolean mUponExit;
         private boolean mHideTabGroups;
+        private @Nullable Runnable mUndoRunnable;
 
         private CloseAllTabsBuilder() {}
 
@@ -149,6 +166,12 @@ public class TabClosureParams {
             return this;
         }
 
+        /** Sets the undo runnable. */
+        public CloseAllTabsBuilder withUndoRunnable(Runnable undoRunnable) {
+            mUndoRunnable = undoRunnable;
+            return this;
+        }
+
         /** Builds the params. */
         public TabClosureParams build() {
             return new TabClosureParams(
@@ -159,7 +182,8 @@ public class TabClosureParams {
                     /* allowUndo= */ true,
                     mHideTabGroups,
                     /* saveToTabRestoreService= */ true,
-                    TabCloseType.ALL);
+                    TabCloseType.ALL,
+                    mUndoRunnable);
         }
     }
 
@@ -173,6 +197,7 @@ public class TabClosureParams {
     public final boolean hideTabGroups;
     public final boolean saveToTabRestoreService;
     public final @TabCloseType int tabCloseType;
+    public final @Nullable Runnable undoRunnable;
 
     private TabClosureParams(
             @Nullable List<Tab> tabs,
@@ -182,7 +207,8 @@ public class TabClosureParams {
             boolean allowUndo,
             boolean hideTabGroups,
             boolean saveToTabRestoreService,
-            @TabCloseType int tabCloseType) {
+            @TabCloseType int tabCloseType,
+            @Nullable Runnable undoRunnable) {
         this.tabs = tabs;
         this.isAllTabs = isAllTabs;
         this.recommendedNextTab = recommendedNextTab;
@@ -191,6 +217,7 @@ public class TabClosureParams {
         this.hideTabGroups = hideTabGroups;
         this.saveToTabRestoreService = saveToTabRestoreService;
         this.tabCloseType = tabCloseType;
+        this.undoRunnable = undoRunnable;
     }
 
     @Override
@@ -205,7 +232,8 @@ public class TabClosureParams {
                     && this.allowUndo == otherParams.allowUndo
                     && this.hideTabGroups == otherParams.hideTabGroups
                     && this.saveToTabRestoreService == otherParams.saveToTabRestoreService
-                    && this.tabCloseType == otherParams.tabCloseType;
+                    && this.tabCloseType == otherParams.tabCloseType
+                    && Objects.equals(this.undoRunnable, otherParams.undoRunnable);
         }
         return false;
     }
@@ -220,7 +248,8 @@ public class TabClosureParams {
                 this.allowUndo,
                 this.hideTabGroups,
                 this.saveToTabRestoreService,
-                this.tabCloseType);
+                this.tabCloseType,
+                this.undoRunnable);
     }
 
     @Override
@@ -240,6 +269,8 @@ public class TabClosureParams {
                 + "\nsaveToTabRestoreService "
                 + this.saveToTabRestoreService
                 + "\ntabCloseType "
-                + this.tabCloseType;
+                + this.tabCloseType
+                + "\nundoRunnable "
+                + this.undoRunnable;
     }
 }

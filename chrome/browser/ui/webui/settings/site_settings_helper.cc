@@ -190,7 +190,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::PASSWORD_PROTECTION, nullptr},
     {ContentSettingsType::MEDIA_ENGAGEMENT, nullptr},
     {ContentSettingsType::CLIENT_HINTS, nullptr},
-    {ContentSettingsType::ACCESSIBILITY_EVENTS, nullptr},
+    {ContentSettingsType::DEPRECATED_ACCESSIBILITY_EVENTS, nullptr},
     {ContentSettingsType::CLIPBOARD_SANITIZED_WRITE, nullptr},
     {ContentSettingsType::BACKGROUND_FETCH, nullptr},
     {ContentSettingsType::INTENT_PICKER_DISPLAY, nullptr},
@@ -559,6 +559,7 @@ std::vector<ContentSettingsType> GetVisiblePermissionCategories(
       ContentSettingsType::IDLE_DETECTION,
       ContentSettingsType::IMAGES,
       ContentSettingsType::JAVASCRIPT,
+      ContentSettingsType::JAVASCRIPT_OPTIMIZER,
       ContentSettingsType::LOCAL_FONTS,
       ContentSettingsType::MEDIASTREAM_CAMERA,
       ContentSettingsType::MEDIASTREAM_MIC,
@@ -627,7 +628,8 @@ std::vector<ContentSettingsType> GetVisiblePermissionCategories(
       base_types->push_back(ContentSettingsType::CAPTURED_SURFACE_CONTROL);
     }
 
-    if (base::FeatureList::IsEnabled(features::kKeyboardAndPointerLockPrompt)) {
+    if (base::FeatureList::IsEnabled(
+            permissions::features::kKeyboardAndPointerLockPrompt)) {
       base_types->push_back(ContentSettingsType::KEYBOARD_LOCK);
       base_types->push_back(ContentSettingsType::POINTER_LOCK);
     }
@@ -1243,7 +1245,7 @@ ContentSetting GetContentSettingForOrigin(Profile* profile,
       result = profile->GetPermissionController()
                    ->GetPermissionResultForOriginWithoutContext(
                        permissions::PermissionUtil::
-                           ContentSettingTypeToPermissionType(content_type),
+                           ContentSettingsTypeToPermissionType(content_type),
                        url::Origin::Create(origin));
     } else {
       permissions::PermissionDecisionAutoBlocker* auto_blocker =

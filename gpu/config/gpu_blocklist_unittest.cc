@@ -37,19 +37,14 @@ class GpuBlocklistTest : public testing::Test {
              GpuControlList::kVersionSchemaCommon, nullptr,
              nullptr},                             // os_version
             0x10de,                                // vendor_id
-            1,                                     // Devices size
-            kDevicesForEntry1,                     // Devices
+            base::span(kDevicesForEntry1),         // Devices
             GpuControlList::kMultiGpuCategoryAny,  // multi_gpu_category
             GpuControlList::kMultiGpuStyleNone,    // multi_gpu_style
             nullptr,                               // driver info
             nullptr,                               // GL strings
             nullptr,                               // machine model info
-            0,                                     // gpu_series size
-            nullptr,                               // gpu_series
-            {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical,
-             GpuControlList::kVersionSchemaCommon, nullptr,
-             nullptr},  // intel_gpu_generation
-            nullptr,    // more conditions
+            nullptr,                               // Intel conditions
+            nullptr,                               // more conditions
         },
         base::span<GpuControlList::Conditions>(),  // exceptions
     }}};
@@ -169,8 +164,8 @@ void TestBlockList(base::span<const GpuControlList::Entry> entries) {
 
 // It checks software_rendering_list.json
 TEST_F(GpuBlocklistTest, VerifyGLStrings) {
-  TestBlockList(kSoftwareRenderingListEntries);
-  TestBlockList(kGpuDriverBugListEntries);
+  TestBlockList(GetSoftwareRenderingListEntries());
+  TestBlockList(GetGpuDriverBugListEntries());
 }
 
 }  // namespace gpu

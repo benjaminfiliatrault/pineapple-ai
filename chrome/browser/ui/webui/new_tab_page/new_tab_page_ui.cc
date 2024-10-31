@@ -36,6 +36,7 @@
 #include "chrome/browser/search/background/ntp_custom_background_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/search_provider_logos/logo_service_factory.h"
+#include "chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/themes/theme_service_factory.h"
@@ -51,6 +52,7 @@
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h"
 #include "chrome/browser/ui/webui/new_tab_page/ntp_pref_names.h"
 #include "chrome/browser/ui/webui/new_tab_page/untrusted_source.h"
+#include "chrome/browser/ui/webui/page_not_available_for_guest/page_not_available_for_guest_ui.h"
 #include "chrome/browser/ui/webui/sanitized_image_source.h"
 #include "chrome/browser/ui/webui/searchbox/realbox_handler.h"
 #include "chrome/browser/ui/webui/searchbox/searchbox_handler.h"
@@ -119,6 +121,17 @@ bool NewTabPageUIConfig::IsWebUIEnabled(
   return !profile->IsOffTheRecord();
 }
 
+std::unique_ptr<content::WebUIController>
+NewTabPageUIConfig::CreateWebUIController(content::WebUI* web_ui,
+                                          const GURL& url) {
+  Profile* profile = Profile::FromWebUI(web_ui);
+  if (profile->IsGuestSession()) {
+    return std::make_unique<PageNotAvailableForGuestUI>(
+        web_ui, chrome::kChromeUINewTabPageHost);
+  }
+  return std::make_unique<NewTabPageUI>(web_ui);
+}
+
 namespace {
 
 constexpr char kPrevNavigationTimePrefName[] = "NewTabPage.PrevNavigationTime";
@@ -127,7 +140,9 @@ bool HasCredentials(Profile* profile) {
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
   return
       /* Can be null if Chrome signin is disabled. */ identity_manager &&
-      !identity_manager->GetAccountsInCookieJar().signed_in_accounts.empty();
+      !identity_manager->GetAccountsInCookieJar()
+           .GetPotentiallyInvalidSignedInAccounts()
+           .empty();
 }
 
 content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
@@ -177,6 +192,8 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
   source->AddBoolean(
       "middleSlotPromoDismissalEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpMiddleSlotPromoDismissal));
+  source->AddBoolean("mobilePromoEnabled", base::FeatureList::IsEnabled(
+                                               ntp_features::kNtpMobilePromo));
   source->AddBoolean(
       "modulesDragAndDropEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpModulesDragAndDrop));
@@ -327,13 +344,14 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
        IDS_NTP_MODULES_DRIVE_DISMISS_BUTTON_TEXT},
       {"modulesDriveMoreActionsButtonText",
        IDS_NTP_MODULES_DRIVE_MORE_ACTIONS_BUTTON_TEXT},
-      {"modulesDriveSentence", IDS_NTP_MODULES_DRIVE_SENTENCE},
-      {"modulesDriveSentence2", IDS_NTP_MODULES_DRIVE_SENTENCE2},
+      {"modulesDriveSentence", IDS_NTP_MODULES_DRIVE_NAME},
       {"modulesDriveFilesSentence", IDS_NTP_MODULES_DRIVE_FILES_SENTENCE},
       {"modulesDummyLower", IDS_NTP_MODULES_DUMMY_LOWER},
-      {"modulesDriveTitle", IDS_NTP_MODULES_DRIVE_TITLE},
-      {"modulesDriveTitleV2", IDS_NTP_MODULES_DRIVE_TITLE_V2},
+      {"modulesDriveTitle", IDS_NTP_MODULES_DRIVE_NAME},
+      {"modulesDriveTitleV2", IDS_NTP_MODULES_DRIVE_NAME},
       {"modulesDriveInfo", IDS_NTP_MODULES_DRIVE_INFO},
+      {"modulesSharepointInfo", IDS_NTP_MODULES_SHAREPOINT_INFO},
+      {"modulesSharepointTitle", IDS_NTP_MODULES_SHAREPOINT_TITLE},
       {"modulesDummyTitle", IDS_NTP_MODULES_DUMMY_TITLE},
       {"modulesDismissForHoursButtonText",
        IDS_NTP_MODULES_DISMISS_FOR_HOURS_BUTTON_TEXT},
@@ -406,6 +424,9 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
 
       // Middle slot promo.
       {"undoDismissPromoButtonToast", IDS_NTP_UNDO_DISMISS_PROMO_BUTTON_TOAST},
+      {"mobilePromoDescription", IDS_NTP_MOBILE_PROMO_DESCRIPTION},
+      {"mobilePromoHeader", IDS_NTP_MOBILE_PROMO_HEADER},
+      {"mobilePromoQrCode", IDS_NTP_MOBILE_PROMO_QR_CODE_LABEL},
 
       // Webstore toast.
       {"webstoreThemesToastMessage", IDS_NTP_WEBSTORE_TOAST_MESSAGE},
@@ -710,9 +731,12 @@ void NewTabPageUI::CreatePageHandler(
   page_handler_ = std::make_unique<NewTabPageHandler>(
       std::move(pending_page_handler), std::move(pending_page), profile_,
       ntp_custom_background_service_, theme_service_,
-      LogoServiceFactory::GetForProfile(profile_), web_contents(),
-      std::make_unique<NewTabPageFeaturePromoHelper>(), navigation_start_time_,
-      &module_id_names_, side_panel_controller);
+      LogoServiceFactory::GetForProfile(profile_),
+      SyncServiceFactory::GetForProfile(profile_),
+      segmentation_platform::SegmentationPlatformServiceFactory::GetForProfile(
+          profile_),
+      web_contents(), std::make_unique<NewTabPageFeaturePromoHelper>(),
+      navigation_start_time_, &module_id_names_, side_panel_controller);
 }
 
 void NewTabPageUI::CreateBrowserCommandHandler(

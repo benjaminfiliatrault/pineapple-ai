@@ -56,6 +56,7 @@
 #include "third_party/blink/renderer/core/style/display_style.h"
 #include "third_party/blink/renderer/core/style/filter_operations.h"
 #include "third_party/blink/renderer/core/style/font_size_style.h"
+#include "third_party/blink/renderer/core/style/gap_color_data_list.h"
 #include "third_party/blink/renderer/core/style/style_cached_data.h"
 #include "third_party/blink/renderer/core/style/style_highlight_data.h"
 #include "third_party/blink/renderer/core/style/style_scrollbar_color.h"
@@ -998,6 +999,7 @@ class ComputedStyle final : public ComputedStyleBase {
   }
   bool ColumnRuleIsTransparent() const {
     return ColumnRuleColor()
+        .GetLegacyGapColor()
         .Resolve(GetCurrentColor(), UsedColorScheme())
         .IsFullyTransparent();
   }
@@ -1291,8 +1293,8 @@ class ComputedStyle final : public ComputedStyleBase {
   bool BorderVisuallyEqual(const ComputedStyle& o) const {
     auto BorderSideVisuallyEqual =
         [&](const StyleColor& color, const StyleColor& other_color,
-           EBorderStyle style, EBorderStyle other_style, int width,
-           int other_width) -> bool {
+            EBorderStyle style, EBorderStyle other_style, int width,
+            int other_width) -> bool {
       if (style == EBorderStyle::kNone && other_style == EBorderStyle::kNone) {
         return true;
       }
@@ -1559,7 +1561,8 @@ class ComputedStyle final : public ComputedStyleBase {
 
   bool DependsOnContainerQueries() const {
     return DependsOnSizeContainerQueries() ||
-           DependsOnStyleContainerQueries() || DependsOnStateContainerQueries();
+           DependsOnStyleContainerQueries() ||
+           DependsOnScrollStateContainerQueries();
   }
 
   static bool IsContentVisibilityVisible(
@@ -2309,7 +2312,8 @@ class ComputedStyle final : public ComputedStyleBase {
     // For display: contents elements, we still need to generate ::before and
     // ::after, but the rest of the pseudo-elements should only be used for
     // elements with an actual layout object.
-    return pseudo == kPseudoIdBefore || pseudo == kPseudoIdAfter;
+    return pseudo == kPseudoIdCheck || pseudo == kPseudoIdBefore ||
+           pseudo == kPseudoIdAfter;
   }
 
   bool HasScrollMarkerGroupBefore() const {
@@ -3304,6 +3308,16 @@ class ComputedStyleBuilder final : public ComputedStyleBuilderBase {
                                    CSSVariableData* value,
                                    bool is_inherited_property) {
     if (is_inherited_property) {
+      // Try to avoid cloning inherited_variables if we haven't already;
+      // taking the extra cost of a lookup and compare here can be worth it
+      // to reduce memory usage if the page sets the same variables
+      // over and over again (e.g. in a universal selector).
+      if (!has_own_inherited_variables_ && InheritedVariables()) {
+        if (auto existing_value = InheritedVariables()->GetData(name);
+            existing_value && base::ValuesEquivalent(*existing_value, value)) {
+          return;
+        }
+      }
       MutableInheritedVariables().SetData(name, value);
     } else {
       MutableNonInheritedVariables().SetData(name, value);

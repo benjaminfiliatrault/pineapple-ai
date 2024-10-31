@@ -13,14 +13,18 @@
 #include "chrome/browser/user_education/user_education_service.h"
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/feature_constants.h"
-#include "components/user_education/common/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_controller.h"
 #include "ui/base/ui_base_features.h"
 
-void NewTabPageFeaturePromoHelper::RecordPromoFeatureUsage(
+void NewTabPageFeaturePromoHelper::RecordPromoFeatureUsageAndClosePromo(
     const base::Feature& feature,
     content::WebContents* web_contents) {
-  UserEducationService::MaybeNotifyPromoFeatureUsed(
-      web_contents->GetBrowserContext(), feature);
+  if (auto* const interface =
+          BrowserUserEducationInterface::MaybeGetForWebContentsInTab(
+              web_contents)) {
+    interface->NotifyFeaturePromoFeatureUsed(
+        feature, FeaturePromoFeatureUsedAction::kClosePromoIfPresent);
+  }
 }
 
 // For testing purposes only.
@@ -48,17 +52,6 @@ void NewTabPageFeaturePromoHelper::MaybeShowFeaturePromo(
           BrowserUserEducationInterface::MaybeGetForWebContentsInTab(
               web_contents)) {
     interface->MaybeShowFeaturePromo(iph_feature);
-  }
-}
-
-void NewTabPageFeaturePromoHelper::CloseFeaturePromo(
-    const base::Feature& iph_feature,
-    content::WebContents* web_contents) {
-  if (auto* const interface =
-          BrowserUserEducationInterface::MaybeGetForWebContentsInTab(
-              web_contents)) {
-    interface->EndFeaturePromo(
-        iph_feature, user_education::EndFeaturePromoReason::kFeatureEngaged);
   }
 }
 

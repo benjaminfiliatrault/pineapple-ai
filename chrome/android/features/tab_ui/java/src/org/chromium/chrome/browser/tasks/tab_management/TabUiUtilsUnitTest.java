@@ -36,9 +36,9 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
 import org.chromium.chrome.browser.tabmodel.TabClosureParams;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
-import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.ConfirmationResult;
+import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
 import org.chromium.components.data_sharing.DataSharingService;
 import org.chromium.components.data_sharing.PeopleGroupActionOutcome;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -75,6 +75,7 @@ public class TabUiUtilsUnitTest {
     @Mock private TabGroupSyncService mTabGroupSyncService;
     @Mock private DataSharingService mDataSharingService;
     @Mock private Callback<Boolean> mDidCloseTabsCallback;
+    @Mock private Callback<Boolean> mContentSensitivitySetter;
 
     @Captor private ArgumentCaptor<Callback<Integer>> mOutcomeCaptor;
 
@@ -142,7 +143,8 @@ public class TabUiUtilsUnitTest {
         boolean hideTabGroups = false;
         doCallback(
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_POSITIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_POSITIVE))
                 .when(mActionConfirmationManager)
                 .processDeleteGroupAttempt(any());
 
@@ -169,7 +171,8 @@ public class TabUiUtilsUnitTest {
         boolean hideTabGroups = false;
         doCallback(
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.IMMEDIATE_CONTINUE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.IMMEDIATE_CONTINUE))
                 .when(mActionConfirmationManager)
                 .processDeleteGroupAttempt(any());
 
@@ -195,7 +198,8 @@ public class TabUiUtilsUnitTest {
         boolean hideTabGroups = false;
         doCallback(
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_NEGATIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_NEGATIVE))
                 .when(mActionConfirmationManager)
                 .processDeleteGroupAttempt(any());
 
@@ -217,7 +221,8 @@ public class TabUiUtilsUnitTest {
         doCallback(
                         1,
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_POSITIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_POSITIVE))
                 .when(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(any(), any());
 
@@ -244,7 +249,8 @@ public class TabUiUtilsUnitTest {
         doCallback(
                         1,
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_NEGATIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_NEGATIVE))
                 .when(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(any(), any());
 
@@ -268,7 +274,8 @@ public class TabUiUtilsUnitTest {
         doCallback(
                         1,
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_POSITIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_POSITIVE))
                 .when(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(any(), any());
 
@@ -292,7 +299,8 @@ public class TabUiUtilsUnitTest {
         doCallback(
                         1,
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_POSITIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_POSITIVE))
                 .when(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(any(), any());
 
@@ -316,7 +324,8 @@ public class TabUiUtilsUnitTest {
         doCallback(
                         1,
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_POSITIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_POSITIVE))
                 .when(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(any(), any());
 
@@ -334,7 +343,8 @@ public class TabUiUtilsUnitTest {
         doCallback(
                         1,
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_POSITIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_POSITIVE))
                 .when(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(any(), any());
 
@@ -357,7 +367,8 @@ public class TabUiUtilsUnitTest {
         doCallback(
                         1,
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_POSITIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_POSITIVE))
                 .when(mActionConfirmationManager)
                 .processLeaveGroupAttempt(any(), any());
 
@@ -387,7 +398,8 @@ public class TabUiUtilsUnitTest {
         doCallback(
                         1,
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_NEGATIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_NEGATIVE))
                 .when(mActionConfirmationManager)
                 .processLeaveGroupAttempt(any(), any());
 
@@ -413,7 +425,8 @@ public class TabUiUtilsUnitTest {
         doCallback(
                         1,
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_POSITIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_POSITIVE))
                 .when(mActionConfirmationManager)
                 .processLeaveGroupAttempt(any(), any());
 
@@ -439,7 +452,8 @@ public class TabUiUtilsUnitTest {
         doCallback(
                         1,
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_POSITIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_POSITIVE))
                 .when(mActionConfirmationManager)
                 .processLeaveGroupAttempt(any(), any());
 
@@ -461,7 +475,8 @@ public class TabUiUtilsUnitTest {
         doCallback(
                         1,
                         (Callback<Integer> resultCallback) ->
-                                resultCallback.onResult(ConfirmationResult.CONFIRMATION_POSITIVE))
+                                resultCallback.onResult(
+                                        ActionConfirmationResult.CONFIRMATION_POSITIVE))
                 .when(mActionConfirmationManager)
                 .processLeaveGroupAttempt(any(), any());
 
@@ -478,5 +493,32 @@ public class TabUiUtilsUnitTest {
                 mModalDialogManager,
                 TAB_ID);
         verify(mActionConfirmationManager, never()).processLeaveGroupAttempt(any(), any());
+    }
+
+    @Test
+    public void testUpdateViewContentSensitivityForListOfTabs() {
+        List<Tab> tabList = List.of(mTab);
+
+        when(mTab.getTabHasSensitiveContent()).thenReturn(true);
+        TabUiUtils.updateViewContentSensitivityForTabs(tabList, mContentSensitivitySetter);
+        verify(mContentSensitivitySetter).onResult(true);
+
+        when(mTab.getTabHasSensitiveContent()).thenReturn(false);
+        TabUiUtils.updateViewContentSensitivityForTabs(tabList, mContentSensitivitySetter);
+        verify(mContentSensitivitySetter).onResult(false);
+    }
+
+    @Test
+    public void testUpdateViewContentSensitivityForTabList() {
+        when(mTabModel.getCount()).thenAnswer(invocation -> 1);
+        when(mTabModel.getTabAt(0)).thenAnswer(invocation -> mTab);
+
+        when(mTab.getTabHasSensitiveContent()).thenReturn(true);
+        TabUiUtils.updateViewContentSensitivityForTabs(mTabModel, mContentSensitivitySetter);
+        verify(mContentSensitivitySetter).onResult(true);
+
+        when(mTab.getTabHasSensitiveContent()).thenReturn(false);
+        TabUiUtils.updateViewContentSensitivityForTabs(mTabModel, mContentSensitivitySetter);
+        verify(mContentSensitivitySetter).onResult(false);
     }
 }

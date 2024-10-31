@@ -76,7 +76,7 @@ HistoryClustersSidePanelUI::HistoryClustersSidePanelUI(content::WebUI* web_ui)
       "enableHistoryEmbeddings",
       history_embeddings::IsHistoryEmbeddingsEnabledForProfile(profile) &&
           history_embeddings::kEnableSidePanel.Get());
-  history_embeddings::PopulateSourceForWebUI(source);
+  history_embeddings::PopulateSourceForWebUI(source, profile);
 
   webui::SetupWebUIDataSource(
       source,
@@ -94,6 +94,10 @@ WEB_UI_CONTROLLER_TYPE_IMPL(HistoryClustersSidePanelUI)
 void HistoryClustersSidePanelUI::SetBrowserWindowInterface(
     BrowserWindowInterface* browser_window_interface) {
   browser_window_interface_ = browser_window_interface;
+  // The page handler may already exist if preloaded.
+  if (history_clusters_handler_) {
+    history_clusters_handler_->SetContextInterface(browser_window_interface);
+  }
 }
 
 void HistoryClustersSidePanelUI::BindInterface(
@@ -132,7 +136,8 @@ void HistoryClustersSidePanelUI::BindInterface(
         pending_page_handler) {
   history_embeddings_handler_ = std::make_unique<HistoryEmbeddingsHandler>(
       std::move(pending_page_handler),
-      Profile::FromWebUI(web_ui())->GetWeakPtr(), web_ui());
+      Profile::FromWebUI(web_ui())->GetWeakPtr(), web_ui(),
+      /*for_side_panel=*/true);
 }
 
 base::WeakPtr<HistoryClustersSidePanelUI>

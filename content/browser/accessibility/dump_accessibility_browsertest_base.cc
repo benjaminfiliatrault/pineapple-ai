@@ -12,6 +12,7 @@
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
+#include "base/scoped_observation.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -69,8 +70,9 @@ bool ShouldHaveChildTree(const ui::AXNode& node,
     return false;  // A disabled child tree owner won't have a child tree.
   }
 
-  if (node.IsInvisibleOrIgnored())
+  if (node.IsInvisibleOrIgnored()) {
     return false;
+  }
 
   // If it has an embedding element role or a child tree id, then expect some
   // child tree content. In some cases IsEmbeddingElement(role) will be false,
@@ -108,7 +110,8 @@ class AXTreeChangeWaiter : public ui::AXTreeObserver {
   }
 
   void WaitForChange(ui::AXTree* tree) {
-    tree->AddObserver(this);
+    base::ScopedObservation<ui::AXTree, ui::AXTreeObserver> observation(this);
+    observation.Observe(tree);
     loop_runner_->Run();
     loop_runner_.reset();
     loop_runner_quit_closure_.Reset();
@@ -158,20 +161,23 @@ unsigned SearchLoadedDocsWithUrlInAccessibilityTree(
     const ui::BrowserAccessibility* node,
     const std::string& url,
     unsigned num_expected) {
-  if (!num_expected)
+  if (!num_expected) {
     return 0;
+  }
 
   if (IsLoadedDocWithUrl(node, url)) {
     num_expected -= 1;
-    if (!num_expected)
+    if (!num_expected) {
       return 0;
+    }
   }
 
   for (const auto* child : node->AllChildren()) {
     num_expected =
         SearchLoadedDocsWithUrlInAccessibilityTree(child, url, num_expected);
-    if (!num_expected)
+    if (!num_expected) {
       return 0;
+    }
   }
   return num_expected;
 }
@@ -250,9 +256,7 @@ std::string DumpAccessibilityTestBase::DumpTreeAsString() const {
   formatter->SetPropertyFilters(scenario_.property_filters,
                                 AXTreeFormatter::kFiltersDefaultSet);
   formatter->SetNodeFilters(scenario_.node_filters);
-  std::string actual_contents =
-      formatter->Format(GetRootAccessibilityNode(GetWebContents()));
-  return base::EscapeNonASCII(actual_contents);
+  return FormatWebContentsTree(*formatter);
 }
 
 std::string
@@ -260,7 +264,23 @@ DumpAccessibilityTestBase::DumpUnfilteredAccessibilityTreeAsString() {
   std::unique_ptr<AXTreeFormatter> formatter(CreateFormatter());
   formatter->SetPropertyFilters({{"*", AXPropertyFilter::ALLOW}});
   formatter->set_show_ids(true);
-  return formatter->Format(GetRootAccessibilityNode(GetWebContents()));
+  return FormatWebContentsTree(*formatter);
+}
+
+std::string DumpAccessibilityTestBase::FormatWebContentsTree(
+    const ui::AXTreeFormatter& formatter) const {
+  std::string contents =
+#if BUILDFLAG(IS_MAC)
+      // macOS uses an external accessibility tree, which allows testing exactly
+      // what assistive technologies operates with. No other platforms
+      // test the internal accessibility tree.
+      GetParam() == ui::AXApiType::kMac
+          ? formatter.Format({static_cast<gfx::AcceleratedWidget>(getpid()),
+                              ui::AXTreeSelector::ActiveTab})
+          :
+#endif
+          formatter.Format(GetRootAccessibilityNode(GetWebContents()));
+  return base::EscapeNonASCII(contents);
 }
 
 void DumpAccessibilityTestBase::RunTest(
@@ -305,8 +325,9 @@ void DumpAccessibilityTestBase::PerformAndWaitForDefaultActions(
   // test, e.g. only perform the action once if this is  script is executed
   // multiple times.
 
-  if (has_performed_default_actions_)
+  if (has_performed_default_actions_) {
     return;
+  }
 
   has_performed_default_actions_ = true;
 
@@ -358,8 +379,9 @@ void DumpAccessibilityTestBase::WaitForExpectedText(ui::AXMode mode) {
     }
 
     // If the @WAIT-FOR text has appeared, we're done.
-    if (all_wait_for_strings_found)
+    if (all_wait_for_strings_found) {
       break;
+    }
 
     // Block until the next accessibility notification in any frame.
     VLOG(1) << "Waiting until the next accessibility event";
@@ -427,8 +449,9 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
   // Get expectation lines from expectation file if any.
   base::FilePath expected_file =
       test_helper_.GetExpectationFilePath(file_path, expectations_qualifier);
-  if (!expected_file.empty())
+  if (!expected_file.empty()) {
     expected_lines = test_helper_.LoadExpectationFile(expected_file);
+  }
 
   // Get the test URL.
   GURL url(embedded_test_server()->GetURL(
@@ -512,8 +535,9 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
   bool matches_expectation = test_helper_.ValidateAgainstExpectation(
       file_path, expected_file, actual_lines, *expected_lines);
   EXPECT_TRUE(matches_expectation);
-  if (!matches_expectation)
+  if (!matches_expectation) {
     OnDiffFailed();
+  }
 }
 
 std::map<std::string, unsigned> DumpAccessibilityTestBase::CollectAllFrameUrls(
@@ -586,8 +610,9 @@ void DumpAccessibilityTestBase::WaitForAllFramesLoaded(ui::AXMode mode) {
 ui::BrowserAccessibility* DumpAccessibilityTestBase::FindNode(
     const std::string& name,
     ui::BrowserAccessibility* search_root) const {
-  if (!search_root)
+  if (!search_root) {
     search_root = GetManager()->GetBrowserAccessibilityRoot();
+  }
 
   CHECK(search_root);
   ui::BrowserAccessibility* node = FindNodeInSubtree(*search_root, name);
@@ -674,14 +699,16 @@ DumpAccessibilityTestBase::CaptureEvents(InvokeAction invoke_action,
 ui::BrowserAccessibility* DumpAccessibilityTestBase::FindNodeInSubtree(
     ui::BrowserAccessibility& node,
     const std::string& name) const {
-  if (node.GetStringAttribute(ax::mojom::StringAttribute::kName) == name)
+  if (node.GetStringAttribute(ax::mojom::StringAttribute::kName) == name) {
     return &node;
+  }
 
   for (unsigned int i = 0; i < node.PlatformChildCount(); ++i) {
     ui::BrowserAccessibility* result =
         FindNodeInSubtree(*node.PlatformGetChild(i), name);
-    if (result)
+    if (result) {
       return result;
+    }
   }
   return nullptr;
 }

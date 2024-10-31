@@ -53,7 +53,6 @@ select::picker(select) {
 }
 
 select:not(:-internal-list-box)::picker(select) {
-  box-shadow: 0px 12.8px 28.8px rgba(0, 0, 0, 0.13), 0px 0px 9.2px rgba(0, 0, 0, 0.11);
   box-sizing: border-box;
   overflow: auto;
   border: 1px solid rgba(0, 0, 0, 0.15);
@@ -114,12 +113,11 @@ select:not(:-internal-list-box) option {
   align-content: center;
 }
 
-/* TODO(crbug.com/1511354): Consider using ::marker or a whole new
- * pseudo-element to implement this. */
-select:not(:-internal-list-box) option::before {
+
+select:not(:-internal-list-box) option::check {
   content: '\2713' / '';
 }
-select option:not(:checked)::before {
+select option:not(:checked)::check {
   visibility: hidden;
 }
 
@@ -146,19 +144,14 @@ select::-internal-select-autofill-preview-text {
   white-space: nowrap;
 }
 
-/* TODO(crbug.com/1511354): select::select-fallback-button::after can't be
- * targeted with author styles but it should be and I don't know why. */
 select:not(-internal-list-box):not(:-internal-select-has-child-button)::after {
   /* We don't have to use -internal-appearance-auto-base-select() here because
    * the pseudo-element won't get generated unless the content property is set. */
   padding-inline-start: 0.5em;
   display: block;
 }
-select:not(:-internal-list-box):not(:-internal-select-has-child-button):open::after {
+select:not(:-internal-list-box):not(:-internal-select-has-child-button)::after {
   content: -internal-appearance-auto-base-select(none, counter(fake-counter-name, disclosure-open));
-}
-select:not(:-internal-list-box):not(:-internal-select-has-child-button):not(:open)::after {
-  content: -internal-appearance-auto-base-select(none, counter(fake-counter-name, disclosure-closed));
 }
 
 select:not(:-internal-list-box) optgroup {

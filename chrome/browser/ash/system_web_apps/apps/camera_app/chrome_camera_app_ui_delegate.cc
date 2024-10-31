@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "ash/constants/ash_features.h"
+#include "ash/constants/web_app_id_constants.h"
 #include "ash/webui/camera_app_ui/ocr.mojom.h"
 #include "ash/webui/camera_app_ui/pdf_builder.mojom.h"
 #include "ash/webui/camera_app_ui/url_constants.h"
@@ -40,11 +41,11 @@
 #include "chrome/browser/pdf/pdf_service.h"
 #include "chrome/browser/policy/policy_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/screen_ai/public/optical_character_recognizer.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/ash/internet/internet_config_dialog.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_launch_queue.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/common/pref_names.h"
@@ -106,10 +107,19 @@ constexpr int kPdfDpi = 72;
 // static
 void ChromeCameraAppUIDelegate::CameraAppDialog::ShowIntent(
     const std::string& queries,
+    bool launch_in_dialog,
     gfx::NativeWindow parent) {
   std::string url = ash::kChromeUICameraAppMainURL + queries;
-  CameraAppDialog* dialog = new CameraAppDialog(url);
-  dialog->ShowSystemDialog(parent);
+  if (launch_in_dialog) {
+    CameraAppDialog* dialog = new CameraAppDialog(url);
+    dialog->ShowSystemDialog(parent);
+  } else {
+    ash::SystemAppLaunchParams params;
+    params.url = GURL(url);
+    params.launch_source = apps::LaunchSource::kFromArc;
+    ash::LaunchSystemWebAppAsync(ProfileManager::GetActiveUserProfile(),
+                                 ash::SystemWebAppType::CAMERA, params);
+  }
 }
 
 ChromeCameraAppUIDelegate::CameraAppDialog::CameraAppDialog(
@@ -320,9 +330,11 @@ void ChromeCameraAppUIDelegate::PdfServiceManager::GotThumbnail(
     mojo::RemoteSetElementId pdf_service_id,
     mojo::RemoteSetElementId pdf_thumbnailer_id,
     const SkBitmap& bitmap) {
-  std::vector<uint8_t> jpeg_data;
-  if (gfx::JPEGCodec::Encode(bitmap, /*quality=*/100, &jpeg_data)) {
-    ConsumeGotThumbnailCallback(std::move(jpeg_data), pdf_thumbnailer_id);
+  std::optional<std::vector<uint8_t>> jpeg_data =
+      gfx::JPEGCodec::Encode(bitmap, /*quality=*/100);
+  if (jpeg_data) {
+    ConsumeGotThumbnailCallback(std::move(jpeg_data.value()),
+                                pdf_thumbnailer_id);
   } else {
     LOG(ERROR) << "Failed to encode bitmap to JPEG";
     ConsumeGotThumbnailCallback({}, pdf_thumbnailer_id);
@@ -400,9 +412,8 @@ void ChromeCameraAppUIDelegate::PdfServiceManager::ProgressivePdf::
     LOG(ERROR) << "Failed to add new page to PDF";
     return;
   }
-  std::unique_ptr<SkBitmap> bitmap =
-      gfx::JPEGCodec::Decode(jpg.data(), jpg.size());
-  pdf_searchifier_->AddPage(std::move(*bitmap), index);
+  SkBitmap bitmap = gfx::JPEGCodec::Decode(jpg);
+  pdf_searchifier_->AddPage(std::move(bitmap), index);
 }
 
 void ChromeCameraAppUIDelegate::PdfServiceManager::ProgressivePdf::DeletePage(
@@ -485,39 +496,6 @@ ChromeCameraAppUIDelegate::~ChromeCameraAppUIDelegate() {
 
   // Try triggering the HaTS survey when leaving the app.
   MaybeTriggerSurvey();
-}
-
-void ChromeCameraAppUIDelegate::SetLaunchDirectory() {
-  Profile* profile = Profile::FromWebUI(web_ui_);
-  content::WebContents* web_contents = web_ui_->GetWebContents();
-
-  auto my_files_folder_path =
-      file_manager::util::GetMyFilesFolderForProfile(profile);
-
-  auto* swa_manager = ash::SystemWebAppManager::Get(profile);
-  if (!swa_manager) {
-    return;
-  }
-
-  std::optional<webapps::AppId> app_id =
-      swa_manager->GetAppIdForSystemApp(ash::SystemWebAppType::CAMERA);
-  if (!app_id.has_value()) {
-    return;
-  }
-
-  // The launch directory is passed here rather than
-  // `SystemWebAppDelegate::LaunchAndNavigateSystemWebApp()` to handle the case
-  // of the app being opened to handle an Android intent, i.e. when it's shown
-  // as a dialog via `CameraAppDialog`.
-  web_app::WebAppLaunchParams launch_params;
-  launch_params.started_new_navigation = true;
-  launch_params.app_id = *app_id;
-  launch_params.target_url = GURL(ash::kChromeUICameraAppMainURL);
-  launch_params.dir = my_files_folder_path;
-  web_app::WebAppTabHelper::CreateForWebContents(web_contents);
-  web_app::WebAppTabHelper::FromWebContents(web_contents)
-      ->EnsureLaunchQueue()
-      .Enqueue(std::move(launch_params));
 }
 
 void ChromeCameraAppUIDelegate::PopulateLoadTimeData(
@@ -799,10 +777,9 @@ void ChromeCameraAppUIDelegate::RenderPdfAsJpeg(
 void ChromeCameraAppUIDelegate::PerformOcr(
     base::span<const uint8_t> jpeg_data,
     base::OnceCallback<void(ash::camera_app::mojom::OcrResultPtr)> callback) {
-  std::unique_ptr<SkBitmap> bitmap =
-      gfx::JPEGCodec::Decode(jpeg_data.data(), jpeg_data.size());
+  SkBitmap bitmap = gfx::JPEGCodec::Decode(jpeg_data);
   optical_character_recognizer_->PerformOCR(
-      std::move(*bitmap),
+      std::move(bitmap),
       base::BindOnce(
           [](base::OnceCallback<void(ash::camera_app::mojom::OcrResultPtr)>
                  callback,

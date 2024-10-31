@@ -1819,6 +1819,69 @@ struct ElementWiseBinaryTester {
   OperandInfo output;
   bool expected;
 
+  static constexpr std::array<mojom::ElementWiseBinary::Kind, 15>
+      kAllBinaryOps = {
+          mojom::ElementWiseBinary::Kind::kAdd,
+          mojom::ElementWiseBinary::Kind::kSub,
+          mojom::ElementWiseBinary::Kind::kMul,
+          mojom::ElementWiseBinary::Kind::kDiv,
+          mojom::ElementWiseBinary::Kind::kPow,
+          mojom::ElementWiseBinary::Kind::kMax,
+          mojom::ElementWiseBinary::Kind::kMin,
+          mojom::ElementWiseBinary::Kind::kEqual,
+          mojom::ElementWiseBinary::Kind::kGreater,
+          mojom::ElementWiseBinary::Kind::kGreaterOrEqual,
+          mojom::ElementWiseBinary::Kind::kLesser,
+          mojom::ElementWiseBinary::Kind::kLesserOrEqual,
+          mojom::ElementWiseBinary::Kind::kLogicalAnd,
+          mojom::ElementWiseBinary::Kind::kLogicalOr,
+          mojom::ElementWiseBinary::Kind::kLogicalXor,
+  };
+
+  static OperandDataType GetValidInputType(mojom::ElementWiseBinary::Kind op) {
+    switch (op) {
+      case mojom::ElementWiseBinary::Kind::kAdd:
+      case mojom::ElementWiseBinary::Kind::kSub:
+      case mojom::ElementWiseBinary::Kind::kMul:
+      case mojom::ElementWiseBinary::Kind::kDiv:
+      case mojom::ElementWiseBinary::Kind::kPow:
+      case mojom::ElementWiseBinary::Kind::kMax:
+      case mojom::ElementWiseBinary::Kind::kMin:
+      case mojom::ElementWiseBinary::Kind::kEqual:
+      case mojom::ElementWiseBinary::Kind::kGreater:
+      case mojom::ElementWiseBinary::Kind::kGreaterOrEqual:
+      case mojom::ElementWiseBinary::Kind::kLesser:
+      case mojom::ElementWiseBinary::Kind::kLesserOrEqual:
+        return OperandDataType::kFloat32;
+      case mojom::ElementWiseBinary::Kind::kLogicalAnd:
+      case mojom::ElementWiseBinary::Kind::kLogicalOr:
+      case mojom::ElementWiseBinary::Kind::kLogicalXor:
+        return OperandDataType::kUint8;
+    }
+  }
+
+  static OperandDataType GetValidOutputType(mojom::ElementWiseBinary::Kind op) {
+    switch (op) {
+      case mojom::ElementWiseBinary::Kind::kAdd:
+      case mojom::ElementWiseBinary::Kind::kSub:
+      case mojom::ElementWiseBinary::Kind::kMul:
+      case mojom::ElementWiseBinary::Kind::kDiv:
+      case mojom::ElementWiseBinary::Kind::kPow:
+      case mojom::ElementWiseBinary::Kind::kMax:
+      case mojom::ElementWiseBinary::Kind::kMin:
+        return OperandDataType::kFloat32;
+      case mojom::ElementWiseBinary::Kind::kEqual:
+      case mojom::ElementWiseBinary::Kind::kGreater:
+      case mojom::ElementWiseBinary::Kind::kGreaterOrEqual:
+      case mojom::ElementWiseBinary::Kind::kLesser:
+      case mojom::ElementWiseBinary::Kind::kLesserOrEqual:
+      case mojom::ElementWiseBinary::Kind::kLogicalAnd:
+      case mojom::ElementWiseBinary::Kind::kLogicalOr:
+      case mojom::ElementWiseBinary::Kind::kLogicalXor:
+        return OperandDataType::kUint8;
+    }
+  }
+
   void Test() {
     auto context_properties = GetContextPropertiesForTesting();
 
@@ -1836,168 +1899,88 @@ struct ElementWiseBinaryTester {
                                                        builder.GetGraphInfo()),
               expected);
   }
-
-  void TestLogicalOperators() {
-    const mojom::ElementWiseBinary::Kind kLogicalOperators[] = {
-        mojom::ElementWiseBinary::Kind::kEqual,
-        mojom::ElementWiseBinary::Kind::kGreater,
-        mojom::ElementWiseBinary::Kind::kGreaterOrEqual,
-        mojom::ElementWiseBinary::Kind::kLesser,
-        mojom::ElementWiseBinary::Kind::kLesserOrEqual,
-    };
-
-    for (const auto& op : kLogicalOperators) {
-      kind = op;
-      Test();
-    }
-  }
 };
 
 TEST_F(WebNNGraphImplTest, ElementWiseBinaryTest) {
+  for (const auto& op : ElementWiseBinaryTester::kAllBinaryOps) {
+    const OperandDataType valid_input_type =
+        ElementWiseBinaryTester::GetValidInputType(op);
+    const OperandDataType valid_output_type =
+        ElementWiseBinaryTester::GetValidOutputType(op);
+
   // Testing building with two input dimensions - {8, 1, 6, 1} and {7, 1, 5}.
   // Both the a and b dimensions have axes with length one that are expanded to
   // a larger size during the broadcast operation.
   // a_dimensions     (4d) 8 * 1 * 6 * 1
   // b_dimensions     (3d)     7 * 1 * 5
   // output_dimenions (4d) 8 * 7 * 6 * 5
-  {
-    ElementWiseBinaryTester{
-        .kind = mojom::ElementWiseBinary::Kind::kAdd,
-        .lhs = {.type = OperandDataType::kFloat32, .dimensions = {8, 1, 6, 1}},
-        .rhs = {.type = OperandDataType::kFloat32, .dimensions = {7, 1, 5}},
-        .output = {.type = OperandDataType::kFloat32,
-                   .dimensions = {8, 7, 6, 5}},
-        .expected = true}
-        .Test();
-  }
+    {
+      ElementWiseBinaryTester{
+          .kind = op,
+          .lhs = {.type = valid_input_type, .dimensions = {8, 1, 6, 1}},
+          .rhs = {.type = valid_input_type, .dimensions = {7, 1, 5}},
+          .output = {.type = valid_output_type, .dimensions = {8, 7, 6, 5}},
+          .expected = true}
+          .Test();
+    }
 
-  // Testing building with two input dimensions - {4, 2, 1} and {4}.
-  // a_dimensions     (3d) 4 * 2 * 1
-  // b_dimensions     (1d)         4
-  // output_dimenions (3d) 4 * 2 * 4
-  {
-    ElementWiseBinaryTester{
-        .kind = mojom::ElementWiseBinary::Kind::kSub,
-        .lhs = {.type = OperandDataType::kFloat32, .dimensions = {4, 2, 1}},
-        .rhs = {.type = OperandDataType::kFloat32, .dimensions = {4}},
-        .output = {.type = OperandDataType::kFloat32, .dimensions = {4, 2, 4}},
-        .expected = true}
-        .Test();
-  }
+    // Testing building with two input dimensions - {4, 2, 1} and {4}.
+    // a_dimensions     (3d) 4 * 2 * 1
+    // b_dimensions     (1d)         4
+    // output_dimenions (3d) 4 * 2 * 4
+    {
+      ElementWiseBinaryTester{
+          .kind = op,
+          .lhs = {.type = valid_input_type, .dimensions = {4, 2, 1}},
+          .rhs = {.type = valid_input_type, .dimensions = {4}},
+          .output = {.type = valid_output_type, .dimensions = {4, 2, 4}},
+          .expected = true}
+          .Test();
+    }
 
-  // Test the invalid graph for the input shapes are not broadcastable.
-  {
-    ElementWiseBinaryTester{
-        .kind = mojom::ElementWiseBinary::Kind::kMul,
-        .lhs = {.type = OperandDataType::kFloat32, .dimensions = {4, 2}},
-        .rhs = {.type = OperandDataType::kFloat32, .dimensions = {4}},
-        .output = {.type = OperandDataType::kFloat32, .dimensions = {4, 2}},
-        .expected = false}
-        .Test();
-  }
+    // Test the invalid graph for the input shapes are not broadcastable.
+    {
+      ElementWiseBinaryTester{
+          .kind = op,
+          .lhs = {.type = valid_input_type, .dimensions = {4, 2}},
+          .rhs = {.type = valid_input_type, .dimensions = {4}},
+          .output = {.type = valid_output_type, .dimensions = {4, 2}},
+          .expected = false}
+          .Test();
+    }
 
-  // Test the invalid graph for the output shapes are not expected.
-  {
-    ElementWiseBinaryTester{
-        .kind = mojom::ElementWiseBinary::Kind::kDiv,
-        .lhs = {.type = OperandDataType::kFloat32, .dimensions = {4, 2}},
-        .rhs = {.type = OperandDataType::kFloat32, .dimensions = {4, 2}},
-        .output = {.type = OperandDataType::kFloat32, .dimensions = {2}},
-        .expected = false}
-        .Test();
-  }
+    // Test the invalid graph for the output shapes are not expected.
+    {
+      ElementWiseBinaryTester{
+          .kind = op,
+          .lhs = {.type = valid_input_type, .dimensions = {4, 2}},
+          .rhs = {.type = valid_input_type, .dimensions = {4, 2}},
+          .output = {.type = valid_output_type, .dimensions = {2}},
+          .expected = false}
+          .Test();
+    }
 
-  // Test the invalid graph for input types don't match.
-  {
-    ElementWiseBinaryTester{
-        .kind = mojom::ElementWiseBinary::Kind::kMax,
-        .lhs = {.type = OperandDataType::kFloat32, .dimensions = {2}},
-        .rhs = {.type = OperandDataType::kInt32, .dimensions = {2}},
-        .output = {.type = OperandDataType::kFloat32, .dimensions = {2}},
-        .expected = false}
-        .Test();
-  }
+    // Test the invalid graph for input types don't match.
+    {
+      ElementWiseBinaryTester{
+          .kind = op,
+          .lhs = {.type = valid_input_type, .dimensions = {2}},
+          .rhs = {.type = OperandDataType::kInt64, .dimensions = {2}},
+          .output = {.type = valid_output_type, .dimensions = {2}},
+          .expected = false}
+          .Test();
+    }
 
-  // Test the invalid graph for output types don't match.
-  {
-    ElementWiseBinaryTester{
-        .kind = mojom::ElementWiseBinary::Kind::kMin,
-        .lhs = {.type = OperandDataType::kFloat32, .dimensions = {2}},
-        .rhs = {.type = OperandDataType::kFloat32, .dimensions = {2}},
-        .output = {.type = OperandDataType::kInt32, .dimensions = {2}},
-        .expected = false}
-        .Test();
-  }
-}
-
-TEST_F(WebNNGraphImplTest, ElementWiseBinaryLogicalTest) {
-  // Testing building with two input dimensions - {8, 1, 6, 1} and {7, 1, 5}.
-  // Both the a and b dimensions have axes with length one that are expanded to
-  // a larger size during the broadcast operation.
-  // a_dimensions     (4d) 8 * 1 * 6 * 1
-  // b_dimensions     (3d)     7 * 1 * 5
-  // output_dimenions (4d) 8 * 7 * 6 * 5
-  {
-    ElementWiseBinaryTester{
-        .lhs = {.type = OperandDataType::kFloat32, .dimensions = {8, 1, 6, 1}},
-        .rhs = {.type = OperandDataType::kFloat32, .dimensions = {7, 1, 5}},
-        .output = {.type = OperandDataType::kUint8, .dimensions = {8, 7, 6, 5}},
-        .expected = true}
-        .TestLogicalOperators();
-  }
-
-  // Testing building with two input dimensions - {4, 2, 1} and {4}.
-  // a_dimensions     (3d) 4 * 2 * 1
-  // b_dimensions     (1d)         4
-  // output_dimenions (3d) 4 * 2 * 4
-  {
-    ElementWiseBinaryTester{
-        .lhs = {.type = OperandDataType::kFloat32, .dimensions = {4, 2, 1}},
-        .rhs = {.type = OperandDataType::kFloat32, .dimensions = {4}},
-        .output = {.type = OperandDataType::kUint8, .dimensions = {4, 2, 4}},
-        .expected = true}
-        .TestLogicalOperators();
-  }
-
-  // Test the invalid graph for the input shapes are not broadcastable.
-  {
-    ElementWiseBinaryTester{
-        .lhs = {.type = OperandDataType::kFloat32, .dimensions = {4, 2}},
-        .rhs = {.type = OperandDataType::kFloat32, .dimensions = {4}},
-        .output = {.type = OperandDataType::kUint8, .dimensions = {4, 2}},
-        .expected = false}
-        .TestLogicalOperators();
-  }
-
-  // Test the invalid graph for the output shapes are not expected.
-  {
-    ElementWiseBinaryTester{
-        .lhs = {.type = OperandDataType::kFloat32, .dimensions = {4, 2}},
-        .rhs = {.type = OperandDataType::kFloat32, .dimensions = {4, 2}},
-        .output = {.type = OperandDataType::kUint8, .dimensions = {2}},
-        .expected = false}
-        .TestLogicalOperators();
-  }
-
-  // Test the invalid graph for input types don't match.
-  {
-    ElementWiseBinaryTester{
-        .lhs = {.type = OperandDataType::kFloat32, .dimensions = {2}},
-        .rhs = {.type = OperandDataType::kInt32, .dimensions = {2}},
-        .output = {.type = OperandDataType::kUint8, .dimensions = {2}},
-        .expected = false}
-        .TestLogicalOperators();
-  }
-
-  // Test the invalid graph for when the output data type is not kUint8 for
-  // logical operators.
-  {
-    ElementWiseBinaryTester{
-        .lhs = {.type = OperandDataType::kFloat32, .dimensions = {2}},
-        .rhs = {.type = OperandDataType::kFloat32, .dimensions = {2}},
-        .output = {.type = OperandDataType::kFloat32, .dimensions = {2}},
-        .expected = false}
-        .TestLogicalOperators();
+    // Test the invalid graph for output types don't match.
+    {
+      ElementWiseBinaryTester{
+          .kind = op,
+          .lhs = {.type = valid_input_type, .dimensions = {2}},
+          .rhs = {.type = valid_input_type, .dimensions = {2}},
+          .output = {.type = OperandDataType::kInt64, .dimensions = {2}},
+          .expected = false}
+          .Test();
+    }
   }
 }
 
@@ -6041,6 +6024,178 @@ TEST_F(WebNNGraphImplTest, ReshapeTest) {
         .output = {.type = OperandDataType::kInt32, .dimensions = {2}},
         .expected = false}
         .Test();
+  }
+}
+
+struct ScatterElementsTester {
+  OperandInfo input;
+  OperandInfo indices;
+  OperandInfo updates;
+  OperandInfo output;
+  uint32_t axis = 0;
+  bool expected;
+
+  void Test() {
+    auto context_properties = GetContextPropertiesForTesting();
+
+    // Build the graph with mojo type.
+    GraphInfoBuilder builder;
+    uint64_t input_operand_id =
+        builder.BuildInput("input", input.dimensions, input.type);
+    uint64_t indices_operand_id =
+        builder.BuildInput("indices", indices.dimensions, indices.type);
+    uint64_t updates_operand_id =
+        builder.BuildInput("updates", updates.dimensions, updates.type);
+    uint64_t output_operand_id =
+        builder.BuildOutput("output", output.dimensions, output.type);
+    builder.BuildScatterElements(input_operand_id, indices_operand_id,
+                                 updates_operand_id, output_operand_id, axis);
+    EXPECT_EQ(WebNNGraphBuilderImpl::IsValidForTesting(context_properties,
+                                                       builder.GetGraphInfo()),
+              expected);
+  }
+};
+
+TEST_F(WebNNGraphImplTest, ScatterElementsTest) {
+  {
+    // ScatterElements to 2-D input along axis 0.
+    ScatterElementsTester{
+        .input = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .indices = {.type = OperandDataType::kUint32, .dimensions = {2, 3}},
+        .updates = {.type = OperandDataType::kFloat32, .dimensions = {2, 3}},
+        .output = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .axis = 0,
+        .expected = true}
+        .Test();
+  }
+  {
+    // ScatterElements to 2-D input along axis 1.
+    ScatterElementsTester{
+        .input = {.type = OperandDataType::kFloat32, .dimensions = {1, 5}},
+        .indices = {.type = OperandDataType::kUint32, .dimensions = {1, 2}},
+        .updates = {.type = OperandDataType::kFloat32, .dimensions = {1, 2}},
+        .output = {.type = OperandDataType::kFloat32, .dimensions = {1, 5}},
+        .axis = 1,
+        .expected = true}
+        .Test();
+  }
+  {
+    // Test an invalid ScatterElements that axis is greater than input rank.
+    ScatterElementsTester{
+        .input = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .indices = {.type = OperandDataType::kUint32, .dimensions = {2, 3}},
+        .updates = {.type = OperandDataType::kFloat32, .dimensions = {2, 3}},
+        .output = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .axis = 2,
+        .expected = false}
+        .Test();
+  }
+  {
+    // Test an invalid ScatterElements that the updates tensor data type is not
+    // the same as input data type.
+    ScatterElementsTester{
+        .input = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .indices = {.type = OperandDataType::kUint32, .dimensions = {2, 3}},
+        .updates = {.type = OperandDataType::kFloat16, .dimensions = {2, 3}},
+        .output = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .expected = false}
+        .Test();
+  }
+  {
+    // Test an invalid ScatterElements with scalar input, indices and updates
+    // tensors.
+    ScatterElementsTester{
+        .input = {.type = OperandDataType::kFloat32, .dimensions = {}},
+        .indices = {.type = OperandDataType::kUint32, .dimensions = {}},
+        .updates = {.type = OperandDataType::kFloat32, .dimensions = {}},
+        .output = {.type = OperandDataType::kFloat32, .dimensions = {}},
+        .expected = false}
+        .Test();
+  }
+  {
+    // Test an invalid ScatterElements whose indices tensor rank is not the same
+    // as input rank.
+    ScatterElementsTester{
+        .input = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .indices = {.type = OperandDataType::kUint32, .dimensions = {2, 3, 3}},
+        .updates = {.type = OperandDataType::kFloat32, .dimensions = {2, 3, 3}},
+        .output = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .expected = false}
+        .Test();
+  }
+  {
+    // Test an invalid ScatterElements whose indices size is not the same as
+    // input size along axis 1.
+    ScatterElementsTester{
+        .input = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .indices = {.type = OperandDataType::kUint32, .dimensions = {2, 4}},
+        .updates = {.type = OperandDataType::kFloat32, .dimensions = {2, 4}},
+        .output = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .axis = 0,
+        .expected = false}
+        .Test();
+  }
+  {
+    // Test an invalid ScatterElements whose indices size is not the same as
+    // input size along axis 0.
+    ScatterElementsTester{
+        .input = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .indices = {.type = OperandDataType::kUint32, .dimensions = {2, 2}},
+        .updates = {.type = OperandDataType::kFloat32, .dimensions = {2, 2}},
+        .output = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .axis = 1,
+        .expected = false}
+        .Test();
+  }
+  {
+    // Test an invalid ScatterElements whose updates tensor's shape is not the
+    // same as indices tensor's.
+    ScatterElementsTester{
+        .input = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .indices = {.type = OperandDataType::kUint32, .dimensions = {2, 3}},
+        .updates = {.type = OperandDataType::kFloat32, .dimensions = {2, 4}},
+        .output = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .expected = false}
+        .Test();
+  }
+  {
+    // Test an invalid ScatterElements whose output shape is not the same as
+    // input.
+    ScatterElementsTester{
+        .input = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .indices = {.type = OperandDataType::kUint32, .dimensions = {2, 3}},
+        .updates = {.type = OperandDataType::kFloat32, .dimensions = {2, 3}},
+        .output = {.type = OperandDataType::kFloat32, .dimensions = {4, 4}},
+        .expected = false}
+        .Test();
+  }
+  {
+    // Test an invalid ScatterElements whose output data type is not the same as
+    // input.
+    ScatterElementsTester{
+        .input = {.type = OperandDataType::kFloat32, .dimensions = {3, 3}},
+        .indices = {.type = OperandDataType::kUint32, .dimensions = {2, 3}},
+        .updates = {.type = OperandDataType::kFloat32, .dimensions = {2, 3}},
+        .output = {.type = OperandDataType::kFloat16, .dimensions = {3, 3}},
+        .expected = false}
+        .Test();
+  }
+  {
+    // Test an invalid ScatterElements where the output is the same as the
+    // input.
+    auto context_properties = GetContextPropertiesForTesting();
+    GraphInfoBuilder builder;
+    uint64_t input_operand_id =
+        builder.BuildInput("input", {3, 3}, OperandDataType::kFloat32);
+    uint64_t indices_operand_id =
+        builder.BuildInput("indices", {2, 3}, OperandDataType::kUint32);
+    uint64_t updates_operand_id =
+        builder.BuildInput("updates", {2, 3}, OperandDataType::kFloat32);
+    builder.BuildScatterElements(input_operand_id, indices_operand_id,
+                                 updates_operand_id, input_operand_id,
+                                 /*axis=*/0);
+    EXPECT_FALSE(WebNNGraphBuilderImpl::IsValidForTesting(
+        context_properties, builder.GetGraphInfo()));
   }
 }
 

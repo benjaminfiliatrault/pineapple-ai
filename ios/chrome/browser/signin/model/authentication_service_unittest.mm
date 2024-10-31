@@ -22,7 +22,6 @@
 #import "components/prefs/pref_registry_simple.h"
 #import "components/signin/ios/browser/features.h"
 #import "components/signin/public/base/signin_pref_names.h"
-#import "components/signin/public/base/signin_switches.h"
 #import "components/signin/public/identity_manager/device_accounts_synchronizer.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/signin/public/identity_manager/identity_test_environment.h"
@@ -114,15 +113,15 @@ class AuthenticationServiceTest : public PlatformTest {
                               base::BindRepeating(&CreateMockSyncService));
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        AuthenticationServiceFactory::GetDefaultFactory());
-
+        AuthenticationServiceFactory::GetFactoryWithDelegate(
+            std::make_unique<FakeAuthenticationServiceDelegate>()));
     profile_ = std::move(builder).Build();
 
     account_manager_ =
         ChromeAccountManagerServiceFactory::GetForProfile(profile_.get());
 
-    AuthenticationServiceFactory::CreateAndInitializeForProfile(
-        profile_.get(), std::make_unique<FakeAuthenticationServiceDelegate>());
+    // Force explicit instantiation of the AuthenticationService.
+    std::ignore = authentication_service();
   }
 
   std::unique_ptr<sync_preferences::PrefServiceSyncable> CreatePrefService() {
@@ -515,13 +514,9 @@ TEST_F(AuthenticationServiceTest, SignedInManagedAccountSignOut) {
   EXPECT_EQ(ClearBrowsingDataCount(), 0);
 }
 
-// Tests that local data is cleared on signout when
-// `kClearDeviceDataOnSignOutForManagedUsers` is enabled for a managed account.
-TEST_F(
-    AuthenticationServiceTest,
-    SignedInManagedAccountSignOutWithClearDataFeatureEnabled_UnmanagedBrowser) {
-  scoped_feature_list_.InitWithFeatures(
-      {kClearDeviceDataOnSignOutForManagedUsers}, {});
+// Tests that local data is cleared on signout for a managed account.
+TEST_F(AuthenticationServiceTest,
+       SignedInManagedAccountSignOutWithClearData_UnmanagedBrowser) {
   FakeSystemIdentity* fake_system_identity =
       [FakeSystemIdentity fakeManagedIdentity];
   fake_system_identity_manager()->AddIdentity(fake_system_identity);
@@ -545,14 +540,11 @@ TEST_F(
   EXPECT_EQ(ClearBrowsingDataFromSigninCount(), 1);
 }
 
-// Tests that local data is not cleared on managed user's signout when
-// `kClearDeviceDataOnSignOutForManagedUsers` is enabled for a managed account
-// and the browser is managed.
+// Tests that local data is not cleared on managed user's signout for a managed
+// account and the browser is managed.
 TEST_F(
     AuthenticationServiceTest,
     SignedInManagedAccountSignOutWithClearDataFeatureEnabled_ManagedBrowser) {
-  scoped_feature_list_.InitWithFeatures(
-      {kClearDeviceDataOnSignOutForManagedUsers}, {});
   // Add managed configuration so the browser is managed.
   NSUserDefaults* userDefaults = [NSUserDefaults standardUserDefaults];
   NSDictionary* dict = @{@"key" : @"value"};
@@ -585,9 +577,7 @@ TEST_F(
 // Tests that all local data is cleared (not just the data from sign-in time)
 // when the user has the sync consent.
 TEST_F(AuthenticationServiceTest,
-       SignedInManagedAccountSignOutWithClearDataFeatureEnabled_SyncMigration) {
-  scoped_feature_list_.InitWithFeatures(
-      {kClearDeviceDataOnSignOutForManagedUsers}, {});
+       SignedInManagedAccountSignOutWithClearData_SyncMigration) {
   FakeSystemIdentity* fake_system_identity =
       [FakeSystemIdentity fakeManagedIdentity];
   fake_system_identity_manager()->AddIdentity(fake_system_identity);
@@ -924,11 +914,8 @@ TEST_F(AuthenticationServiceTest, TestGetServiceStatus) {
 
 // Tests that identity manager loads identities while being signed out.
 // And also tests that an identity being added is loaded by identity manager.
-// kAlwaysLoadDeviceAccounts flag is enabled.
 TEST_F(AuthenticationServiceTest,
        TestAccountsLoadedByIdentityManagerWhenSignedOut) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(switches::kAlwaysLoadDeviceAccounts);
   // `fakeIdentity1` and `fakeIdentity2` are already loaded.
   std::vector<AccountInfo> account_info_vector =
       identity_manager()->GetExtendedAccountInfoForAccountsWithRefreshToken();
@@ -945,10 +932,7 @@ TEST_F(AuthenticationServiceTest,
 // Tests that identity manager loads identities while being signed out.
 // And also tests that an identity being removed is forgotten by identity
 // manager.
-// kAlwaysLoadDeviceAccounts flag is enabled.
 TEST_F(AuthenticationServiceTest, TestAccountsForgetIdentityWhenSignedOut) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(switches::kAlwaysLoadDeviceAccounts);
   std::vector<AccountInfo> account_info_vector =
       identity_manager()->GetExtendedAccountInfoForAccountsWithRefreshToken();
   // `fakeIdentity1` and `fakeIdentity2` are already loaded.

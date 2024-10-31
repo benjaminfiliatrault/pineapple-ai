@@ -25,7 +25,7 @@ class Config {
     /** @type {Map<string, number>} */
     this.speeds = {up: 20, down: 20, left: 20, right: 20};
     /** @type {number} */
-    this.repeatDelayMs = -1;
+    this.repeatDelayMs = undefined;
     /** @type {boolean} */
     this.cursorControlEnabled = true;
     /** @type {boolean} */
@@ -218,7 +218,6 @@ FaceGazeTestBase = class extends E2ETestBase {
     assertNotNullNorUndefined(accessibilityCommon);
     assertNotNullNorUndefined(BubbleController);
     assertNotNullNorUndefined(FaceGaze);
-    assertNotNullNorUndefined(FaceGazeConstants);
     assertNotNullNorUndefined(FacialGesture);
     assertNotNullNorUndefined(FacialGesturesToMediapipeGestures);
     assertNotNullNorUndefined(GestureDetector);
@@ -261,6 +260,11 @@ FaceGazeTestBase = class extends E2ETestBase {
   /** @return {!FaceGaze} */
   getFaceGaze() {
     return accessibilityCommon.getFaceGazeForTest();
+  }
+
+  /** @return {!ScrollModeController} */
+  getScrollModeController() {
+    return this.getFaceGaze().mouseController_.scrollModeController_;
   }
 
   async startFacegazeWithConfigAndForeheadLocation_(
@@ -309,8 +313,7 @@ FaceGazeTestBase = class extends E2ETestBase {
     }
 
     if (config.bufferSize !== -1) {
-      await this.setPref(
-          MouseController.PREF_CURSOR_SMOOTHING, config.bufferSize);
+      faceGaze.mouseController_.setBufferSizeForTesting(config.bufferSize);
     }
 
     await this.setPref(MouseController.PREF_SPD_UP, config.speeds.up);
@@ -318,7 +321,7 @@ FaceGazeTestBase = class extends E2ETestBase {
     await this.setPref(MouseController.PREF_SPD_LEFT, config.speeds.left);
     await this.setPref(MouseController.PREF_SPD_RIGHT, config.speeds.right);
 
-    if (config.repeatDelayMs > 0) {
+    if (config.repeatDelayMs !== undefined) {
       faceGaze.gestureHandler_.repeatDelayMs_ = config.repeatDelayMs;
     }
 

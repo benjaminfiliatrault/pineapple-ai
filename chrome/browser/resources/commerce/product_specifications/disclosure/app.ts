@@ -6,7 +6,7 @@ import 'chrome://resources/cr_components/localized_link/localized_link.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_icon/cr_icon.js';
 import '/images/icons.html.js';
-import '../strings.m.js';
+import '/strings.m.js';
 
 import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 import type {BrowserProxy} from 'chrome://resources/cr_components/commerce/browser_proxy.js';
@@ -77,8 +77,16 @@ export class DisclosureAppElement extends DisclosureAppElementBase {
     this.shoppingApi_.setProductSpecificationDisclosureAcceptVersion(
         ProductSpecificationsDisclosureVersion.kV1);
 
-    // On accept, continue to create and show the product spec set.
+    // On accept, if `set_id` is available, open the existing set; otherwise
+    // create a new set with `urls` and `name`.
     const args = JSON.parse(chrome.getVariableValue('dialogArguments'));
+    const setId = args['set_id'];
+    if (setId.length !== 0) {
+      this.shoppingApi_.showProductSpecificationsSetForUuid(
+          {value: setId}, false);
+      chrome.send('dialogClose');
+      return;
+    }
     let name: string = args['name'];
     if (name.length === 0) {
       name = loadTimeData.getString('defaultTableTitle');

@@ -15,6 +15,7 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/unique_ids.h"
+#include "components/autofill_prediction_improvements/core/browser/autofill_prediction_improvements_features.h"
 #include "components/optimization_guide/core/optimization_guide_proto_util.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
@@ -38,18 +39,25 @@ AutofillPredictionImprovementsFillingEngineImpl::
 
 void AutofillPredictionImprovementsFillingEngineImpl::GetPredictions(
     autofill::FormData form_data,
+    base::flat_map<autofill::FieldGlobalId, bool> field_eligibility_map,
+    base::flat_map<autofill::FieldGlobalId, bool> field_sensitivity_map,
     optimization_guide::proto::AXTreeUpdate ax_tree_update,
     PredictionsReceivedCallback callback) {
-  user_annotations_service_->RetrieveAllEntries(
-      base::BindOnce(&AutofillPredictionImprovementsFillingEngineImpl::
-                         OnUserAnnotationsRetrieved,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(form_data),
-                     std::move(ax_tree_update), std::move(callback)));
+  user_annotations_service_->RetrieveAllEntries(base::BindOnce(
+      &AutofillPredictionImprovementsFillingEngineImpl::
+          OnUserAnnotationsRetrieved,
+      weak_ptr_factory_.GetWeakPtr(), std::move(form_data),
+      std::move(field_eligibility_map), std::move(field_sensitivity_map),
+      std::move(ax_tree_update), std::move(callback)));
 }
 
 void AutofillPredictionImprovementsFillingEngineImpl::
     OnUserAnnotationsRetrieved(
         autofill::FormData form_data,
+        const base::flat_map<autofill::FieldGlobalId, bool>&
+            field_eligibility_map,
+        const base::flat_map<autofill::FieldGlobalId, bool>&
+            field_sensitivity_map,
         optimization_guide::proto::AXTreeUpdate ax_tree_update,
         PredictionsReceivedCallback callback,
         user_annotations::UserAnnotationsEntries user_annotations) {
@@ -66,17 +74,23 @@ void AutofillPredictionImprovementsFillingEngineImpl::
   optimization_guide::proto::FormsPredictionsRequest request;
   optimization_guide::proto::PageContext* page_context =
       request.mutable_page_context();
-  page_context->set_url(form_data.url().spec());
-  page_context->set_title(ax_tree_update.tree_data().title());
+  if (kSendTitleURL.Get()) {
+    page_context->set_url(form_data.url().spec());
+    page_context->set_title(ax_tree_update.tree_data().title());
+  } else {
+    page_context->set_url(form_data.main_frame_origin().Serialize());
+  }
   *page_context->mutable_ax_tree_data() = std::move(ax_tree_update);
+
   *request.mutable_form_data() =
-      ToFormDataProto(autofill::FormStructure(form_data));
+      ToFormDataProto(form_data, field_eligibility_map, field_sensitivity_map);
   *request.mutable_entries() = {
       std::make_move_iterator(user_annotations.begin()),
       std::make_move_iterator(user_annotations.end())};
 
   model_executor_->ExecuteModel(
       optimization_guide::ModelBasedCapabilityKey::kFormsPredictions, request,
+      kExecutionTimeout.Get(),
       base::BindOnce(
           &AutofillPredictionImprovementsFillingEngineImpl::OnModelExecuted,
           weak_ptr_factory_.GetWeakPtr(), std::move(form_data),
@@ -88,23 +102,25 @@ void AutofillPredictionImprovementsFillingEngineImpl::OnModelExecuted(
     PredictionsReceivedCallback callback,
     optimization_guide::OptimizationGuideModelExecutionResult execution_result,
     std::unique_ptr<optimization_guide::ModelQualityLogEntry> log_entry) {
-  if (!execution_result.has_value()) {
-    std::move(callback).Run(base::unexpected(false), std::nullopt);
+  const std::optional<std::string> execution_id =
+      log_entry ? log_entry->model_execution_id()
+                : std::optional<std::string>();
+  if (!execution_result.response.has_value()) {
+    std::move(callback).Run(base::unexpected(false), execution_id);
     return;
   }
 
   std::optional<optimization_guide::proto::FormsPredictionsResponse>
       maybe_response = optimization_guide::ParsedAnyMetadata<
           optimization_guide::proto::FormsPredictionsResponse>(
-          execution_result.value());
+          execution_result.response.value());
   if (!maybe_response) {
-    std::move(callback).Run(base::unexpected(false), std::nullopt);
+    std::move(callback).Run(base::unexpected(false), execution_id);
     return;
   }
 
   std::move(callback).Run(
-      ExtractPredictions(form_data, maybe_response->form_data()),
-      log_entry ? log_entry->model_execution_id() : "");
+      ExtractPredictions(form_data, maybe_response->form_data()), execution_id);
 }
 
 // static
@@ -116,50 +132,63 @@ AutofillPredictionImprovementsFillingEngineImpl::ExtractPredictions(
   const std::vector<autofill::FormFieldData>& fields = form_data.fields();
   for (const optimization_guide::proto::FilledFormFieldData&
            filled_form_field_proto : form_data_proto.filled_form_field_data()) {
-    if (filled_form_field_proto.field_data().field_value().empty()) {
+    // Only the first predicted value is used at the moment.
+    if (filled_form_field_proto.predicted_values_size() == 0 ||
+        filled_form_field_proto.predicted_values()[0].value().empty()) {
       continue;
     }
 
-    // TODO: b/357098401 - Change it to look by renderer ID which is unique
-    // rather than label.
-    if (auto it = base::ranges::find(
-            fields,
-            base::UTF8ToUTF16(
-                filled_form_field_proto.field_data().field_label()),
-            &autofill::FormFieldData::label);
-        it != fields.end()) {
-      const autofill::FormFieldData& field = *it;
-      const std::u16string predicted_value =
-          base::UTF8ToUTF16(filled_form_field_proto.field_data().field_value());
-      std::optional<std::u16string> select_option_text = std::nullopt;
+    size_t request_field_index =
+        static_cast<size_t>(filled_form_field_proto.request_field_index());
+    if (request_field_index >= fields.size()) {
+      // Execution returned an out-of-bounds field index.
+      continue;
+    }
 
-      if (field.IsSelectOrSelectListElement()) {
-        // Reject the prediction if it equals the currently selected option.
-        if (field.selected_option().has_value() &&
-            field.selected_option()->value == predicted_value) {
-          continue;
-        }
+    const autofill::FormFieldData& field = fields.at(request_field_index);
+    if (base::UTF8ToUTF16(filled_form_field_proto.field_data().field_label()) !=
+        field.label()) {
+      // Skip over if the label is no longer the same and the execution provided
+      // a wrong index.
+      continue;
+    }
 
-        // Ensure that the predicted value actually is one of the select
-        // options.
-        auto predicted_select_option_it = base::ranges::find(
-            field.options(), predicted_value, &autofill::SelectOption::value);
-        if (predicted_select_option_it == field.options().end()) {
-          continue;
-        }
+    std::u16string predicted_value = base::UTF8ToUTF16(
+        filled_form_field_proto.predicted_values()[0].value());
+    std::u16string label =
+        filled_form_field_proto.normalized_label().empty()
+            ? (field.label().empty() ? field.placeholder() : field.label())
+            : base::UTF8ToUTF16(filled_form_field_proto.normalized_label());
 
-        // Sets `Prediction::select_option_text` below which will then be shown
-        // in the suggestion as the main text.
-        select_option_text = predicted_select_option_it->text;
+    if (field.IsSelectElement()) {
+      // Reject the prediction if it equals the currently selected option.
+      if (field.selected_option().has_value() &&
+          field.selected_option()->text == predicted_value) {
+        continue;
+      }
+
+      // Ensure that the predicted value actually is one of the select
+      // options.
+      auto predicted_select_option_it = base::ranges::find(
+          field.options(), predicted_value, &autofill::SelectOption::text);
+      if (predicted_select_option_it == field.options().end()) {
+        continue;
       }
 
       predictions.emplace_back(
           field.global_id(),
-          Prediction{
-              std::move(predicted_value),
-              field.label().empty() ? field.placeholder() : field.label(),
-              select_option_text});
+          Prediction{predicted_select_option_it->value, std::move(label),
+                     field.IsFocusable(), predicted_select_option_it->text});
+      continue;
     }
+    // Skip predictions for non-empty text fields.
+    else if (field.IsTextInputElement() && !field.value().empty()) {
+      continue;
+    }
+
+    predictions.emplace_back(field.global_id(),
+                             Prediction{std::move(predicted_value),
+                                        std::move(label), field.IsFocusable()});
   }
   return predictions;
 }

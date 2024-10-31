@@ -7,7 +7,7 @@ import 'chrome://resources/cr_elements/cr_auto_img/cr_auto_img.js';
 import 'chrome://resources/cr_elements/cr_grid/cr_grid.js';
 import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import './check_mark_wrapper.js';
-import './strings.m.js';
+import '/strings.m.js';
 
 import type {SpHeadingElement} from 'chrome://customize-chrome-side-panel.top-chrome/shared/sp_heading.js';
 import {HelpBubbleMixinLit} from 'chrome://resources/cr_components/help_bubble/help_bubble_mixin_lit.js';
@@ -18,7 +18,7 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
-import {CustomizeChromeAction, recordCustomizeChromeAction} from './common.js';
+import {CustomizeChromeAction, NtpImageType, recordCustomizeChromeAction, recordCustomizeChromeImageError} from './common.js';
 import type {BackgroundCollection, CollectionImage, CustomizeChromePageCallbackRouter, CustomizeChromePageHandlerInterface, Theme} from './customize_chrome.mojom-webui.js';
 import {CustomizeChromeApiProxy} from './customize_chrome_api_proxy.js';
 import {getCss} from './themes.css.js';
@@ -168,6 +168,12 @@ export class ThemesElement extends ThemesElementBase {
         Math.floor(
             WindowProxy.getInstance().now() -
             this.previewImageLoadStartEpoch_));
+  }
+
+  protected onPreviewImageError_() {
+    if (this.imageErrorDetectionEnabled_) {
+      recordCustomizeChromeImageError(NtpImageType.BACKGROUND_IMAGE);
+    }
   }
 
   private onCollectionChange_() {

@@ -6,7 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_SCRIPT_ITERATOR_H_
 
 #include "third_party/abseil-cpp/absl/types/variant.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/world_safe_v8_reference.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -15,8 +15,11 @@
 
 namespace blink {
 
+class ExceptionContext;
 class ExceptionState;
 class ExecutionContext;
+template <typename IDLResolvedType>
+class ScriptPromise;
 
 // This class provides a wrapper for iterating over any ES object that
 // implements either the async iterable and async iterator protocols, or the
@@ -86,14 +89,14 @@ class ExecutionContext;
 //
 //       // `on_fulfilled` fulfills to an Iterator Result, and calls
 //       // `GetNextValue()` again if the result is not done.
-//       ScriptFunction* on_fulfilled = ...;
-//       ScriptFunction* on_rejected = ...;
-//       next_promise_.Then(on_fulfilled, on_rejected);
+//       ThenCallableDerived* on_fulfilled = ...;
+//       ThenCallableDerived* on_rejected = ...;
+//       next_promise_.Then(script_State, on_fulfilled, on_rejected);
 //     }
 //
 //    private:
 //     ScriptIterator iterator_;
-//     ScriptPromiseUntyped next_promise_;
+//     ScriptPromise<IDLAny> next_promise_;
 //   };
 //
 // Sync iterable usage:

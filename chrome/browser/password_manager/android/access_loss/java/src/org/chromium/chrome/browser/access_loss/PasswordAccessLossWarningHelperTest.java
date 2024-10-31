@@ -38,7 +38,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.mockito.quality.Strictness;
@@ -79,7 +78,6 @@ public class PasswordAccessLossWarningHelperTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.openMocks(this);
         mActivity = Robolectric.buildActivity(Activity.class).create().start().resume().get();
         mActivity.setTheme(R.style.Theme_BrowserUI_DayNight);
         CustomTabIntentHelper customTabIntentHelper = (Context context, Intent intent) -> intent;
@@ -151,7 +149,7 @@ public class PasswordAccessLossWarningHelperTest {
                 mActivity.getString(R.string.pwd_access_loss_warning_update_gms_core_title));
         assertEquals(
                 model.get(SHEET_TEXT).toString(),
-                getStringWithoutLink(R.string.pwd_access_loss_warning_update_gms_core_text));
+                getStringWithoutLink(R.string.pwd_access_loss_warning_no_upm_text));
         assertEquals(
                 model.get(BUTTON_TITLE),
                 mActivity.getString(R.string.pwd_access_loss_warning_update_gms_core_button_text));

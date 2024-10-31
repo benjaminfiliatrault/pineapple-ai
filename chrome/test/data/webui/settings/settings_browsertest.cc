@@ -11,7 +11,9 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/web_ui_mocha_browser_test.h"
 #include "components/compose/buildflags.h"
+#include "components/compose/core/browser/compose_features.h"
 #include "components/content_settings/core/common/features.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/performance_manager/public/features.h"
 #include "components/permissions/features.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
@@ -25,6 +27,10 @@
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "chrome/browser/browser_features.h"
 #endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+
+#if BUILDFLAG(ENABLE_COMPOSE)
+#include "chrome/browser/compose/compose_enabling.h"
+#endif  // BUILDFLAG(ENABLE_COMPOSE)
 
 class SettingsBrowserTest : public WebUIMochaBrowserTest {
  protected:
@@ -162,7 +168,7 @@ IN_PROC_BROWSER_TEST_F(SettingsTest, EditDictionaryPage) {
 class SettingsAiPageTest : public SettingsBrowserTest {
  private:
   base::test::ScopedFeatureList scoped_feature_list_{
-      features::kAiSettingsPageRefresh};
+      optimization_guide::features::kAiSettingsPageRefresh};
 };
 
 IN_PROC_BROWSER_TEST_F(SettingsAiPageTest, ExperimentalAdvancedPage) {
@@ -176,9 +182,22 @@ IN_PROC_BROWSER_TEST_F(SettingsAiPageTest,
           "runMochaSuite('ExperimentalAdvancedPageRefreshDisabled')");
 }
 
-IN_PROC_BROWSER_TEST_F(SettingsTest, TabOrganizationSubpage) {
+IN_PROC_BROWSER_TEST_F(SettingsAiPageTest, AiInfoCard) {
+  RunTest("settings/ai_info_card_test.js", "runMochaSuite('AiInfoCard')");
+}
+
+IN_PROC_BROWSER_TEST_F(SettingsAiPageTest, TabOrganizationSubpage) {
   RunTest("settings/ai_subpage_test.js",
           "runMochaSuite('TabOrganizationSubpage')");
+}
+
+IN_PROC_BROWSER_TEST_F(SettingsAiPageTest, HistorySearchSubpage) {
+  RunTest("settings/ai_subpage_test.js",
+          "runMochaSuite('HistorySearchSubpage')");
+}
+
+IN_PROC_BROWSER_TEST_F(SettingsAiPageTest, CompareSubpage) {
+  RunTest("settings/ai_subpage_test.js", "runMochaSuite('CompareSubpage')");
 }
 
 IN_PROC_BROWSER_TEST_F(SettingsTest, ExtensionControlledIndicator) {
@@ -516,8 +535,34 @@ IN_PROC_BROWSER_TEST_F(SettingsTest, ToggleButton) {
 }
 
 #if BUILDFLAG(ENABLE_COMPOSE)
-IN_PROC_BROWSER_TEST_F(SettingsTest, OfferWritingHelpPage) {
-  RunTest("settings/offer_writing_help_page_test.js", "mocha.run()");
+class SettingsComposePageTest : public SettingsBrowserTest {
+ public:
+  SettingsComposePageTest() {
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{optimization_guide::features::
+                                  kAiSettingsPageRefresh,
+                              compose::features::kEnableComposeProactiveNudge},
+        /*disabled_features=*/{});
+  }
+
+  void SetUpOnMainThread() override {
+    SettingsBrowserTest::SetUpOnMainThread();
+    scoped_enable_compose_ = ComposeEnabling::ScopedEnableComposeForTesting();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+  ComposeEnabling::ScopedOverride scoped_enable_compose_;
+};
+
+IN_PROC_BROWSER_TEST_F(SettingsComposePageTest, ComposePage) {
+  RunTest("settings/offer_writing_help_page_test.js",
+          "runMochaSuite('ComposePage')");
+}
+
+IN_PROC_BROWSER_TEST_F(SettingsComposePageTest, ComposePageRefreshDisabled) {
+  RunTest("settings/offer_writing_help_page_test.js",
+          "runMochaSuite('ComposePageRefreshDisabled')");
 }
 #endif  // BUILDFLAG(ENABLE_COMPOSE)
 
@@ -1081,23 +1126,9 @@ IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest, RestrictedEnabled) {
           "runMochaSuite('RestrictedEnabled')");
 }
 
-IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest,
-                       TopicsSubpageWithProactiveTopicsBlockingDisabled) {
+IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest, TopicsSubpage) {
   RunTest("settings/privacy_sandbox_page_test.js",
-          "runMochaSuite('TopicsSubpageWithProactiveTopicsBlockingDisabled')");
-}
-
-IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest,
-                       TopicsSubpageEmptyWithProactiveTopicsBlockingDisabled) {
-  RunTest(
-      "settings/privacy_sandbox_page_test.js",
-      "runMochaSuite('TopicsSubpageEmptyWithProactiveTopicsBlockingDisabled')");
-}
-
-IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest,
-                       FledgeSubpageWithProactiveTopicsBlockingDisabled) {
-  RunTest("settings/privacy_sandbox_page_test.js",
-          "runMochaSuite('FledgeSubpageWithProactiveTopicsBlockingDisabled')");
+          "runMochaSuite('TopicsSubpage')");
 }
 
 IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest, FledgeSubpageEmpty) {
@@ -1116,35 +1147,17 @@ IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest, AdMeasurementSubpage) {
           "runMochaSuite('AdMeasurementSubpage')");
 }
 
-class ProactiveTopicsBlockingTest : public SettingsPrivacySandboxPageTest {
- protected:
-  ProactiveTopicsBlockingTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        privacy_sandbox::kPrivacySandboxProactiveTopicsBlocking);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(ProactiveTopicsBlockingTest,
-                       TopicsSubpageWithProactiveTopicsBlockingEnabled) {
-  RunTest("settings/privacy_sandbox_page_test.js",
-          "runMochaSuite('TopicsSubpageWithProactiveTopicsBlockingEnabled')");
-}
-
-IN_PROC_BROWSER_TEST_F(ProactiveTopicsBlockingTest, ManageTopics) {
+IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest, ManageTopics) {
   RunTest("settings/privacy_sandbox_page_test.js",
           "runMochaSuite('ManageTopics')");
 }
 
-IN_PROC_BROWSER_TEST_F(ProactiveTopicsBlockingTest,
-                       FledgeSubpageWithProactiveTopicsBlockingEnabled) {
+IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest, FledgeSubpage) {
   RunTest("settings/privacy_sandbox_page_test.js",
-          "runMochaSuite('FledgeSubpageWithProactiveTopicsBlockingEnabled')");
+          "runMochaSuite('FledgeSubpage')");
 }
 
-IN_PROC_BROWSER_TEST_F(ProactiveTopicsBlockingTest,
+IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest,
                        ManageTopicsAndAdTopicsPageState) {
   RunTest("settings/privacy_sandbox_page_test.js",
           "runMochaSuite('ManageTopicsAndAdTopicsPageState')");
@@ -1261,6 +1274,8 @@ class SettingsSecurityPageTest : public SettingsBrowserTest {
     scoped_feature_list_.InitWithFeatures(
         {
             features::kEnableCertManagementUIV2,
+            safe_browsing::kEsbAiStringUpdate,
+            safe_browsing::kPasswordLeakToggleMove,
         },
         {});
   }

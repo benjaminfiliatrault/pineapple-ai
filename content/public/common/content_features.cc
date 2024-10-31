@@ -191,27 +191,6 @@ BASE_FEATURE(kCapturedSurfaceControlStickyPermissions,
              "CapturedSurfaceControlStickyPermissions",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// This serves as an overall kill switch to kill CdmStorageDatabase. If
-// disabled, no operations will be routed through the CdmStorage* path, even in
-// the migration code that lives in MediaLicense* code path.
-// This feature is enabled as default alongside with
-// kCdmStorageDatabaseMigration enabled by default as to allow for data transfer
-// from the MediaLicenseDatabase to CdmStorageDatabase to occur. Refer to
-// go/cdm-storage-migration-details for more details.
-BASE_FEATURE(kCdmStorageDatabase,
-             "CdmStorageDatabase",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// This guards between using the MediaLicense* code path and the CdmStorage*
-// code path for storing Cdm data. This will be enabled by default as we do not
-// want the CdmStorageDatabase to be used solely.
-// Later when the migration is finished, we will remove this flag so that
-// kCdmStorageDatabase serves as the only flag. Refer to
-// go/cdm-storage-migration-details for more details.
-BASE_FEATURE(kCdmStorageDatabaseMigration,
-             "CdmStorageDatabaseMigration",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Clear the window.name property for the top-level cross-site navigations that
 // swap BrowsingContextGroups(BrowsingInstances).
 BASE_FEATURE(kClearCrossSiteCrossBrowsingContextGroupWindowName,
@@ -492,6 +471,13 @@ BASE_FEATURE(kFencedFramesEnforceFocus,
              "FencedFramesEnforceFocus",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Whether a memory pressure signal in a renderer should be forwarded to Blink
+// isolates. Forwarding the signal triggers a GC (critical) or starts
+// incremental marking (moderate), see `v8::Heap::CheckMemoryPressure`.
+BASE_FEATURE(kForwardMemoryPressureToBlinkIsolates,
+             "ForwardMemoryPressureToBlinkIsolates",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Enables the Digital Credential API.
 BASE_FEATURE(kWebIdentityDigitalCredentials,
              "WebIdentityDigitalCredentials",
@@ -514,6 +500,12 @@ BASE_FEATURE(kNetworkQualityEstimatorWebHoldback,
 // quotes and escaped backslashed should be added to the Sec-CH-UA header
 // (activated by kUserAgentClientHint)
 BASE_FEATURE(kGreaseUACH, "GreaseUACH", base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Whether GuestViews (see components/guest_view/README.md) are implemented
+// using MPArch inner pages. See https://crbug.com/40202416
+BASE_FEATURE(kGuestViewMPArch,
+             "GuestViewMPArch",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // See crbug.com/359623664
 BASE_FEATURE(kIdbPrioritizeForegroundClients,
@@ -577,11 +569,6 @@ BASE_FEATURE(kIsolateOrigins,
              "IsolateOrigins",
              base::FEATURE_DISABLED_BY_DEFAULT);
 const char kIsolateOriginsFieldTrialParamName[] = "OriginsList";
-
-// Enables experimental JavaScript shared memory features.
-BASE_FEATURE(kJavaScriptExperimentalSharedMemory,
-             "JavaScriptExperimentalSharedMemory",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable lazy initialization of the media controls.
 BASE_FEATURE(kLazyInitializeMediaControls,
@@ -938,6 +925,14 @@ BASE_FEATURE(kServiceWorkerStaticRouter,
              "ServiceWorkerStaticRouter",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// crbug.com/374606637: When this is enabled, race-network-and-fetch-hander will
+// prioritize the response processing for the network request over the
+// processing for the fetch handler.
+BASE_FEATURE(
+    kServiceWorkerStaticRouterRaceNetworkRequestPerformanceImprovement,
+    "ServiceWorkerStaticRouterRaceNetworkRequestPerformanceImprovement",
+    base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Run video capture service in the Browser process as opposed to a dedicated
 // utility process.
 // Camera requests from Lacros are forwarded to Ash via a Mojo connection
@@ -1078,7 +1073,7 @@ const base::FeatureParam<SkiaFontServiceTypefaceType>
 // initialize COM.
 BASE_FEATURE(kUtilityWithUiPumpInitializesCom,
              "UtilityWithUiPumpInitializesCom",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
 
 // When enabled, OOPIFs will not try to reuse compatible processes from

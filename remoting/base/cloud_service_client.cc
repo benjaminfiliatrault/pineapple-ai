@@ -14,9 +14,11 @@
 #include "remoting/base/service_urls.h"
 #include "remoting/base/version.h"
 #include "remoting/proto/google/internal/remoting/cloud/v1alpha/empty.pb.h"
+#include "remoting/proto/google/internal/remoting/cloud/v1alpha/network_traversal_service.pb.h"
 #include "remoting/proto/google/internal/remoting/cloud/v1alpha/remote_access_host.pb.h"
 #include "remoting/proto/google/internal/remoting/cloud/v1alpha/remote_access_service.pb.h"
 #include "remoting/proto/google/internal/remoting/cloud/v1alpha/session_authz_service.pb.h"
+#include "remoting/proto/google/remoting/cloud/v1/provisioning_service.pb.h"
 #include "remoting/proto/remoting/v1/cloud_messages.pb.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -229,14 +231,56 @@ constexpr net::NetworkTrafficAnnotationTag
             "Not implemented."
         })");
 
+constexpr net::NetworkTrafficAnnotationTag kGenerateIceConfigTrafficAnnotation =
+    net::DefineNetworkTrafficAnnotation("remoting_cloud_generate_ice_config",
+                                        R"(
+        semantics {
+          sender: "Chrome Remote Desktop"
+          description:
+            "Request used by Chrome Remote Desktop to fetch an ICE "
+            "(Interactive Connectivity Establishment) configuration which "
+            "contains a list of STUN (Session Traversal Utilities for NAT) & "
+            "TURN (Traversal Using Relay NAT) servers and TURN credentials. "
+            "Please see https://tools.ietf.org/html/rfc5245 for more details."
+          trigger:
+            "When a user connects to a remote access host instance running on "
+            "GCE which has been configured as a 'Cloud' host."
+          user_data {
+            type: OTHER
+          }
+          data:
+            "An access token for the device robot account associated with this "
+            "machine."
+          destination: GOOGLE_OWNED_SERVICE
+          internal {
+            contacts { owners: "//remoting/OWNERS" }
+          }
+          last_reviewed: "2024-10-08"
+        }
+        policy {
+          cookies_allowed: NO
+          setting:
+            "This request cannot be stopped in settings, but will not be sent "
+            "if the Chrome Remote Desktop host is not registered as a Cloud "
+            "host running on GCE."
+          policy_exception_justification:
+            "Not implemented."
+        })");
+
+// Legacy using statements.
 using LegacyProvisionGceInstanceRequest =
     remoting::apis::v1::ProvisionGceInstanceRequest;
 
+// Remoting Cloud API using statements.
+using ProvisionGceInstanceRequest =
+    google::remoting::cloud::v1::ProvisionGceInstanceRequest;
+
+// Remoting Cloud Private API using statements.
 using Empty = google::internal::remoting::cloud::v1alpha::Empty;
 using GenerateHostTokenRequest =
     google::internal::remoting::cloud::v1alpha::GenerateHostTokenRequest;
-using ProvisionGceInstanceRequest =
-    google::internal::remoting::cloud::v1alpha::ProvisionGceInstanceRequest;
+using GenerateIceConfigRequest =
+    google::internal::remoting::cloud::v1alpha::GenerateIceConfigRequest;
 using ReauthorizeHostRequest =
     google::internal::remoting::cloud::v1alpha::ReauthorizeHostRequest;
 using RemoteAccessHost =
@@ -262,12 +306,19 @@ CloudServiceClient::CloudServiceClient(
 
 CloudServiceClient::CloudServiceClient(
     const std::string& api_key,
-    OAuthTokenGetter* oauth_token_getter,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
     : api_key_(api_key),
-      http_client_(ServiceUrls::GetInstance()->remoting_cloud_endpoint(),
-                   oauth_token_getter,
+      http_client_(ServiceUrls::GetInstance()->remoting_cloud_public_endpoint(),
+                   /*oauth_token_getter=*/nullptr,
                    url_loader_factory) {}
+
+CloudServiceClient::CloudServiceClient(
+    OAuthTokenGetter* oauth_token_getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
+    : http_client_(
+          ServiceUrls::GetInstance()->remoting_cloud_private_endpoint(),
+          oauth_token_getter,
+          url_loader_factory) {}
 
 CloudServiceClient::~CloudServiceClient() = default;
 
@@ -300,7 +351,7 @@ void CloudServiceClient::ProvisionGceInstance(
     const std::string& public_key,
     const std::optional<std::string>& existing_directory_id,
     ProvisionGceInstanceCallback callback) {
-  constexpr char path[] = "/v1alpha/access:provisionGceInstance";
+  constexpr char path[] = "/v1/provisioning:provisionGceInstance";
 
   auto request = std::make_unique<ProvisionGceInstanceRequest>();
   request->set_owner_email(owner_email);
@@ -345,12 +396,15 @@ void CloudServiceClient::UpdateRemoteAccessHost(
     host->set_version(*host_version);
   }
   if (signaling_id.has_value()) {
-    auto parts = base::SplitStringOnce(*signaling_id, kFtlResourceSeparator);
-    if (parts) {
-      host->mutable_tachyon_account_info()->set_account_id(
-          std::string(parts->first));
+    auto parts = base::SplitStringUsingSubstr(
+        *signaling_id, kFtlResourceSeparator, base::TRIM_WHITESPACE,
+        base::SPLIT_WANT_ALL);
+    if (parts.size() == 2) {
+      host->mutable_tachyon_account_info()->set_account_id(std::move(parts[0]));
       host->mutable_tachyon_account_info()->set_registration_id(
-          std::string(parts->second));
+          std::move(parts[1]));
+    } else {
+      LOG(WARNING) << "Invalid signaling_id provided: " << *signaling_id;
     }
   }
   if (offline_reason.has_value()) {
@@ -372,6 +426,15 @@ void CloudServiceClient::GenerateHostToken(GenerateHostTokenCallback callback) {
   ExecuteRequest(kGenerateHostTokenTrafficAnnotation, path, /*api_key=*/"",
                  net::HttpRequestHeaders::kPostMethod,
                  std::make_unique<GenerateHostTokenRequest>(),
+                 std::move(callback));
+}
+
+void CloudServiceClient::GenerateIceConfig(GenerateIceConfigCallback callback) {
+  constexpr char path[] = "/v1alpha/networkTraversal:generateIceConfig";
+
+  ExecuteRequest(kGenerateIceConfigTrafficAnnotation, path, /*api_key=*/"",
+                 net::HttpRequestHeaders::kPostMethod,
+                 std::make_unique<GenerateIceConfigRequest>(),
                  std::move(callback));
 }
 

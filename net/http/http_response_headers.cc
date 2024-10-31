@@ -24,6 +24,7 @@
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
@@ -686,24 +687,22 @@ void HttpResponseHeaders::Parse(const std::string& raw_input) {
   DCHECK_EQ('\0', raw_headers_[raw_headers_.size() - 1]);
 }
 
-bool HttpResponseHeaders::GetNormalizedHeader(std::string_view name,
-                                              std::string* value) const {
+std::optional<std::string> HttpResponseHeaders::GetNormalizedHeader(
+    std::string_view name) const {
   // If you hit this assertion, please use EnumerateHeader instead!
   DCHECK(!HttpUtil::IsNonCoalescingHeader(name));
 
-  value->clear();
-
-  bool found = false;
-  size_t i = 0;
-  while (i < parsed_.size()) {
+  std::optional<std::string> value;
+  for (size_t i = 0; i < parsed_.size();) {
     i = FindHeader(i, name);
     if (i == std::string::npos)
       break;
 
-    if (found)
+    if (value) {
       value->append(", ");
-
-    found = true;
+    } else {
+      value.emplace();
+    }
 
     std::string::const_iterator value_begin = parsed_[i].value_begin;
     std::string::const_iterator value_end = parsed_[i].value_end;
@@ -712,7 +711,7 @@ bool HttpResponseHeaders::GetNormalizedHeader(std::string_view name,
     value->append(value_begin, value_end);
   }
 
-  return found;
+  return value;
 }
 
 std::string HttpResponseHeaders::GetStatusLine() const {
@@ -986,9 +985,9 @@ void HttpResponseHeaders::AddHeader(std::string::const_iterator name_begin,
       // TODO(crbug.com/369533090): Converting from a string_view back to a
       // string iterator is awkward. Switch this class to using string_views.
       std::string::const_iterator sub_value_begin =
-          values_begin + (it.value_piece().data() - values.data());
+          values_begin + (it.value().data() - values.data());
       std::string::const_iterator sub_value_end =
-          sub_value_begin + it.value_piece().length();
+          sub_value_begin + it.value().length();
 
       AddToParsed(name_begin, name_end, sub_value_begin, sub_value_end);
       // clobber these so that subsequent values are treated as continuations
@@ -1017,44 +1016,39 @@ void HttpResponseHeaders::AddNonCacheableHeaders(HeaderSet* result) const {
   const char kPrefix[] = "no-cache=\"";
   const size_t kPrefixLen = sizeof(kPrefix) - 1;
 
-  std::string value;
+  std::optional<std::string_view> value;
   size_t iter = 0;
-  while (EnumerateHeader(&iter, kCacheControl, &value)) {
+  while ((value = EnumerateHeader(&iter, kCacheControl))) {
     // If the value is smaller than the prefix and a terminal quote, skip
     // it.
-    if (value.size() <= kPrefixLen ||
-        value.compare(0, kPrefixLen, kPrefix) != 0) {
+    if (value->size() <= kPrefixLen ||
+        value->compare(0, kPrefixLen, kPrefix) != 0) {
       continue;
     }
     // if it doesn't end with a quote, then treat as malformed
-    if (value[value.size() - 1] != '\"')
+    if (value->back() != '\"') {
       continue;
+    }
 
     // process the value as a comma-separated list of items. Each
     // item can be wrapped by linear white space.
-    std::string::const_iterator item = value.begin() + kPrefixLen;
-    std::string::const_iterator end = value.end() - 1;
-    while (item != end) {
-      // Find the comma to compute the length of the current item,
-      // and the position of the next one.
-      std::string::const_iterator item_next = std::find(item, end, ',');
-      std::string::const_iterator item_end = end;
-      if (item_next != end) {
-        // Skip over comma for next position.
-        item_end = item_next;
-        item_next++;
-      }
-      // trim off leading and trailing whitespace in this item.
-      HttpUtil::TrimLWS(&item, &item_end);
 
-      // assuming the header is not empty, lowercase and insert into set
-      if (item_end > item) {
-        result->insert(
-            base::ToLowerASCII(std::string_view(&*item, item_end - item)));
-      }
+    // Remove the prefix and close quote.
+    std::string_view remaining =
+        value->substr(kPrefixLen, value->size() - kPrefixLen - 1);
+    // Use base::KEEP_WHITESPACE despite trimming each item so can use the HTTP
+    // definition of whitespace.
+    std::vector<std::string_view> items = base::SplitStringPiece(
+        remaining, /*separators=*/",", base::KEEP_WHITESPACE,
+        base::SPLIT_WANT_NONEMPTY);
+    for (std::string_view item : items) {
+      // Trim off leading and trailing whitespace in this item.
+      item = HttpUtil::TrimLWS(item);
 
-      // Continue to next item.
-      item = item_next;
+      // If the header is not empty, lowercase and insert into set.
+      if (!item.empty()) {
+        result->insert(base::ToLowerASCII(item));
+      }
     }
   }
 }
@@ -1088,15 +1082,13 @@ void HttpResponseHeaders::GetMimeTypeAndCharset(std::string* mime_type,
   mime_type->clear();
   charset->clear();
 
-  std::string name = "content-type";
-  std::string value;
-
+  std::optional<std::string_view> value;
   bool had_charset = false;
-
   size_t iter = 0;
-  while (EnumerateHeader(&iter, name, &value))
-    HttpUtil::ParseContentType(value, mime_type, charset, &had_charset,
-                               nullptr);
+  while ((value = EnumerateHeader(&iter, "content-type"))) {
+    HttpUtil::ParseContentType(*value, mime_type, charset, &had_charset,
+                               /*boundary=*/nullptr);
+  }
 }
 
 bool HttpResponseHeaders::GetMimeType(std::string* mime_type) const {
@@ -1144,31 +1136,28 @@ bool HttpResponseHeaders::IsRedirect(std::string* location) const {
 
 bool HttpResponseHeaders::HasStorageAccessRetryHeader(
     const std::string* expected_origin) const {
-  size_t iter = 0;
-  std::optional<std::string_view> header_value;
-  while (
-      (header_value = EnumerateHeader(&iter, kActivateStorageAccessHeader))) {
-    const std::optional<structured_headers::ParameterizedItem> item =
-        structured_headers::ParseItem(*header_value);
-    if (!item || !item->item.is_token() || item->item.GetString() != "retry") {
-      continue;
-    }
-    if (base::ranges::any_of(
-            item->params, [&](const auto& key_and_value) -> bool {
-              const auto [key, value] = key_and_value;
-              if (key != "allowed-origin") {
-                return false;
-              }
-              if (value.is_token() && value.GetString() == "*") {
-                return true;
-              }
-              return expected_origin && value.is_string() &&
-                     value.GetString() == *expected_origin;
-            })) {
-      return true;
-    }
+  std::optional<std::string> header_value =
+      GetNormalizedHeader(kActivateStorageAccessHeader);
+  if (!header_value) {
+    return false;
   }
-  return false;
+  const std::optional<structured_headers::ParameterizedItem> item =
+      structured_headers::ParseItem(*header_value);
+  if (!item || !item->item.is_token() || item->item.GetString() != "retry") {
+    return false;
+  }
+  return base::ranges::any_of(
+      item->params, [&](const auto& key_and_value) -> bool {
+        const auto [key, value] = key_and_value;
+        if (key != "allowed-origin") {
+          return false;
+        }
+        if (value.is_token() && value.GetString() == "*") {
+          return true;
+        }
+        return expected_origin && value.is_string() &&
+               value.GetString() == *expected_origin;
+      });
 }
 
 // static
@@ -1524,23 +1513,16 @@ bool HttpResponseHeaders::IsKeepAlive() const {
 }
 
 bool HttpResponseHeaders::HasStrongValidators() const {
-  std::string etag_header;
-  EnumerateHeader(nullptr, "etag", &etag_header);
-  std::string last_modified_header;
-  EnumerateHeader(nullptr, "Last-Modified", &last_modified_header);
-  std::string date_header;
-  EnumerateHeader(nullptr, "Date", &date_header);
-  return HttpUtil::HasStrongValidators(GetHttpVersion(), etag_header,
-                                       last_modified_header, date_header);
+  return HttpUtil::HasStrongValidators(
+      GetHttpVersion(), EnumerateHeader(nullptr, "etag"),
+      EnumerateHeader(nullptr, "Last-Modified"),
+      EnumerateHeader(nullptr, "Date"));
 }
 
 bool HttpResponseHeaders::HasValidators() const {
-  std::string etag_header;
-  EnumerateHeader(nullptr, "etag", &etag_header);
-  std::string last_modified_header;
-  EnumerateHeader(nullptr, "Last-Modified", &last_modified_header);
-  return HttpUtil::HasValidators(GetHttpVersion(), etag_header,
-                                 last_modified_header);
+  return HttpUtil::HasValidators(GetHttpVersion(),
+                                 EnumerateHeader(nullptr, "etag"),
+                                 EnumerateHeader(nullptr, "Last-Modified"));
 }
 
 // From RFC 2616:
@@ -1552,20 +1534,21 @@ int64_t HttpResponseHeaders::GetContentLength() const {
 int64_t HttpResponseHeaders::GetInt64HeaderValue(
     const std::string& header) const {
   size_t iter = 0;
-  std::string content_length_val;
-  if (!EnumerateHeader(&iter, header, &content_length_val))
+  std::optional<std::string_view> content_length =
+      EnumerateHeader(&iter, header);
+  if (!content_length || content_length->empty()) {
     return -1;
+  }
 
-  if (content_length_val.empty())
+  if ((*content_length)[0] == '+') {
     return -1;
-
-  if (content_length_val[0] == '+')
-    return -1;
+  }
 
   int64_t result;
-  bool ok = base::StringToInt64(content_length_val, &result);
-  if (!ok || result < 0)
+  bool ok = base::StringToInt64(*content_length, &result);
+  if (!ok || result < 0) {
     return -1;
+  }
 
   return result;
 }
@@ -1575,15 +1558,15 @@ bool HttpResponseHeaders::GetContentRangeFor206(
     int64_t* last_byte_position,
     int64_t* instance_length) const {
   size_t iter = 0;
-  std::string content_range_spec;
-  if (!EnumerateHeader(&iter, kContentRange, &content_range_spec)) {
+  std::optional<std::string_view> content_range =
+      EnumerateHeader(&iter, kContentRange);
+  if (!content_range) {
     *first_byte_position = *last_byte_position = *instance_length = -1;
     return false;
   }
 
   return HttpUtil::ParseContentRangeHeaderFor206(
-      content_range_spec, first_byte_position, last_byte_position,
-      instance_length);
+      *content_range, first_byte_position, last_byte_position, instance_length);
 }
 
 base::Value::Dict HttpResponseHeaders::NetLogParams(

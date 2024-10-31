@@ -193,6 +193,20 @@ class GraphBuilderTflite final {
                                           int32_t rhs_tensor_index,
                                           int32_t output_tensor_index);
 
+  // Serialize a sub graph (min appending max operation) for clamp.
+  template <typename DataType>
+  OperatorOffset SerializeSubGraphMaxMin(const TensorInfo& input_tensor_info,
+                                         int32_t output_tensor_index,
+                                         base::span<const DataType> min_values,
+                                         base::span<const DataType> max_values);
+
+  // Serialize gather_nd indices tensor.
+  template <typename DataType>
+  base::expected<int32_t, std::string> SerializeGatherNDIndices(
+      const TensorInfo& indices_tensor_info,
+      const TensorInfo& input_tensor_info);
+  int32_t CastGatherIndices(const TensorInfo& indices_tensor_info);
+
   // This function is called by `SerializeConcat` to serialize WebNN
   // concat operator or used to emulate WebNN operations.
   OperatorOffset SerializeConcatOperation(
@@ -286,9 +300,7 @@ class GraphBuilderTflite final {
 
   // Insert a tempary transpose operation for input operand with calling
   // `SerializeTransposeOperation`.
-  int32_t InsertTransposeOperation(base::span<const int32_t> input_dimensions,
-                                   ::tflite::TensorType input_tensor_type,
-                                   int32_t input_tensor_index,
+  int32_t InsertTransposeOperation(const TensorInfo& input_tensor_info,
                                    base::span<const uint32_t> permutation);
 
   // Serialize a sub graph (pow appending mul operation) for erf operation.
@@ -472,6 +484,8 @@ class GraphBuilderTflite final {
       const mojom::Conv2d& conv2d);
   base::expected<OperatorOffset, std::string> SerializeConcat(
       const mojom::Concat& concat);
+  base::expected<OperatorOffset, std::string> SerializeCumulativeSum(
+      const mojom::CumulativeSum& cumulative_sum);
   base::expected<OperatorOffset, std::string> SerializeElementWiseBinary(
       const mojom::ElementWiseBinary& op);
   base::expected<OperatorOffset, std::string> SerializeElementWiseUnary(
@@ -485,6 +499,8 @@ class GraphBuilderTflite final {
       const mojom::Expand& expand);
   base::expected<OperatorOffset, std::string> SerializeGather(
       const mojom::Gather& gather);
+  base::expected<OperatorOffset, std::string> SerializeGatherND(
+      const mojom::GatherND& gather_nd);
   base::expected<OperatorOffset, std::string> SerializeGelu(
       const mojom::Gelu& gelu);
   base::expected<OperatorOffset, std::string> SerializeGemm(

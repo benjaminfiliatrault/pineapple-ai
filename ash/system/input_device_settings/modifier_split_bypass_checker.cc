@@ -5,7 +5,6 @@
 #include "ash/system/input_device_settings/modifier_split_bypass_checker.h"
 
 #include "ash/constants/ash_features.h"
-#include "ash/picker/picker_controller.h"
 #include "ash/shell.h"
 #include "ash/system/input_device_settings/input_device_settings_controller_impl.h"
 #include "ui/events/ash/keyboard_capability.h"
@@ -58,9 +57,6 @@ void ModifierSplitBypassChecker::ForceEnableFeatures() {
   Shell::Get()
       ->input_device_settings_controller()
       ->ForceKeyboardSettingRefreshWhenFeatureEnabled();
-  if (features::IsPickerUpdateEnabled()) {
-    Shell::Get()->picker_controller()->DisableFeatureKeyCheck();
-  }
 
   // Reset observing as we are no longer interested in seeing when new keyboards
   // connect.

@@ -67,8 +67,6 @@ void RegisterBrowserPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kOverscrollHistoryNavigationEnabled,
                                 true);
 #endif
-  registry->RegisterIntegerPref(prefs::kToolbarAvatarLabelSettings, 0);
-
   registry->RegisterTimePref(prefs::kDefaultBrowserLastDeclinedTime,
                              base::Time());
   registry->RegisterIntegerPref(prefs::kDefaultBrowserDeclinedCount, 0);
@@ -191,6 +189,7 @@ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
                                std::string());
   registry->RegisterStringPref(prefs::kEnterpriseCustomLabelForProfile,
                                std::string());
-  registry->RegisterIntegerPref(prefs::kProfileLabelPreset, 0);
+  registry->RegisterIntegerPref(prefs::kEnterpriseProfileBadgeToolbarSettings,
+                                0);
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 }

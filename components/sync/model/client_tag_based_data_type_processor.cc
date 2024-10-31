@@ -1291,13 +1291,12 @@ void ClientTagBasedDataTypeProcessor::HasUnsyncedData(
 
 void ClientTagBasedDataTypeProcessor::GetAllNodesForDebugging(
     AllNodesCallback callback) {
-  if (!bridge_) {
-    return;
-  }
+  CHECK(bridge_);
+  CHECK(model_ready_to_sync_);
 
   std::unique_ptr<DataBatch> batch = bridge_->GetAllDataForDebugging();
   if (!batch) {
-    std::move(callback).Run(type_, base::Value::List());
+    std::move(callback).Run(base::Value::List());
     return;
   }
 
@@ -1348,7 +1347,7 @@ void ClientTagBasedDataTypeProcessor::GetAllNodesForDebugging(
                       .Set("NON_UNIQUE_NAME", type_string);
   all_nodes.Append(std::move(rootnode));
 
-  std::move(callback).Run(type_, std::move(all_nodes));
+  std::move(callback).Run(std::move(all_nodes));
 }
 
 bool ClientTagBasedDataTypeProcessor::ClearPersistedMetadataIfInvalid(

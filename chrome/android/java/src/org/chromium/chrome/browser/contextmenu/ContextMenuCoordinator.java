@@ -23,6 +23,7 @@ import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AlertDialog;
 
 import org.chromium.base.Callback;
+import org.chromium.base.CallbackUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -37,7 +38,6 @@ import org.chromium.content_public.browser.LoadCommittedDetails;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.content_public.common.ContentFeatures;
-import org.chromium.ui.base.MenuSourceType;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.dragdrop.DragStateTracker;
@@ -46,6 +46,7 @@ import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.ModelListAdapter;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.mojom.MenuSourceType;
 import org.chromium.ui.widget.AnchoredPopupWindow;
 
 import java.lang.annotation.Retention;
@@ -138,7 +139,7 @@ public class ContextMenuCoordinator implements ContextMenuUi {
                         && ContextMenuUtils.usePopupContextMenuForContext(activity);
         final boolean isPopup =
                 isDragDropEnabled
-                        || params.getSourceType() == MenuSourceType.MENU_SOURCE_MOUSE
+                        || params.getSourceType() == MenuSourceType.MOUSE
                         || params.getOpenedFromHighlight();
         final float density = activity.getResources().getDisplayMetrics().density;
         final float touchPointXPx = params.getTriggeringTouchXDp() * density;
@@ -491,29 +492,26 @@ public class ContextMenuCoordinator implements ContextMenuUi {
     void simulateShoppyImageClassificationForTesting() {
         // Don't need to initialize controller because that should be triggered by
         // forcing feature flags.
-        mChipController.setFakeLensQueryResultForTesting(); // IN-TEST
         ChipRenderParams chipRenderParamsForTesting = new ChipRenderParams();
         chipRenderParamsForTesting.titleResourceId =
                 R.string.contextmenu_shop_image_with_google_lens;
-        chipRenderParamsForTesting.onClickCallback = () -> {};
+        chipRenderParamsForTesting.onClickCallback = CallbackUtils.emptyRunnable();
         mChipController.showChip(chipRenderParamsForTesting);
     }
 
     void simulateTranslateImageClassificationForTesting() {
         // Don't need to initialize controller because that should be triggered by
         // forcing feature flags.
-        mChipController.setFakeLensQueryResultForTesting(); // IN-TEST
         ChipRenderParams chipRenderParamsForTesting = new ChipRenderParams();
         chipRenderParamsForTesting.titleResourceId =
                 R.string.contextmenu_translate_image_with_google_lens;
-        chipRenderParamsForTesting.onClickCallback = () -> {};
+        chipRenderParamsForTesting.onClickCallback = CallbackUtils.emptyRunnable();
         mChipController.showChip(chipRenderParamsForTesting);
     }
 
     ChipRenderParams simulateImageClassificationForTesting() {
         // Don't need to initialize controller because that should be triggered by
         // forcing feature flags.
-        mChipController.setFakeLensQueryResultForTesting(); // IN-TEST
         ChipRenderParams chipRenderParamsForTesting = new ChipRenderParams();
         return chipRenderParamsForTesting;
     }

@@ -1,0 +1,56 @@
+# Copyright 2024 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+  import("//third_party/jni_zero/jni_zero.gni")
+}
+
+source_set("public") {
+  sources = [
+    "collaboration_controller_delegate.h",
+    "collaboration_service.h",
+    "service_status.cc",
+    "service_status.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/data_sharing/public:public",
+    "//components/keyed_service/core",
+    "//components/saved_tab_groups/public",
+    "//url",
+  ]
+}
+
+if (is_android) {
+  android_library("java") {
+    sources = [
+      "android/java/src/org/chromium/components/collaboration/CollaborationService.java",
+      "android/java/src/org/chromium/components/collaboration/ServiceStatus.java",
+    ]
+
+    deps = [
+      "//components/data_sharing/public:public_java",
+      "//third_party/androidx:androidx_annotation_annotation_java",
+      "//third_party/jni_zero:jni_zero_java",
+    ]
+
+    srcjar_deps = [ ":enums_java" ]
+  }
+
+  java_cpp_enum("enums_java") {
+    sources = [ "service_status.h" ]
+  }
+
+  generate_jni("jni_headers") {
+    visibility = [
+      ":*",
+      "//components/collaboration/internal",
+    ]
+
+    sources = [ "android/java/src/org/chromium/components/collaboration/ServiceStatus.java" ]
+  }
+}

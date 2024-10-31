@@ -87,6 +87,9 @@ inline constexpr char kHMRConsentStatus[] = "settings.hmr.consent_status";
 inline constexpr char kHMRConsentWindowDismissCount[] =
     "settings.hmr.consent_window_dismiss_count";
 
+// A boolean pref of whether Lobster is enabled.
+inline constexpr char kLobsterEnabled[] = "settings.lobster_enabled";
+
 // A boolean pref used by an admin policy to enable/disable particular
 // features on the physical keyboard. See the policy at
 // PhysicalKeyboardAutocorrect.yml.
@@ -544,12 +547,12 @@ inline constexpr char kAccessibilityChromeVoxVirtualBrailleRows[] =
 // A string pref which holds the current voice name for ChromeVox.
 inline constexpr char kAccessibilityChromeVoxVoiceName[] =
     "settings.a11y.chromevox.voice_name";
-// A boolean pref which determines whether the disable trackpad feature is
+// A boolean pref which determines whether the disable touchpad feature is
 // enabled.
 inline constexpr char kAccessibilityDisableTrackpadEnabled[] =
     "settings.a11y.disable_trackpad_enabled";
 // An integer pref which determines the mode of the disabled internal
-// trackpad. Values are from the ash::kDisableTrackpadMode enum.
+// trackpad. Values are from the ash::kDisableTouchpadMode enum.
 inline constexpr char kAccessibilityDisableTrackpadMode[] =
     "settings.a11y.disable_trackpad_mode";
 // A boolean pref which determines whether high contrast is enabled.
@@ -807,6 +810,10 @@ inline constexpr char kAccessibilitySelectToSpeakWordHighlight[] =
 inline constexpr char kAccessibilityReducedAnimationsEnabled[] =
     "settings.a11y.reduced_animations.enabled";
 
+// A boolean pref which determines whether overlay scrollbars is enabled.
+inline constexpr char kAccessibilityOverlayScrollbarEnabled[] =
+    "settings.a11y.overlay_scrollbar.enabled";
+
 // A boolean pref which determines whether FaceGaze is enabled.
 inline constexpr char kAccessibilityFaceGazeEnabled[] =
     "settings.a11y.face_gaze.enabled";
@@ -822,10 +829,6 @@ inline constexpr char kAccessibilityFaceGazeCursorSpeedLeft[] =
 // An integer pref which scales the cursor speed when moving right.
 inline constexpr char kAccessibilityFaceGazeCursorSpeedRight[] =
     "settings.a11y.face_gaze.cursor_speed_right";
-// An integer pref which determines how much FaceGaze should smooth cursor
-// movements.
-inline constexpr char kAccessibilityFaceGazeCursorSmoothing[] =
-    "settings.a11y.face_gaze.cursor_smoothing";
 // A boolean pref which determines whether FaceGaze should use cursor
 // acceleration, which makes the cursor move faster when the tracked point moves
 // quickly.
@@ -1478,15 +1481,6 @@ inline constexpr char kWallpaperTimeOfDayStatus[] =
     "ash.wallpaper_time_of_day.status";
 inline constexpr char kWallpaperTimeOfDayScheduleType[] =
     "ash.wallpaper_time_of_day.schedule_type";
-
-// Integer pref that tracks whether user SeaPen images have been moved to
-// cryptohome. SeaPen initially stored images in the global wallpaper directory,
-// but now only stores a copy of the active (currently set as wallpaper) image
-// in global wallpaper directory. All other SeaPen images are in cryptohome so
-// that they are encrypted upon logout.
-// @see SeaPenWallpaperManager::MigrationStatus enum.
-inline constexpr char kWallpaperSeaPenMigrationStatus[] =
-    "ash.wallpaper.sea_pen.migration_status";
 
 // Boolean pref indicating whether a user has enabled the bluetooth adapter.
 inline constexpr char kUserBluetoothAdapterEnabled[] =
@@ -2175,6 +2169,9 @@ inline constexpr char kAshLoginSessionStartedIsFirstSession[] =
 inline constexpr char kInputForceRespectUiGainsEnabled[] =
     "ash.input_force_respect_ui_gains_enabled";
 
+// A boolean pref that controls whether spatial audio is enabled.
+inline constexpr char kSpatialAudioEnabled[] = "ash.spatial_audio_enabled";
+
 // An integer pref that tracks how many times (3) we'll show the user a
 // notification when an incoming event would have been remapped to a right
 // click but either the user's setting is inconsistent with the matched
@@ -2278,6 +2275,11 @@ inline constexpr char kFocusModeYTMDisplayOAuthConsent[] =
 // a 3 months free trial for YouTube Music.
 inline constexpr char kFocusModeYTMDisplayFreeTrial[] =
     "ash.focus_mode.youtube_music.free_trial";
+
+// A string pref holding the value of the demo account obfuscated gaia id for
+// current session. The account will be clean up at the beginning of next
+// session.
+inline constexpr char kDemoAccountGaiaId[] = "demo_mode.obfuscated_gaia_id";
 
 // An integer pref that holds enum value of current demo mode configuration.
 // Values are defined by DemoSession::DemoModeConfig enum.
@@ -2483,6 +2485,11 @@ inline constexpr char kBirchUseCoral[] = "ash.birch.use_coral";
 
 // LINT.ThenChange(/chrome/browser/ui/ash/birch/birch_browsertest.cc)
 
+// A string pref indicating class management tools availability. Valid values
+// are `disabled`, `student`, `teacher`.
+inline constexpr char kClassManagementToolsAvailabilitySetting[] =
+    "ash.class_management_tools.availability_setting";
+
 // A boolean pref that holds whether the user dismissed the extended updates
 // notification.
 inline constexpr char kExtendedUpdatesNotificationDismissed[] =
@@ -2505,8 +2512,21 @@ inline constexpr char kDnsOverHttpsIncludedDomains[] =
 inline constexpr char kGraduationEnablementStatus[] =
     "ash.graduation.enablement_status";
 
+// Deprecated. Use kGraduationNudgeShownCount and kGraduationNudgeLastShownTime
+// prefs instead.
 // Boolean pref representing if the nudge for the Graduation app has been shown.
-inline constexpr char kGraduationNudgeShown[] = "ash.graduation.nudge_shown";
+inline constexpr char kGraduationNudgeShownDeprecated[] =
+    "ash.graduation.nudge_shown";
+
+// Integer pref representing how many times the nudge for the Graduation app has
+// been shown.
+inline constexpr char kGraduationNudgeShownCount[] =
+    "ash.graduation.nudge_shown_count";
+
+// Time pref representing the last time the Graduation app nudge was shown. The
+// default value is the default NULL time, base::Time().
+inline constexpr char kGraduationNudgeLastShownTime[] =
+    "ash.graduation.nudge_last_shown_time";
 
 //-----------------------------------------------------------------------------
 // Language related Prefs

@@ -297,11 +297,11 @@ class InspectorPostBodyParser
       const FormDataElement& data = request_body->Elements()[i];
       switch (data.type_) {
         case FormDataElement::kData:
-          parts_[i] = String::FromUTF8WithLatin1Fallback(data.data_.data(),
-                                                         data.data_.size());
+          parts_[i] = String::FromUTF8WithLatin1Fallback(
+              base::as_byte_span(data.data_));
           break;
         case FormDataElement::kEncodedBlob:
-          ReadDataBlob(data.optional_blob_data_handle_, &parts_[i]);
+          ReadDataBlob(data.blob_data_handle_, &parts_[i]);
           break;
         case FormDataElement::kEncodedFile:
         case FormDataElement::kDataPipe:
@@ -327,8 +327,8 @@ class InspectorPostBodyParser
                         std::optional<SegmentedBuffer> raw_data) {
     if (raw_data) {
       Vector<char> flattened_data = std::move(*raw_data).CopyAs<Vector<char>>();
-      *destination = String::FromUTF8WithLatin1Fallback(flattened_data.data(),
-                                                        flattened_data.size());
+      *destination = String::FromUTF8WithLatin1Fallback(
+          base::as_byte_span(flattened_data));
     } else {
       error_ = true;
     }
@@ -664,7 +664,7 @@ std::unique_ptr<protocol::Network::WebSocketFrame> WebSocketMessageToProtocol(
       .setMask(masked)
       // Only interpret the payload as UTF-8 when it's a text message
       .setPayloadData(op_code == 1 ? String::FromUTF8WithLatin1Fallback(
-                                         payload.data(), payload.size())
+                                         base::as_bytes(payload))
                                    : Base64Encode(base::as_bytes(payload)))
       .build();
 }
@@ -828,7 +828,7 @@ static bool FormDataToString(
 
   Vector<char> bytes;
   body->Flatten(bytes);
-  *content = String::FromUTF8WithLatin1Fallback(bytes.data(), bytes.size());
+  *content = String::FromUTF8WithLatin1Fallback(base::as_byte_span(bytes));
   return true;
 }
 
@@ -1015,6 +1015,7 @@ String AlternateProtocolUsageToString(
 
 static std::unique_ptr<protocol::Network::Response>
 BuildObjectForResourceResponse(const ResourceResponse& response,
+                               const ExecutionContext* context,
                                const Resource* cached_resource = nullptr,
                                bool* is_empty = nullptr) {
   if (response.IsNull())
@@ -1112,7 +1113,8 @@ BuildObjectForResourceResponse(const ResourceResponse& response,
   if (auto* resource_load_timing = response.GetResourceLoadTiming()) {
     auto load_timing = BuildObjectForTiming(*resource_load_timing);
 
-    if (RuntimeEnabledFeatures::ServiceWorkerStaticRouterTimingInfoEnabled()) {
+    if (RuntimeEnabledFeatures::ServiceWorkerStaticRouterTimingInfoEnabled(
+            context)) {
       if (!resource_load_timing->WorkerRouterEvaluationStart().is_null()) {
         load_timing->setWorkerRouterEvaluationStart(
             resource_load_timing->CalculateMillisecondDelta(
@@ -1326,8 +1328,9 @@ void InspectorNetworkAgent::WillSendRequestInternal(
       timestamp.since_origin().InSecondsF(),
       base::Time::Now().InSecondsFSinceUnixEpoch(), std::move(initiator_object),
       redirect_response.EmittedExtraInfo(),
-      BuildObjectForResourceResponse(redirect_response), resource_type,
-      std::move(maybe_frame_id), request.HasUserGesture());
+      BuildObjectForResourceResponse(redirect_response,
+                                     GetTargetExecutionContext()),
+      resource_type, std::move(maybe_frame_id), request.HasUserGesture());
   if (options.synchronous_policy == SynchronousPolicy::kRequestSynchronously)
     GetFrontend()->flush();
 
@@ -1486,8 +1489,8 @@ void InspectorNetworkAgent::DidReceiveResourceResponse(
 
   bool resource_is_empty = true;
   std::unique_ptr<protocol::Network::Response> resource_response =
-      BuildObjectForResourceResponse(response, cached_resource,
-                                     &resource_is_empty);
+      BuildObjectForResourceResponse(response, GetTargetExecutionContext(),
+                                     cached_resource, &resource_is_empty);
 
   InspectorPageAgent::ResourceType type =
       cached_resource
@@ -2437,7 +2440,8 @@ bool InspectorNetworkAgent::FetchResourceContent(Document* document,
   Resource* cached_resource = document->Fetcher()->CachedResource(url);
   if (!cached_resource) {
     cached_resource = MemoryCache::Get()->ResourceForURL(
-        url, document->Fetcher()->GetCacheIdentifier(url));
+        url, document->Fetcher()->GetCacheIdentifier(
+                 url, /*skip_service_worker=*/false));
   }
   if (cached_resource && InspectorPageAgent::CachedResourceContent(
                              cached_resource, content, base64_encoded)) {
@@ -2476,7 +2480,7 @@ String InspectorNetworkAgent::NavigationInitiatorInfo(LocalFrame* frame) {
   }
   std::vector<uint8_t> json;
   ConvertCBORToJSON(SpanFrom(cbor), &json);
-  return String(reinterpret_cast<const char*>(json.data()), json.size());
+  return String(base::span(json));
 }
 
 InspectorNetworkAgent::InspectorNetworkAgent(

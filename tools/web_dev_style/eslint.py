@@ -19,12 +19,16 @@ def Run(os_path=None, args=None):
   finally:
     sys.path = old_sys_path
 
-  os.environ["ESLINT_USE_FLAT_CONFIG"] = "false"
+  # When '--config' is passed, ESLint uses cwd as the base path for all
+  # 'ignorePatterns' (v8 config) or 'ignores' (v9 config), and cannot correctly
+  # navigate parent directories via '../'. We must set the repository's root as
+  # the cwd.
+  os.chdir(_SRC_PATH)
   return node.RunNode([
       node_modules.PathToEsLint(),
       '--quiet',
-      '--resolve-plugins-relative-to',
-      os_path.join(_NODE_PATH, 'node_modules'),
+      '--config',
+      os_path.join(_HERE_PATH, 'eslint.config.mjs'),
   ] + args)
 
 

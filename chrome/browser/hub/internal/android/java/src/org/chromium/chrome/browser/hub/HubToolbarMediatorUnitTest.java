@@ -19,6 +19,7 @@ import static org.mockito.Mockito.when;
 
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.ACTION_BUTTON_DATA;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.COLOR_SCHEME;
+import static org.chromium.chrome.browser.hub.HubToolbarProperties.IS_INCOGNITO;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.MENU_BUTTON_VISIBLE;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.PANE_BUTTON_LOOKUP_CALLBACK;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.PANE_SWITCHER_BUTTON_DATA;
@@ -34,7 +35,6 @@ import androidx.test.filters.SmallTest;
 
 import com.google.common.collect.ImmutableSet;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -44,7 +44,6 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Callback;
-import org.chromium.base.cached_flags.CachedFlagUtils;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
@@ -122,19 +121,13 @@ public class HubToolbarMediatorUnitTest {
         mIncognitoTabSwitcherReferenceButtonDataSupplier2.set(mDisplayButtonData);
     }
 
-    @After
-    public void tearDown() {
-        CachedFlagUtils.resetFlagsForTesting();
-    }
-
     @Test
     @SmallTest
     public void testDestroy() {
         assertFalse(mFocusedPaneSupplier.hasObservers());
 
         HubToolbarMediator mediator =
-                new HubToolbarMediator(
-                        mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+                new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         assertTrue(mFocusedPaneSupplier.hasObservers());
 
         mediator.destroy();
@@ -147,7 +140,7 @@ public class HubToolbarMediatorUnitTest {
     @Test
     @SmallTest
     public void testWithActionButtonData() {
-        new HubToolbarMediator(mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         mFocusedPaneSupplier.set(mTabSwitcherPane);
         mActionButtonSupplier.set(mFullButtonData);
         assertEquals(mFullButtonData, mModel.get(ACTION_BUTTON_DATA));
@@ -157,7 +150,7 @@ public class HubToolbarMediatorUnitTest {
     @SmallTest
     @EnableFeatures(ChromeFeatureList.ANDROID_HUB_FLOATING_ACTION_BUTTON)
     public void testNoActionButtonData() {
-        new HubToolbarMediator(mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         mFocusedPaneSupplier.set(mTabSwitcherPane);
         mActionButtonSupplier.set(mFullButtonData);
         assertEquals(null, mModel.get(ACTION_BUTTON_DATA));
@@ -166,7 +159,7 @@ public class HubToolbarMediatorUnitTest {
     @Test
     @SmallTest
     public void testPaneSwitcherButtonData() {
-        new HubToolbarMediator(mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         List<FullButtonData> paneSwitcherButtonData = mModel.get(PANE_SWITCHER_BUTTON_DATA);
         assertEquals(2, paneSwitcherButtonData.size());
 
@@ -182,7 +175,7 @@ public class HubToolbarMediatorUnitTest {
     public void testNullPane() {
         when(mPaneManager.getPaneForId(PaneId.INCOGNITO_TAB_SWITCHER)).thenReturn(null);
 
-        new HubToolbarMediator(mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         List<FullButtonData> paneSwitcherButtonData = mModel.get(PANE_SWITCHER_BUTTON_DATA);
         assertEquals(1, paneSwitcherButtonData.size());
 
@@ -195,7 +188,7 @@ public class HubToolbarMediatorUnitTest {
     public void testPaneSwitcherButtonDataEventCount() {
         verify(mPropertyObserver, never()).onPropertyChanged(any(), eq(PANE_SWITCHER_BUTTON_DATA));
 
-        new HubToolbarMediator(mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         verify(mPropertyObserver, times(1)).onPropertyChanged(any(), eq(PANE_SWITCHER_BUTTON_DATA));
 
         mTabSwitcherReferenceButtonDataSupplier1.set(mDisplayButtonData);
@@ -211,7 +204,7 @@ public class HubToolbarMediatorUnitTest {
     @Test
     @SmallTest
     public void testActionButtonHasText() {
-        new HubToolbarMediator(mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         assertFalse(mModel.get(SHOW_ACTION_BUTTON_TEXT));
 
         mTabSwitcherReferenceButtonDataSupplier1.set(null);
@@ -224,7 +217,7 @@ public class HubToolbarMediatorUnitTest {
     @Test
     @SmallTest
     public void testPaneSwitcherIndex() {
-        new HubToolbarMediator(mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         assertEquals(-1, mModel.get(PANE_SWITCHER_INDEX));
 
         mFocusedPaneSupplier.set(mTabSwitcherPane);
@@ -253,7 +246,7 @@ public class HubToolbarMediatorUnitTest {
     @Test
     @SmallTest
     public void testHubColorScheme() {
-        new HubToolbarMediator(mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         mFocusedPaneSupplier.set(mTabSwitcherPane);
         assertEquals(HubColorScheme.DEFAULT, mModel.get(COLOR_SCHEME));
 
@@ -267,7 +260,7 @@ public class HubToolbarMediatorUnitTest {
     @Test
     @SmallTest
     public void testMenuButtonVisibility() {
-        new HubToolbarMediator(mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         when(mIncognitoTabSwitcherPane.getMenuButtonVisible()).thenReturn(false);
         mFocusedPaneSupplier.set(mIncognitoTabSwitcherPane);
         assertFalse(mModel.get(MENU_BUTTON_VISIBLE));
@@ -284,8 +277,7 @@ public class HubToolbarMediatorUnitTest {
     @SmallTest
     public void testPaneButtonLookupCallback() {
         HubToolbarMediator mediator =
-                new HubToolbarMediator(
-                        mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+                new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         assertEquals(2, mModel.get(PANE_SWITCHER_BUTTON_DATA).size());
         assertNull(mediator.getButton(PaneId.TAB_SWITCHER));
 
@@ -307,7 +299,7 @@ public class HubToolbarMediatorUnitTest {
                 .thenReturn(ImmutableSet.of(PaneId.TAB_SWITCHER, PaneId.TAB_GROUPS));
         when(mPaneManager.getPaneForId(PaneId.TAB_GROUPS)).thenReturn(mTabSwitcherPane);
 
-        new HubToolbarMediator(mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         List<FullButtonData> paneSwitcherButtonData = mModel.get(PANE_SWITCHER_BUTTON_DATA);
         assertEquals(2, paneSwitcherButtonData.size());
 
@@ -322,9 +314,21 @@ public class HubToolbarMediatorUnitTest {
 
     @Test
     @SmallTest
+    public void testIsCurrentPaneIncognito() {
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
+        mFocusedPaneSupplier.set(mTabSwitcherPane);
+        assertFalse(mModel.get(IS_INCOGNITO));
+        mFocusedPaneSupplier.set(mIncognitoTabSwitcherPane);
+        assertTrue(mModel.get(IS_INCOGNITO));
+        mFocusedPaneSupplier.set(null);
+        assertFalse(mModel.get(IS_INCOGNITO));
+    }
+
+    @Test
+    @SmallTest
     @EnableFeatures(ChromeFeatureList.ANDROID_HUB_SEARCH)
     public void testSearchBoxSetup_FlagEnabled() {
-        new HubToolbarMediator(mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         assertTrue(mModel.get(SEARCH_BOX_VISIBLE));
         assertNotNull(mModel.get(SEARCH_BOX_LISTENER));
     }
@@ -333,7 +337,7 @@ public class HubToolbarMediatorUnitTest {
     @SmallTest
     @DisableFeatures(ChromeFeatureList.ANDROID_HUB_SEARCH)
     public void testSearchBoxSetup_FlagNotEnabled() {
-        new HubToolbarMediator(mActivity, mModel, mPaneManager, mTracker, mSearchActivityClient);
+        new HubToolbarMediator(mModel, mPaneManager, mTracker, mSearchActivityClient);
         assertFalse(mModel.get(SEARCH_BOX_VISIBLE));
         assertNotNull(mModel.get(SEARCH_BOX_LISTENER));
     }

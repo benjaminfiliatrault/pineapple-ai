@@ -145,11 +145,8 @@ gfx::Image LensOmniboxClient::GetIconIfExtensionMatch(
 }
 
 std::u16string LensOmniboxClient::GetFormattedFullURL() const {
-  std::optional<TemplateURLService::SearchMetadata> metadata =
-      ios::TemplateURLServiceFactory::GetForProfile(profile_)
-          ->ExtractSearchMetadata(GetURL());
-  if (metadata) {
-    return metadata->search_terms;
+  if (omnibox_steady_state_text_) {
+    return base::SysNSStringToUTF16(omnibox_steady_state_text_);
   }
   return u"";
 }
@@ -164,7 +161,10 @@ GURL LensOmniboxClient::GetNavigationEntryURL() const {
 
 metrics::OmniboxEventProto::PageClassification
 LensOmniboxClient::GetPageClassification(bool is_prefetch) const {
-  return metrics::OmniboxEventProto::LENS_SIDE_PANEL_SEARCHBOX;
+  if (lens_result_has_thumbnail_ && !thumbnail_removed_in_session_) {
+    return metrics::OmniboxEventProto::LENS_SIDE_PANEL_SEARCHBOX;
+  }
+  return metrics::OmniboxEventProto::SEARCH_SIDE_PANEL_SEARCHBOX;
 }
 
 security_state::SecurityLevel LensOmniboxClient::GetSecurityLevel() const {
@@ -183,9 +183,9 @@ const gfx::VectorIcon& LensOmniboxClient::GetVectorIcon() const {
   return kEmptyVectorIcon;
 }
 
-std::optional<lens::proto::LensOverlayInteractionResponse>
-LensOmniboxClient::GetLensOverlayInteractionResponse() const {
-  return lens_overlay_interaction_response_;
+std::optional<lens::proto::LensOverlaySuggestInputs>
+LensOmniboxClient::GetLensOverlaySuggestInputs() const {
+  return lens_overlay_suggest_inputs_;
 }
 
 bool LensOmniboxClient::ProcessExtensionKeyword(
@@ -237,9 +237,16 @@ void LensOmniboxClient::OnAutocompleteAccept(
     const AutocompleteMatch& match,
     const AutocompleteMatch& alternative_nav_match,
     IDNA2008DeviationCharacter deviation_char_in_hostname) {
-  [delegate_ omniboxDidAcceptText:text
+  [delegate_ omniboxDidAcceptText:match.fill_into_edit
                    destinationURL:destination_url
                  thumbnailRemoved:thumbnail_removed_in_session_];
+}
+
+void LensOmniboxClient::OnThumbnailOnlyAccept() {
+  // The destinationURL is not used for multimodal suggestions.
+  [delegate_ omniboxDidAcceptText:u""
+                   destinationURL:GURL()
+                 thumbnailRemoved:NO];
 }
 
 base::WeakPtr<OmniboxClient> LensOmniboxClient::AsWeakPtr() {

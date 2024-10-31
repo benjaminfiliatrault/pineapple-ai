@@ -285,11 +285,28 @@ guestMessagePipe.registerHandler(Message.GET_DEVICE_INFO, async () => {
 });
 
 guestMessagePipe.registerHandler(
+    Message.OPEN_SETTINGS,
+    (path: number) => void helpApp.handler.openSettings(path));
+
+guestMessagePipe.registerHandler(
   Message.OPEN_URL_IN_BROWSER_AND_TRIGGER_INSTALL_DIALOG,
   (url: string | object) => {
     helpApp.handler.openUrlInBrowserAndTriggerInstallDialog(toUrl(url));
   },
 );
+
+guestMessagePipe.registerHandler(
+    Message.SET_HAS_COMPLETED_NEW_DEVICE_CHECKLIST,
+    () => void helpApp.handler.setHasCompletedNewDeviceChecklist());
+
+guestMessagePipe.registerHandler(
+    Message.SET_HAS_VISITED_HOW_TO_PAGE,
+    () => void helpApp.handler.setHasVisitedHowToPage());
+
+guestMessagePipe.registerHandler(
+    Message.OPEN_APP_MALL_PATH, ({path}: {path: string}) => {
+      window.open(`chrome://mall/${path}`);
+    });
 
 /** Compare two positions by their start index. Use for sorting. */
 function compareByStart(a: Position, b: Position): number {

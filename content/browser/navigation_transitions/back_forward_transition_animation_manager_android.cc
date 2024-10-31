@@ -39,7 +39,14 @@ BackForwardTransitionAnimationManagerAndroid::
           std::make_unique<BackForwardTransitionAnimator::Factory>()) {}
 
 BackForwardTransitionAnimationManagerAndroid::
-    ~BackForwardTransitionAnimationManagerAndroid() = default;
+    ~BackForwardTransitionAnimationManagerAndroid() {
+  // `this` must be destroyed before the `NavigationController`.
+  CHECK(navigation_controller_);
+  if (animator_) {
+    animator_->AbortAnimation(AnimationAbortReason::kAnimationManagerDestroyed);
+    DestroyAnimator();
+  }
+}
 
 void BackForwardTransitionAnimationManagerAndroid::OnGestureStarted(
     const ui::BackGestureEvent& gesture,
@@ -237,17 +244,28 @@ void BackForwardTransitionAnimationManagerAndroid::
 }
 
 void BackForwardTransitionAnimationManagerAndroid::OnAnimationStageChanged() {
-  web_contents_view_android()
-      ->web_contents()
-      ->GetDelegate()
-      ->DidBackForwardTransitionAnimationChange();
+  if (auto* delegate =
+          web_contents_view_android()->web_contents()->GetDelegate()) {
+    delegate->DidBackForwardTransitionAnimationChange();
+  }
 }
 
 void BackForwardTransitionAnimationManagerAndroid::
-    OnPostNavigationFirstFrameTimeout() {
-  CHECK(animator_);
-  CHECK(animator_->IsTerminalState());
+    OnPhysicalBackingSizeChanged() {
+  if (!animator_) {
+    return;
+  }
+  animator_->AbortAnimation(AnimationAbortReason::kPhysicalSizeChanged);
   DestroyAnimator();
+}
+
+void BackForwardTransitionAnimationManagerAndroid::OnBeforeUnloadDialogShown(
+    int64_t navigation_id) {
+  if (!animator_) {
+    return;
+  }
+  animator_->OnBeforeUnloadDialogShown(navigation_id);
+  MaybeDestroyAnimator();
 }
 
 SkBitmap BackForwardTransitionAnimationManagerAndroid::

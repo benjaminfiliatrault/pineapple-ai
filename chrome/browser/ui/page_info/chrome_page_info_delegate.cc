@@ -202,12 +202,12 @@ void ChromePageInfoDelegate::FocusWebContents() {
 std::optional<std::u16string> ChromePageInfoDelegate::GetRwsOwner(
     const GURL& site_url) {
   return PrivacySandboxServiceFactory::GetForProfile(GetProfile())
-      ->GetFirstPartySetOwnerForDisplay(site_url);
+      ->GetRelatedWebsiteSetOwnerForDisplay(site_url);
 }
 
 bool ChromePageInfoDelegate::IsRwsManaged() {
   return PrivacySandboxServiceFactory::GetForProfile(GetProfile())
-      ->IsFirstPartySetsDataAccessManaged();
+      ->IsRelatedWebsiteSetsDataAccessManaged();
 }
 
 bool ChromePageInfoDelegate::CreateInfoBarDelegate() {
@@ -294,6 +294,17 @@ void ChromePageInfoDelegate::OpenConnectionHelpCenterPage(
 
 void ChromePageInfoDelegate::OpenSafetyTipHelpCenterPage() {
   OpenHelpCenterFromSafetyTip(web_contents_);
+}
+
+void ChromePageInfoDelegate::OpenSafeBrowsingHelpCenterPage(
+    const ui::Event& event) {
+  web_contents_->OpenURL(
+      content::OpenURLParams(
+          GURL(chrome::kSafeBrowsingHelpCenterURL), content::Referrer(),
+          ui::DispositionFromEventFlags(
+              event.flags(), WindowOpenDisposition::NEW_FOREGROUND_TAB),
+          ui::PAGE_TRANSITION_LINK, false),
+      /*navigation_handle_callback=*/{});
 }
 
 void ChromePageInfoDelegate::OpenContentSettingsExceptions(

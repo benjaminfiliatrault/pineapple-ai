@@ -53,7 +53,7 @@ class Component {
   CrxUpdateItem GetCrxUpdateItem() const;
 
   // Called by the UpdateEngine when an update check for this component is done.
-  void SetUpdateCheckResult(const std::optional<ProtocolParser::Result>& result,
+  void SetUpdateCheckResult(std::optional<ProtocolParser::Result> result,
                             ErrorCategory error_category,
                             int error);
 
@@ -231,8 +231,10 @@ class Component {
     // State overrides.
     void DoHandle() override;
     bool CanTryDiffUpdate() const;
-    void GetNextCrxFromCacheComplete(const CrxCache::Result& result);
-    void CheckIfCacheContainsPreviousCrxComplete(bool crx_is_in_cache);
+    void GetNextCrxFromCacheComplete(
+        base::expected<base::FilePath, UnpackerError> result);
+    void CheckIfCacheContainsPreviousCrxComplete(
+        base::expected<base::FilePath, UnpackerError> result);
   };
 
   class StateUpToDate : public State {
@@ -259,8 +261,7 @@ class Component {
     void DoHandle() override;
 
     void DownloadComplete(
-        const base::expected<base::FilePath, CategorizedError>&
-            download_result);
+        base::expected<base::FilePath, CategorizedError> download_result);
 
     bool diff_;
   };
@@ -276,8 +277,7 @@ class Component {
     // State overrides.
     void DoHandle() override;
 
-    void PatchingComplete(
-        const base::expected<base::FilePath, CategorizedError>&);
+    void PatchingComplete(base::expected<base::FilePath, CategorizedError>);
     void InstallProgress(int install_progress);
     void InstallComplete(const CrxInstaller::Result& installer_result);
   };

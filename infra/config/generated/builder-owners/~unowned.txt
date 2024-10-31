@@ -35,7 +35,6 @@ ci/android-11-x86-rel
 ci/android-12-x64-dbg-tests
 ci/android-12-x64-fyi-rel
 ci/android-12l-x64-fyi-dbg
-ci/android-13-x64-fyi-rel
 ci/android-annotator-rel
 ci/android-arm64-archive-rel
 ci/android-avd-packager
@@ -89,7 +88,6 @@ ci/linux-perfetto-rel
 ci/linux-rel-no-external-ip
 ci/linux-rust-x64-dbg
 ci/linux-rust-x64-rel
-ci/linux-ubsan-fyi-rel
 ci/linux-updater-builder-dbg
 ci/linux-updater-builder-rel
 ci/linux-updater-tester-dbg
@@ -109,7 +107,6 @@ ci/mac-updater-builder-arm64-rel
 ci/mac-updater-builder-asan-dbg
 ci/mac-updater-builder-dbg
 ci/mac-updater-builder-rel
-ci/mac-upload-perfetto
 ci/mac11-arm64-updater-tester-dbg
 ci/mac11-arm64-updater-tester-rel
 ci/mac11-x64-updater-tester-dbg
@@ -226,7 +223,6 @@ try/android-webview-13-x64-dbg
 try/android-webview-oreo-arm64-dbg
 try/android-webview-pie-arm64-dbg
 try/android-webview-pie-x86-wpt-fyi-rel
-try/android-x64-cast
 try/android_arm64_dbg_recipe
 try/android_blink_rel
 try/android_compile_dbg
@@ -324,9 +320,7 @@ try/linux-swangle-try-x64
 try/linux-swangle-try-x64-exp
 try/linux-tsan-dbg
 try/linux-tsan-rel
-try/linux-ubsan-fyi-rel
 try/linux-ubsan-rel
-try/linux-ubsan-vptr
 try/linux-ubsan-vptr-rel
 try/linux-updater-try-builder-dbg
 try/linux-updater-try-builder-rel

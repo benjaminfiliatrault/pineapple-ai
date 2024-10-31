@@ -46,16 +46,12 @@ constexpr auto kDataResources = base::MakeFixedFlatMap<Suggestion::Icon, int>({
     {Suggestion::Icon::kCreate, IDR_ANDROID_AUTOFILL_CREATE},
     {Suggestion::Icon::kOfferTag, IDR_ANDROID_AUTOFILL_OFFER_TAG_GREEN},
     {Suggestion::Icon::kPlusAddress, IDR_AUTOFILL_PLUS_ADDRESS},
-#else
-    {Suggestion::Icon::kAutofillPredictionImprovements,
-     IDR_AUTOFILL_PREDICTION_IMPROVEMENTS_LOGO},
 #endif  // BUILDFLAG(IS_ANDROID)
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     {Suggestion::Icon::kGooglePay, IDR_AUTOFILL_GOOGLE_PAY},
 #if !BUILDFLAG(IS_ANDROID)
     {Suggestion::Icon::kGooglePayDark, IDR_AUTOFILL_GOOGLE_PAY_DARK},
 #endif  // !BUILDFLAG(IS_ANDROID)
-#else
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 });
 
@@ -84,9 +80,6 @@ constexpr auto kNewCardArtAndNetworkDataResources =
         {Suggestion::Icon::kCreate, IDR_ANDROID_AUTOFILL_CREATE},
         {Suggestion::Icon::kOfferTag, IDR_ANDROID_AUTOFILL_OFFER_TAG_GREEN},
         {Suggestion::Icon::kPlusAddress, IDR_AUTOFILL_PLUS_ADDRESS},
-#else
-        {Suggestion::Icon::kAutofillPredictionImprovements,
-         IDR_AUTOFILL_PREDICTION_IMPROVEMENTS_LOGO},
 #endif  // BUILDFLAG(IS_ANDROID)
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
         {Suggestion::Icon::kGooglePay, IDR_AUTOFILL_GOOGLE_PAY},

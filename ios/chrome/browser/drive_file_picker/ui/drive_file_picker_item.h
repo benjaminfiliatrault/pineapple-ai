@@ -12,11 +12,11 @@ enum class DriveItemType : NSUInteger {
   // "Real" items which can be mapped to a corresponding `DriveItem`.
   kFile,
   kFolder,
+  kShortcut,
   kSharedDrive,
   // "Virtual" items which cannot be mapped to a corresponding `DriveItem`.
   kMyDrive,
   kSharedDrives,
-  kComputers,
   kStarred,
   kRecent,
   kSharedWithMe,
@@ -46,10 +46,15 @@ enum class DriveItemType : NSUInteger {
 // Whether this item is enabled. YES by default.
 @property(nonatomic, assign) BOOL enabled;
 
+// Whether the icon should be fetched. No by default.
+@property(nonatomic, assign) BOOL shouldFetchIcon;
+
+// Whether the icon is a thumbnail. NO by default.
+@property(nonatomic, assign) BOOL iconIsThumbnail;
+
 // Convenience factory methods to create root drive items.
 + (instancetype)myDriveItem;
 + (instancetype)sharedDrivesItem;
-+ (instancetype)computersItem;
 + (instancetype)starredItem;
 + (instancetype)recentItem;
 + (instancetype)sharedWithMeItem;

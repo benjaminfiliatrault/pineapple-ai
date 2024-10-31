@@ -339,9 +339,11 @@ static void SetShouldInvalidateSelection(
 }
 
 static bool IsDisplayContentElement(const Node& node) {
-  if (!node.IsElementNode())
+  const Element* element = DynamicTo<Element>(node);
+  if (!element) {
     return false;
-  const ComputedStyle* const style = node.GetComputedStyle();
+  }
+  const ComputedStyle* style = element->GetComputedStyle();
   return style && style->Display() == EDisplay::kContents;
 }
 
@@ -667,6 +669,11 @@ LayoutSelectionStatus LayoutSelection::ComputeSelectionStatus(
   // hyphen is generated from it, or the character before the hyphen if
   // automatic hyphenation.
   const unsigned offset = current->StartOffsetInContainer(cursor);
+  if (offset == 0) {
+    // StartOffsetInContainer() didn't find the offset.
+    // See crbug.com/372586875.
+    return {0, 0, SelectSoftLineBreak::kNotSelected};
+  }
   DCHECK_GT(offset, 0u);
   LayoutSelectionStatus status =
       ComputeSelectionStatus(cursor, {offset - 1, offset});
@@ -1009,7 +1016,7 @@ void LayoutSelection::InvalidateStyleAndPaintForSelection() {
       // elements so that ::selection::inactive-window style is applied
       // (or removed).
       if (auto* this_element = DynamicTo<Element>(node)) {
-        const ComputedStyle* element_style = node.GetComputedStyle();
+        const ComputedStyle* element_style = this_element->GetComputedStyle();
         if (element_style &&
             element_style->HasPseudoElementStyle(kPseudoIdSelection)) {
           node.SetNeedsStyleRecalc(

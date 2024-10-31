@@ -160,8 +160,7 @@ void ParseAsCvcChallengeOption(
       challenge_info_position_string = l10n_util::GetStringUTF16(
           IDS_AUTOFILL_CARD_UNMASK_PROMPT_SECURITY_CODE_POSITION_BACK_OF_CARD);
     } else {
-      NOTREACHED_IN_MIGRATION();
-      parsed_challenge_option.cvc_position = CvcPosition::kUnknown;
+      NOTREACHED();
     }
   }
 
@@ -225,11 +224,10 @@ CardUnmaskChallengeOption ParseCardUnmaskChallengeOption(
 }  // namespace
 
 UnmaskCardRequest::UnmaskCardRequest(
-    const PaymentsNetworkInterface::UnmaskRequestDetails& request_details,
+    const UnmaskRequestDetails& request_details,
     const bool full_sync_enabled,
-    base::OnceCallback<
-        void(PaymentsAutofillClient::PaymentsRpcResult,
-             const PaymentsNetworkInterface::UnmaskResponseDetails&)> callback)
+    base::OnceCallback<void(PaymentsAutofillClient::PaymentsRpcResult,
+                            const UnmaskResponseDetails&)> callback)
     : request_details_(request_details),
       full_sync_enabled_(full_sync_enabled),
       callback_(std::move(callback)) {
@@ -311,8 +309,7 @@ std::string UnmaskCardRequest::GetRequestContent() {
           cvc_position = "CVC_POSITION_BACK";
           break;
         case autofill::CvcPosition::kUnknown:
-          NOTREACHED_IN_MIGRATION();
-          break;
+          NOTREACHED();
       }
       challenge_option.Set("cvc_position", cvc_position);
 
@@ -358,14 +355,6 @@ std::string UnmaskCardRequest::GetRequestContent() {
             .spec());
     request_dict.Set("virtual_card_request_info",
                      std::move(virtual_card_request_info));
-  }
-
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableMerchantDomainInUnmaskCardRequest) &&
-      request_details_.merchant_domain_for_footprints.has_value()) {
-    request_dict.Set(
-        "merchant_domain",
-        request_details_.merchant_domain_for_footprints->Serialize());
   }
 
   std::string json_request;
@@ -457,7 +446,7 @@ void UnmaskCardRequest::ParseResponse(const base::Value::Dict& response) {
     response_details_.card_type =
         PaymentsAutofillClient::PaymentsRpcCardType::kServerCard;
   } else {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
   const base::Value::Dict* decline_details =

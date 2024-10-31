@@ -549,6 +549,7 @@ class Browser : public TabStripModelObserver,
   // Gets the window title of the tab at |index|.
   std::u16string GetWindowTitleForTab(int index) const;
 
+  std::u16string GetTitleForTab(int index) const;
   // Gets the window title for the current tab, to display in a menu. If the
   // title is too long to fit in the required space, the tab title will be
   // elided. The result title might still be a larger width than specified, as
@@ -830,6 +831,9 @@ class Browser : public TabStripModelObserver,
   Browser* GetBrowserForOpeningWebUi();
 
   StatusBubble* GetStatusBubbleForTesting();
+  UnloadController* GetUnloadControllerForTesting() {
+    return &unload_controller_;
+  }
 
   // Sets or clears the flags to force showing bookmark bar.
   void SetForceShowBookmarkBarFlag(ForceShowBookmarkBarFlag flag);
@@ -847,6 +851,8 @@ class Browser : public TabStripModelObserver,
   TabStripModel* GetTabStripModel() override;
   bool IsTabStripVisible() override;
   bool ShouldHideUIForFullscreen() const override;
+  base::CallbackListSubscription RegisterBrowserDidClose(
+      BrowserDidCloseCallback callback) override;
   views::View* TopContainer() override;
   base::CallbackListSubscription RegisterActiveTabDidChange(
       ActiveTabChangeCallback callback) override;
@@ -864,6 +870,8 @@ class Browser : public TabStripModelObserver,
   Type GetType() const override;
   BrowserUserEducationInterface* GetUserEducationInterface() override;
   web_app::AppBrowserController* GetAppBrowserController() override;
+  std::vector<tabs::TabInterface*> GetAllTabInterfaces() override;
+  Browser* GetBrowserForMigrationOnly() override;
 
   // Called by BrowserView when on active changes.
   void DidBecomeActive();
@@ -1042,6 +1050,8 @@ class Browser : public TabStripModelObserver,
                           bool user_gesture,
                           bool last_unlocked_by_target) override;
   void LostPointerLock() override;
+  bool IsWaitingForPointerLockPrompt(
+      content::WebContents* web_contents) override;
   void RequestKeyboardLock(content::WebContents* web_contents,
                            bool esc_key_locked) override;
   void CancelKeyboardLockRequest(content::WebContents* web_contents) override;
@@ -1405,6 +1415,8 @@ class Browser : public TabStripModelObserver,
   std::unique_ptr<chrome::BrowserCommandController> command_controller_;
 
   // Dialog controller that handles the showing of the deletion dialog.
+  // TODO (https://crbug.com/372011320) Move this to be a browser window
+  // feature.
   std::unique_ptr<tab_groups::DeletionDialogController>
       tab_group_deletion_dialog_controller_;
 
@@ -1460,6 +1472,10 @@ class Browser : public TabStripModelObserver,
 #endif
 
   int force_show_bookmark_bar_flags_ = ForceShowBookmarkBarFlag::kNone;
+
+  using BrowserDidCloseCallbackList =
+      base::RepeatingCallbackList<void(BrowserWindowInterface*)>;
+  BrowserDidCloseCallbackList browser_did_close_callback_list_;
 
   using DidActiveTabChangeCallbackList =
       base::RepeatingCallbackList<void(BrowserWindowInterface*)>;

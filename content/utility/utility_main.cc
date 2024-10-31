@@ -19,6 +19,7 @@
 #include "base/timer/hi_res_timer_manager.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/services/on_device_translation/buildflags/buildflags.h"
 #include "content/child/child_process.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/features.h"
@@ -101,6 +102,10 @@
 #if BUILDFLAG(IS_WIN)
 sandbox::TargetServices* g_utility_target_services = nullptr;
 #endif  // BUILDFLAG(IS_WIN)
+
+#if BUILDFLAG(ENABLE_ON_DEVICE_TRANSLATION) && BUILDFLAG(IS_LINUX)
+#include "components/services/on_device_translation/sandbox_hook.h"
+#endif  // BUILDFLAG(ENABLE_ON_DEVICE_TRANSLATION) && BUILDFLAG(IS_LINUX)
 
 namespace content {
 
@@ -185,7 +190,7 @@ bool PreLockdownSandboxHook(base::span<const uint8_t> delegate_blob) {
 }
 #endif  // BUILDFLAG(IS_WIN)
 
-void SetUtilityThreadName(const std::string utility_sub_type) {
+void SetUtilityThreadName(const std::string& utility_sub_type) {
   // Typical utility sub-types are audio.mojom.AudioService or
   // proxy_resolver.mojom.ProxyResolverFactory. Using the full sub-type as part
   // of the thread name is too verbose so we take the text in front of the first
@@ -193,8 +198,8 @@ void SetUtilityThreadName(const std::string utility_sub_type) {
   // audio.CrUtilityMain and proxy_resolver.CrUtilityMain. If there is no period
   // then the entire utility_sub_type string will be put in front.
   auto first_period = utility_sub_type.find('.');
-  base::PlatformThread::SetName(
-      (utility_sub_type.substr(0, first_period) + ".CrUtilityMain").c_str());
+  base::PlatformThread::SetName(utility_sub_type.substr(0, first_period) +
+                                ".CrUtilityMain");
 }
 
 }  // namespace
@@ -289,6 +294,12 @@ int UtilityMain(MainFunctionParams parameters) {
       pre_sandbox_hook =
           base::BindOnce(&speech::SpeechRecognitionPreSandboxHook);
       break;
+#if BUILDFLAG(ENABLE_ON_DEVICE_TRANSLATION) && BUILDFLAG(IS_LINUX)
+    case sandbox::mojom::Sandbox::kOnDeviceTranslation:
+      pre_sandbox_hook = base::BindOnce(
+          &on_device_translation::OnDeviceTranslationSandboxHook);
+      break;
+#endif  // BUILDFLAG(ENABLE_ON_DEVICE_TRANSLATION) && BUILDFLAG(IS_LINUX)
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
     case sandbox::mojom::Sandbox::kScreenAI:
       pre_sandbox_hook =
@@ -299,10 +310,8 @@ int UtilityMain(MainFunctionParams parameters) {
 #endif
 #if BUILDFLAG(IS_LINUX)
     case sandbox::mojom::Sandbox::kVideoEffects:
-#if BUILDFLAG(ENABLE_VIDEO_EFFECTS)
       pre_sandbox_hook =
           base::BindOnce(&video_effects::VideoEffectsPreSandboxHook);
-#endif  // BUILDFLAG(ENABLE_VIDEO_EFFECTS)
       break;
 #endif  // BUILDFLAG(IS_LINUX)
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)

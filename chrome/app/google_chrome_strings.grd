@@ -348,6 +348,24 @@ chromium_strings.grd. -->
           Task Manager - Google Chrome
         </message>
       </if>
+      <message name="IDS_TASK_MANAGER_SEARCH_PLACEHOLDER" desc="The placeholder text for the Search bar in the Task Manager window" translateable="false">
+        Search
+      </message>
+      <message name="IDS_TASK_MANAGER_SEARCH_ACCESSIBILITY_NAME" desc="The accessibility description for the Search bar in the Task Manager window" translateable="false">
+        Look up the name of any tab title or extension to highlight it in the process table.
+      </message>
+      <message name="IDS_TASK_MANAGER_KILL_ACCESSIBILITY_NAME" desc="The accessibility description for the End Process button in the Task Manager window" translateable="false">
+        Ends the highlighted process.
+      </message>
+      <message name="IDS_TASK_MANAGER_CATEGORY_TABS_NAME" desc="The title of the 'Tabs' filter category." translateable="false">
+        Tabs
+      </message>
+      <message name="IDS_TASK_MANAGER_CATEGORY_EXTENSIONS_NAME" desc="The title of the 'Extensions' filter category." translateable="false">
+        Extensions
+      </message>
+      <message name="IDS_TASK_MANAGER_CATEGORY_SYSTEM_NAME" desc="The title of the 'System' filter category." translateable="false">
+        System
+      </message>
       <message name="IDS_SESSION_CRASHED_VIEW_UMA_OPTIN" desc="Text besides the checkbox to let users optin to UMA in the restore from previous crash bubble.">
         Help make Google Chrome better by sending crash reports and <ph name="UMA_LINK">$1<ex>usage statistics</ex></ph> to Google
       </message>
@@ -981,6 +999,12 @@ Permissions you've already given to websites and apps may apply to this account.
         <message name="IDS_ENTERPRISE_SIGNIN_WORK_PROFILE_EXPLANATION" desc="The warning message displayed to an enterprise user about to link their profile to their Google account. This message is followed by a 'Learn more' link.">
           Any Chrome data that is generated during the use of this profile (such as the creation of bookmarks, history, passwords, and other settings) can be removed by the work profile administrator. <ph name="LEARN_MORE">$1<ex>Learn more</ex></ph>
         </message>
+        <message name="IDS_ENTERPRISE_VALUE_PROPOSITION_PROFILE_REQUIRED_BY_ORG_TITLE" desc="Title the value proposition dialog for creating an enterprise profile where profile creattion is mandatory.">
+          Your organization requires you to sign into Chrome
+        </message>
+        <message name="IDS_ENTERPRISE_VALUE_PROPOSITION_PROFILE_REQUIRED_BY_ORG_KNOWN_DOMAIN_TITLE" desc="Title the value proposition dialog for creating an enterprise profile where profile creattion is mandatory.">
+          Your organization, <ph name="MANAGER">$1<ex>manager.com</ex></ph>, requires you to sign into Chrome
+        </message>
         <!-- New one-click sign-in dialog contents for SAML support -->
         <message name="IDS_ONE_CLICK_SIGNIN_DIALOG_TITLE_NEW" desc="The title of the modal dialog window that opens when the user chooses to use one click sign-in.">
           You're signed in to Chrome!
@@ -1075,6 +1099,9 @@ Permissions you've already given to websites and apps may apply to this account.
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_DESC_V2" desc="This string is the body text for a dialog that appears when the user is already signed in to Chrome, but they just tried to sign in to a Google service (like Gmail) with a different Google Account that already has its own Chrome profile on this device. The body text is after the 'Switch to existing Chrome profile?' string. The tone should be inviting and helpful.">
           You're already signed in as <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph> in another Chrome profile
         </message>
+        <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_DESC_V2_SUPERVISED" desc="This string is the body text for a dialog that appears when the user is already signed in to Chrome, but they just tried to sign in to a Google service (like Gmail) with a different supervised Google Account that already has its own Chrome profile on this device. The body text is after the 'Switch to existing Chrome profile?' string. The tone should be inviting and helpful.">
+          To stay safer online with your parent’s choices, switch to your Chrome profile where you’re already signed in as <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph>
+        </message>
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_CONSUMER_BUBBLE_DESC" desc="Body of the web signin interception bubble">
           <ph name="EXISTING_USER">$1<ex>Elisa</ex></ph> is already signed in to this Chrome profile. To keep your browsing separate, Chrome can create your own profile for you.
         </message>
@@ -1089,9 +1116,6 @@ Permissions you've already given to websites and apps may apply to this account.
         </message>
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_SUBTITLE" desc="Subtitle of the Chrome Signin Bubble intercept that is shown when a signed out user signs in on the web with it's first account.">
           To get your passwords and more on all your devices, sign in to Chrome
-        </message>
-        <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_SUBTITLE_SUPERVISED" desc="Subtitle of the Chrome Signin Bubble intercept that is shown when a signed out user signs in on the web with a supervised account." translateable="false">
-          Sign in to Chrome so that your parents can help you stay safe on the web
         </message>
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_IPH_TEXT_SIGNIN_REMINDER" desc="This string is the body text of a reminder message, which is intended to help users understand that they have been signed in to Chrome. The user previously signed in to a Google service (like Gmail or Maps), and saw the Chrome Signin Bubble intercept; when asked whether the user wanted to sign in to Chrome as well, the user selected yes. After a period of time, this reminder message appears at the top right of Chrome (pointing at the Profile Menu) to remind the user that they made this choice a while ago. This body text string comes after the 'Welcome back, USER_NAME' string. We are focusing on the benefit that user enjoys, now that they're signed in to Chrome. The tone should be welcoming.">
           While you're signed in, you can use your passwords and more from your Google Account in Chrome. You can change this at any time in settings.
@@ -1941,6 +1965,33 @@ Permissions you've already given to websites and apps may apply to this account.
           desc="The label for the renderer process housing the Lens overlay.">
           Google Lens
         </message>
+        <message name="IDS_LENS_OVERLAY_CLOSE_TRANSLATE_SCREEN_LABEL"
+          desc="Accessibility label for the button that closes translate mode on the Lens Overlay UI. Informs the user that the button this label is associated with closes translate screen functionality.">
+          Close translate screen
+        </message>
+        <message name="IDS_LENS_OVERLAY_LANGUAGE_PICKER_LABEL"
+          desc="Accessibility label for the language picker menu. Informs the user that the menu opened is a language picker menu where they can select a language.">
+          Language picker
+        </message>
+        <message name="IDS_LENS_OVERLAY_SOURCE_LANGUAGE_ACCESSIBILITY_LABEL"
+          desc="Accessibility label for the button that shows the source translate language when in translate mode. Informs the user of the current source translate language that is set on the UI which is the language the screen will be translated from.">
+          Original language: <ph name="LANGUAGE"><ex>English</ex>$1</ph>
+        </message>
+        <message name="IDS_LENS_OVERLAY_TARGET_LANGUAGE_ACCESSIBILITY_LABEL"
+          desc="Accessibility label for the button that shows the target translate language when in translate mode. Informs the user of the current target translate language that is set on the UI which is the language the screen will be translated to.">
+          Translated language: <ph name="LANGUAGE"><ex>English</ex>$1</ph>
+        </message>
+
+        <!-- IPH Strings -->
+        <message name="IDS_LENS_OVERLAY_TRANSLATE_BUTTON_IPH"
+          desc="Text that appears in the IPH toast informing the user about the availability of the new translate screen chip in the Lens Overlay that adds functionality to translate the entire screen.">
+          New! You can translate both text and images on your screen
+        </message>
+        <message name="IDS_LENS_OVERLAY_TRANSLATE_BUTTON_IPH_SCREENREADER"
+          is_accessibility_with_no_ui="true"
+          desc="Text that appears in the IPH toast informing the user about the availability of the new translate screen chip in the Lens Overlay that adds functionality to translate the entire screen.">
+          New! You can translate both text and images on your screen by selecting the "translate screen" button
+        </message>
 
         <!-- Entrypoint Strings -->
         <message name="IDS_LENS_OVERLAY_FIND_IN_PAGE_ENTRYPOINT_MESSAGE"
@@ -1998,6 +2049,10 @@ Permissions you've already given to websites and apps may apply to this account.
           desc="Text on the continue button in the dialog for choosing to allow the sending of the Lens screenshot to Google.">
           OK
         </message>
+        <message name="IDS_LENS_PERMISSION_BUBBLE_DIALOG_CSB_DESCRIPTION"
+          desc="Text that is shown in the Lens permission bubble, giving examples of what Lens can do and informing users what information will be sent to Google. Includes placeholder for learn more link.">
+          When you use Google Lens, the page title, URL, and content, including PDFs, are sent to Google. <ph name="LEARN_MORE">$1<ex>Learn more</ex></ph>
+        </message>
         <message name="IDS_LENS_PERMISSION_BUBBLE_DIALOG_DESCRIPTION"
           desc="Text that is shown in the Lens permission bubble, giving examples of what Lens can do and informing users that their screenshot will be sent to Google. Includes placeholder for learn more link.">
           Identify things or places and copy or translate text. When you use Google Lens, a screenshot of the page is sent to Google. <ph name="LEARN_MORE">$1<ex>Learn more</ex></ph>
@@ -2008,7 +2063,7 @@ Permissions you've already given to websites and apps may apply to this account.
         </message>
         <message name="IDS_LENS_PERMISSION_BUBBLE_DIALOG_TITLE"
           desc="The title of the lens permission search bubble dialog, introducing Lens as a way to search what's on their screen.">
-          New! An easy way to search what's on your screen
+          Search anything on this page with Google Lens
         </message>
 
         <!-- Title Case Dependent -->
@@ -2186,19 +2241,6 @@ Permissions you've already given to websites and apps may apply to this account.
       </if>
 
       <if expr="not chromeos_ash and not is_android">
-        <!-- Enterprise profile welcome screen -->
-        <message name="IDS_ENTERPRISE_OIDC_WELCOME_TIMEOUT_SUBTITLE" desc="Subtitle of a section telling the user that their work profile was created but is not fully ready yet.">
-          While we're setting up account access, you can still use Chrome. You may not be able to access some resources until setup is complete.
-        </message>
-
-        <!-- Supervised user profile signin IPH -->
-        <!-- TODO(b/351333491): Mark them translateable once the strings are approved. -->
-        <message name="IDS_SUPERVISED_USER_PROFILE_SIGNIN_IPH_TEXT"
-          desc="Informative text shown on the IPH bubble when a supervised user signs-in in a new profile or an existing local profile."
-          translateable="false">
-          The Chrome settings your parent chose in Family Link can help keep you safe online
-        </message>
-
         <!-- Profile Picker -->
         <if expr="chromeos_lacros">
           <message name="IDS_PROFILE_PICKER_MAIN_VIEW_SUBTITLE_LACROS" desc="Profile picker main view subtitle">
@@ -2708,6 +2750,13 @@ Permissions you've already given to websites and apps may apply to this account.
       <if expr="is_macosx">
         <message name="IDS_CHROMIUM_SHORCUT_DESCRIPTION" desc="Text to use as description for the '.crwebloc' file format, which is generated by the 'Save and Share' -> 'Create Shortcut' flow.">
           Chrome Shortcut
+        </message>
+      </if>
+
+      <!-- Toast Strings-->
+      <if expr="not is_android">
+        <message name="IDS_CLEAR_BROWSING_DATA_TOAST_BODY" desc="Text on a toast notification that is shown when browsing data is successfully cleared.">
+          Cleared Chrome data
         </message>
       </if>
     </messages>

@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/timer/elapsed_timer.h"
@@ -106,7 +107,9 @@ class ModelWrapper final : public mojom::OnDeviceModel {
       mojo::PendingReceiver<mojom::OnDeviceModel> receiver,
       base::OnceCallback<void(base::WeakPtr<mojom::OnDeviceModel>)> on_delete)
       : model_(std::move(model)), on_delete_(std::move(on_delete)) {
-    receivers_.Add(this, std::move(receiver), std::nullopt);
+    receivers_.Add(
+        this, std::move(receiver),
+        std::unique_ptr<ml::OnDeviceModelExecutor::ScopedAdaptation>());
     receivers_.set_disconnect_handler(base::BindRepeating(
         &ModelWrapper::ModelDisconnected, weak_ptr_factory_.GetWeakPtr()));
   }
@@ -118,8 +121,9 @@ class ModelWrapper final : public mojom::OnDeviceModel {
   void AddAndRunPendingTask(
       base::OnceCallback<void(base::OnceClosure finish_callback)> task,
       base::WeakPtr<SessionWrapper> session = nullptr) {
-    base::ScopedClosureRunner task_finished(base::BindOnce(
-        &ModelWrapper::TaskFinished, weak_ptr_factory_.GetWeakPtr()));
+    base::ScopedClosureRunner task_finished(
+        base::BindPostTaskToCurrentDefault(base::BindOnce(
+            &ModelWrapper::TaskFinished, weak_ptr_factory_.GetWeakPtr())));
     pending_tasks_.push(PendingTask{
         .session = session,
         .task = base::BindOnce(std::move(task),
@@ -131,7 +135,7 @@ class ModelWrapper final : public mojom::OnDeviceModel {
 
   void StartSession(mojo::PendingReceiver<mojom::Session> session) override {
     AddSession(std::move(session),
-               model_->CreateSession(receivers_.current_context()), {});
+               model_->CreateSession(receivers_.current_context().get()), {});
   }
 
   void ClassifyTextSafety(const std::string& text,
@@ -207,7 +211,7 @@ class ModelWrapper final : public mojom::OnDeviceModel {
       std::move(callback).Run(result.error());
       return;
     }
-    receivers_.Add(this, std::move(model), *result);
+    receivers_.Add(this, std::move(model), std::move(*result));
     std::move(callback).Run(mojom::LoadModelResult::kSuccess);
   }
 
@@ -237,7 +241,10 @@ class ModelWrapper final : public mojom::OnDeviceModel {
   std::set<std::unique_ptr<SessionWrapper>, base::UniquePtrComparator>
       sessions_;
   std::unique_ptr<ml::OnDeviceModelExecutor> model_;
-  mojo::ReceiverSet<mojom::OnDeviceModel, std::optional<uint32_t>> receivers_;
+  mojo::ReceiverSet<
+      mojom::OnDeviceModel,
+      std::unique_ptr<ml::OnDeviceModelExecutor::ScopedAdaptation>>
+      receivers_;
   base::OnceCallback<void(base::WeakPtr<mojom::OnDeviceModel>)> on_delete_;
   std::queue<PendingTask> pending_tasks_;
   bool is_running_ = false;

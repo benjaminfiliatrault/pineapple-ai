@@ -2,13 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/fetch/form_data_bytes_consumer.h"
 
+#include "base/debug/dump_without_crashing.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -40,9 +36,8 @@ class DataOnlyBytesConsumer : public BytesConsumer {
   }
 
   // BytesConsumer implementation
-  Result BeginRead(const char** buffer, size_t* available) override {
-    *buffer = nullptr;
-    *available = 0;
+  Result BeginRead(base::span<const char>& buffer) override {
+    buffer = {};
     if (form_data_) {
       form_data_->Flatten(flatten_form_data_);
       form_data_ = nullptr;
@@ -50,8 +45,7 @@ class DataOnlyBytesConsumer : public BytesConsumer {
     }
     if (flatten_form_data_offset_ == flatten_form_data_.size())
       return Result::kDone;
-    *buffer = flatten_form_data_.data() + flatten_form_data_offset_;
-    *available = flatten_form_data_.size() - flatten_form_data_offset_;
+    buffer = base::span(flatten_form_data_).subspan(flatten_form_data_offset_);
     return Result::kOk;
   }
   Result EndRead(size_t read_size) override {
@@ -120,18 +114,17 @@ class DataAndDataPipeBytesConsumer final : public BytesConsumer {
     // data is just a Vector<char> and data pipe getter can be shared.
     form_data_ = form_data->Copy();
     form_data_->SetBoundary(FormDataEncoder::GenerateUniqueBoundaryString());
-    iter_ = form_data_->MutableElements().begin();
+    iter_ = form_data_->MutableElements().CheckedBegin();
   }
 
-  Result BeginRead(const char** buffer, size_t* available) override {
-    *buffer = nullptr;
-    *available = 0;
+  Result BeginRead(base::span<const char>& buffer) override {
+    buffer = {};
     if (state_ == PublicState::kClosed)
       return Result::kDone;
     if (state_ == PublicState::kErrored)
       return Result::kError;
 
-    if (iter_ == form_data_->MutableElements().end()) {
+    if (iter_ == form_data_->MutableElements().CheckedEnd()) {
       Close();
       return Result::kDone;
     }
@@ -148,7 +141,7 @@ class DataAndDataPipeBytesConsumer final : public BytesConsumer {
           simple_consumer_->SetClient(client_);
       }
       // Read from the bytes consumer.
-      Result result = simple_consumer_->BeginRead(buffer, available);
+      Result result = simple_consumer_->BeginRead(buffer);
       if (result == Result::kError) {
         SetError();
         return Result::kError;
@@ -157,7 +150,7 @@ class DataAndDataPipeBytesConsumer final : public BytesConsumer {
       if (result == Result::kDone) {
         simple_consumer_ = nullptr;
         ++iter_;
-        return BeginRead(buffer, available);
+        return BeginRead(buffer);
       }
       return result;
     }
@@ -192,7 +185,7 @@ class DataAndDataPipeBytesConsumer final : public BytesConsumer {
       }
 
       // Read from the data pipe consumer.
-      Result result = data_pipe_consumer_->BeginRead(buffer, available);
+      Result result = data_pipe_consumer_->BeginRead(buffer);
       if (result == Result::kError) {
         SetError();
         return Result::kError;
@@ -203,7 +196,7 @@ class DataAndDataPipeBytesConsumer final : public BytesConsumer {
         data_pipe_consumer_ = nullptr;
         completion_notifier_ = nullptr;
         ++iter_;
-        return BeginRead(buffer, available);
+        return BeginRead(buffer);
       }
       return result;
     }
@@ -361,7 +354,7 @@ class DataAndDataPipeBytesConsumer final : public BytesConsumer {
   Member<ExecutionContext> execution_context_;
   PublicState state_ = PublicState::kReadableOrWaiting;
   scoped_refptr<EncodedFormData> form_data_;
-  Vector<FormDataElement>::iterator iter_;
+  base::CheckedContiguousIterator<Vector<FormDataElement>::ValueType> iter_;
   Error error_;
   Member<BytesConsumer::Client> client_;
   Member<DataOnlyBytesConsumer> simple_consumer_;
@@ -411,9 +404,9 @@ class DataAndEncodedFileOrBlobBytesConsumer final : public BytesConsumer {
           break;
         }
         case FormDataElement::kEncodedBlob:
-          if (element.optional_blob_data_handle_) {
-            blob_data->AppendBlob(element.optional_blob_data_handle_, 0,
-                                  element.optional_blob_data_handle_->size());
+          if (element.blob_data_handle_) {
+            blob_data->AppendBlob(element.blob_data_handle_, 0,
+                                  element.blob_data_handle_->size());
           }
           break;
         case FormDataElement::kDataPipe:
@@ -431,12 +424,12 @@ class DataAndEncodedFileOrBlobBytesConsumer final : public BytesConsumer {
   }
 
   // BytesConsumer implementation
-  Result BeginRead(const char** buffer, size_t* available) override {
+  Result BeginRead(base::span<const char>& buffer) override {
     form_data_ = nullptr;
     // Delegate the operation to the underlying consumer. This relies on
     // the fact that we appropriately notify the draining information to
     // the underlying consumer.
-    return blob_bytes_consumer_->BeginRead(buffer, available);
+    return blob_bytes_consumer_->BeginRead(buffer);
   }
   Result EndRead(size_t read_size) override {
     return blob_bytes_consumer_->EndRead(read_size);
@@ -481,6 +474,43 @@ class DataAndEncodedFileOrBlobBytesConsumer final : public BytesConsumer {
   Member<BytesConsumer> blob_bytes_consumer_;
 };
 
+scoped_refptr<EncodedFormData> StripUnhandledElements(
+    scoped_refptr<EncodedFormData> form_data) {
+  scoped_refptr<EncodedFormData> new_data = EncodedFormData::Create();
+  new_data->SetBoundary(form_data->Boundary());
+  new_data->SetIdentifier(form_data->Identifier());
+  new_data->SetContainsPasswordData(form_data->ContainsPasswordData());
+  EncodedFormData::FormDataType type = EncodedFormData::FormDataType::kDataOnly;
+  for (auto& element : form_data->MutableElements()) {
+    switch (element.type_) {
+      case FormDataElement::kData:
+        break;
+      case FormDataElement::kEncodedFile:
+      case FormDataElement::kEncodedBlob:
+        if (type == EncodedFormData::FormDataType::kDataAndDataPipe) {
+          type = EncodedFormData::FormDataType::kInvalid;
+        } else {
+          type = EncodedFormData::FormDataType::kDataAndEncodedFileOrBlob;
+        }
+        break;
+      case FormDataElement::kDataPipe:
+        if (type == EncodedFormData::FormDataType::kDataAndEncodedFileOrBlob) {
+          type = EncodedFormData::FormDataType::kInvalid;
+        } else {
+          type = EncodedFormData::FormDataType::kDataAndDataPipe;
+        }
+        break;
+    }
+    if (type == EncodedFormData::FormDataType::kInvalid) {
+      return new_data;
+    }
+    new_data->MutableElements().push_back(std::move(element));
+  }
+  DUMP_WILL_BE_CHECK_NE(EncodedFormData::FormDataType::kInvalid,
+                        form_data->GetType());
+  return new_data;
+}
+
 }  // namespace
 
 FormDataBytesConsumer::FormDataBytesConsumer(const String& string)
@@ -524,6 +554,14 @@ BytesConsumer* FormDataBytesConsumer::GetImpl(
     scoped_refptr<EncodedFormData> form_data,
     BytesConsumer* consumer_for_testing) {
   DCHECK(form_data);
+  // TODO(crbug.com/374124998): introduce canonical way not to lose elements.
+  // Also see https://issues.chromium.org/u/1/issues/356183778#comment57
+  if (form_data->GetType() == EncodedFormData::FormDataType::kInvalid) {
+    base::debug::DumpWithoutCrashing();
+    form_data = StripUnhandledElements(form_data);
+    DUMP_WILL_BE_CHECK_NE(EncodedFormData::FormDataType::kInvalid,
+                          form_data->GetType());
+  }
   switch (form_data->GetType()) {
     case EncodedFormData::FormDataType::kDataOnly:
       return MakeGarbageCollected<DataOnlyBytesConsumer>(std::move(form_data));
@@ -534,7 +572,7 @@ BytesConsumer* FormDataBytesConsumer::GetImpl(
       return MakeGarbageCollected<DataAndDataPipeBytesConsumer>(
           execution_context, form_data.get());
     case EncodedFormData::FormDataType::kInvalid:
-      NOTREACHED();
+      DUMP_WILL_BE_NOTREACHED();
   }
   return nullptr;
 }

@@ -134,7 +134,6 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_deletion_dialog_controller.h"
@@ -188,7 +187,7 @@
 #include "components/paint_preview/buildflags/buildflags.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/prefs/pref_service.h"
-#include "components/saved_tab_groups/tab_group_sync_service.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/search/search.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/session_types.h"
@@ -399,10 +398,8 @@ bool ShouldShowCookieMigrationNoticeForBrowser(const Browser& browser) {
   return last_window_for_profile;
 }
 
-void UpdateTabGroupSessionMetadata(
-    Browser* browser,
-    const tab_groups::TabGroupId& group_id,
-    const std::optional<std::string> saved_group_id) {
+void UpdateTabGroupSessionMetadata(Browser* browser,
+                                   const tab_groups::TabGroupId& group_id) {
   SessionService* const session_service =
       SessionServiceFactory::GetForProfile(browser->profile());
   if (!session_service) {
@@ -416,7 +413,7 @@ void UpdateTabGroupSessionMetadata(
           ->visual_data();
 
   session_service->SetTabGroupMetadata(browser->session_id(), group_id,
-                                       visual_data, saved_group_id);
+                                       visual_data);
 }
 
 }  // namespace
@@ -672,6 +669,10 @@ Browser::~Browser() {
   features_.reset();
   ClearAllUserData();
 
+  // Destroy the deletion dialog before profile resets.
+  // (see https://crbug.com/357391254)
+  tab_group_deletion_dialog_controller_.reset();
+
   // Stop observing notifications and destroy the tab monitor before continuing
   // with destruction. Profile destruction will unload extensions and reentrant
   // calls to Browser:: should be avoided while it is being torn down.
@@ -843,6 +844,17 @@ std::u16string Browser::GetWindowTitleForTab(int index) const {
   }
 
   if (title.empty() && (is_type_normal() || is_type_popup())) {
+    title = CoreTabHelper::GetDefaultTitle();
+  }
+
+  return title;
+}
+
+std::u16string Browser::GetTitleForTab(int index) const {
+  std::u16string title = FormatTitleForDisplay(
+      tab_strip_model_->GetWebContentsAt(index)->GetTitle());
+
+  if (title.empty()) {
     title = CoreTabHelper::GetDefaultTitle();
   }
 
@@ -1132,6 +1144,11 @@ bool Browser::ShouldHideUIForFullscreen() const {
   return window_ && window_->ShouldHideUIForFullscreen();
 }
 
+base::CallbackListSubscription Browser::RegisterBrowserDidClose(
+    BrowserDidCloseCallback callback) {
+  return browser_did_close_callback_list_.Add(std::move(callback));
+}
+
 views::View* Browser::TopContainer() {
   return window_->GetTopContainer();
 }
@@ -1155,7 +1172,21 @@ Browser::GetWebContentsModalDialogHostForWindow() {
 }
 
 bool Browser::IsActive() {
+// TODO(https://crbug.com/376306245): This is a temporary workaround for the
+// fact that window_->IsActive() does not return the right result for macOS
+// standalone PWA windows. This new behavior is still not technically correct,
+// since it's checking that the last active window is `this`, as opposed to
+// whether `this` is active.
+#if BUILDFLAG(IS_MAC)
+  // If this is a standalone PWA window, check BrowserList instead.
+  if (GetAppBrowserController()) {
+    return BrowserList::GetInstance()->GetLastActive() == this;
+  } else {
+    return window_->IsActive();
+  }
+#else
   return window_->IsActive();
+#endif
 }
 
 base::CallbackListSubscription Browser::RegisterDidBecomeActive(
@@ -1186,6 +1217,18 @@ BrowserUserEducationInterface* Browser::GetUserEducationInterface() {
 
 web_app::AppBrowserController* Browser::GetAppBrowserController() {
   return app_controller_.get();
+}
+
+std::vector<tabs::TabInterface*> Browser::GetAllTabInterfaces() {
+  std::vector<tabs::TabInterface*> results;
+  for (int index = 0; index < tab_strip_model_->count(); ++index) {
+    results.push_back(tab_strip_model_->GetTabAtIndex(index));
+  }
+  return results;
+}
+
+Browser* Browser::GetBrowserForMigrationOnly() {
+  return this;
 }
 
 void Browser::DidBecomeActive() {
@@ -1257,6 +1300,10 @@ void Browser::OnWindowClosing() {
     // If there are no tabs, then a task will be scheduled (by views) to delete
     // this Browser.
     is_delete_scheduled_ = true;
+
+    // At this point the browser has successfully closed and is scheduled for
+    // deletion.
+    browser_did_close_callback_list_.Notify(this);
   }
 }
 
@@ -1516,18 +1563,7 @@ void Browser::OnTabGroupChanged(const TabGroupChange& change) {
   DCHECK(!IsRelevantToAppSessionService(type_));
   DCHECK(tab_strip_model_->group_model());
   if (change.type == TabGroupChange::kVisualsChanged) {
-    std::optional<std::string> saved_guid;
-
-    tab_groups::TabGroupSyncService* tab_group_service =
-        tab_groups::SavedTabGroupUtils::GetServiceForProfile(profile_);
-    if (tab_group_service) {
-      const std::optional<tab_groups::SavedTabGroup> saved_group =
-          tab_group_service->GetGroup(change.group);
-      if (saved_group) {
-        saved_guid = saved_group->saved_guid().AsLowercaseString();
-      }
-    }
-    UpdateTabGroupSessionMetadata(this, change.group, std::move(saved_guid));
+    UpdateTabGroupSessionMetadata(this, change.group);
   } else if (change.type == TabGroupChange::kClosed) {
     sessions::TabRestoreService* tab_restore_service =
         TabRestoreServiceFactory::GetForProfile(profile());
@@ -2463,6 +2499,11 @@ void Browser::RequestPointerLock(WebContents* web_contents,
 void Browser::LostPointerLock() {
   exclusive_access_manager_->pointer_lock_controller()
       ->ExitExclusiveAccessToPreviousState();
+}
+
+bool Browser::IsWaitingForPointerLockPrompt(WebContents* web_contents) {
+  return exclusive_access_manager_->pointer_lock_controller()
+      ->IsWaitingForPointerLockPrompt(web_contents);
 }
 
 void Browser::RequestKeyboardLock(WebContents* web_contents,

@@ -18,6 +18,7 @@ struct SkImageInfo;
 
 namespace gpu {
 class ClientSharedImage;
+struct ExportedSharedImage;
 }  // namespace gpu
 
 namespace blink {
@@ -29,16 +30,15 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
  public:
   ~AcceleratedStaticBitmapImage() override;
 
-  // Creates an image wrapping a shared image mailbox.
+  // Creates an image wrapping a shared image.
   //
   // |sync_token| is the token that must be waited on before reading the
-  // contents of this mailbox.
+  // contents of this shared image.
   //
   // |shared_image_texture_id| is an optional texture bound to the shared image
-  // mailbox imported into the provided context. If provided the caller must
-  // ensure that the texture is bound to the shared image mailbox, stays alive
-  // and has a read lock on the shared image until the |release_callback| is
-  // invoked.
+  // imported into the provided context. If provided the caller must ensure that
+  // the texture is bound to the shared image, stays alive and has a read lock
+  // on the shared image until the |release_callback| is invoked.
   //
   // |sk_image_info| provides the metadata associated with the backing.
   //
@@ -48,33 +48,17 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
   // |is_origin_top_left| indicates whether the origin in texture space
   // corresponds to the top-left content pixel.
   //
-  // |context_provider| is the context that the mailbox was created with.
+  // |context_provider| is the context that the shared image was created with.
   // |context_thread_ref| and |context_task_runner| refer to the thread the
   // context is bound to. If the image is created on a different thread than
   // |context_thread_ref| then the provided sync_token must be verified and no
   // |shared_image_texture_id| should be provided.
   //
-  // |release_callback| is a callback to be invoked when this mailbox can be
-  // safely destroyed. It is guaranteed to be invoked on the context thread.
+  // |release_callback| is a callback to be invoked when this shared image can
+  // be safely destroyed. It is guaranteed to be invoked on the context thread.
   //
   // Note that it is assumed that the mailbox can only be used for read
   // operations, no writes are allowed.
-  static scoped_refptr<AcceleratedStaticBitmapImage> CreateFromCanvasMailbox(
-      const gpu::Mailbox&,
-      const gpu::SyncToken&,
-      GLuint shared_image_texture_id,
-      const SkImageInfo& sk_image_info,
-      GLenum texture_target,
-      bool is_origin_top_left,
-      base::WeakPtr<WebGraphicsContext3DProviderWrapper>,
-      base::PlatformThreadRef context_thread_ref,
-      scoped_refptr<base::SingleThreadTaskRunner> context_task_runner,
-      viz::ReleaseCallback release_callback,
-      bool supports_display_compositing,
-      bool is_overlay_candidate);
-
-  // Same as CreateFromCanvasMailbox() except that this function accepts
-  // a ClientSharedImage instead of a mailbox.
   static scoped_refptr<AcceleratedStaticBitmapImage>
   CreateFromCanvasSharedImage(
       scoped_refptr<gpu::ClientSharedImage>,
@@ -90,13 +74,13 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
       bool supports_display_compositing,
       bool is_overlay_candidate);
 
-  // Creates an image wrapping an external mailbox.
-  // The mailbox may come from a different context,
+  // Creates an image wrapping an external shared image.
+  // The shared image may come from a different context,
   // potentially from a different process.
-  // This takes ownership of the mailbox.
-  static scoped_refptr<AcceleratedStaticBitmapImage> CreateFromExternalMailbox(
-      const gpu::MailboxHolder& mailbox_holder,
-      gpu::SharedImageUsageSet usage,
+  // This takes ownership of the shared image.
+  static scoped_refptr<AcceleratedStaticBitmapImage>
+  CreateFromExternalSharedImage(
+      const gpu::ExportedSharedImage& exported_shared_image,
       const SkImageInfo& sk_image_info,
       bool is_origin_top_left,
       bool supports_display_compositing,
@@ -129,9 +113,6 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
                      const gfx::Point& dest_point,
                      const gfx::Rect& source_sub_rectangle) override;
 
-  bool CopyToResourceProvider(
-      CanvasResourceProvider* resource_provider) override;
-
   bool CopyToResourceProvider(CanvasResourceProvider* resource_provider,
                               const gfx::Rect& copy_rect) override;
 
@@ -153,6 +134,7 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
   // sync token before accessing this mailbox.
   gpu::MailboxHolder GetMailboxHolder() const final;
   scoped_refptr<gpu::ClientSharedImage> GetSharedImage() const final;
+  gpu::SyncToken GetSyncToken() const final;
   bool IsOriginTopLeft() const final { return is_origin_top_left_; }
   bool SupportsDisplayCompositing() const final {
     return supports_display_compositing_;

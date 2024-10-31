@@ -73,6 +73,7 @@
 #include "components/security_interstitials/core/unsafe_resource.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/account_info.h"
+#include "components/signin/public/identity_manager/account_managed_status_finder.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
@@ -957,10 +958,11 @@ void ChromePasswordProtectionService::OnGaiaPasswordChanged(
 // Disabled on Android, because enterprise reporting extension is not supported.
 #if !BUILDFLAG(IS_ANDROID)
   // Only report if the current password changed is the primary account and it's
-  // not a Gmail account or if the current password changed is a content area
-  // account and it's not a Gmail account.
-  if (!IsAccountGmail(username))
+  // not a consumer account or if the current password changed is a content area
+  // account and it's not a consumer account.
+  if (!IsAccountConsumer(username)) {
     ReportPasswordChanged();
+  }
 #endif
 }
 
@@ -1637,10 +1639,16 @@ bool ChromePasswordProtectionService::IsPrimaryAccountSignedIn() const {
          !GetAccountInfo().hosted_domain.empty();
 }
 
-bool ChromePasswordProtectionService::IsAccountGmail(
+bool ChromePasswordProtectionService::IsAccountConsumer(
     const std::string& username) const {
-  return GetAccountInfoForUsername(username).hosted_domain ==
-         kNoHostedDomainFound;
+  // Check that |username| is likely an email address because if |username| has
+  // no email domain MayBeEnterpriseUserBasedOnEmail will assume it is a
+  // consumer account.
+  return (username.find("@") != std::string::npos &&
+          !signin::AccountManagedStatusFinder::MayBeEnterpriseUserBasedOnEmail(
+              username)) ||
+         GetAccountInfoForUsername(username).hosted_domain ==
+             kNoHostedDomainFound;
 }
 
 AccountInfo ChromePasswordProtectionService::GetAccountInfoForUsername(

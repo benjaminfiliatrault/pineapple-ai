@@ -9,10 +9,14 @@ assert(is_chromeos_ash, "Graduation is ash-chrome only")
 
 static_library("graduation") {
   sources = [
+    "graduation_state_tracker.cc",
+    "graduation_state_tracker.h",
     "graduation_ui.cc",
     "graduation_ui.h",
     "graduation_ui_handler.cc",
     "graduation_ui_handler.h",
+    "webview_auth_handler.cc",
+    "webview_auth_handler.h",
   ]
 
   public_deps = [ ":url_constants" ]
@@ -22,12 +26,15 @@ static_library("graduation") {
     "resources:resources",
     "//ash:ash",
     "//ash/constants:constants",
+    "//ash/public/cpp:cpp",
     "//ash/webui/common:chrome_os_webui_config",
     "//ash/webui/common:trusted_types_util",
     "//ash/webui/system_apps/public:system_web_app_config",
     "//ash/webui/system_apps/public:system_web_app_type",
     "//base",
     "//chromeos/strings",
+    "//components/signin/public/base",
+    "//components/signin/public/identity_manager",
     "//components/user_manager",
     "//content/public/browser",
     "//ui/base",

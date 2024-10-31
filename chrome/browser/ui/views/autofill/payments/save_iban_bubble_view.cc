@@ -21,8 +21,10 @@
 #include "ui/gfx/vector_icon_utils.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
+#include "ui/views/layout/table_layout.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/style/typography_provider.h"
 #include "ui/views/view_class_properties.h"
@@ -67,7 +69,7 @@ void SaveIbanBubbleView::Hide() {
   // posted in CloseBubble() completes, but we need to fix references sooner.
   if (controller_) {
     controller_->OnBubbleClosed(
-        GetPaymentsBubbleClosedReasonFromWidget(GetWidget()));
+        GetPaymentsUiClosedReasonFromWidget(GetWidget()));
   }
   controller_ = nullptr;
 }
@@ -83,8 +85,9 @@ void SaveIbanBubbleView::AddedToWidget() {
                               base::Unretained(this))));
 
   if (controller_->IsUploadSave()) {
-    GetBubbleFrameView()->SetTitleView(CreateTitleView(
-        GetWindowTitle(), TitleWithIconAndSeparatorView::Icon::GOOGLE_PAY));
+    GetBubbleFrameView()->SetTitleView(
+        std::make_unique<TitleWithIconAfterLabelView>(
+            GetWindowTitle(), TitleWithIconAfterLabelView::Icon::GOOGLE_PAY));
   }
 }
 
@@ -95,7 +98,7 @@ std::u16string SaveIbanBubbleView::GetWindowTitle() const {
 void SaveIbanBubbleView::WindowClosing() {
   if (controller_) {
     controller_->OnBubbleClosed(
-        GetPaymentsBubbleClosedReasonFromWidget(GetWidget()));
+        GetPaymentsUiClosedReasonFromWidget(GetWidget()));
     controller_ = nullptr;
   }
 }
@@ -286,7 +289,7 @@ std::unique_ptr<views::View> SaveIbanBubbleView::CreateLegalMessageView() {
       ChromeLayoutProvider::Get()->GetDistanceMetric(
           DISTANCE_RELATED_CONTROL_VERTICAL_SMALL));
 
-  legal_message_view->AddChildView(std::make_unique<LegalMessageView>(
+  legal_message_view->AddChildView(::autofill::CreateLegalMessageView(
       message_lines, base::UTF8ToUTF16(controller()->GetAccountInfo().email),
       GetProfileAvatar(controller()->GetAccountInfo()),
       base::BindRepeating(&SaveIbanBubbleView::LinkClicked,

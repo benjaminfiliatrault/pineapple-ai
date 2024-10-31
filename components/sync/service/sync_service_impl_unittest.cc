@@ -58,6 +58,8 @@ using testing::AllOf;
 using testing::AnyNumber;
 using testing::AtLeast;
 using testing::ByMove;
+using testing::ContainerEq;
+using testing::Contains;
 using testing::Eq;
 using testing::Invoke;
 using testing::IsEmpty;
@@ -298,8 +300,6 @@ class SyncServiceImplTest : public ::testing::Test {
 
  private:
   base::test::SingleThreadTaskEnvironment task_environment_;
-  base::test::ScopedFeatureList feature_list_{
-      syncer::kSyncEnableModelTypeLocalDataBatchUploaders};
   SyncServiceImplBundle sync_service_impl_bundle_;
   std::unique_ptr<SyncServiceImpl> service_;
   raw_ptr<SyncClientMock, DanglingUntriaged> sync_client_ =
@@ -2210,7 +2210,7 @@ TEST_F(SyncServiceImplTest,
   // disabled by policy. So data should not be uploaded.
   auto device_info_uploader =
       std::make_unique<MockDataTypeLocalDataBatchUploader>();
-  EXPECT_CALL(*device_info_uploader, TriggerLocalDataMigration).Times(0);
+  EXPECT_CALL(*device_info_uploader, TriggerLocalDataMigration()).Times(0);
 
   std::vector<FakeControllerInitParams> params;
   params.emplace_back(DEVICE_INFO, /*enable_transport_mode=*/true,
@@ -2237,7 +2237,7 @@ TEST_F(SyncServiceImplTest,
   // syncing. So data should not be uploaded.
   auto device_info_uploader =
       std::make_unique<MockDataTypeLocalDataBatchUploader>();
-  EXPECT_CALL(*device_info_uploader, TriggerLocalDataMigration).Times(0);
+  EXPECT_CALL(*device_info_uploader, TriggerLocalDataMigration()).Times(0);
 
   std::vector<FakeControllerInitParams> params;
   params.emplace_back(DEVICE_INFO, /*enable_transport_mode=*/true,
@@ -2250,6 +2250,69 @@ TEST_F(SyncServiceImplTest,
   service()->TriggerLocalDataMigration({DEVICE_INFO});
 }
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+class SyncServiceImplWithBatchUploadDesktopTest : public SyncServiceImplTest {
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_{
+      switches::kBatchUploadDesktop};
+};
+
+TEST_F(SyncServiceImplWithBatchUploadDesktopTest,
+       ShouldNotForwardUponTriggerLocalDataMigrationWithItemsIfSyncDisabled) {
+  prefs()->SetManagedPref(prefs::internal::kSyncManaged, base::Value(true));
+  SignInWithoutSyncConsent();
+
+  // DEVICE_INFO will be passed to TriggerLocalDataMigration(), but sync is
+  // disabled by policy. So data should not be uploaded.
+  auto device_info_uploader =
+      std::make_unique<MockDataTypeLocalDataBatchUploader>();
+  EXPECT_CALL(*device_info_uploader, TriggerLocalDataMigration(testing::_))
+      .Times(0);
+
+  std::vector<FakeControllerInitParams> params;
+  params.emplace_back(DEVICE_INFO, /*enable_transport_mode=*/true,
+                      std::move(device_info_uploader));
+  InitializeService(std::move(params));
+  base::RunLoop().RunUntilIdle();
+
+  // Sync was disabled due to the policy.
+  EXPECT_EQ(SyncService::DisableReasonSet(
+                {SyncService::DISABLE_REASON_ENTERPRISE_POLICY}),
+            service()->GetDisableReasons());
+  EXPECT_EQ(SyncService::TransportState::DISABLED,
+            service()->GetTransportState());
+
+  std::map<DataType, std::vector<syncer::LocalDataItemModel::DataId>> items{
+      {DEVICE_INFO, {"d1", "d2"}}};
+  service()->TriggerLocalDataMigration(items);
+}
+
+TEST_F(SyncServiceImplWithBatchUploadDesktopTest,
+       ShouldDoNothingUponTriggerLocalDataMigrationWithItemsForSyncingUsers) {
+  PopulatePrefsForInitialSyncFeatureSetupComplete();
+  SignInWithSyncConsent();
+
+  // DEVICE_INFO will be passed to TriggerLocalDataMigration(), but the user is
+  // syncing. So data should not be uploaded.
+  auto device_info_uploader =
+      std::make_unique<MockDataTypeLocalDataBatchUploader>();
+  EXPECT_CALL(*device_info_uploader, TriggerLocalDataMigration(testing::_))
+      .Times(0);
+
+  std::vector<FakeControllerInitParams> params;
+  params.emplace_back(DEVICE_INFO, /*enable_transport_mode=*/true,
+                      std::move(device_info_uploader));
+  InitializeService(std::move(params));
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_TRUE(service()->GetPreferredDataTypes().Has(DEVICE_INFO));
+
+  std::map<DataType, std::vector<syncer::LocalDataItemModel::DataId>> items{
+      {DEVICE_INFO, {"d1", "d2"}}};
+  service()->TriggerLocalDataMigration(items);
+}
+#endif
+
 TEST_F(SyncServiceImplTest, ShouldRecordLocalDataMigrationRequests) {
   base::HistogramTester histogram_tester;
   SignInWithoutSyncConsent();
@@ -2258,7 +2321,8 @@ TEST_F(SyncServiceImplTest, ShouldRecordLocalDataMigrationRequests) {
   InitializeService(std::move(params));
   base::RunLoop().RunUntilIdle();
 
-  service()->TriggerLocalDataMigration({DEVICE_INFO, AUTOFILL_WALLET_DATA});
+  service()->TriggerLocalDataMigration(
+      DataTypeSet{DEVICE_INFO, AUTOFILL_WALLET_DATA});
 
   // The metric records what was requested, regardless of what types are active.
   EXPECT_THAT(histogram_tester.GetAllSamples("Sync.BatchUpload.Requests3"),
@@ -2373,6 +2437,139 @@ TEST_F(SyncServiceImplTest, ShouldCacheTrustedVaultAutoUpgradeDebugInfo) {
                 .value_or(sync_pb::TrustedVaultAutoUpgradeExperimentGroup())
                 .cohort());
 }
+
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+TEST_F(SyncServiceImplTest, ShouldRecordHistoryOptInStateOnSignin) {
+  // Allow UserSelectableType::kHistory in transport mode.
+  base::test::ScopedFeatureList features{kReplaceSyncPromosWithSignInPromos};
+
+  {
+    base::HistogramTester histogram_tester;
+
+    SignInWithoutSyncConsent();
+
+    std::vector<FakeControllerInitParams> params;
+    params.emplace_back(HISTORY, /*enable_transport_mode=*/true);
+    InitializeService(std::move(params));
+    base::RunLoop().RunUntilIdle();
+
+    // The signin happened before the SyncService was initialized (this mimics
+    // the case where the user previously signed in, and just restarted Chrome),
+    // so nothing should be recorded.
+    EXPECT_THAT(
+        histogram_tester.GetTotalCountsForPrefix("Signin.HistoryOptInState."),
+        IsEmpty());
+    EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
+                    "Signin.HistoryAlreadyOptedInAccessPoint."),
+                IsEmpty());
+  }
+
+  {
+    base::HistogramTester histogram_tester;
+    // Sign out, then back in.
+    identity_test_env()->ClearPrimaryAccount();
+    SignInWithoutSyncConsent();
+    // The histograms are recorded in a posted task.
+    base::RunLoop().RunUntilIdle();
+
+    // Now histograms should have been recorded. For `ConsentLevel::kSignin`,
+    // history should be off by default.
+    EXPECT_THAT(
+        histogram_tester.GetAllSamples("Signin.HistoryOptInState.OnSignin"),
+        base::BucketsAre(base::Bucket(false, 1)));
+    EXPECT_THAT(
+        histogram_tester.GetAllSamples("Signin.HistoryOptInState.OnSync"),
+        IsEmpty());
+    EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
+                    "Signin.HistoryAlreadyOptedInAccessPoint."),
+                IsEmpty());
+  }
+
+  {
+    base::HistogramTester histogram_tester;
+    // Opt in to history.
+    service()->GetUserSettings()->SetSelectedType(UserSelectableType::kHistory,
+                                                  true);
+    ASSERT_TRUE(service()->GetUserSettings()->GetSelectedTypes().Has(
+        UserSelectableType::kHistory));
+
+    // Opting in while already signed in should not record the histograms.
+    EXPECT_THAT(
+        histogram_tester.GetTotalCountsForPrefix("Signin.HistoryOptInState."),
+        IsEmpty());
+    EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
+                    "Signin.HistoryAlreadyOptedInAccessPoint."),
+                IsEmpty());
+  }
+
+  {
+    base::HistogramTester histogram_tester;
+    // Sign out, then back in.
+    identity_test_env()->ClearPrimaryAccount();
+    SignInWithoutSyncConsent();
+    // The histograms are recorded in a posted task.
+    base::RunLoop().RunUntilIdle();
+
+    ASSERT_TRUE(service()->GetUserSettings()->GetSelectedTypes().Has(
+        UserSelectableType::kHistory));
+
+    // Histograms should've been recorded again, and this time the user was
+    // already opted in.
+    EXPECT_THAT(
+        histogram_tester.GetAllSamples("Signin.HistoryOptInState.OnSignin"),
+        base::BucketsAre(base::Bucket(true, 1)));
+    EXPECT_THAT(
+        histogram_tester.GetAllSamples("Signin.HistoryOptInState.OnSync"),
+        IsEmpty());
+    EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
+                    "Signin.HistoryAlreadyOptedInAccessPoint."),
+                ContainerEq(base::HistogramTester::CountsMap{
+                    {"Signin.HistoryAlreadyOptedInAccessPoint.OnSignin", 1}}));
+  }
+}
+
+TEST_F(SyncServiceImplTest, ShouldRecordHistoryOptInStateOnSync) {
+  base::HistogramTester histogram_tester;
+
+  SignInWithSyncConsent();
+
+  std::vector<FakeControllerInitParams> params;
+  params.emplace_back(HISTORY, /*enable_transport_mode=*/true);
+  InitializeService(std::move(params));
+  base::RunLoop().RunUntilIdle();
+
+  // Sync was enabled before the SyncService was initialized (this mimics the
+  // case where the user previously enabled sync, and just restarted Chrome), so
+  // nothing should be recorded.
+  EXPECT_THAT(
+      histogram_tester.GetTotalCountsForPrefix("Signin.HistoryOptInState."),
+      IsEmpty());
+  EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
+                  "Signin.HistoryAlreadyOptedInAccessPoint."),
+              IsEmpty());
+
+  // Sign out, then back in.
+  identity_test_env()->ClearPrimaryAccount();
+  SignInWithSyncConsent();
+  // The histograms are recorded in a posted task.
+  base::RunLoop().RunUntilIdle();
+
+  // Note: In production, enabling sync is a two-step process: First signin
+  // with `ConsentLevel::kSignin` (and history sync disabled), then switching
+  // to `ConsentLevel::kSync` (with history sync enabled). However,
+  // `IdentityTestEnvironment` doesn't faithfully reproduce this process but
+  // rather does both steps at once, and so `.OnSignin` gets recorded as "true"
+  // here. Rather than adding an inaccurate expectation, let's just verify the
+  // total count.
+  histogram_tester.ExpectTotalCount("Signin.HistoryOptInState.OnSignin", 1);
+  EXPECT_THAT(histogram_tester.GetAllSamples("Signin.HistoryOptInState.OnSync"),
+              base::BucketsAre(base::Bucket(true, 1)));
+  EXPECT_THAT(
+      histogram_tester.GetTotalCountsForPrefix(
+          "Signin.HistoryAlreadyOptedInAccessPoint."),
+      Contains(Pair("Signin.HistoryAlreadyOptedInAccessPoint.OnSync", 1)));
+}
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace
 }  // namespace syncer

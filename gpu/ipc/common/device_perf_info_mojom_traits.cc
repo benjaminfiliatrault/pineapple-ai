@@ -14,6 +14,8 @@ gpu::mojom::Direct3DFeatureLevel
 EnumTraits<gpu::mojom::Direct3DFeatureLevel, D3D_FEATURE_LEVEL>::ToMojom(
     D3D_FEATURE_LEVEL d3d_feature_level) {
   switch (d3d_feature_level) {
+    case D3D_FEATURE_LEVEL_1_0_GENERIC:
+      return gpu::mojom::Direct3DFeatureLevel::k1_0_Generic;
     case D3D_FEATURE_LEVEL_1_0_CORE:
       return gpu::mojom::Direct3DFeatureLevel::k1_0_Core;
     case D3D_FEATURE_LEVEL_9_1:
@@ -37,9 +39,7 @@ EnumTraits<gpu::mojom::Direct3DFeatureLevel, D3D_FEATURE_LEVEL>::ToMojom(
     case D3D_FEATURE_LEVEL_12_2:
       return gpu::mojom::Direct3DFeatureLevel::k12_2;
   }
-  NOTREACHED_IN_MIGRATION()
-      << "Invalid D3D_FEATURE_LEVEL:" << d3d_feature_level;
-  return gpu::mojom::Direct3DFeatureLevel::k1_0_Core;
+  NOTREACHED() << "Invalid D3D_FEATURE_LEVEL:" << d3d_feature_level;
 }
 
 // static
@@ -47,6 +47,9 @@ bool EnumTraits<gpu::mojom::Direct3DFeatureLevel, D3D_FEATURE_LEVEL>::FromMojom(
     gpu::mojom::Direct3DFeatureLevel input,
     D3D_FEATURE_LEVEL* out) {
   switch (input) {
+    case gpu::mojom::Direct3DFeatureLevel::k1_0_Generic:
+      *out = D3D_FEATURE_LEVEL_1_0_GENERIC;
+      return true;
     case gpu::mojom::Direct3DFeatureLevel::k1_0_Core:
       *out = D3D_FEATURE_LEVEL_1_0_CORE;
       return true;
@@ -81,8 +84,7 @@ bool EnumTraits<gpu::mojom::Direct3DFeatureLevel, D3D_FEATURE_LEVEL>::FromMojom(
       *out = D3D_FEATURE_LEVEL_12_2;
       return true;
   }
-  NOTREACHED_IN_MIGRATION() << "Invalid D3D_FEATURE_LEVEL: " << input;
-  return false;
+  NOTREACHED() << "Invalid D3D_FEATURE_LEVEL: " << input;
 }
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -97,9 +99,8 @@ EnumTraits<gpu::mojom::HasDiscreteGpu, gpu::HasDiscreteGpu>::ToMojom(
     case gpu::HasDiscreteGpu::kYes:
       return gpu::mojom::HasDiscreteGpu::kYes;
   }
-  NOTREACHED_IN_MIGRATION()
-      << "Invalid gpu::HasDiscreteGpu: " << static_cast<int>(has_discrete_gpu);
-  return gpu::mojom::HasDiscreteGpu::kUnknown;
+  NOTREACHED() << "Invalid gpu::HasDiscreteGpu: "
+               << static_cast<int>(has_discrete_gpu);
 }
 
 // static
@@ -117,8 +118,7 @@ bool EnumTraits<gpu::mojom::HasDiscreteGpu, gpu::HasDiscreteGpu>::FromMojom(
       *out = gpu::HasDiscreteGpu::kYes;
       return true;
   }
-  NOTREACHED_IN_MIGRATION() << "Invalid gpu::mojom::HasDiscreteGpu: " << input;
-  return false;
+  NOTREACHED() << "Invalid gpu::mojom::HasDiscreteGpu: " << input;
 }
 
 // static

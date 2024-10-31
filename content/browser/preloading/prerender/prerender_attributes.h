@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 
+#include "content/browser/preloading/preload_pipeline_info.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/frame_tree_node_id.h"
 #include "content/public/browser/preloading.h"
@@ -25,6 +26,16 @@ namespace content {
 
 // Records the basic attributes of a prerender request.
 struct CONTENT_EXPORT PrerenderAttributes {
+  // - `prerendering_url` indicates the initial URL of the prerender request.
+  //    The real url might be changed during the prerendering navigation, e.g.,
+  //    redirection.
+  // - `initiator_render_frame_host`: the render frame host that initiates this
+  //    prerender request. It could be null if the prerender is initiated by
+  //    browser.
+  // - `initiator_web_contents`: the web contents that the initiator render
+  //    frame host belongs to. Note that `initiator_web_contents` is non-null
+  //    even if `initiator_render_frame_host` is null, because the attempted
+  //    prerender could be triggered by other components of a WebContents.
   PrerenderAttributes(
       const GURL& prerendering_url,
       PreloadingTriggerType trigger_type,
@@ -33,12 +44,8 @@ struct CONTENT_EXPORT PrerenderAttributes {
       Referrer referrer,
       std::optional<blink::mojom::SpeculationEagerness> eagerness,
       std::optional<net::HttpNoVarySearchData> no_vary_search_expected,
-      std::optional<url::Origin> initiator_origin,
-      int initiator_process_id,
+      RenderFrameHost* initiator_render_frame_host,
       base::WeakPtr<WebContents> initiator_web_contents,
-      std::optional<blink::LocalFrameToken> initiator_frame_token,
-      FrameTreeNodeId initiator_frame_tree_node_id,
-      ukm::SourceId initiator_ukm_id,
       ui::PageTransition transition_type,
       bool should_warm_up_compositor,
       base::RepeatingCallback<bool(const GURL&,
@@ -46,9 +53,7 @@ struct CONTENT_EXPORT PrerenderAttributes {
           url_match_predicate,
       base::RepeatingCallback<void(NavigationHandle&)>
           prerender_navigation_handle_callback,
-      // TODO(crbug.com/40246462): use pattern other than default parameter.
-      const std::optional<base::UnguessableToken>&
-          initiator_devtools_navigation_token = std::nullopt);
+      scoped_refptr<PreloadPipelineInfo> preload_pipeline_info);
 
   ~PrerenderAttributes();
   PrerenderAttributes(const PrerenderAttributes&);
@@ -122,6 +127,9 @@ struct CONTENT_EXPORT PrerenderAttributes {
 
   base::RepeatingCallback<void(NavigationHandle&)>
       prerender_navigation_handle_callback;
+
+  // Information of preload pipeline that this prerender belongs to.
+  scoped_refptr<PreloadPipelineInfo> preload_pipeline_info;
 
   // This is std::nullopt when prerendering is initiated by the browser.
   std::optional<base::UnguessableToken> initiator_devtools_navigation_token;

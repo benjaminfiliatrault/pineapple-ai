@@ -19,6 +19,7 @@
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalaneg</translation>
 <translation id="1168100932582989117">Gweinyddion enw Google</translation>
+<translation id="1170788066030116158">Dyddiad tynnwyd</translation>
 <translation id="1172970565351728681">Tua <ph name="REMAINING_TIME" /> ar ôl</translation>
 <translation id="1173894706177603556">Ailenwi</translation>
 <translation id="1173916544412572294">Rhwydwaith <ph name="NETWORK_INDEX" /> of<ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, Cryfder Signal <ph name="SIGNAL_STRENGTH" />%, Batri'r Ffôn <ph name="BATTERY_STATUS" />%, Manylion</translation>
@@ -581,6 +582,7 @@
 <translation id="5447680084201416734">Dim digon o le storio.</translation>
 <translation id="5449551289610225147">Cyfrinair annilys</translation>
 <translation id="5459064203055649751">Mae ffeil o'r enw "<ph name="FILENAME" />" eisoes yn bodoli. Ydych chi am ei disodli gyda'r un rydych chi'n ei symud?</translation>
+<translation id="5462378611565326489">Nid yw OneDrive ar gael tra all-lein.</translation>
 <translation id="5463231940765244860">Rhowch</translation>
 <translation id="5469868506864199649">Eidaleg</translation>
 <translation id="5473333559083690127">Rhowch y PIN newydd eto</translation>

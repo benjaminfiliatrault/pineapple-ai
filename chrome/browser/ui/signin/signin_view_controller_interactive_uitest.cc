@@ -306,14 +306,16 @@ IN_PROC_BROWSER_TEST_F(SignInViewControllerBrowserTest,
   content_observer.StartWatchingNewWebContents();
   signin::SigninChoice result;
   browser()->signin_view_controller()->ShowModalManagedUserNoticeDialog(
-      account_info, /*is_oidc_account=*/false, /*force_new_profile=*/true,
-      /*show_link_data_option=*/true,
-      base::BindOnce([](signin::SigninChoice* result,
-                        signin::SigninChoice choice) { *result = choice; },
-                     &result),
-      /*done_callback=*/
-      base::BindOnce(&SigninViewController::CloseModalSignin,
-                     browser()->signin_view_controller()->AsWeakPtr()));
+      std::make_unique<signin::EnterpriseProfileCreationDialogParams>(
+          account_info, /*is_oidc_account=*/false, /*force_new_profile=*/true,
+          /*show_link_data_option=*/true,
+          /*process_user_choice_callback=*/
+          base::BindOnce([](signin::SigninChoice* result,
+                            signin::SigninChoice choice) { *result = choice; },
+                         &result),
+          /*done_callback=*/
+          base::BindOnce(&SigninViewController::CloseModalSignin,
+                         browser()->signin_view_controller()->AsWeakPtr())));
   EXPECT_TRUE(browser()->signin_view_controller()->ShowsModalDialog());
   content_observer.Wait();
 
@@ -360,7 +362,8 @@ IN_PROC_BROWSER_TEST_F(SignInViewControllerBrowserOIDCAccountTest,
       base::BindLambdaForTesting(
           [&user_choice_run_loop, &result](
               signin::SigninChoice choice,
-              signin::SigninChoiceOperationDoneCallback callback) {
+              signin::SigninChoiceOperationDoneCallback callback,
+              signin::SigninChoiceOperationRetryCallback) {
             result = choice;
             std::move(callback).Run(
                 signin::SigninChoiceOperationResult::SIGNIN_SILENT_SUCCESS);
@@ -368,7 +371,8 @@ IN_PROC_BROWSER_TEST_F(SignInViewControllerBrowserOIDCAccountTest,
           }),
       /*done_callback=*/
       base::BindOnce(&SigninViewController::CloseModalSignin,
-                     browser()->signin_view_controller()->AsWeakPtr()));
+                     browser()->signin_view_controller()->AsWeakPtr()),
+      /*retry_callback=*/base::DoNothing());
   EXPECT_TRUE(browser()->signin_view_controller()->ShowsModalDialog());
   content_observer.Wait();
 

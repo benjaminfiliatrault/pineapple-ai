@@ -16,6 +16,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.autofill.payments.BankAccount;
+import org.chromium.components.autofill.payments.Ewallet;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
@@ -51,8 +52,13 @@ public class FacilitatedPaymentsPaymentMethodsCoordinator
     }
 
     @Override
-    public boolean showSheet(List<BankAccount> bankAccounts) {
-        return mMediator.showSheet(bankAccounts);
+    public void showSheet(List<BankAccount> bankAccounts) {
+        mMediator.showSheet(bankAccounts);
+    }
+
+    @Override
+    public void showSheetForEwallet(List<Ewallet> eWallets) {
+        mMediator.showSheetForEwallet(eWallets);
     }
 
     @Override

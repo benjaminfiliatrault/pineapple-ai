@@ -19,6 +19,7 @@
 <translation id="115443833402798225">Хангул Ахнматае</translation>
 <translation id="1155759005174418845">Каталанча</translation>
 <translation id="1168100932582989117">Google ысым серверлери</translation>
+<translation id="1170788066030116158">Тартылган күнү</translation>
 <translation id="1172970565351728681">Болжол менен <ph name="REMAINING_TIME" /> калды</translation>
 <translation id="1173894706177603556">Атын өзгөртүү</translation>
 <translation id="1173916544412572294"><ph name="NETWORK_COUNT" /> ичинен <ph name="NETWORK_INDEX" />-тармак, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, Сигналдын күчү <ph name="SIGNAL_STRENGTH" />%, Телефондун батареясы <ph name="BATTERY_STATUS" />%, Чоо-жайы</translation>
@@ -581,6 +582,7 @@
 <translation id="5447680084201416734">Сактагычта орун жетишсиз.</translation>
 <translation id="5449551289610225147">Сырсөз жараксыз</translation>
 <translation id="5459064203055649751">"<ph name="FILENAME" />" деген файл мурунтан эле бар. Аны жылдырып жаткан файлга алмаштырасызбы?</translation>
+<translation id="5462378611565326489">OneDrive'ды Интернетсиз колдонууга болбойт.</translation>
 <translation id="5463231940765244860">Киргизүү</translation>
 <translation id="5469868506864199649">Италиянча</translation>
 <translation id="5473333559083690127">Жаңы PIN'ди кайра киргизиңиз</translation>

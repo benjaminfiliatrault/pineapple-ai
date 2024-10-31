@@ -552,6 +552,14 @@ crbug.com/1426916 [ chromeos chromeos-board-amd64-generic passthrough ] deqp/fun
 crbug.com/891953 [ mac ] WebglExtension_OVR_multiview2 [ Failure ]
 crbug.com/891953 [ android ] WebglExtension_OVR_multiview2 [ Failure ]
 
+# Platform-independent failures due to a WebGL roll.
+crbug.com/371971708 conformance/context/context-lost.html [ Failure ]
+crbug.com/371971708 conformance/offscreencanvas/context-lost-restored-worker.html [ Failure ]
+crbug.com/371971708 conformance/offscreencanvas/context-lost-restored.html [ Failure ]
+crbug.com/371971708 conformance/offscreencanvas/context-lost-worker.html [ Failure ]
+crbug.com/371971708 conformance/offscreencanvas/context-lost.html [ Failure ]
+crbug.com/371971708 conformance2/state/gl-enum-tests.html [ Failure ]
+
 # ========================
 # Conformance expectations
 # ========================
@@ -580,6 +588,7 @@ crbug.com/953120 [ angle-disabled no-asan no-passthrough ] conformance/programs/
 
 crbug.com/949249 [ win passthrough angle-d3d11 ] conformance2/extensions/ovr_multiview2.html [ Failure ]
 crbug.com/949249 [ linux passthrough angle-opengl ] conformance2/extensions/ovr_multiview2.html [ Failure ]
+crbug.com/949249 [ fuchsia fuchsia-board-qemu-x64 ] conformance2/extensions/ovr_multiview2.html [ Failure ]
 
 # New validation was not implemented on the validating command decoder.
 crbug.com/angleproject/6358 [ no-passthrough ] conformance/programs/program-test.html [ Failure ]
@@ -639,9 +648,7 @@ crbug.com/1523323 [ win11 qualcomm-0x41333430 angle-d3d11 ] deqp/functional/gles
 crbug.com/1523323 [ win11 qualcomm-0x41333430 angle-d3d11 ] deqp/functional/gles3/transformfeedback/random_separate_triangles.html [ Failure ]
 crbug.com/1523401 [ win11 qualcomm-0x41333430 angle-d3d11 ] conformance2/reading/format-r11f-g11f-b10f.html [ Failure ]
 crbug.com/1523401 [ win11 qualcomm-0x41333430 angle-d3d11 ] conformance2/rendering/framebuffer-mismatched-attachment-targets.html [ Failure ]
-crbug.com/338008895 [ win11 angle-d3d11 qualcomm-0x41333430 passthrough release ] conformance2/textures/image_bitmap_from_video/tex-2d-r32f-red-float.html [ Failure ]
-crbug.com/338008895 [ win11 angle-d3d11 qualcomm-0x41333430 passthrough release ] conformance2/textures/image_bitmap_from_video/tex-3d-rg16f-rg-float.html [ Failure ]
-crbug.com/1523401 [ win11 qualcomm-0x41333430 angle-d3d11 ] deqp/data/gles3/shaders/linkage.html [ Failure ]
+crbug.com/338008895 [ win11 angle-d3d11 qualcomm-0x41333430 passthrough release ] conformance2/textures/image_bitmap_from_video/tex-3d-rgb5_a1-rgba-unsigned_short_5_5_5_1.html [ Failure ]
 crbug.com/1523401 [ win11 qualcomm-0x41333430 angle-d3d11 ] deqp/functional/gles3/shaderindexing/tmp.html [ Failure ]
 crbug.com/1523401 [ win11 qualcomm-0x41333430 angle-d3d11 ] deqp/functional/gles3/shaderindexing/varying.html [ Failure ]
 crbug.com/1523401 [ win11 qualcomm-0x41333430 angle-d3d11 ] deqp/functional/gles3/shadertexturefunction/texelfetchoffset.html [ Failure ]
@@ -649,6 +656,10 @@ crbug.com/41496352 [ win11 qualcomm-0x41333430 angle-d3d11 ] deqp/functional/gle
 crbug.com/329211596 [ win11 qualcomm-0x41333430 angle-d3d11 ] deqp/functional/gles3/shaderprecision_int.html [ Failure ]
 crbug.com/329211596 [ win11 qualcomm-0x41333430 angle-d3d11 ] deqp/functional/gles3/shaderprecision_uint.html [ Failure ]
 crbug.com/338348432 [ win11 qualcomm-0x41333430 angle-d3d11 ] deqp/functional/gles3/occlusionquery_strict.html [ RetryOnFailure ]
+crbug.com/373852610 [ win11 qualcomm-0x41333430 angle-d3d11 ] conformance2/wasm/getbuffersubdata-16gb-wasm-memory.html [ Failure ]
+crbug.com/373852610 [ win11 qualcomm-0x41333430 angle-d3d11 ] conformance2/wasm/bufferdata-16gb-wasm-memory.html [ Failure ]
+crbug.com/373852610 [ win11 qualcomm-0x41333430 angle-d3d11 ] conformance2/wasm/texsubimage2d-16gb-wasm-memory.html [ Failure ]
+crbug.com/373852610 [ win11 qualcomm-0x41333430 angle-d3d11 ] conformance/rendering/rendering-stencil-large-viewport.html [ Failure ]
 
 # Graphite
 crbug.com/332745399 [ win graphite-enabled ] conformance2/extensions/webgl-shader-pixel-local-storage.html [ Failure ]
@@ -715,6 +726,7 @@ crbug.com/angleproject/6430 [ angle-metal intel mac passthrough ] deqp/functiona
 
 
 ## Metal Graphite ##
+
 
 
 ######################################################################
@@ -806,6 +818,11 @@ crbug.com/354627705 [ mac amd-0x7340 angle-opengl ] conformance2/rendering/blitf
 crbug.com/354627705 [ mac amd-0x7340 angle-metal ] deqp/functional/gles3/fbomultisample.2_samples.html [ Failure ]
 crbug.com/354627705 [ mac amd-0x7340 angle-metal ] deqp/functional/gles3/fbomultisample.4_samples.html [ Failure ]
 crbug.com/354627705 [ mac amd-0x7340 angle-opengl ] deqp/functional/gles3/instancedrendering.html [ Failure ]
+crbug.com/328102507 [ mac amd angle-opengl graphite-disabled asan ] conformance/renderbuffers/stencil-renderbuffer-initialization.html [ Failure ]
+
+crbug.com/372295133 [ amd-0x679e angle-metal monterey passthrough ] deqp/functional/gles3/textureshadow/2d_array_linear_mipmap_linear_equal.html [ Failure ]
+crbug.com/374696517 [ mac amd-0x7340 angle-metal ] deqp/functional/gles3/uniformbuffers/random.html [ RetryOnFailure ]
+crbug.com/374691239 [ mac amd angle-metal ] deqp/functional/gles3/texturefiltering/2d_array_combinations_05.html [ RetryOnFailure ]
 
 ## Mac Intel ##
 
@@ -881,7 +898,6 @@ crbug.com/1081978 [ angle-opengl intel-0x9bc5 linux passthrough ] conformance2/t
 ## Linux NVIDIA ##
 
 crbug.com/1115314 [ linux nvidia-0x2184 angle-opengl passthrough ] deqp/functional/gles3/fbocompleteness.html [ Failure ]
-crbug.com/366284863 [ linux nvidia-0x2184 angle-opengl passthrough ] deqp/functional/gles3/shaderoperator/sequence.html [ RetryOnFailure ]
 
 ## Linux AMD RX 5500 XT ##
 
@@ -923,7 +939,8 @@ crbug.com/906742 [ android-pie android-pixel-2 no-passthrough qualcomm ] conform
 crbug.com/1000354 [ android android-pixel-2 passthrough ] conformance2/reading/read-pixels-from-fbo-test.html [ Failure ]
 crbug.com/1276186 [ android android-pixel-2 ] conformance2/glsl3/array-equality.html [ Failure ]
 crbug.com/angleproject/7421 [ android android-pixel-2 angle-disabled no-passthrough ] conformance2/renderbuffers/invalidate-framebuffer.html [ Failure ]
-
+crbug.com/375117795 [ android android-pixel-2 ] deqp/functional/gles3/multisample/fbo_4_samples.html [ Failure ]
+crbug.com/375128676 [ android android-pixel-2 ] deqp/functional/gles3/multisample/fbo_max_samples.html [ Failure ]
 
 ## Pixel 4 ##
 
@@ -936,7 +953,7 @@ crbug.com/angleproject/3684 [ android angle-opengles ] conformance2/renderbuffer
 
 
 crbug.com/335857348 [ android android-pixel-4 ] deqp/functional/gles3/multisample/fbo_max_samples.html [ Failure ]
-
+crbug.com/375117795 [ android android-pixel-4 ] deqp/functional/gles3/multisample/fbo_4_samples.html [ Failure ]
 
 #####################
 # ChromeOS failures #
@@ -992,7 +1009,6 @@ crbug.com/1488978 [ chromeos cros-chrome chromeos-board-jacuzzi ] conformance/li
 crbug.com/1488979 [ chromeos cros-chrome chromeos-board-jacuzzi ] conformance/misc/shader-precision-format.html [ Failure ]
 crbug.com/1492242 [ chromeos cros-chrome chromeos-board-jacuzzi ] conformance2/buffers/uniform-buffers.html [ Failure ]
 crbug.com/1492245 [ chromeos cros-chrome chromeos-board-jacuzzi ] conformance2/extensions/oes-sample-variables.html [ Failure ]
-crbug.com/1492246 [ chromeos cros-chrome chromeos-board-jacuzzi ] conformance2/extensions/webgl-shader-pixel-local-storage.html [ Failure ]
 crbug.com/1492248 [ chromeos cros-chrome chromeos-board-jacuzzi ] conformance2/glsl3/array-as-return-value.html [ Failure ]
 crbug.com/1492250 [ chromeos cros-chrome chromeos-board-jacuzzi ] conformance2/glsl3/matrix-row-major.html [ Failure ]
 crbug.com/1492256 [ chromeos cros-chrome chromeos-board-jacuzzi ] conformance2/glsl3/texture-bias.html [ Failure ]
@@ -1141,67 +1157,6 @@ crbug.com/332743717 [ chromeos chromeos-board-amd64-generic ] conformance2/canva
 crbug.com/332743717 [ chromeos chromeos-board-volteer ] conformance2/canvas/drawingbuffer-storage-test.html [ Failure ]
 crbug.com/332743717 [ android android-pixel-2 ] conformance2/canvas/drawingbuffer-storage-test.html [ Failure ]
 crbug.com/332743717 [ win intel-0x4680 ] conformance2/query/occlusion-query-scissor.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-2 ] conformance2/wasm/bufferdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-2 ] conformance2/wasm/bufferdata-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-2 ] conformance2/wasm/buffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-2 ] conformance2/wasm/buffersubdata-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-2 ] conformance2/wasm/getbuffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-2 ] conformance2/wasm/getbuffersubdata-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-2 ] conformance2/wasm/readpixels-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-2 ] conformance2/wasm/readpixels-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-2 ] conformance2/wasm/teximage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-2 ] conformance2/wasm/teximage2d-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-2 ] conformance2/wasm/texsubimage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-2 ] conformance2/wasm/texsubimage2d-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-4 ] conformance2/wasm/bufferdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-4 ] conformance2/wasm/bufferdata-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-4 ] conformance2/wasm/buffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-4 ] conformance2/wasm/buffersubdata-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-4 ] conformance2/wasm/getbuffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-4 ] conformance2/wasm/getbuffersubdata-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-4 ] conformance2/wasm/readpixels-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-4 ] conformance2/wasm/readpixels-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-4 ] conformance2/wasm/teximage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-4 ] conformance2/wasm/teximage2d-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-4 ] conformance2/wasm/texsubimage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ android android-pixel-4 ] conformance2/wasm/texsubimage2d-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ linux ] conformance2/wasm/bufferdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ linux ] conformance2/wasm/buffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ linux ] conformance2/wasm/getbuffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ linux ] conformance2/wasm/readpixels-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ linux ] conformance2/wasm/teximage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ linux ] conformance2/wasm/texsubimage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ win target-cpu-32 ] conformance2/wasm/bufferdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ win target-cpu-32 ] conformance2/wasm/bufferdata-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ win target-cpu-32 ] conformance2/wasm/buffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ win target-cpu-32 ] conformance2/wasm/buffersubdata-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ win target-cpu-32 ] conformance2/wasm/getbuffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ win target-cpu-32 ] conformance2/wasm/getbuffersubdata-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ win target-cpu-32 ] conformance2/wasm/readpixels-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ win target-cpu-32 ] conformance2/wasm/readpixels-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ win target-cpu-32 ] conformance2/wasm/teximage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ win target-cpu-32 ] conformance2/wasm/teximage2d-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ win target-cpu-32 ] conformance2/wasm/texsubimage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ win target-cpu-32 ] conformance2/wasm/texsubimage2d-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-amd64-generic ] conformance2/wasm/bufferdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-amd64-generic ] conformance2/wasm/buffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-amd64-generic ] conformance2/wasm/getbuffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-amd64-generic ] conformance2/wasm/readpixels-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-amd64-generic ] conformance2/wasm/teximage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-amd64-generic ] conformance2/wasm/texsubimage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-amd64-generic ] conformance2/wasm/texsubimage2d-4gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-jacuzzi ] conformance2/wasm/bufferdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-jacuzzi ] conformance2/wasm/buffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-jacuzzi ] conformance2/wasm/getbuffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-jacuzzi ] conformance2/wasm/readpixels-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-jacuzzi ] conformance2/wasm/teximage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-jacuzzi ] conformance2/wasm/texsubimage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-volteer ] conformance2/wasm/bufferdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-volteer ] conformance2/wasm/buffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-volteer ] conformance2/wasm/getbuffersubdata-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-volteer ] conformance2/wasm/readpixels-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-volteer ] conformance2/wasm/teximage2d-16gb-wasm-memory.html [ Failure ]
-crbug.com/335203259 [ chromeos chromeos-board-volteer ] conformance2/wasm/texsubimage2d-16gb-wasm-memory.html [ Failure ]
 
 #################################################################
 # Temporary suppressions for introduction of drawingBufferStorage

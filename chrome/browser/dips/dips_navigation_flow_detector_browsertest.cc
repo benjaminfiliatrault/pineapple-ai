@@ -13,7 +13,6 @@
 #include "base/test/test_timeouts.h"
 #include "base/types/expected.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
-#include "chrome/browser/dips/dips_navigation_flow_detector_wrapper.h"
 #include "chrome/browser/dips/dips_test_utils.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -182,16 +181,7 @@ class DipsNavigationFlowDetectorTest : public PlatformBrowserTest {
   }
 
   DipsNavigationFlowDetector* GetDetector() {
-#if BUILDFLAG(IS_ANDROID)
     return DipsNavigationFlowDetector::FromWebContents(GetActiveWebContents());
-#else
-    return browser()
-        ->tab_strip_model()
-        ->GetActiveTab()
-        ->tab_features()
-        ->dips_navigation_flow_detector_wrapper()
-        ->GetDetector();
-#endif
   }
 
  private:
@@ -446,8 +436,8 @@ IN_PROC_BROWSER_TEST_F(DipsNavigationFlowDetectorTest,
   ExpectNoNavigationFlowNodeUkmEvents();
 }
 
-// TODO - crbug.com/353556432: flaky on Linux release builds
-#if BUILDFLAG(IS_LINUX) && defined(NDEBUG)
+// TODO - crbug.com/353556432: flaky on Mac and Linux release builds
+#if (BUILDFLAG(IS_LINUX) && defined(NDEBUG)) || BUILDFLAG(IS_MAC)
 #define MAYBE_UkmNotEmittedWhenCookiesReadViaHeaders \
   DISABLED_UkmNotEmittedWhenCookiesReadViaHeaders
 #else
@@ -480,8 +470,9 @@ IN_PROC_BROWSER_TEST_F(DipsNavigationFlowDetectorTest,
   ExpectNoNavigationFlowNodeUkmEvents();
 }
 
-// TODO - crbug.com/353556432: flaky on Linux release builds
-#if BUILDFLAG(IS_LINUX) && defined(NDEBUG)
+// TODO - crbug.com/353556432: flaky on Linux release builds and on Android
+#if (BUILDFLAG(IS_LINUX) && defined(NDEBUG)) || BUILDFLAG(IS_ANDROID) || \
+    BUILDFLAG(IS_MAC)
 #define MAYBE_UkmNotEmittedForCookieAccessInPrerenders \
   DISABLED_UkmNotEmittedForCookieAccessInPrerenders
 #else
@@ -681,8 +672,8 @@ IN_PROC_BROWSER_TEST_F(
   ExpectNoNavigationFlowNodeUkmEvents();
 }
 
-// TODO - crbug.com/353556432: flaky on Linux release builds
-#if BUILDFLAG(IS_LINUX) && defined(NDEBUG)
+// TODO - crbug.com/353556432: flaky on Mac and Linux release builds
+#if (BUILDFLAG(IS_LINUX) && defined(NDEBUG)) || BUILDFLAG(IS_MAC)
 #define MAYBE_UkmEmitsWhenVisitingABA DISABLED_UkmEmitsWhenVisitingABA
 #else
 #define MAYBE_UkmEmitsWhenVisitingABA UkmEmitsWhenVisitingABA

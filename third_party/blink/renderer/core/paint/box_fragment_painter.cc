@@ -61,6 +61,7 @@
 #include "third_party/blink/renderer/core/paint/url_metadata_utils.h"
 #include "third_party/blink/renderer/core/paint/view_painter.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
+#include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context_state_saver.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_cache_skipper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
@@ -394,6 +395,33 @@ void PaintFragment(const PhysicalBoxFragment& fragment,
   }
 }
 
+bool ShouldDelegatePaintingToViewTransition(const PhysicalBoxFragment& fragment,
+                                            PaintPhase paint_phase) {
+  if (!fragment.GetLayoutObject()) {
+    return false;
+  }
+
+  switch (paint_phase) {
+    case PaintPhase::kSelfBlockBackgroundOnly:
+    case PaintPhase::kSelfOutlineOnly:
+      return ViewTransitionUtils::
+          ShouldDelegateEffectsAndBoxDecorationsToViewTransitionGroup(
+              *fragment.GetLayoutObject());
+    case PaintPhase::kBlockBackground:
+    case PaintPhase::kDescendantBlockBackgroundsOnly:
+    case PaintPhase::kForcedColorsModeBackplate:
+    case PaintPhase::kFloat:
+    case PaintPhase::kForeground:
+    case PaintPhase::kOutline:
+    case PaintPhase::kDescendantOutlinesOnly:
+    case PaintPhase::kOverlayOverflowControls:
+    case PaintPhase::kSelectionDragImage:
+    case PaintPhase::kTextClip:
+    case PaintPhase::kMask:
+      return false;
+  }
+}
+
 }  // anonymous namespace
 
 PhysicalRect BoxFragmentPainter::InkOverflowIncludingFilters() const {
@@ -605,6 +633,11 @@ void BoxFragmentPainter::PaintObject(const PaintInfo& paint_info,
                                      bool suppress_box_decoration_background) {
   const PaintPhase paint_phase = paint_info.phase;
   const PhysicalBoxFragment& fragment = GetPhysicalFragment();
+
+  if (ShouldDelegatePaintingToViewTransition(fragment, paint_phase)) {
+    return;
+  }
+
   if (fragment.IsFrameSet()) {
     FrameSetPainter(fragment, display_item_client_)
         .PaintObject(paint_info, paint_offset);
@@ -646,8 +679,9 @@ void BoxFragmentPainter::PaintObject(const PaintInfo& paint_info,
       (!fragment.Children().empty() || fragment.HasItems() ||
        inline_box_cursor_) &&
       !paint_info.DescendantPaintingBlocked()) {
-    if (is_visible && paint_phase == PaintPhase::kForeground &&
-        fragment.IsCSSBox() && style.HasColumnRule()) [[unlikely]] {
+    if (paint_phase == PaintPhase::kDescendantBlockBackgroundsOnly &&
+        is_visible && fragment.IsCSSBox() && style.HasColumnRule())
+        [[unlikely]] {
       PaintColumnRules(paint_info, paint_offset);
     }
 
@@ -742,7 +776,6 @@ void BoxFragmentPainter::PaintLineBoxes(const PaintInfo& paint_info,
   // a fragment with inline children, without a paint fragment. See:
   // http://crbug.com/1022545
   if (!items_ || layout_object->NeedsLayout()) {
-    DUMP_WILL_BE_NOTREACHED();
     return;
   }
 
@@ -1483,8 +1516,9 @@ void BoxFragmentPainter::PaintColumnRules(const PaintInfo& paint_info,
       rule.size.width = rule_thickness;
     } else {
       // Vertical writing-mode.
+      const auto writing_direction = style.GetWritingDirection();
       LayoutUnit center;
-      if (style.IsLeftToRightDirection()) {
+      if (writing_direction.InlineEnd() == PhysicalDirection::kDown) {
         // Top to bottom.
         center = (previous_column.Y() + current_column.Bottom()) / 2;
         box_side = BoxSide::kTop;
@@ -1497,7 +1531,7 @@ void BoxFragmentPainter::PaintColumnRules(const PaintInfo& paint_info,
       LayoutUnit rule_length;
       LayoutUnit rule_left = previous_column.offset.left;
       if (!span_count) {
-        if (style.GetWritingMode() == WritingMode::kVerticalLr) {
+        if (writing_direction.BlockEnd() == PhysicalDirection::kRight) {
           const LayoutUnit column_box_right = box_fragment_.Size().width -
                                               box_fragment_.Borders().right -
                                               box_fragment_.Padding().right -
@@ -1506,7 +1540,7 @@ void BoxFragmentPainter::PaintColumnRules(const PaintInfo& paint_info,
                                                   .block_end;
           rule_length = column_box_right - previous_column.offset.left;
         } else {
-          // Vertical-rl writing-mode
+          // Vertical-rl or sideways-rl writing-mode
           const LayoutUnit column_box_left = box_fragment_.ContentOffset().left;
           rule_length = previous_column.Width() +
                         (previous_column.offset.left - column_box_left);
@@ -1633,18 +1667,14 @@ void BoxFragmentPainter::PaintInlineItems(const PaintInfo& paint_info,
           PaintBoxItem(*item, *cursor, paint_info, paint_offset, parent_offset);
         cursor->MoveToNextSkippingChildren();
         break;
-      case FragmentItem::kLine:
+      case FragmentItem::kLine: {
         // Nested kLine items are used for ruby annotations.
-        if (RuntimeEnabledFeatures::RubyLineBreakableEnabled()) {
-          InlineCursor line_box_cursor = cursor->CursorForDescendants();
-          PaintInlineItems(paint_info, paint_offset, parent_offset,
-                           &line_box_cursor);
-          cursor->MoveToNextSkippingChildren();
-        } else {
-          NOTREACHED_IN_MIGRATION();
-          cursor->MoveToNext();
-        }
+        InlineCursor line_box_cursor = cursor->CursorForDescendants();
+        PaintInlineItems(paint_info, paint_offset, parent_offset,
+                         &line_box_cursor);
+        cursor->MoveToNextSkippingChildren();
         break;
+      }
       case FragmentItem::kInvalid:
         NOTREACHED();
     }
@@ -2560,7 +2590,6 @@ bool BoxFragmentPainter::HitTestItemsChildren(
           return true;
         }
       } else {  // Nested kLine items for ruby annotations.
-        DCHECK(RuntimeEnabledFeatures::RubyLineBreakableEnabled());
         if (HitTestItemsChildren(hit_test, container,
                                  cursor.CursorForDescendants())) {
           return true;

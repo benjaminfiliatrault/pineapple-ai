@@ -52,12 +52,11 @@
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/plus_addresses/fake_plus_address_service.h"
 #include "components/plus_addresses/features.h"
-#include "components/plus_addresses/plus_address_test_environment.h"
+#include "components/plus_addresses/grit/plus_addresses_strings.h"
 #include "components/plus_addresses/plus_address_test_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/resources/android/theme_resources.h"
 #include "components/security_state/core/security_state.h"
-#include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/webauthn/android/cred_man_support.h"
 #include "components/webauthn/android/webauthn_cred_man_delegate.h"
@@ -73,6 +72,7 @@ namespace {
 using autofill::AccessoryAction;
 using autofill::AccessorySheetData;
 using autofill::AccessorySheetField;
+using autofill::AccessorySuggestionType;
 using autofill::AccessoryTabType;
 using autofill::FooterCommand;
 using autofill::UserInfo;
@@ -93,9 +93,7 @@ using password_manager::PasswordManagerInterface;
 using password_manager::PasswordStoreInterface;
 using password_manager::TestPasswordStore;
 using plus_addresses::FakePlusAddressService;
-using plus_addresses::PlusAddressSettingService;
 using plus_addresses::PlusProfile;
-using plus_addresses::test::PlusAddressTestEnvironment;
 using testing::_;
 using testing::ByMove;
 using testing::Eq;
@@ -323,12 +321,8 @@ PasswordForm MakeSavedPassword() {
 }
 
 std::unique_ptr<KeyedService> BuildFakePlusAddressService(
-    PrefService* pref_service,
-    signin::IdentityManager* identity_manager,
-    PlusAddressSettingService* setting_service,
     content::BrowserContext* context) {
-  return std::make_unique<FakePlusAddressService>(
-      pref_service, identity_manager, setting_service);
+  return std::make_unique<FakePlusAddressService>();
 }
 
 }  // namespace
@@ -338,21 +332,13 @@ class PasswordAccessoryControllerTest : public ChromeRenderViewHostTestHarness {
   PasswordAccessoryControllerTest()
       : ChromeRenderViewHostTestHarness(
             base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
-    features_.InitWithFeatures(
-        {plus_addresses::features::kPlusAddressesEnabled,
-         plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled},
-        {});
   }
 
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 
     PlusAddressServiceFactory::GetInstance()->SetTestingFactory(
-        GetBrowserContext(),
-        base::BindRepeating(&BuildFakePlusAddressService,
-                            &plus_environment_.pref_service(),
-                            plus_environment_.identity_env().identity_manager(),
-                            &plus_environment_.setting_service()));
+        GetBrowserContext(), base::BindRepeating(&BuildFakePlusAddressService));
 
     NavigateAndCommit(GURL(kExampleSite));
     FocusWebContentsOnMainFrame();
@@ -465,7 +451,8 @@ class PasswordAccessoryControllerTest : public ChromeRenderViewHostTestHarness {
     return mock_profile_password_store_.get();
   }
 
-  base::test::ScopedFeatureList features_;
+  base::test::ScopedFeatureList features_{
+      plus_addresses::features::kPlusAddressesEnabled};
   StrictMock<MockManualFillingController> mock_manual_filling_controller_;
   base::MockCallback<AccessoryController::FillingSourceObserver>
       filling_source_observer_;
@@ -482,7 +469,6 @@ class PasswordAccessoryControllerTest : public ChromeRenderViewHostTestHarness {
     return driver();
   }
 
-  PlusAddressTestEnvironment plus_environment_;
   password_manager::CredentialCache credential_cache_;
   std::unique_ptr<MockPasswordManagerClient> mock_pwd_manager_client_;
   NiceMock<MockPasswordManagerDriver> mock_driver_;
@@ -519,8 +505,10 @@ TEST_F(PasswordAccessoryControllerTest, TransformsMatchesToSuggestions) {
   EXPECT_EQ(controller()->GetSheetData(),
             PasswordAccessorySheetDataBuilderEmptyTitle()
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Ben", u"Ben", false, true)
-                .AppendField(u"S3cur3", password_for_str(u"Ben"), true, false)
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Ben", u"Ben", false, true)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"S3cur3", password_for_str(u"Ben"), true, false)
                 .Build());
 }
 
@@ -539,8 +527,10 @@ TEST_F(PasswordAccessoryControllerTest, HintsToEmptyUserNames) {
       controller()->GetSheetData(),
       PasswordAccessorySheetDataBuilderEmptyTitle()
           .AddUserInfo(kExampleSite)
-          .AppendField(no_user_str(), no_user_str(), false, false)
-          .AppendField(u"S3cur3", password_for_str(no_user_str()), true, false)
+          .AppendField(AccessorySuggestionType::kCredentialUsername,
+                       no_user_str(), no_user_str(), false, false)
+          .AppendField(AccessorySuggestionType::kCredentialPassword, u"S3cur3",
+                       password_for_str(no_user_str()), true, false)
           .Build());
 }
 
@@ -565,17 +555,25 @@ TEST_F(PasswordAccessoryControllerTest, SortsAlphabeticalDuringTransform) {
   EXPECT_EQ(controller()->GetSheetData(),
             PasswordAccessorySheetDataBuilderEmptyTitle()
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Alf", u"Alf", false, true)
-                .AppendField(u"PWD", password_for_str(u"Alf"), true, false)
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Alf", u"Alf", false, true)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"PWD", password_for_str(u"Alf"), true, false)
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Ben", u"Ben", false, true)
-                .AppendField(u"S3cur3", password_for_str(u"Ben"), true, false)
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Ben", u"Ben", false, true)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"S3cur3", password_for_str(u"Ben"), true, false)
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Cat", u"Cat", false, true)
-                .AppendField(u"M1@u", password_for_str(u"Cat"), true, false)
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Cat", u"Cat", false, true)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"M1@u", password_for_str(u"Cat"), true, false)
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Zebra", u"Zebra", false, true)
-                .AppendField(u"M3h", password_for_str(u"Zebra"), true, false)
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Zebra", u"Zebra", false, true)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"M3h", password_for_str(u"Zebra"), true, false)
                 .Build());
 }
 
@@ -594,8 +592,10 @@ TEST_F(PasswordAccessoryControllerTest, RepeatsSuggestionsForSameFrame) {
   EXPECT_EQ(controller()->GetSheetData(),
             PasswordAccessorySheetDataBuilderEmptyTitle()
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Ben", u"Ben", false, true)
-                .AppendField(u"S3cur3", password_for_str(u"Ben"), true, false)
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Ben", u"Ben", false, true)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"S3cur3", password_for_str(u"Ben"), true, false)
                 .Build());
 }
 
@@ -633,12 +633,16 @@ TEST_F(PasswordAccessoryControllerTest, PasswordFieldChangesSuggestionType) {
   EXPECT_EQ(controller()->GetSheetData(),
             PasswordAccessorySheetDataBuilderEmptyTitle()
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"No username", u"No username", false, false)
-                .AppendField(u"p455w0rd", password_for_str(u"No username"),
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"No username", u"No username", false, false)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"p455w0rd", password_for_str(u"No username"),
                              true, false)
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Ben", u"Ben", false, true)
-                .AppendField(u"S3cur3", password_for_str(u"Ben"), true, false)
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Ben", u"Ben", false, true)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"S3cur3", password_for_str(u"Ben"), true, false)
                 .Build());
 
   // Pretend that we focus a password field now: By triggering a refresh with
@@ -650,12 +654,16 @@ TEST_F(PasswordAccessoryControllerTest, PasswordFieldChangesSuggestionType) {
   EXPECT_EQ(controller()->GetSheetData(),
             PasswordAccessorySheetDataBuilderEmptyTitle()
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"No username", u"No username", false, false)
-                .AppendField(u"p455w0rd", password_for_str(u"No username"),
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"No username", u"No username", false, false)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"p455w0rd", password_for_str(u"No username"),
                              true, true)
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Ben", u"Ben", false, true)
-                .AppendField(u"S3cur3", password_for_str(u"Ben"), true, true)
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Ben", u"Ben", false, true)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"S3cur3", password_for_str(u"Ben"), true, true)
                 .Build());
 }
 
@@ -673,8 +681,10 @@ TEST_F(PasswordAccessoryControllerTest, CacheChangesReplacePasswords) {
   EXPECT_EQ(controller()->GetSheetData(),
             PasswordAccessorySheetDataBuilderEmptyTitle()
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Ben", u"Ben", false, true)
-                .AppendField(u"S3cur3", password_for_str(u"Ben"), true, false)
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Ben", u"Ben", false, true)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"S3cur3", password_for_str(u"Ben"), true, false)
                 .Build());
 
   std::vector<PasswordForm> changed_matches = {CreateEntry(
@@ -689,8 +699,10 @@ TEST_F(PasswordAccessoryControllerTest, CacheChangesReplacePasswords) {
   EXPECT_EQ(controller()->GetSheetData(),
             PasswordAccessorySheetDataBuilderEmptyTitle()
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Alf", u"Alf", false, true)
-                .AppendField(u"M3lm4k", password_for_str(u"Alf"), true, false)
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Alf", u"Alf", false, true)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"M3lm4k", password_for_str(u"Alf"), true, false)
                 .Build());
 }
 
@@ -713,14 +725,18 @@ TEST_F(PasswordAccessoryControllerTest, SetsTitleForPSLMatchedOriginsInV2) {
   EXPECT_EQ(controller()->GetSheetData(),
             PasswordAccessorySheetDataBuilderEmptyTitle()
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Ben", u"Ben",
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Ben", u"Ben",
                              /*is_obfuscated=*/false, /*selectable=*/true)
-                .AppendField(u"S3cur3", password_for_str(u"Ben"),
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"S3cur3", password_for_str(u"Ben"),
                              /*is_obfuscated=*/true, /*selectable=*/false)
                 .AddUserInfo(kExampleSiteMobile, IsExactMatch(false))
-                .AppendField(u"Alf", u"Alf",
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Alf", u"Alf",
                              /*is_obfuscated=*/false, /*selectable=*/true)
-                .AppendField(u"R4nd0m", password_for_str(u"Alf"),
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"R4nd0m", password_for_str(u"Alf"),
                              /*is_obfuscated=*/true, /*selectable=*/false)
                 .Build());
 }
@@ -741,8 +757,10 @@ TEST_F(PasswordAccessoryControllerTest, UnfillableFieldClearsSuggestions) {
   EXPECT_EQ(controller()->GetSheetData(),
             PasswordAccessorySheetDataBuilderEmptyTitle()
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Ben", u"Ben", false, true)
-                .AppendField(u"S3cur3", password_for_str(u"Ben"), true, false)
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Ben", u"Ben", false, true)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"S3cur3", password_for_str(u"Ben"), true, false)
                 .Build());
 
   // Pretend that the focus was lost or moved to an unfillable field. Now, only
@@ -772,8 +790,10 @@ TEST_F(PasswordAccessoryControllerTest, NavigatingMainFrameClearsSuggestions) {
   EXPECT_EQ(controller()->GetSheetData(),
             PasswordAccessorySheetDataBuilderEmptyTitle()
                 .AddUserInfo(kExampleSite)
-                .AppendField(u"Ben", u"Ben", false, true)
-                .AppendField(u"S3cur3", password_for_str(u"Ben"), true, false)
+                .AppendField(AccessorySuggestionType::kCredentialUsername,
+                             u"Ben", u"Ben", false, true)
+                .AppendField(AccessorySuggestionType::kCredentialPassword,
+                             u"S3cur3", password_for_str(u"Ben"), true, false)
                 .Build());
 
   // Pretend that the focus was lost or moved to an unfillable field.
@@ -1035,11 +1055,12 @@ TEST_F(PasswordAccessoryControllerTest, PlusAddressUsedAsUsername) {
       PasswordAccessorySheetDataBuilderEmptyTitle()
           .AddUserInfo(kExampleSite)
           .AppendField(
-              u"example@gmail", u"example@gmail", u"example@gmail", "",
+              AccessorySuggestionType::kCredentialUsername, u"example@gmail",
+              u"example@gmail", u"example@gmail", "",
               ResourceMapper::MapToJavaDrawableId(IDR_AUTOFILL_PLUS_ADDRESS),
               false, true)
-          .AppendField(u"S3cur3", password_for_str(u"example@gmail"), true,
-                       false)
+          .AppendField(AccessorySuggestionType::kCredentialPassword, u"S3cur3",
+                       password_for_str(u"example@gmail"), true, false)
           .AppendFooterCommand(
               l10n_util::GetStringUTF16(
                   IDS_PLUS_ADDRESS_MANAGE_PLUS_ADDRESSES_LINK_ANDROID),
@@ -1079,10 +1100,11 @@ TEST_F(PasswordAccessoryControllerTest, BothPlusAddressAndCredentialShown) {
                                         plus_address_title(kExampleDomain))
           .AddUserInfo(kExampleSite)
           .AddPlusAddressInfo("https://foo.com", u"example@gmail")
-          .AppendField(u"foo.bar@gmail", u"foo.bar@gmail",
+          .AppendField(AccessorySuggestionType::kCredentialUsername,
+                       u"foo.bar@gmail", u"foo.bar@gmail",
                        /*is_obfuscated=*/false, /*selectable=*/true)
-          .AppendField(u"S3cur3", password_for_str(u"foo.bar@gmail"), true,
-                       false)
+          .AppendField(AccessorySuggestionType::kCredentialPassword, u"S3cur3",
+                       password_for_str(u"foo.bar@gmail"), true, false)
           .AppendFooterCommand(
               l10n_util::GetStringUTF16(
                   IDS_PLUS_ADDRESS_MANAGE_PLUS_ADDRESSES_LINK_ANDROID),
@@ -1328,10 +1350,12 @@ TEST_F(PasswordAccessoryControllerTest, FillsUsername) {
   controller()->RefreshSuggestionsForField(
       FocusedFieldType::kFillableUsernameField);
 
-  AccessorySheetField selected_field = AccessorySheetField::Builder()
-                                           .SetDisplayText(u"Ben")
-                                           .SetSelectable(true)
-                                           .Build();
+  AccessorySheetField selected_field =
+      AccessorySheetField::Builder()
+          .SetSuggestionType(AccessorySuggestionType::kCredentialUsername)
+          .SetDisplayText(u"Ben")
+          .SetSelectable(true)
+          .Build();
   EXPECT_CALL(*driver(),
               FillIntoFocusedField(selected_field.is_obfuscated(),
                                    Eq(selected_field.display_text())));
@@ -1354,11 +1378,13 @@ TEST_F(PasswordAccessoryControllerTest, FillsPasswordIfNoAuthAvailable) {
   controller()->RefreshSuggestionsForField(
       FocusedFieldType::kFillableUsernameField);
 
-  AccessorySheetField selected_field = AccessorySheetField::Builder()
-                                           .SetDisplayText(u"S3cur3")
-                                           .SetIsObfuscated(true)
-                                           .SetSelectable(true)
-                                           .Build();
+  AccessorySheetField selected_field =
+      AccessorySheetField::Builder()
+          .SetSuggestionType(AccessorySuggestionType::kCredentialPassword)
+          .SetDisplayText(u"S3cur3")
+          .SetIsObfuscated(true)
+          .SetSelectable(true)
+          .Build();
 
   auto mock_authenticator = std::make_unique<MockDeviceAuthenticator>();
 
@@ -1376,7 +1402,6 @@ TEST_F(PasswordAccessoryControllerTest, FillsPasswordIfAuthSuccessful) {
   features_.Reset();
   features_.InitWithFeatures(
       {plus_addresses::features::kPlusAddressesEnabled,
-       plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled,
        password_manager::features::kBiometricTouchToFill},
       {});
   CreateSheetController();
@@ -1390,11 +1415,13 @@ TEST_F(PasswordAccessoryControllerTest, FillsPasswordIfAuthSuccessful) {
   controller()->RefreshSuggestionsForField(
       FocusedFieldType::kFillableUsernameField);
 
-  AccessorySheetField selected_field = AccessorySheetField::Builder()
-                                           .SetDisplayText(u"S3cur3")
-                                           .SetIsObfuscated(true)
-                                           .SetSelectable(true)
-                                           .Build();
+  AccessorySheetField selected_field =
+      AccessorySheetField::Builder()
+          .SetSuggestionType(AccessorySuggestionType::kCredentialPassword)
+          .SetDisplayText(u"S3cur3")
+          .SetIsObfuscated(true)
+          .SetSelectable(true)
+          .Build();
 
   auto mock_authenticator = std::make_unique<MockDeviceAuthenticator>();
 
@@ -1417,7 +1444,6 @@ TEST_F(PasswordAccessoryControllerTest, DoesntFillPasswordIfAuthFails) {
   features_.Reset();
   features_.InitWithFeatures(
       {plus_addresses::features::kPlusAddressesEnabled,
-       plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled,
        password_manager::features::kBiometricTouchToFill},
       {});
   CreateSheetController();
@@ -1431,11 +1457,13 @@ TEST_F(PasswordAccessoryControllerTest, DoesntFillPasswordIfAuthFails) {
   controller()->RefreshSuggestionsForField(
       FocusedFieldType::kFillableUsernameField);
 
-  AccessorySheetField selected_field = AccessorySheetField::Builder()
-                                           .SetDisplayText(u"S3cur3")
-                                           .SetIsObfuscated(true)
-                                           .SetSelectable(true)
-                                           .Build();
+  AccessorySheetField selected_field =
+      AccessorySheetField::Builder()
+          .SetSuggestionType(AccessorySuggestionType::kCredentialPassword)
+          .SetDisplayText(u"S3cur3")
+          .SetIsObfuscated(true)
+          .SetSelectable(true)
+          .Build();
 
   auto mock_authenticator = std::make_unique<MockDeviceAuthenticator>();
 
@@ -1459,7 +1487,6 @@ TEST_F(PasswordAccessoryControllerTest, CancelsOngoingAuthIfDestroyed) {
   features_.Reset();
   features_.InitWithFeatures(
       {plus_addresses::features::kPlusAddressesEnabled,
-       plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled,
        password_manager::features::kBiometricTouchToFill},
       {});
   CreateSheetController();
@@ -1473,11 +1500,13 @@ TEST_F(PasswordAccessoryControllerTest, CancelsOngoingAuthIfDestroyed) {
   controller()->RefreshSuggestionsForField(
       FocusedFieldType::kFillableUsernameField);
 
-  AccessorySheetField selected_field = AccessorySheetField::Builder()
-                                           .SetDisplayText(u"S3cur3")
-                                           .SetIsObfuscated(true)
-                                           .SetSelectable(true)
-                                           .Build();
+  AccessorySheetField selected_field =
+      AccessorySheetField::Builder()
+          .SetSuggestionType(AccessorySuggestionType::kCredentialPassword)
+          .SetDisplayText(u"S3cur3")
+          .SetIsObfuscated(true)
+          .SetSelectable(true)
+          .Build();
 
   auto mock_authenticator = std::make_unique<MockDeviceAuthenticator>();
   auto* mock_authenticator_ptr = mock_authenticator.get();
@@ -1736,7 +1765,6 @@ TEST_F(PasswordAccessoryControllerTest,
   features_.Reset();
   features_.InitWithFeatures(
       {plus_addresses::features::kPlusAddressesEnabled,
-       plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled,
        password_manager::features::
            kUnifiedPasswordManagerLocalPasswordsMigrationWarning},
       {});
@@ -1750,11 +1778,13 @@ TEST_F(PasswordAccessoryControllerTest,
       url::Origin::Create(GURL(kExampleSite)));
   controller()->RefreshSuggestionsForField(
       FocusedFieldType::kFillableUsernameField);
-  AccessorySheetField selected_field = AccessorySheetField::Builder()
-                                           .SetDisplayText(u"S3cur3")
-                                           .SetIsObfuscated(true)
-                                           .SetSelectable(true)
-                                           .Build();
+  AccessorySheetField selected_field =
+      AccessorySheetField::Builder()
+          .SetSuggestionType(AccessorySuggestionType::kCredentialPassword)
+          .SetDisplayText(u"S3cur3")
+          .SetIsObfuscated(true)
+          .SetSelectable(true)
+          .Build();
   EXPECT_CALL(
       show_migration_warning_callback_,
       Run(_, _,
@@ -1776,8 +1806,7 @@ TEST_F(PasswordAccessoryControllerTest, DontShowMigrationSheetlIfDisabled) {
 
   features_.Reset();
   features_.InitWithFeatures(
-      {plus_addresses::features::kPlusAddressesEnabled,
-       plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled},
+      {plus_addresses::features::kPlusAddressesEnabled},
       {password_manager::features::
            kUnifiedPasswordManagerLocalPasswordsMigrationWarning});
   // Set up credentials for filling.
@@ -1791,11 +1820,13 @@ TEST_F(PasswordAccessoryControllerTest, DontShowMigrationSheetlIfDisabled) {
   controller()->RefreshSuggestionsForField(
       FocusedFieldType::kFillableUsernameField);
 
-  AccessorySheetField selected_field = AccessorySheetField::Builder()
-                                           .SetDisplayText(u"S3cur3")
-                                           .SetIsObfuscated(true)
-                                           .SetSelectable(true)
-                                           .Build();
+  AccessorySheetField selected_field =
+      AccessorySheetField::Builder()
+          .SetSuggestionType(AccessorySuggestionType::kCredentialPassword)
+          .SetDisplayText(u"S3cur3")
+          .SetIsObfuscated(true)
+          .SetSelectable(true)
+          .Build();
   EXPECT_CALL(show_migration_warning_callback_, Run).Times(0);
   controller()->OnFillingTriggered(autofill::FieldGlobalId(), selected_field);
 }
@@ -1815,7 +1846,6 @@ TEST_F(PasswordAccessoryControllerTest,
   features_.Reset();
   features_.InitWithFeatures(
       {plus_addresses::features::kPlusAddressesEnabled,
-       plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled,
        password_manager::features::
            kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning},
       {});
@@ -1829,11 +1859,13 @@ TEST_F(PasswordAccessoryControllerTest,
       url::Origin::Create(GURL(kExampleSite)));
   controller()->RefreshSuggestionsForField(
       FocusedFieldType::kFillableUsernameField);
-  AccessorySheetField selected_field = AccessorySheetField::Builder()
-                                           .SetDisplayText(u"S3cur3")
-                                           .SetIsObfuscated(true)
-                                           .SetSelectable(true)
-                                           .Build();
+  AccessorySheetField selected_field =
+      AccessorySheetField::Builder()
+          .SetSuggestionType(AccessorySuggestionType::kCredentialPassword)
+          .SetDisplayText(u"S3cur3")
+          .SetIsObfuscated(true)
+          .SetSelectable(true)
+          .Build();
   EXPECT_CALL(*mock_access_loss_warning_bridge_,
               ShouldShowAccessLossNoticeSheet(profile()->GetPrefs(),
                                               /*called_at_startup=*/false))
@@ -1862,8 +1894,7 @@ TEST_F(PasswordAccessoryControllerTest,
 
   features_.Reset();
   features_.InitWithFeatures(
-      {plus_addresses::features::kPlusAddressesEnabled,
-       plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled},
+      {plus_addresses::features::kPlusAddressesEnabled},
       {password_manager::features::
            kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning});
   // Set up credentials for filling.
@@ -1877,11 +1908,13 @@ TEST_F(PasswordAccessoryControllerTest,
   controller()->RefreshSuggestionsForField(
       FocusedFieldType::kFillableUsernameField);
 
-  AccessorySheetField selected_field = AccessorySheetField::Builder()
-                                           .SetDisplayText(u"S3cur3")
-                                           .SetIsObfuscated(true)
-                                           .SetSelectable(true)
-                                           .Build();
+  AccessorySheetField selected_field =
+      AccessorySheetField::Builder()
+          .SetSuggestionType(AccessorySuggestionType::kCredentialPassword)
+          .SetDisplayText(u"S3cur3")
+          .SetIsObfuscated(true)
+          .SetSelectable(true)
+          .Build();
   EXPECT_CALL(*mock_access_loss_warning_bridge_,
               ShouldShowAccessLossNoticeSheet(profile()->GetPrefs(),
                                               /*called_at_startup=*/false))

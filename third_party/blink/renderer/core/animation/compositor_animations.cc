@@ -95,12 +95,12 @@ bool ConsiderAnimationAsIncompatible(const Animation& animation,
     return true;
 
   switch (animation.CalculateAnimationPlayState()) {
-    case Animation::kIdle:
+    case V8AnimationPlayState::Enum::kIdle:
       return false;
-    case Animation::kRunning:
+    case V8AnimationPlayState::Enum::kRunning:
       return true;
-    case Animation::kPaused:
-    case Animation::kFinished:
+    case V8AnimationPlayState::Enum::kPaused:
+    case V8AnimationPlayState::Enum::kFinished:
       if (Animation::HasLowerCompositeOrdering(
               &animation, &animation_to_add,
               Animation::CompareAnimationsOrdering::kPointerOrder)) {
@@ -1156,9 +1156,7 @@ bool CompositorAnimations::CanStartScrollTimelineOnCompositor(Node* target) {
     return false;
   }
   if (auto* properties = layout_box->FirstFragment().PaintProperties()) {
-    return properties->Scroll() &&
-           (!RuntimeEnabledFeatures::ScrollNodeForOverflowHiddenEnabled() ||
-            properties->Scroll()->UserScrollable());
+    return properties->Scroll() && properties->Scroll()->UserScrollable();
   }
   return false;
 }

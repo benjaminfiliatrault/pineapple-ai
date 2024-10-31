@@ -22,6 +22,8 @@
 #include "cc/paint/paint_record.h"
 #include "cc/paint/record_paint_canvas.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_fill_rule.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_image_smoothing_quality.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_typedefs.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_performance_monitor.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
@@ -112,6 +114,7 @@ class Path;
 class Path2D;
 class ScriptState;
 class SimpleFontData;
+class TextCluster;
 class TextMetrics;
 class V8GPUTextureFormat;
 class V8UnionCanvasFilterOrString;
@@ -121,6 +124,8 @@ enum class ColorParseResult;
 enum RespectImageOrientationEnum : uint8_t;
 template <typename T>
 class NotShared;
+class V8CanvasFontStretch;
+class V8CanvasTextRendering;
 
 class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
  public:
@@ -226,21 +231,26 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   void beginPath();
 
   void fill();
-  void fill(const String& winding);
+  void fill(const V8CanvasFillRule& winding);
   void fill(Path2D*);
-  void fill(Path2D*, const String& winding);
+  void fill(Path2D*, const V8CanvasFillRule& winding);
   void stroke();
   void stroke(Path2D*);
-  void clip(const String& winding = "nonzero");
-  void clip(Path2D*, const String& winding = "nonzero");
+  void clip(const V8CanvasFillRule& winding =
+                V8CanvasFillRule(V8CanvasFillRule::Enum::kNonzero));
+  void clip(Path2D*,
+            const V8CanvasFillRule& winding =
+                V8CanvasFillRule(V8CanvasFillRule::Enum::kNonzero));
 
   bool isPointInPath(const double x,
                      const double y,
-                     const String& winding = "nonzero");
+                     const V8CanvasFillRule& winding =
+                         V8CanvasFillRule(V8CanvasFillRule::Enum::kNonzero));
   bool isPointInPath(Path2D*,
                      const double x,
                      const double y,
-                     const String& winding = "nonzero");
+                     const V8CanvasFillRule& winding =
+                         V8CanvasFillRule(V8CanvasFillRule::Enum::kNonzero));
   bool isPointInStroke(const double x, const double y);
   bool isPointInStroke(Path2D*, const double x, const double y);
 
@@ -352,8 +362,8 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
 
   bool imageSmoothingEnabled() const;
   void setImageSmoothingEnabled(bool);
-  String imageSmoothingQuality() const;
-  void setImageSmoothingQuality(const String&);
+  V8ImageSmoothingQuality imageSmoothingQuality() const;
+  void setImageSmoothingQuality(const V8ImageSmoothingQuality&);
 
   // Transfers a canvas' existing back-buffer to a GPUTexture for use in a
   // WebGPU pipeline. The canvas' image can be used as a texture, or the texture
@@ -452,14 +462,20 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   String wordSpacing() const;
   void setWordSpacing(const String&);
 
-  String textRendering() const;
-  void setTextRendering(const String&);
+  V8CanvasTextRendering textRendering() const;
+  void setTextRendering(const V8CanvasTextRendering&);
+
+  String textRenderingAsString() const;
+  void setTextRenderingAsString(const String&);
 
   String fontKerning() const;
   void setFontKerning(const String&);
 
-  String fontStretch() const;
-  void setFontStretch(const String&);
+  V8CanvasFontStretch fontStretch() const;
+  void setFontStretch(const V8CanvasFontStretch&);
+
+  String fontStretchAsString() const;
+  void setFontStretchAsString(const String&);
 
   String fontVariantCaps() const;
   void setFontVariantCaps(const String&);
@@ -472,6 +488,11 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   void strokeText(const String& text, double x, double y);
   void strokeText(const String& text, double x, double y, double max_width);
   TextMetrics* measureText(const String& text);
+  // Renders a TextCluster returned by TextMetrics::getTextClusters(). If
+  // possible, the align, baseline, and font from the TextCluster will be used.
+  // The x and y parameters are added to the values from the TextCluster to
+  // position the cluster.
+  void fillTextCluster(const TextCluster* text_cluster, double x, double y);
 
   void Trace(Visitor*) const override;
 
@@ -710,7 +731,8 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
                         double x,
                         double y,
                         CanvasRenderingContext2DState::PaintType paint_type,
-                        double* max_width = nullptr);
+                        double* max_width = nullptr,
+                        const TextCluster* text_cluster = nullptr);
 
   // Returns the color from a string. This may return a cached value as well
   // as updating the cache (if possible).
@@ -804,13 +826,13 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
                          const SkSamplingOptions&,
                          const cc::PaintFlags*);
   void ClipInternal(const Path&,
-                    const String& winding_rule_string,
+                    const V8CanvasFillRule& winding_rule,
                     cc::UsePaintCache);
 
   bool IsPointInPathInternal(const Path&,
                              const double x,
                              const double y,
-                             const String& winding_rule_string);
+                             const V8CanvasFillRule& winding_rule);
   bool IsPointInStrokeInternal(const Path&, const double x, const double y);
 
   static bool IsFullCanvasCompositeMode(SkBlendMode);
@@ -864,10 +886,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
 
   cc::PaintFlags GetClearFlags() const;
 
-  bool CopyGPUTextureToResourceProvider(
-      GPUTexture& src_texture,
-      CanvasResourceProvider& resource_provider);
-
   bool origin_tainted_by_content_ = false;
   cc::UsePaintCache path2d_use_paint_cache_;
   int num_readbacks_performed_ = 0;
@@ -881,24 +899,26 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
 
 namespace {
 
-// Blend modes that require compositing with layers when shadows are drawn.
-ALWAYS_INLINE bool BlendModeRequiresLayersForShadows(SkBlendMode blendMode) {
-  return blendMode == SkBlendMode::kDstOver ||
-         blendMode == SkBlendMode::kPlus ||
-         blendMode == SkBlendMode::kMultiply ||
-         blendMode == SkBlendMode::kXor || blendMode == SkBlendMode::kOverlay ||
-         blendMode == SkBlendMode::kDarken ||
-         blendMode == SkBlendMode::kLighten ||
-         blendMode == SkBlendMode::kColorDodge ||
-         blendMode == SkBlendMode::kColorBurn ||
-         blendMode == SkBlendMode::kHardLight ||
-         blendMode == SkBlendMode::kSoftLight ||
-         blendMode == SkBlendMode::kDifference ||
-         blendMode == SkBlendMode::kExclusion ||
-         blendMode == SkBlendMode::kHue ||
-         blendMode == SkBlendMode::kSaturation ||
-         blendMode == SkBlendMode::kColor ||
-         blendMode == SkBlendMode::kLuminosity;
+// Returns true if the blend modes is compatible with `DropShadowPaintFilter`.
+//
+// The HTML specification requires the shadow to be composited against the
+// background first, and the foreground to be composited on the result.
+// Conceptually:
+//   composite(composite(background, shadow), foreground)
+//
+// This would normally be implemented by drawing the shape twice, once for the
+// shadow and once for the foreground. As an optimization, we can implement
+// shadows using `DropShadowPaintFilter`. This filter however doesn't follow the
+// HTML specification. It draws the foreground on the shadow first, without
+// compositing and then composite the result onto the background. Conceptually:
+//   composite(background, sourceOver(shadow, foreground))
+//
+// For the composite ops listed below, these two operations turns out to be
+// equivalent. We can therefore use `DropShadowPaintFilter` with them.
+ALWAYS_INLINE bool BlendModeSupportsShadowFilter(SkBlendMode blendMode) {
+  return blendMode == SkBlendMode::kSrcOver ||
+         blendMode == SkBlendMode::kSrcATop ||
+         blendMode == SkBlendMode::kDstOut;
 }
 
 ALWAYS_INLINE bool BlendModeDoesntPreserveOpaqueDestinationAlpha(
@@ -917,13 +937,19 @@ ALWAYS_INLINE bool BlendModeDoesntPreserveOpaqueDestinationAlpha(
 ALWAYS_INLINE bool BaseRenderingContext2D::BlendModeRequiresCompositedDraw(
     const CanvasRenderingContext2DState& state) const {
   SkBlendMode blend_mode = state.GlobalComposite();
+  // The "copy" composite operation (a.k.a. `SkBlendMode::kSrc`) is handled as a
+  // special case in `DrawInternal` and thus doesn't require `CompositedDraw`.
+  if (blend_mode == SkBlendMode::kSrc) {
+    return false;
+  }
   // Blend modes that require CompositedDraw in every case.
   if (IsFullCanvasCompositeMode(blend_mode)) {
     return true;
   }
-  // Blend modes that require CompositedDraw if shadows are drawn.
+  // For blend modes not compatible with `DropShadowPaintFilter`, we must
+  // manually composite the shadow and foreground one after the other.
   return state.ShouldDrawShadows() &&
-         BlendModeRequiresLayersForShadows(blend_mode);
+         !BlendModeSupportsShadowFilter(blend_mode);
 }
 
 ALWAYS_INLINE void BaseRenderingContext2D::ResetAlphaIfNeeded(

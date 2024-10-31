@@ -8,11 +8,13 @@ source_set("coordinator") {
     "plus_address_bottom_sheet_coordinator.mm",
     "plus_address_bottom_sheet_mediator.h",
     "plus_address_bottom_sheet_mediator.mm",
+    "plus_address_error_alert_delegate.h",
   ]
   deps = [
     "//base",
     "//components/plus_addresses",
     "//components/plus_addresses/metrics",
+    "//components/plus_addresses/resources/strings",
     "//components/plus_addresses/settings",
     "//components/strings:components_strings_grit",
     "//ios/chrome/browser/autofill/model/bottom_sheet:bottom_sheet",
@@ -46,7 +48,6 @@ source_set("unit_tests") {
     "//ios/chrome/browser/plus_addresses/ui:ui",
     "//ios/chrome/browser/shared/model/browser/test:test_support",
     "//ios/chrome/browser/shared/model/profile/test",
-    "//ios/chrome/browser/signin/model",
     "//ios/chrome/browser/url_loading/model",
     "//ios/chrome/browser/url_loading/model:test_support",
     "//ios/web/public/test",

@@ -130,12 +130,16 @@ class MEDIA_EXPORT MediaCodecBridge {
                                           gfx::Size* encoded_size) = 0;
 
   // Submits a byte array to the given input buffer. Call this after getting an
-  // available buffer from DequeueInputBuffer(). If |data| is NULL, it assumes
-  // the input buffer has already been populated (but still obeys |size|).
-  // |data_size| must be less than kint32max (because Java).
+  // available buffer from DequeueInputBuffer(). `data` will be copied into the
+  // input buffer.
   virtual MediaCodecResult QueueInputBuffer(
       int index,
-      const uint8_t* data,
+      base::span<const uint8_t> data,
+      base::TimeDelta presentation_time) = 0;
+  // Similar to QueueInputBuffer() but submits the input buffer referenced by
+  // `index` assuming it has already been filled.
+  virtual MediaCodecResult QueueFilledInputBuffer(
+      int index,
       size_t data_size,
       base::TimeDelta presentation_time) = 0;
 
@@ -149,8 +153,7 @@ class MEDIA_EXPORT MediaCodecBridge {
   // whole buffer is encrypted.
   virtual MediaCodecResult QueueSecureInputBuffer(
       int index,
-      const uint8_t* data,
-      size_t data_size,
+      base::span<const uint8_t> data,
       const std::string& key_id,
       const std::string& iv,
       const std::vector<SubsampleEntry>& subsamples,
@@ -187,21 +190,20 @@ class MEDIA_EXPORT MediaCodecBridge {
   virtual void ReleaseOutputBuffer(int index, bool render) = 0;
 
   // Returns an input buffer's base pointer and capacity.
-  virtual MediaCodecResult GetInputBuffer(int input_buffer_index,
-                                          uint8_t** data,
-                                          size_t* capacity) = 0;
+  virtual base::span<uint8_t> GetInputBuffer(int input_buffer_index) = 0;
 
   // Copies |num| bytes from output buffer |index|'s |offset| into the memory
-  // region pointed to by |dst|. To avoid overflows, the size of both source
-  // and destination must be at least |num| bytes, and should not overlap.
-  // Returns kError if an error occurs, or kOk otherwise.
+  // region pointed to by |dst|. Returns kError if an error occurs, or kOk
+  // otherwise.
   virtual MediaCodecResult CopyFromOutputBuffer(int index,
                                                 size_t offset,
-                                                void* dst,
-                                                size_t num) = 0;
+                                                base::span<uint8_t> dst) = 0;
 
   // Gets the component name. Before API level 18 this returns an empty string.
   virtual std::string GetName() = 0;
+
+  // Returns whether the media codec implementation is software codec.
+  virtual bool IsSoftwareCodec() = 0;
 
   // Changes the output surface for the MediaCodec. May only be used on API
   // level 23 and higher (Marshmallow).

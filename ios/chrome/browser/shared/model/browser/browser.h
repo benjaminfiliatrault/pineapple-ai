@@ -9,10 +9,10 @@
 
 #import "base/memory/weak_ptr.h"
 #import "base/supports_user_data.h"
-#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
 class BrowserObserver;
 @class CommandDispatcher;
+class ProfileIOS;
 @class SceneState;
 class WebStateList;
 
@@ -48,11 +48,6 @@ class Browser : public base::SupportsUserData {
 
   // Returns the type of this browser.
   virtual Type type() const = 0;
-
-  // Accessor for the owning ProfileIOS.
-  // TODO(crbug.com/358301380): After all usage has changed to GetProfile(),
-  // remove this method.
-  virtual ProfileIOS* GetBrowserState() = 0;
 
   // Accessor for the owning Profile.
   virtual ProfileIOS* GetProfile() = 0;

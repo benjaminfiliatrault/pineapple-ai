@@ -29,12 +29,17 @@ import {i18n} from '../core/i18n.js';
 import {usePlatformHandler} from '../core/lit/context.js';
 import {ReactiveLitElement} from '../core/reactive/lit.js';
 import {signal} from '../core/reactive/signal.js';
+import {LanguageCode} from '../core/soda/language_info.js';
 import {
   settings,
   SpeakerLabelEnableState,
   SummaryEnableState,
   TranscriptionEnableState,
 } from '../core/state/settings.js';
+import {
+  enableTranscription,
+  toggleTranscriptionEnabled,
+} from '../core/state/transcription.js';
 import {HELP_URL} from '../core/url_constants.js';
 import {
   assertExhaustive,
@@ -339,8 +344,11 @@ export class SettingsMenu extends ReactiveLitElement {
   }
 
   private renderTranscriptionDetailSettings() {
-    if (!this.transcriptionEnabled ||
-        this.platformHandler.sodaState.value.kind === 'notInstalled') {
+    // TODO(hsuanling): Currently shows settings when en-US is installed.
+    // Discuss with UXR about the logic to show detail settings when there're
+    // multiple languages.
+    const sodaState = this.platformHandler.getSodaState(LanguageCode.EN_US);
+    if (!this.transcriptionEnabled || sodaState.value.kind === 'notInstalled') {
       return nothing;
     }
     return [
@@ -355,51 +363,21 @@ export class SettingsMenu extends ReactiveLitElement {
   }
 
   private onTranscriptionToggle() {
-    // TODO(pihsun): This is the same as in toggleTranscriptionEnabled in
-    // record-page.ts, consider how to centralize the logic for all
-    // transcription enable/available state transitions.
-    switch (settings.value.transcriptionEnabled) {
-      case TranscriptionEnableState.ENABLED:
-        settings.mutate((s) => {
-          s.transcriptionEnabled = TranscriptionEnableState.DISABLED;
-        });
-        return;
-      case TranscriptionEnableState.DISABLED:
-        settings.mutate((s) => {
-          s.transcriptionEnabled = TranscriptionEnableState.ENABLED;
-        });
-        return;
-      case TranscriptionEnableState.UNKNOWN:
-      case TranscriptionEnableState.DISABLED_FIRST:
-        this.transcriptionConsentDialog.value?.show();
-        // This force the switch to be re-rendered so it'll catch the "live"
-        // value and set selected back to false.
-        this.requestUpdate();
-        return;
-      default:
-        assertExhaustive(settings.value.transcriptionEnabled);
+    if (!toggleTranscriptionEnabled()) {
+      this.transcriptionConsentDialog.value?.show();
+      // This force the switch to be re-rendered so it'll catch the "live"
+      // value and set selected back to false.
+      this.requestUpdate();
     }
   }
 
   private onInstallSodaClick() {
-    // TODO(pihsun): This is the same as in toggleTranscriptionEnabled in
-    // record-page.ts, consider how to centralize the logic for all
-    // transcription enable/available state transitions.
-    switch (settings.value.transcriptionEnabled) {
-      case TranscriptionEnableState.ENABLED:
-      case TranscriptionEnableState.DISABLED:
-        settings.mutate((s) => {
-          s.transcriptionEnabled = TranscriptionEnableState.ENABLED;
-        });
-        this.platformHandler.installSoda();
-        return;
-      case TranscriptionEnableState.UNKNOWN:
-      case TranscriptionEnableState.DISABLED_FIRST:
-        this.transcriptionConsentDialog.value?.show();
-        return;
-      default:
-        assertExhaustive(settings.value.transcriptionEnabled);
+    if (!toggleTranscriptionEnabled()) {
+      this.transcriptionConsentDialog.value?.show();
+      return;
     }
+    // Forces transcription to be enabled.
+    enableTranscription();
   }
 
   private get transcriptionEnabled() {
@@ -409,7 +387,10 @@ export class SettingsMenu extends ReactiveLitElement {
   }
 
   private renderTranscriptionDescriptionAndAction() {
-    const sodaState = this.platformHandler.sodaState.value;
+    // TODO(hsuanling): Move the download logic to language picker, and always
+    // show the toggle switch.
+    const sodaState =
+      this.platformHandler.getSodaState(LanguageCode.EN_US).value;
     if (sodaState.kind === 'notInstalled') {
       // Shows the "download" button when SODA is not installed, even if it's
       // already enabled by user. This shouldn't happen in normal case, but
@@ -471,7 +452,7 @@ export class SettingsMenu extends ReactiveLitElement {
   }
 
   private renderTranscriptionSection() {
-    if (this.platformHandler.sodaState.value.kind === 'unavailable') {
+    if (!this.platformHandler.isSodaAvailable()) {
       return nothing;
     }
     return html`

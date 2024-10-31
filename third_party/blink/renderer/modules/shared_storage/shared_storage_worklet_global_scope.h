@@ -43,8 +43,10 @@ class SharedStorageOperationDefinition;
 class V8NoArgumentConstructor;
 class SharedStorage;
 class ScriptCachedMetadataHandler;
+class SharedStorageWorkletNavigator;
 class PrivateAggregation;
 class Crypto;
+class StorageInterestGroup;
 
 // mojom::blink::SharedStorageWorkletService implementation. Responsible for
 // handling worklet operations. This object lives on the worklet thread.
@@ -102,7 +104,8 @@ class MODULES_EXPORT SharedStorageWorkletGlobalScope final
   // mojom::blink::SharedStorageWorkletService implementation:
   void Initialize(mojo::PendingAssociatedRemote<
                       mojom::blink::SharedStorageWorkletServiceClient> client,
-                  bool private_aggregation_permissions_policy_allowed,
+                  mojom::blink::SharedStorageWorkletPermissionsPolicyStatePtr
+                      permissions_policy_state,
                   const String& embedder_context) override;
   void AddModule(mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>
                      pending_url_loader_factory,
@@ -124,6 +127,10 @@ class MODULES_EXPORT SharedStorageWorkletGlobalScope final
   SharedStorage* sharedStorage(ScriptState*, ExceptionState&);
   PrivateAggregation* privateAggregation(ScriptState*, ExceptionState&);
   Crypto* crypto(ScriptState*, ExceptionState&);
+  ScriptPromise<IDLSequence<StorageInterestGroup>> interestGroups(
+      ScriptState*,
+      ExceptionState&);
+  SharedStorageWorkletNavigator* Navigator(ScriptState*, ExceptionState&);
 
   // Returns the unique ID for the currently running operation.
   int64_t GetCurrentOperationId();
@@ -135,8 +142,9 @@ class MODULES_EXPORT SharedStorageWorkletGlobalScope final
 
   const String& embedder_context() const { return embedder_context_; }
 
-  bool private_aggregation_permissions_policy_allowed() const {
-    return private_aggregation_permissions_policy_allowed_;
+  const mojom::blink::SharedStorageWorkletPermissionsPolicyStatePtr&
+  permissions_policy_state() const {
+    return permissions_policy_state_;
   }
 
  private:
@@ -217,6 +225,10 @@ class MODULES_EXPORT SharedStorageWorkletGlobalScope final
   // `crypto`.
   Member<Crypto> crypto_;
 
+  // The per-global-scope navigator object. Created on the first access of
+  // `navigator`.
+  Member<SharedStorageWorkletNavigator> navigator_;
+
   // The map from the registered operation names to their definition.
   HeapHashMap<String, Member<SharedStorageOperationDefinition>>
       operation_definition_map_;
@@ -238,9 +250,10 @@ class MODULES_EXPORT SharedStorageWorkletGlobalScope final
   HeapMojoAssociatedRemote<mojom::blink::SharedStorageWorkletServiceClient>
       client_{this};
 
-  // Whether the "private-aggregation" permissions policy is enabled in the
-  // worklet.
-  bool private_aggregation_permissions_policy_allowed_;
+  // The state of the permissions policy features applicable to the shared
+  // storage worklet.
+  mojom::blink::SharedStorageWorkletPermissionsPolicyStatePtr
+      permissions_policy_state_;
 
   const SharedStorageWorkletToken token_;
 };

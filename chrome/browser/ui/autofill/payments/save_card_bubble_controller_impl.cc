@@ -38,7 +38,7 @@
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/payments_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
-#include "components/autofill/core/browser/ui/payments/payments_bubble_closed_reasons.h"
+#include "components/autofill/core/browser/ui/payments/payments_ui_closed_reasons.h"
 #include "components/autofill/core/browser/ui/payments/save_payment_method_and_virtual_card_enroll_confirmation_ui_params.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -264,6 +264,19 @@ void SaveCardBubbleControllerImpl::ShowConfirmationBubbleView(
   }
 }
 
+base::OnceClosure SaveCardBubbleControllerImpl::
+    GetShowConfirmationForCardSuccessfullySavedCallback() {
+  return base::BindOnce(
+      &SaveCardBubbleControllerImpl::ShowConfirmationBubbleView,
+      weak_ptr_factory_.GetWeakPtr(), true, std::nullopt);
+}
+
+base::OnceClosure
+SaveCardBubbleControllerImpl::GetEndSaveCardPromptFlowCallback() {
+  return base::BindOnce(&SaveCardBubbleControllerImpl::EndSaveCardPromptFlow,
+                        weak_ptr_factory_.GetWeakPtr());
+}
+
 std::u16string SaveCardBubbleControllerImpl::GetWindowTitle() const {
   switch (current_bubble_type_) {
     case BubbleType::LOCAL_SAVE:
@@ -411,7 +424,7 @@ const CreditCard& SaveCardBubbleControllerImpl::GetCard() const {
   return card_;
 }
 
-base::OnceCallback<void(PaymentsBubbleClosedReason)>
+base::OnceCallback<void(PaymentsUiClosedReason)>
 SaveCardBubbleControllerImpl::GetOnBubbleClosedCallback() {
   return base::BindOnce(&SaveCardBubbleControllerImpl::OnBubbleClosed,
                         weak_ptr_factory_.GetWeakPtr());
@@ -521,8 +534,8 @@ void SaveCardBubbleControllerImpl::OnSaveButton(
                    kAccepted);
       break;
     case BubbleType::MANAGE_CARDS:
-      LogManageCardsPromptMetric(ManageCardsPromptMetric::kManageCardsDone,
-                                 is_upload_save_);
+      CHECK(!is_upload_save_);
+      LogManageCardsPromptMetric(ManageCardsPromptMetric::kManageCardsDone);
       return;
     case BubbleType::UPLOAD_IN_PROGRESS:
     case BubbleType::UPLOAD_COMPLETED:
@@ -538,9 +551,9 @@ void SaveCardBubbleControllerImpl::OnLegalMessageLinkClicked(const GURL& url) {
 
 void SaveCardBubbleControllerImpl::OnManageCardsClicked() {
   CHECK(current_bubble_type_ == BubbleType::MANAGE_CARDS);
+  CHECK(!is_upload_save_);
 
-  LogManageCardsPromptMetric(ManageCardsPromptMetric::kManageCardsManageCards,
-                             is_upload_save_);
+  LogManageCardsPromptMetric(ManageCardsPromptMetric::kManageCardsManageCards);
 
   ShowPaymentsSettingsPage();
 }
@@ -551,7 +564,7 @@ void SaveCardBubbleControllerImpl::ShowPaymentsSettingsPage() {
 }
 
 void SaveCardBubbleControllerImpl::OnBubbleClosed(
-    PaymentsBubbleClosedReason closed_reason) {
+    PaymentsUiClosedReason closed_reason) {
   set_bubble_view(nullptr);
 
   // If the dialog should be re-shown, do not change the bubble type or log
@@ -562,19 +575,19 @@ void SaveCardBubbleControllerImpl::OnBubbleClosed(
     return;
   }
 
-  auto get_metric = [](PaymentsBubbleClosedReason reason) {
+  auto get_metric = [](PaymentsUiClosedReason reason) {
     switch (reason) {
-      case PaymentsBubbleClosedReason::kAccepted:
+      case PaymentsUiClosedReason::kAccepted:
         return autofill_metrics::SaveCardPromptResult::kAccepted;
-      case PaymentsBubbleClosedReason::kCancelled:
+      case PaymentsUiClosedReason::kCancelled:
         return autofill_metrics::SaveCardPromptResult::kCancelled;
-      case PaymentsBubbleClosedReason::kClosed:
+      case PaymentsUiClosedReason::kClosed:
         return autofill_metrics::SaveCardPromptResult::kClosed;
-      case PaymentsBubbleClosedReason::kNotInteracted:
+      case PaymentsUiClosedReason::kNotInteracted:
         return autofill_metrics::SaveCardPromptResult::kNotInteracted;
-      case PaymentsBubbleClosedReason::kLostFocus:
+      case PaymentsUiClosedReason::kLostFocus:
         return autofill_metrics::SaveCardPromptResult::kLostFocus;
-      case PaymentsBubbleClosedReason::kUnknown:
+      case PaymentsUiClosedReason::kUnknown:
         return autofill_metrics::SaveCardPromptResult::kUnknown;
     }
   };
@@ -632,7 +645,7 @@ void SaveCardBubbleControllerImpl::OnBubbleClosed(
       payments::PaymentsAutofillClient::SaveCardOfferUserDecision;
   std::optional<SaveCardOfferUserDecision> user_decision;
   switch (closed_reason) {
-    case PaymentsBubbleClosedReason::kAccepted:
+    case PaymentsUiClosedReason::kAccepted:
       user_decision = SaveCardOfferUserDecision::kAccepted;
       switch (current_bubble_type_) {
         case BubbleType::LOCAL_SAVE:
@@ -650,15 +663,15 @@ void SaveCardBubbleControllerImpl::OnBubbleClosed(
           NOTREACHED_IN_MIGRATION();
       }
       break;
-    case PaymentsBubbleClosedReason::kCancelled:
+    case PaymentsUiClosedReason::kCancelled:
       user_decision = SaveCardOfferUserDecision::kDeclined;
       break;
-    case PaymentsBubbleClosedReason::kClosed:
+    case PaymentsUiClosedReason::kClosed:
       user_decision = SaveCardOfferUserDecision::kIgnored;
       break;
-    case PaymentsBubbleClosedReason::kUnknown:
-    case PaymentsBubbleClosedReason::kNotInteracted:
-    case PaymentsBubbleClosedReason::kLostFocus:
+    case PaymentsUiClosedReason::kUnknown:
+    case PaymentsUiClosedReason::kNotInteracted:
+    case PaymentsUiClosedReason::kLostFocus:
       break;
   }
 
@@ -836,8 +849,8 @@ void SaveCardBubbleControllerImpl::DoShowBubble() {
           is_reshow_);
       break;
     case BubbleType::MANAGE_CARDS:
-      LogManageCardsPromptMetric(ManageCardsPromptMetric::kManageCardsShown,
-                                 is_upload_save_);
+      CHECK(!is_upload_save_);
+      LogManageCardsPromptMetric(ManageCardsPromptMetric::kManageCardsShown);
       break;
     case BubbleType::UPLOAD_COMPLETED:
       autofill_metrics::LogCreditCardUploadConfirmationViewShownMetric(
@@ -929,6 +942,13 @@ bool SaveCardBubbleControllerImpl::IsWebContentsActive() {
   return active_browser &&
          active_browser->tab_strip_model()->GetActiveWebContents() ==
              web_contents();
+}
+
+void SaveCardBubbleControllerImpl::EndSaveCardPromptFlow() {
+  HideBubble();
+  current_bubble_type_ = BubbleType::INACTIVE;
+  confirmation_ui_params_.reset();
+  UpdatePageActionIcon();
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(SaveCardBubbleControllerImpl);

@@ -103,7 +103,7 @@ class MODULES_EXPORT IDBDatabase final
   }
   IDBTransaction* transaction(ScriptState* script_state,
                               const V8UnionStringOrStringSequence* store_names,
-                              const String& mode,
+                              const V8IDBTransactionMode& mode,
                               const IDBTransactionOptions* options,
                               ExceptionState& exception_state);
   void deleteObjectStore(const String& name, ExceptionState&);
@@ -195,8 +195,9 @@ class MODULES_EXPORT IDBDatabase final
               int64_t object_store_id,
               int64_t index_id,
               const IDBKeyRange*,
+              mojom::blink::IDBGetAllResultType result_type,
               int64_t max_count,
-              bool key_only,
+              mojom::blink::IDBCursorDirection direction,
               IDBRequest*);
   void SetIndexKeys(int64_t transaction_id,
                     int64_t object_store_id,

@@ -727,10 +727,8 @@ std::optional<int> AXNode::CompareTo(const AXNode& other) const {
     return 1;
 
   if (our_ancestors.empty() || other_ancestors.empty()) {
-    NOTREACHED_IN_MIGRATION()
-        << "The common ancestor should be followed by two uncommon "
-           "children in the two corresponding lists of ancestors.";
-    return std::nullopt;
+    NOTREACHED() << "The common ancestor should be followed by two uncommon "
+                    "children in the two corresponding lists of ancestors.";
   }
 
   size_t this_uncommon_ancestor_index = our_ancestors.top()->GetIndexInParent();
@@ -779,6 +777,16 @@ void AXNode::SetLocation(AXNodeID offset_container_id,
   } else {
     data_.relative_bounds.transform.reset();
   }
+}
+
+void AXNode::SetScrollInfo(const int& scroll_x, const int& scroll_y) {
+  data_.AddIntAttribute(ax::mojom::IntAttribute::kScrollX, scroll_x);
+  data_.AddIntAttribute(ax::mojom::IntAttribute::kScrollY, scroll_y);
+}
+
+void AXNode::GetScrollInfo(int* scroll_x, int* scroll_y) const {
+  *scroll_x = GetIntAttribute(ax::mojom::IntAttribute::kScrollX);
+  *scroll_y = GetIntAttribute(ax::mojom::IntAttribute::kScrollY);
 }
 
 void AXNode::SetIndexInParent(size_t index_in_parent) {
@@ -1868,6 +1876,7 @@ bool AXNode::SetRoleMatchesItemRole(const AXNode* ordered_set) const {
   // Tree grid rows and grouped disclosure triangles should be treated as
   // ordered set items.
   if (IsRowInTreeGrid(ordered_set) ||
+      item_role == ax::mojom::Role::kDisclosureTriangle ||
       item_role == ax::mojom::Role::kDisclosureTriangleGrouped) {
     return true;
   }

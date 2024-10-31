@@ -662,6 +662,10 @@ em::ActiveTimePeriod::SessionType GetSessionType(
     case DeviceLocalAccountType::kWebKioskApp:
       return em::ActiveTimePeriod::SESSION_WEB_KIOSK;
 
+    case DeviceLocalAccountType::kKioskIsolatedWebApp:
+      // TODO(crbug.com/369516363): add ActiveTimePeriod value for IWA.
+      return em::ActiveTimePeriod::SESSION_WEB_KIOSK;
+
     default:
       NOTREACHED_IN_MIGRATION();
   }
@@ -689,7 +693,8 @@ em::TpmVersionInfo_GscVersion ConvertTpmGscVersion(
 
 // Do not report session type and email for deprecated user types.
 bool IsDeprecatedArcKioskAccount(std::string_view user_email) {
-  return gaia::ExtractDomainName(user_email) == user_manager::kArcKioskDomain;
+  return gaia::ExtractDomainName(gaia::SanitizeEmail(user_email)) ==
+         user_manager::kArcKioskDomain;
 }
 
 }  // namespace

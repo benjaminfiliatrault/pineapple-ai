@@ -72,7 +72,8 @@ class ContentPasswordManagerDriver final
   void FocusNextFieldAfterPasswords() override;
   void FillField(const std::u16string& value) override;
   void FillSuggestion(const std::u16string& username,
-                      const std::u16string& password) override;
+                      const std::u16string& password,
+                      base::OnceCallback<void(bool)> success_callback) override;
   void FillSuggestionById(autofill::FieldRendererId username_element_id,
                           autofill::FieldRendererId password_element_id,
                           const std::u16string& username,
@@ -124,7 +125,7 @@ class ContentPasswordManagerDriver final
   // 4) The server predicts the field as new password field.
   bool IsPasswordFieldForPasswordManager(
       autofill::FieldRendererId field_renderer_id,
-      const content::ContextMenuParams& params);
+      std::optional<blink::mojom::FormControlType> form_control_type);
 
   content::RenderFrameHost* render_frame_host() const {
     return render_frame_host_;

@@ -60,15 +60,15 @@ enum class DelayPolicy {
 // Base class for all message configurations.
 struct MessageConfigBase {
  public:
-  MessageConfigBase(UserAction user_action,
+  MessageConfigBase(CollaborationEvent collaboration_event,
                     BrowserStateRequirement display_requirement,
                     UserRequirement user_requirement,
                     DelayPolicy delay_policy,
                     uint64_t delay_policy_ttl);
   virtual ~MessageConfigBase();
 
-  // Which action was taken.
-  UserAction user_action;
+  // What type of collaboration event that occured.
+  CollaborationEvent collaboration_event;
 
   // What are the requirements for the browser state for displaying the message.
   BrowserStateRequirement display_requirement;
@@ -87,13 +87,17 @@ struct MessageConfigBase {
 struct InstantMessageConfig : public MessageConfigBase {
  public:
   InstantMessageConfig(
-      UserAction user_action,
+      CollaborationEvent collaboration_event,
       UserRequirement user_requirement,
       BrowserStateRequirement display_requirement,
+      InstantNotificationLevel notification_level,
       InstantNotificationType notification_type,
       DelayPolicy delay_policy,
       uint64_t delay_policy_ttl = DEFAULT_INSTANT_MESSAGE_SECONDS_TTL);
   ~InstantMessageConfig() override;
+
+  // What level of notification should be used for the message.
+  InstantNotificationLevel notification_level;
 
   // What type of notification should be used for the message.
   InstantNotificationType notification_type;
@@ -103,7 +107,7 @@ struct InstantMessageConfig : public MessageConfigBase {
 struct PersistentMessageConfig : public MessageConfigBase {
  public:
   PersistentMessageConfig(
-      UserAction user_action,
+      CollaborationEvent collaboration_event,
       UserRequirement user_requirement,
       BrowserStateRequirement display_requirement,
       BrowserStateRequirement hide_requirement,

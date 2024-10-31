@@ -27,6 +27,7 @@
 #include "chrome/browser/sync/session_sync_service_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/common/chrome_constants.h"
+#include "components/pref_registry/pref_registry_syncable.h"
 #include "components/segmentation_platform/embedder/default_model/device_switcher_result_dispatcher.h"
 #include "components/segmentation_platform/embedder/home_modules/home_modules_card_registry.h"
 #include "components/segmentation_platform/embedder/input_delegate/shopping_service_input_delegate.h"
@@ -105,6 +106,16 @@ void InitTabDataCollection(
                        std::move(rank_dispatcher));
 }
 
+void InitializeUkmDatabaseIfNeeded(Profile* profile) {
+  // The client is initialized in
+  // `ChromeBrowserMainExtraPartsSegmentationPlatform::PreProfileInit()` for
+  // production scenarios. But unit tests do not initialize the browser process,
+  // so this code path initializes the UKM client. Use in-memory since only
+  // tests should use this path.
+  UkmDatabaseClientHolder::GetClientInstance(profile).PreProfileInit(
+      /*in_memory_database=*/true);
+}
+
 }  // namespace
 
 // static
@@ -143,6 +154,11 @@ SegmentationPlatformServiceFactory::SegmentationPlatformServiceFactory()
 SegmentationPlatformServiceFactory::~SegmentationPlatformServiceFactory() =
     default;
 
+void SegmentationPlatformServiceFactory::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  home_modules::HomeModulesCardRegistry::RegisterProfilePrefs(registry);
+}
+
 KeyedService* SegmentationPlatformServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   if (context->IsOffTheRecord())
@@ -161,6 +177,8 @@ KeyedService* SegmentationPlatformServiceFactory::BuildServiceInstanceFor(
   auto home_modules_card_registry =
       std::make_unique<home_modules::HomeModulesCardRegistry>(
           profile->GetPrefs());
+
+  InitializeUkmDatabaseIfNeeded(profile);
 
   auto params = std::make_unique<SegmentationPlatformServiceImpl::InitParams>();
   auto profile_path = profile->GetPath().value();

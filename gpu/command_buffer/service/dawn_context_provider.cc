@@ -38,6 +38,7 @@
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/config/gpu_util.h"
+#include "third_party/dawn/include/dawn/webgpu_cpp_print.h"
 #include "third_party/skia/include/gpu/graphite/Context.h"
 #include "third_party/skia/include/gpu/graphite/dawn/DawnBackendContext.h"
 #include "third_party/skia/include/gpu/graphite/dawn/DawnUtils.h"
@@ -138,7 +139,6 @@ std::vector<wgpu::FeatureName> GetRequiredFeatures(
   std::vector<wgpu::FeatureName> features = {
       wgpu::FeatureName::DawnInternalUsages,
       wgpu::FeatureName::ImplicitDeviceSynchronization,
-      wgpu::FeatureName::SurfaceCapabilities,
 #if BUILDFLAG(IS_ANDROID)
       wgpu::FeatureName::TextureCompressionETC2,
 #endif
@@ -308,8 +308,7 @@ wgpu::BackendType DawnContextProvider::GetDefaultBackendType() {
 #elif BUILDFLAG(IS_APPLE)
   return wgpu::BackendType::Metal;
 #else
-  NOTREACHED_IN_MIGRATION();
-  return wgpu::BackendType::Null;
+  NOTREACHED();
 #endif
 }
 
@@ -361,24 +360,6 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
 
   std::optional<error::ContextLostReason> GetResetStatus() const;
 
-  // Provided to wgpu::Device as logging callback.
-  static void LogInfo(WGPULoggingType type,
-                      char const* message,
-                      void* userdata) {
-    switch (static_cast<wgpu::LoggingType>(type)) {
-      case wgpu::LoggingType::Warning:
-        LOG(WARNING) << message;
-        break;
-      case wgpu::LoggingType::Error:
-        LOG(ERROR) << message;
-        SetDawnErrorCrashKey(message);
-        base::debug::DumpWithoutCrashing();
-        break;
-      default:
-        break;
-    }
-  }
-
  private:
   friend class base::RefCountedThreadSafe<DawnSharedContext>;
 
@@ -407,9 +388,28 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
     }
   }
 
+  // Provided to wgpu::Device as logging callback.
+  static void LogInfo(WGPULoggingType type,
+                      WGPUStringView message,
+                      void*) {
+    std::string_view view = {message.data, message.length};
+    switch (static_cast<wgpu::LoggingType>(type)) {
+      case wgpu::LoggingType::Warning:
+        LOG(WARNING) << view;
+        break;
+      case wgpu::LoggingType::Error:
+        LOG(ERROR) << view;
+        SetDawnErrorCrashKey(view);
+        base::debug::DumpWithoutCrashing();
+        break;
+      default:
+        break;
+    }
+  }
+
   ~DawnSharedContext() override;
 
-  void OnError(wgpu::ErrorType error_type, const char* message);
+  void OnError(wgpu::ErrorType error_type, wgpu::StringView message);
 
   // base::trace_event::MemoryDumpProvider implementation:
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
@@ -557,7 +557,7 @@ bool DawnSharedContext::Initialize(
 
   wgpu::DeviceDescriptor descriptor;
   descriptor.SetUncapturedErrorCallback(
-      [](const wgpu::Device&, wgpu::ErrorType type, const char* message,
+      [](const wgpu::Device&, wgpu::ErrorType type, wgpu::StringView message,
          DawnSharedContext* state) {
         if (type != wgpu::ErrorType::NoError) {
           state->OnError(type, message);
@@ -567,7 +567,7 @@ bool DawnSharedContext::Initialize(
   descriptor.SetDeviceLostCallback(
       wgpu::CallbackMode::AllowSpontaneous,
       [](const wgpu::Device&, wgpu::DeviceLostReason reason,
-         const char* message, DawnSharedContext* state) {
+         wgpu::StringView message, DawnSharedContext* state) {
         if (reason != wgpu::DeviceLostReason::Destroyed) {
           state->OnError(wgpu::ErrorType::DeviceLost, message);
         }
@@ -665,7 +665,7 @@ std::optional<error::ContextLostReason> DawnSharedContext::GetResetStatus()
 }
 
 void DawnSharedContext::OnError(wgpu::ErrorType error_type,
-                                const char* message) {
+                                wgpu::StringView message) {
   LOG(ERROR) << message;
   SetDawnErrorCrashKey(message);
 
@@ -791,29 +791,6 @@ std::unique_ptr<DawnContextProvider> DawnContextProvider::CreateWithBackend(
   return base::WrapUnique(
       new DawnContextProvider(std::move(dawn_shared_context)));
 }
-
-#if BUILDFLAG(IS_WIN)
-std::unique_ptr<webgpu::DawnInstance>
-DawnContextProvider::CreateDawnInstanceForD3D12ShaderCache(
-    const GpuPreferences& gpu_preferences) {
-  std::unique_ptr<webgpu::DawnInstance> instance = webgpu::DawnInstance::Create(
-      nullptr, gpu_preferences, webgpu::SafetyLevel::kUnsafe,
-      &DawnSharedContext::LogInfo, nullptr);
-
-  // Request D3D12 adapters to initialize the access to D3D12 shader cache.
-  wgpu::RequestAdapterOptions adapter_options;
-  adapter_options.backendType = wgpu::BackendType::D3D12;
-  adapter_options.forceFallbackAdapter = false;
-  dawn::native::d3d::RequestAdapterOptionsLUID adapter_options_luid;
-  if (GetANGLED3D11DeviceLUID(&adapter_options_luid.adapterLUID)) {
-    adapter_options.nextInChain = &adapter_options_luid;
-  }
-  adapter_options.compatibilityMode = false;
-  instance->EnumerateAdapters(&adapter_options);
-
-  return instance;
-}
-#endif
 
 std::unique_ptr<DawnContextProvider>
 DawnContextProvider::CreateWithSharedDevice(

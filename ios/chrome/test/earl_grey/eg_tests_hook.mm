@@ -5,15 +5,19 @@
 #import <MaterialComponents/MaterialSnackbar.h>
 
 #import "base/command_line.h"
+#import "base/files/file_path.h"
+#import "base/files/file_util.h"
 #import "base/logging.h"
+#import "base/strings/sys_string_conversions.h"
 #import "base/time/time.h"
 #import "components/password_manager/core/browser/sharing/fake_recipients_fetcher.h"
 #import "components/password_manager/ios/fake_bulk_leak_check_service.h"
 #import "components/plus_addresses/fake_plus_address_service.h"
-#import "components/saved_tab_groups/fake_tab_group_sync_service.h"
-#import "components/saved_tab_groups/features.h"
-#import "components/saved_tab_groups/tab_group_sync_coordinator.h"
-#import "components/saved_tab_groups/tab_group_sync_coordinator_impl.h"
+#import "components/saved_tab_groups/delegate/tab_group_sync_delegate.h"
+#import "components/saved_tab_groups/internal/tab_group_sync_coordinator.h"
+#import "components/saved_tab_groups/internal/tab_group_sync_coordinator_impl.h"
+#import "components/saved_tab_groups/public/features.h"
+#import "components/saved_tab_groups/test_support/fake_tab_group_sync_service.h"
 #import "components/signin/internal/identity_manager/fake_profile_oauth2_token_service.h"
 #import "components/signin/internal/identity_manager/profile_oauth2_token_service.h"
 #import "components/signin/internal/identity_manager/profile_oauth2_token_service_delegate.h"
@@ -40,6 +44,9 @@ namespace tests_hook {
 
 class IOSFakeTabGroupSyncService : public tab_groups::FakeTabGroupSyncService {
  public:
+  void SetTabGroupSyncDelegate(
+      std::unique_ptr<tab_groups::TabGroupSyncDelegate> delegate) override;
+
   void SetCoordinator(
       std::unique_ptr<tab_groups::TabGroupSyncCoordinator> coordinator);
 
@@ -49,13 +56,18 @@ class IOSFakeTabGroupSyncService : public tab_groups::FakeTabGroupSyncService {
   std::unique_ptr<tab_groups::TabGroupSyncCoordinator> coordinator_;
 };
 
+void IOSFakeTabGroupSyncService::SetTabGroupSyncDelegate(
+    std::unique_ptr<tab_groups::TabGroupSyncDelegate> delegate) {
+  auto coordinator = std::make_unique<tab_groups::TabGroupSyncCoordinatorImpl>(
+      std::move(delegate), this);
+  SetCoordinator(std::move(coordinator));
+}
+
 void IOSFakeTabGroupSyncService::SetCoordinator(
     std::unique_ptr<tab_groups::TabGroupSyncCoordinator> coordinator) {
   CHECK(!coordinator_);
   coordinator_ = std::move(coordinator);
-  if (tab_groups::IsTabGroupSyncCoordinatorEnabled()) {
-    AddObserver(coordinator_.get());
-  }
+  AddObserver(coordinator_.get());
 }
 
 bool DisableAppGroupAccess() {
@@ -184,7 +196,7 @@ std::unique_ptr<TrustedVaultClientBackend> CreateTrustedVaultClientBackend() {
 }
 
 std::unique_ptr<tab_groups::TabGroupSyncService> CreateTabGroupSyncService(
-    ChromeBrowserState* browser_state) {
+    ProfileIOS* profile) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
   if (!IsTabGroupSyncEnabled() ||
@@ -193,8 +205,7 @@ std::unique_ptr<tab_groups::TabGroupSyncService> CreateTabGroupSyncService(
   }
   auto sync_service = std::make_unique<IOSFakeTabGroupSyncService>();
 
-  BrowserList* browser_list =
-      BrowserListFactory::GetForBrowserState(browser_state);
+  BrowserList* browser_list = BrowserListFactory::GetForProfile(profile);
 
   std::unique_ptr<tab_groups::TabGroupLocalUpdateObserver>
       local_update_observer =
@@ -218,12 +229,8 @@ GetOverriddenBulkLeakCheckService() {
 }
 
 std::unique_ptr<plus_addresses::PlusAddressService>
-GetOverriddenPlusAddressService(ProfileIOS* profile) {
-  signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForProfile(profile);
-  return std::make_unique<plus_addresses::FakePlusAddressService>(
-      profile->GetPrefs(), identity_manager,
-      PlusAddressSettingServiceFactory::GetForProfile(profile));
+GetOverriddenPlusAddressService() {
+  return std::make_unique<plus_addresses::FakePlusAddressService>();
 }
 
 std::unique_ptr<password_manager::RecipientsFetcher>
@@ -283,6 +290,54 @@ std::optional<std::string> FETDemoModeOverride() {
   }
   return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
       test_switches::kEnableIPH);
+}
+
+void DeleteFilesRecursively(NSString* directoryPath) {
+  NSFileManager* fileManager = [NSFileManager defaultManager];
+  NSError* error = nil;
+  NSArray* contents = [fileManager contentsOfDirectoryAtPath:directoryPath
+                                                       error:&error];
+  for (NSString* itemName in contents) {
+    NSString* itemPath =
+        [directoryPath stringByAppendingPathComponent:itemName];
+    BOOL isDirectory;
+    if ([fileManager fileExistsAtPath:itemPath isDirectory:&isDirectory]) {
+      if (isDirectory) {
+        DeleteFilesRecursively(itemPath);
+      } else {
+        // Deleting files in /Library/Preferences seems to break
+        // NSUserDefaults syncing. Just ignore the directory completely.
+        if ([itemPath containsString:@"/Library/Preferences/"]) {
+          continue;
+        }
+        if (![fileManager removeItemAtPath:itemPath error:&error]) {
+          NSLog(@"Error deleting file: %@", error.localizedDescription);
+        }
+      }
+    }
+  }
+}
+
+void WipeProfileIfRequested(int argc, char* argv[]) {
+  const char kWipeArg[] = "-EGTestWipeProfile";
+  bool found = false;
+  for (int i = 0; i < argc; i++) {
+    if (strncmp(argv[i], kWipeArg, strlen(kWipeArg)) == 0) {
+      found = true;
+    }
+  }
+
+  if (!found) {
+    return;
+  }
+
+  DeleteFilesRecursively(
+      [NSHomeDirectory() stringByAppendingPathComponent:@"Library"]);
+  // Reset NSUserDefaults.
+  [[NSUserDefaults standardUserDefaults]
+      setPersistentDomain:[NSDictionary dictionary]
+                  forName:[[NSBundle mainBundle] bundleIdentifier]];
+  [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 }  // namespace tests_hook

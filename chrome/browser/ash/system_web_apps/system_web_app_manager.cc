@@ -54,7 +54,6 @@
 #include "chrome/browser/ash/system_web_apps/apps/os_feedback_system_web_app_info.h"
 #include "chrome/browser/ash/system_web_apps/apps/os_flags_system_web_app_info.h"
 #include "chrome/browser/ash/system_web_apps/apps/os_settings_web_app_info.h"
-#include "chrome/browser/ash/system_web_apps/apps/os_url_handler_system_web_app_info.h"
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_system_app_delegate.h"
 #include "chrome/browser/ash/system_web_apps/apps/print_management_web_app_info.h"
 #include "chrome/browser/ash/system_web_apps/apps/print_preview_cros_system_web_app_info.h"
@@ -139,14 +138,13 @@ SystemWebAppDelegateMap CreateSystemWebApps(Profile* profile) {
   info_vec.push_back(std::make_unique<FileManagerSystemAppDelegate>(profile));
   info_vec.push_back(std::make_unique<ProjectorSystemWebAppDelegate>(profile));
   info_vec.push_back(
-      std::make_unique<OsUrlHandlerSystemWebAppDelegate>(profile));
-  info_vec.push_back(
       std::make_unique<FirmwareUpdateSystemAppDelegate>(profile));
   info_vec.push_back(std::make_unique<OsFlagsSystemWebAppDelegate>(profile));
   info_vec.push_back(
       std::make_unique<vc_background_ui::VcBackgroundUISystemAppDelegate>(
           profile));
   info_vec.push_back(std::make_unique<PrintPreviewCrosDelegate>(profile));
+  info_vec.push_back(std::make_unique<RecorderSystemAppDelegate>(profile));
   if (ash::boca_util::IsEnabled()) {
     info_vec.push_back(std::make_unique<BocaSystemAppDelegate>(profile));
   }
@@ -157,10 +155,6 @@ SystemWebAppDelegateMap CreateSystemWebApps(Profile* profile) {
 
   if (base::FeatureList::IsEnabled(ash::features::kSanitize)) {
     info_vec.push_back(std::make_unique<SanitizeSystemAppDelegate>(profile));
-  }
-
-  if (base::FeatureList::IsEnabled(ash::features::kConch)) {
-    info_vec.push_back(std::make_unique<RecorderSystemAppDelegate>(profile));
   }
 
   if (features::IsGraduationEnabled()) {

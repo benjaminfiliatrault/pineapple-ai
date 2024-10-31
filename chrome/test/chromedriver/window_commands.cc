@@ -735,10 +735,11 @@ Status ExecuteWindowCommand(const WindowCommand& command,
       // When pageload strategy is None, new navigation can occur during
       // execution of a command. Retry the command.
       continue;
-    } else if (status.code() == kDisconnected) {
+    } else if (status.code() == kDisconnected ||
+               status.code() == kTargetDetached) {
       // Some commands, like clicking a button or link which closes the window,
-      // may result in a kDisconnected error code. |web_view| may be invalid at
-      // at this point.
+      // may result in a kDisconnected or kTargetDetached error code.
+      // |web_view| may be invalid at this point.
       return status;
     } else if (status.IsError()) {
       // If the command failed while a new page or frame started loading, retry
@@ -820,6 +821,8 @@ Status ExecuteExecuteScript(Session* session,
                                    session->script_timeout, value);
   switch (status.code()) {
     case kTimeout:
+    // If the target has been detached the script will never return
+    case kTargetDetached:
     // Navigation has happened during script execution. Further wait would lead
     // to timeout.
     case kNavigationDetectedByRemoteEnd:

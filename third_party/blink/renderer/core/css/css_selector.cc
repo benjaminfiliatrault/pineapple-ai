@@ -88,7 +88,11 @@ unsigned MaximumSpecificity(
 
 struct SameSizeAsCSSSelector {
   unsigned bitfields;
-  void* pointers[1];
+  union {
+    AtomicString value_;
+    QualifiedName tag_q_name_or_attribute_;
+    Member<void*> rare_data_;
+  } pointers;
 };
 
 ASSERT_SIZE(CSSSelector, SameSizeAsCSSSelector);
@@ -331,10 +335,14 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
       return kPseudoIdFirstLetter;
     case kPseudoSelection:
       return kPseudoIdSelection;
+    case kPseudoCheck:
+      return kPseudoIdCheck;
     case kPseudoBefore:
       return kPseudoIdBefore;
     case kPseudoAfter:
       return kPseudoIdAfter;
+    case kPseudoSelectArrow:
+      return kPseudoIdSelectArrow;
     case kPseudoMarker:
       return kPseudoIdMarker;
     case kPseudoBackdrop:
@@ -431,6 +439,7 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoFullscreen:
     case kPseudoFutureCue:
     case kPseudoHas:
+    case kPseudoHasSlotted:
     case kPseudoHasDatalist:
     case kPseudoHorizontal:
     case kPseudoHost:
@@ -466,6 +475,8 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoPart:
     case kPseudoPastCue:
     case kPseudoPaused:
+    case kPseudoPermissionElementInvalidStyle:
+    case kPseudoPermissionElementOccluded:
     case kPseudoPermissionGranted:
     case kPseudoPictureInPicture:
     case kPseudoPlaceholderShown:
@@ -571,6 +582,7 @@ constexpr static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"autofill", CSSSelector::kPseudoAutofill},
     {"backdrop", CSSSelector::kPseudoBackdrop},
     {"before", CSSSelector::kPseudoBefore},
+    {"check", CSSSelector::kPseudoCheck},
     {"checked", CSSSelector::kPseudoChecked},
     {"closed", CSSSelector::kPseudoClosed},
     {"column", CSSSelector::kPseudoColumn},
@@ -599,6 +611,7 @@ constexpr static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"future", CSSSelector::kPseudoFutureCue},
     {"grammar-error", CSSSelector::kPseudoGrammarError},
     {"granted", CSSSelector::kPseudoPermissionGranted},
+    {"has-slotted", CSSSelector::kPseudoHasSlotted},
     {"horizontal", CSSSelector::kPseudoHorizontal},
     {"host", CSSSelector::kPseudoHost},
     {"hover", CSSSelector::kPseudoHover},
@@ -606,6 +619,7 @@ constexpr static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"increment", CSSSelector::kPseudoIncrement},
     {"indeterminate", CSSSelector::kPseudoIndeterminate},
     {"invalid", CSSSelector::kPseudoInvalid},
+    {"invalid-style", CSSSelector::kPseudoPermissionElementInvalidStyle},
     {"last-child", CSSSelector::kPseudoLastChild},
     {"last-of-type", CSSSelector::kPseudoLastOfType},
     {"left", CSSSelector::kPseudoLeftPage},
@@ -613,6 +627,7 @@ constexpr static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"marker", CSSSelector::kPseudoMarker},
     {"modal", CSSSelector::kPseudoModal},
     {"no-button", CSSSelector::kPseudoNoButton},
+    {"occluded", CSSSelector::kPseudoPermissionElementOccluded},
     {"only-child", CSSSelector::kPseudoOnlyChild},
     {"only-of-type", CSSSelector::kPseudoOnlyOfType},
     {"open", CSSSelector::kPseudoOpen},
@@ -636,6 +651,7 @@ constexpr static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"scroll-next-button", CSSSelector::kPseudoScrollNextButton},
     {"scroll-prev-button", CSSSelector::kPseudoScrollPrevButton},
     {"search-text", CSSSelector::kPseudoSearchText},
+    {"select-arrow", CSSSelector::kPseudoSelectArrow},
     {"selection", CSSSelector::kPseudoSelection},
     {"single-button", CSSSelector::kPseudoSingleButton},
     {"spelling-error", CSSSelector::kPseudoSpellingError},
@@ -734,6 +750,18 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
     return CSSSelector::kPseudoUnknown;
   }
 
+  if (match->type == CSSSelector::kPseudoPermissionElementInvalidStyle &&
+      !RuntimeEnabledFeatures::PermissionElementEnabled(
+          document ? document->GetExecutionContext() : nullptr)) {
+    return CSSSelector::kPseudoUnknown;
+  }
+
+  if (match->type == CSSSelector::kPseudoPermissionElementOccluded &&
+      !RuntimeEnabledFeatures::PermissionElementEnabled(
+          document ? document->GetExecutionContext() : nullptr)) {
+    return CSSSelector::kPseudoUnknown;
+  }
+
   if (match->type == CSSSelector::kPseudoPermissionGranted &&
       !RuntimeEnabledFeatures::PermissionElementEnabled(
           document ? document->GetExecutionContext() : nullptr)) {
@@ -772,6 +800,11 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
   if ((match->type == CSSSelector::kPseudoSearchText ||
        match->type == CSSSelector::kPseudoCurrent) &&
       !RuntimeEnabledFeatures::SearchTextHighlightPseudoEnabled()) {
+    return CSSSelector::kPseudoUnknown;
+  }
+
+  if (match->type == CSSSelector::kPseudoHasSlotted &&
+      !RuntimeEnabledFeatures::CSSPseudoHasSlottedEnabled()) {
     return CSSSelector::kPseudoUnknown;
   }
 
@@ -842,13 +875,15 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoFirstLetter:
     case kPseudoFirstLine:
       // The spec says some pseudos allow both single and double colons like
-      // :before for backwards compatability. Single colon becomes PseudoClass,
+      // :before for backwards compatibility. Single colon becomes PseudoClass,
       // but should be PseudoElement like double colon.
       if (Match() == kPseudoClass) {
         bits_.set<MatchField>(kPseudoElement);
       }
       [[fallthrough]];
     // For pseudo elements
+    case kPseudoSelectArrow:
+    case kPseudoCheck:
     case kPseudoBackdrop:
     case kPseudoCue:
     case kPseudoMarker:
@@ -940,6 +975,7 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoFullscreen:
     case kPseudoFutureCue:
     case kPseudoHas:
+    case kPseudoHasSlotted:
     case kPseudoHorizontal:
     case kPseudoHost:
     case kPseudoHostContext:
@@ -968,6 +1004,8 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoParent:
     case kPseudoPastCue:
     case kPseudoPaused:
+    case kPseudoPermissionElementInvalidStyle:
+    case kPseudoPermissionElementOccluded:
     case kPseudoPermissionGranted:
     case kPseudoPictureInPicture:
     case kPseudoPlaceholderShown:
@@ -1422,6 +1460,11 @@ void CSSSelector::SetContainsComplexLogicalCombinationsInsideHasPseudoClass() {
   data_.rare_data_->bits_.has_.contains_complex_logical_combinations_ = true;
 }
 
+void CSSSelector::SetHasArgumentMatchInShadowTree() {
+  CreateRareData();
+  data_.rare_data_->bits_.has_.argument_match_in_shadow_tree_ = true;
+}
+
 static bool ValidateSubSelector(const CSSSelector* selector) {
   switch (selector->Match()) {
     case CSSSelector::kTag:
@@ -1566,12 +1609,29 @@ bool CSSSelector::IsAllowedInParentPseudo() const {
 
 bool CSSSelector::IsTreeAbidingPseudoElement() const {
   return Match() == CSSSelector::kPseudoElement &&
-         (GetPseudoType() == kPseudoBefore || GetPseudoType() == kPseudoAfter ||
+         (GetPseudoType() == kPseudoCheck || GetPseudoType() == kPseudoBefore ||
+          GetPseudoType() == kPseudoAfter ||
+          GetPseudoType() == kPseudoSelectArrow ||
           GetPseudoType() == kPseudoMarker ||
           GetPseudoType() == kPseudoPlaceholder ||
           GetPseudoType() == kPseudoFileSelectorButton ||
           GetPseudoType() == kPseudoBackdrop ||
-          GetPseudoType() == kPseudoPicker);
+          GetPseudoType() == kPseudoViewTransition ||
+          GetPseudoType() == kPseudoViewTransitionGroup ||
+          GetPseudoType() == kPseudoViewTransitionImagePair ||
+          GetPseudoType() == kPseudoViewTransitionOld ||
+          GetPseudoType() == kPseudoViewTransitionNew ||
+          IsElementBackedPseudoElement(GetPseudoType()));
+}
+
+/* static */ bool CSSSelector::IsElementBackedPseudoElement(
+    CSSSelector::PseudoType pseudo) {
+  return pseudo == kPseudoDetailsContent || pseudo == kPseudoPicker;
+}
+
+bool CSSSelector::IsElementBackedPseudoElement() const {
+  return Match() == CSSSelector::kPseudoElement &&
+         IsElementBackedPseudoElement(GetPseudoType());
 }
 
 bool CSSSelector::IsAllowedAfterPart() const {
@@ -1584,8 +1644,10 @@ bool CSSSelector::IsAllowedAfterPart() const {
     //
     // All pseudo-elements other than ::part() should be allowed after
     // ::part().
+    case kPseudoCheck:
     case kPseudoBefore:
     case kPseudoAfter:
+    case kPseudoSelectArrow:
     case kPseudoPlaceholder:
     case kPseudoFileSelectorButton:
     case kPseudoFirstLine:
@@ -1659,6 +1721,7 @@ bool CSSSelector::IsAllowedAfterPart() const {
     case kPseudoFocusVisible:
     case kPseudoFocusWithin:
     case kPseudoFullPageMedia:
+    case kPseudoHasSlotted:
     case kPseudoHover:
     case kPseudoIndeterminate:
     case kPseudoInvalid:
@@ -1666,6 +1729,8 @@ bool CSSSelector::IsAllowedAfterPart() const {
     case kPseudoLink:
     case kPseudoModal:
     case kPseudoOptional:
+    case kPseudoPermissionElementInvalidStyle:
+    case kPseudoPermissionElementOccluded:
     case kPseudoPermissionGranted:
     case kPseudoPlaceholderShown:
     case kPseudoReadOnly:

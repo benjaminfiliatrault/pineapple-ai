@@ -14,7 +14,7 @@
 #include "components/content_settings/browser/ui/cookie_controls_controller.h"
 #include "components/content_settings/browser/ui/cookie_controls_view.h"
 #include "components/content_settings/core/common/cookie_blocking_3pcd_status.h"
-#include "components/user_education/common/feature_promo_result.h"
+#include "components/user_education/common/feature_promo/feature_promo_result.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 
 // View for the cookie control icon in the Omnibox.  This is the new version of
@@ -75,10 +75,14 @@ class CookieControlsIconView : public PageActionIconView,
   void UpdateIcon();
 
   int GetLabelForStatus() const;
-  void SetLabelAndTooltip();
+  void SetLabelForStatus();
+
+  // Whether to use "Tracking Protection" for label and tooltip.
+  bool ShouldShowTrackingProtectionText();
 
   bool icon_visible_ = false;
   bool protections_on_ = false;
+  bool protections_changed_ = true;
   bool did_animate_ = false;
   // Whether we should have a visual indicator highlighting the icon.
   bool should_highlight_ = false;

@@ -297,7 +297,6 @@ LocalFrameView::LocalFrameView(LocalFrame& frame, gfx::Rect frame_rect)
       intersection_observation_state_(kNotNeeded),
       main_thread_scrolling_reasons_(0),
       forced_layout_stack_depth_(0),
-      forced_layout_start_time_(base::TimeTicks()),
       paint_frame_count_(0),
       unique_id_(NewUniqueObjectId()),
       layout_shift_tracker_(MakeGarbageCollected<LayoutShiftTracker>(this)),
@@ -852,25 +851,32 @@ void LocalFrameView::UpdateLayout() {
   probe::DidChangeViewport(frame_.Get());
 }
 
-void LocalFrameView::WillStartForcedLayout() {
+void LocalFrameView::WillStartForcedLayout(DocumentUpdateReason reason) {
+  if (!base::TimeTicks::IsHighResolution()) {
+    return;
+  }
+
   // UpdateLayout is re-entrant for auto-sizing and plugins. So keep
   // track of stack depth to include all the time in the top-level call.
   forced_layout_stack_depth_++;
   if (forced_layout_stack_depth_ > 1)
     return;
-  forced_layout_start_time_ = base::TimeTicks::Now();
-  if (auto* metrics_aggregator = GetUkmAggregator())
-    metrics_aggregator->BeginForcedLayout();
+  if (auto* metrics_aggregator = GetUkmAggregator()) {
+    DCHECK(!forced_layout_timer_.has_value());
+    forced_layout_timer_ =
+        metrics_aggregator->GetScopedForcedLayoutTimer(reason);
+  }
 }
 
-void LocalFrameView::DidFinishForcedLayout(DocumentUpdateReason reason) {
+void LocalFrameView::DidFinishForcedLayout() {
+  if (!base::TimeTicks::IsHighResolution()) {
+    return;
+  }
+
   CHECK_GT(forced_layout_stack_depth_, (unsigned)0);
   forced_layout_stack_depth_--;
-  if (!forced_layout_stack_depth_ && base::TimeTicks::IsHighResolution()) {
-    if (auto* metrics_aggregator = GetUkmAggregator()) {
-      metrics_aggregator->RecordForcedLayoutSample(
-          reason, forced_layout_start_time_, base::TimeTicks::Now());
-    }
+  if (!forced_layout_stack_depth_) {
+    forced_layout_timer_.reset();
   }
 }
 
@@ -1030,7 +1036,7 @@ void LocalFrameView::ForceUpdateViewportIntersections() {
   // update; but we can't wait for a lifecycle update to run them, because a
   // hidden frame won't run lifecycle updates. Force layout and run them now.
   DisallowThrottlingScope disallow_throttling(*this);
-  UpdateLifecycleToPrePaintClean(
+  UpdateAllLifecyclePhasesExceptPaint(
       DocumentUpdateReason::kIntersectionObservation);
   ComputeIntersectionsContext context;
   UpdateViewportIntersectionsForSubtree(
@@ -1931,12 +1937,6 @@ bool LocalFrameView::UpdateAllLifecyclePhasesForTest() {
   return result;
 }
 
-bool LocalFrameView::UpdateLifecycleToPrePaintClean(
-    DocumentUpdateReason reason) {
-  return GetFrame().LocalFrameRoot().View()->UpdateLifecyclePhases(
-      DocumentLifecycle::kPrePaintClean, reason);
-}
-
 bool LocalFrameView::UpdateLifecycleToCompositingInputsClean(
     DocumentUpdateReason reason) {
   return GetFrame().LocalFrameRoot().View()->UpdateLifecyclePhases(
@@ -2029,14 +2029,24 @@ bool LocalFrameView::NotifyResizeObservers() {
     if (resize_controller->SkippedObservations() &&
         !resize_controller->IsLoopLimitErrorDispatched()) {
       resize_controller->ClearObservations();
-      ErrorEvent* error = ErrorEvent::Create(
-          "ResizeObserver loop completed with undelivered notifications.",
-          CaptureSourceLocation(frame_->DomWindow()), nullptr);
-      // We're using |SanitizeScriptErrors::kDoNotSanitize| as the error is made
-      // by blink itself.
-      // TODO(yhirano): Reconsider this.
-      frame_->DomWindow()->DispatchErrorEvent(
-          error, SanitizeScriptErrors::kDoNotSanitize);
+
+      if (auto* script_state = ToScriptStateForMainWorld(frame_->DomWindow())) {
+        ScriptState::Scope scope(script_state);
+        const String message =
+            "ResizeObserver loop completed with undelivered notifications.";
+        ScriptValue value(script_state->GetIsolate(),
+                          V8String(script_state->GetIsolate(), message));
+        // TODO(pdr): We could report the source location of one of the
+        // observers which had skipped observations.
+        ErrorEvent* error = ErrorEvent::Create(message, CaptureSourceLocation(),
+                                               value, &script_state->World());
+        // We're using |SanitizeScriptErrors::kDoNotSanitize| as the error is
+        // made by blink itself.
+        // TODO(yhirano): Reconsider this.
+        frame_->DomWindow()->DispatchErrorEvent(
+            error, SanitizeScriptErrors::kDoNotSanitize);
+      }
+
       // Ensure notifications will get delivered in next cycle.
       ScheduleAnimation();
       resize_controller->SetLoopLimitErrorDispatched(true);
@@ -4601,7 +4611,7 @@ String LocalFrameView::MainThreadScrollingReasonsAsText() {
     const auto* compositor =
         GetFrame().LocalFrameRoot().View()->paint_artifact_compositor_.Get();
     CHECK(compositor);
-    reasons = compositor->GetMainThreadScrollingReasons(*properties->Scroll());
+    reasons = compositor->GetMainThreadRepaintReasons(*properties->Scroll());
   }
   return String(cc::MainThreadScrollingReason::AsText(reasons).c_str());
 }

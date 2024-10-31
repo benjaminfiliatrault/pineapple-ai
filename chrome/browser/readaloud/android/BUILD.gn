@@ -10,7 +10,7 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/readaloud/BoyerMoore.java",
     "java/src/org/chromium/chrome/browser/readaloud/ReadAloudController.java",
     "java/src/org/chromium/chrome/browser/readaloud/ReadAloudControllerSupplier.java",
-    "java/src/org/chromium/chrome/browser/readaloud/ReadAloudIPHController.java",
+    "java/src/org/chromium/chrome/browser/readaloud/ReadAloudIphController.java",
     "java/src/org/chromium/chrome/browser/readaloud/ReadAloudMiniPlayerSceneLayer.java",
     "java/src/org/chromium/chrome/browser/readaloud/ReadAloudPrefs.java",
     "java/src/org/chromium/chrome/browser/readaloud/ReadAloudToolbarButtonController.java",
@@ -30,6 +30,7 @@ android_library("java") {
     "//chrome/browser/browser_controls/android:java",
     "//chrome/browser/device:java",
     "//chrome/browser/feature_engagement:java",
+    "//chrome/browser/fullscreen/android:java",
     "//chrome/browser/language/android:base_module_java",
     "//chrome/browser/language/android:java",
     "//chrome/browser/profiles/android:java",
@@ -188,7 +189,7 @@ robolectric_library("junit") {
   testonly = true
   sources = [
     "java/src/org/chromium/chrome/browser/readaloud/ReadAloudControllerUnitTest.java",
-    "java/src/org/chromium/chrome/browser/readaloud/ReadAloudIPHControllerUnitTest.java",
+    "java/src/org/chromium/chrome/browser/readaloud/ReadAloudIphControllerUnitTest.java",
     "java/src/org/chromium/chrome/browser/readaloud/ReadAloudMiniPlayerSceneLayerUnitTest.java",
     "java/src/org/chromium/chrome/browser/readaloud/ReadAloudPrefsUnitTest.java",
     "java/src/org/chromium/chrome/browser/readaloud/ReadAloudToolbarButtonControllerUnitTest.java",
@@ -215,6 +216,7 @@ robolectric_library("junit") {
     "//chrome/browser/device:java",
     "//chrome/browser/device:junit",
     "//chrome/browser/flags:java",
+    "//chrome/browser/fullscreen/android:java",
     "//chrome/browser/language/android:base_module_java",
     "//chrome/browser/language/android:java",
     "//chrome/browser/language/android:junit",

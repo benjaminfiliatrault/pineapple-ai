@@ -33,10 +33,6 @@ source_set("payments") {
     sources += [
       "autofill_message_controller.h",
       "autofill_message_model.h",
-      "autofill_snackbar_controller.h",
-      "autofill_snackbar_controller_impl.h",
-      "autofill_snackbar_type.h",
-      "autofill_snackbar_view.h",
       "offer_notification_controller_android.h",
     ]
     public_deps += [
@@ -116,7 +112,6 @@ source_set("impl") {
     sources += [
       "autofill_message_controller.cc",
       "autofill_message_model.cc",
-      "autofill_snackbar_controller_impl.cc",
       "offer_notification_controller_android.cc",
     ]
     deps += [
@@ -124,6 +119,7 @@ source_set("impl") {
       "//chrome/browser/mandatory_reauth/android/internal:jni",
       "//chrome/browser/profiles:profile",
       "//chrome/browser/touch_to_fill/autofill/android",
+      "//components/infobars/core",
       "//components/signin/public/identity_manager",
       "//components/webauthn/android",
       "//ui/android",
@@ -141,16 +137,22 @@ source_set("impl") {
       "//chrome/browser/sync",
       "//chrome/browser/sync:factories",
       "//chrome/browser/ui:browser_navigator_params_headers",
+      "//chrome/browser/ui:ui_features",
+      "//chrome/browser/ui/tabs:tab_strip",
       "//chrome/common",
       "//components/autofill/core/common:credit_card_number_validation",
       "//components/commerce/core:feature_list",
-      "//components/infobars/core",
       "//components/prefs",
       "//components/strings:components_strings_grit",
       "//components/sync/service",
       "//components/user_prefs",
       "//components/webauthn/content/browser",
     ]
+
+    # TODO(crbug.com/372209715): Extract out of is_chrome_branded.
+    if (is_chrome_branded) {
+      deps += [ "//chrome/browser/ui/promos:utils" ]
+    }
   }
 
   if (toolkit_views) {
@@ -260,7 +262,6 @@ source_set("unit_tests") {
       "autofill_message_controller_test_api.h",
       "autofill_message_controller_unittest.cc",
       "autofill_message_model_unittest.cc",
-      "autofill_snackbar_controller_impl_unittest.cc",
     ]
     public_deps += [ ":payments" ]
 
@@ -285,7 +286,6 @@ source_set("unit_tests") {
     ]
     deps += [
       ":payments",
-      "//build:chromeos_buildflags",
       "//chrome/app:generated_resources",
       "//chrome/app:generated_resources_grit",
       "//chrome/browser/autofill",

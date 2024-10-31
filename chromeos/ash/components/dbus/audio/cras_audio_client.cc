@@ -383,6 +383,17 @@ class CrasAudioClientImpl : public CrasAudioClient {
                             base::DoNothing());
   }
 
+  void GetAudioEffectDlcs(
+      chromeos::DBusMethodCallback<std::string> callback) override {
+    VLOG(1) << "cras_audio_client: Requesting getting audio effect dlcs.";
+    dbus::MethodCall method_call(cras::kCrasControlInterface,
+                                 cras::kGetAudioEffectDlcs);
+    cras_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&CrasAudioClientImpl::OnGetAudioEffectDlcs,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
+
   void GetNoiseCancellationSupported(
       chromeos::DBusMethodCallback<bool> callback) override {
     VLOG(1) << "cras_audio_client: Requesting noise cancellation support.";
@@ -727,6 +738,27 @@ class CrasAudioClientImpl : public CrasAudioClient {
     cras_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::BindOnce(&CrasAudioClientImpl::OnGetNumberOfArcStreams,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
+
+  void SetSpatialAudio(bool spatial_audio) override {
+    dbus::MethodCall method_call(cras::kCrasControlInterface,
+                                 cras::kSetSpatialAudio);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendBool(spatial_audio);
+    cras_proxy_->CallMethod(&method_call,
+                            dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+                            base::DoNothing());
+  }
+
+  void GetSpatialAudioSupported(
+      chromeos::DBusMethodCallback<bool> callback) override {
+    VLOG(1) << "cras_audio_client: Requesting spatial audio support.";
+    dbus::MethodCall method_call(cras::kCrasControlInterface,
+                                 cras::kIsSpatialAudioSupported);
+    cras_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&CrasAudioClientImpl::OnGetSpatialAudioSupported,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
@@ -1302,6 +1334,26 @@ class CrasAudioClientImpl : public CrasAudioClient {
     std::move(callback).Run(true);
   }
 
+  void OnGetAudioEffectDlcs(chromeos::DBusMethodCallback<std::string> callback,
+                            dbus::Response* response) {
+    if (!response) {
+      LOG(ERROR) << "Error calling GetAudioEffectDlcs";
+      std::move(callback).Run(std::nullopt);
+      return;
+    }
+    std::string audio_effect_dlcs;
+    dbus::MessageReader reader(response);
+    if (!reader.PopString(&audio_effect_dlcs)) {
+      LOG(ERROR) << "Error reading response from cras: "
+                 << response->ToString();
+      std::move(callback).Run(std::nullopt);
+      return;
+    }
+    std::move(callback).Run(audio_effect_dlcs);
+    VLOG(1) << "cras_audio_client: Retrieved audio effect dlcs: "
+            << audio_effect_dlcs;
+  }
+
   void OnGetNoiseCancellationSupported(
       chromeos::DBusMethodCallback<bool> callback,
       dbus::Response* response) {
@@ -1363,6 +1415,26 @@ class CrasAudioClientImpl : public CrasAudioClient {
     std::move(callback).Run(is_hfp_mic_sr_supported);
     VLOG(1) << "cras_audio_client: Retrieved hfp_mic_sr support: "
             << is_hfp_mic_sr_supported;
+  }
+
+  void OnGetSpatialAudioSupported(chromeos::DBusMethodCallback<bool> callback,
+                                  dbus::Response* response) {
+    if (!response) {
+      LOG(ERROR) << "Error calling " << "IsSpatialAudioSupported";
+      std::move(callback).Run(std::nullopt);
+      return;
+    }
+    bool is_spatial_audio_supported = 0;
+    dbus::MessageReader reader(response);
+    if (!reader.PopBool(&is_spatial_audio_supported)) {
+      LOG(ERROR) << "Error reading response from cras: "
+                 << response->ToString();
+      std::move(callback).Run(std::nullopt);
+      return;
+    }
+    std::move(callback).Run(is_spatial_audio_supported);
+    VLOG(1) << "cras_audio_client: Retrieved spatial_audio support: "
+            << is_spatial_audio_supported;
   }
 
   bool GetAudioNode(dbus::Response* response,

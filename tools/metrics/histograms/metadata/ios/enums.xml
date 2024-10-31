@@ -218,6 +218,7 @@ the generic promo launch. -->
   <int value="0" label="Primary Action Button"/>
   <int value="1" label="Secondary Action Button"/>
   <int value="2" label="Swipe Down"/>
+  <int value="3" label="Tertiary Action Button"/>
 </enum>
 
 <enum name="IOSDockingPromoAction">
@@ -334,11 +335,72 @@ the generic promo launch. -->
   <int value="3" label="Skipped Default Browser Settings For NTP"/>
 </enum>
 
+<enum name="IOSFilePickerDriveAccountSelection">
+  <int value="0" label="Change account"/>
+  <int value="1" label="Add account success"/>
+  <int value="2" label="Add account failure"/>
+</enum>
+
+<enum name="IOSFilePickerDriveDisplayed">
+  <int value="0" label="The Drive element was displayed"/>
+  <int value="1" label="The tab was killed"/>
+  <int value="2" label="The feature was disabled"/>
+  <int value="3" label="The tab was OTR"/>
+  <int value="4" label="The user was not signed in"/>
+</enum>
+
+<enum name="IOSFilePickerDriveFilter">
+  <int value="0" label="Select Archives"/>
+  <int value="1" label="Select Audio"/>
+  <int value="2" label="Select Videos"/>
+  <int value="3" label="Select Photos and Images"/>
+  <int value="4" label="Select PDFs"/>
+  <int value="5" label="Select Enable All"/>
+</enum>
+
+<enum name="IOSFilePickerDriveOutcome">
+  <int value="0" label="Cancelled (no file selected, no error)"/>
+  <int value="1" label="Interrupted by the user"/>
+  <int value="2" label="Interrupted by the user after an error"/>
+  <int value="3" label="Interrupted externally"/>
+  <int value="4" label="Interrupted externally with selected file"/>
+  <int value="5" label="Submitted from Search Text"/>
+  <int value="6" label="Submitted from Search Recent"/>
+  <int value="7" label="Submitted from Root Search"/>
+  <int value="8" label="Submitted from My Drive"/>
+  <int value="9" label="Submitted from Shared with me"/>
+  <int value="10" label="Submitted from Shared Drives"/>
+  <int value="11" label="Submitted from Recent"/>
+  <int value="12" label="Submitted from Starred"/>
+</enum>
+
+<enum name="IOSFilePickerDriveSearchOutcome">
+  <int value="0" label="Submitted search item"/>
+  <int value="1" label="Submitted search subitem"/>
+  <int value="2" label="Submitted non search item"/>
+  <int value="3" label="Submitted without triggering search"/>
+  <int value="4" label="Cancel without triggering search"/>
+  <int value="5" label="Cancel after triggering search"/>
+</enum>
+
+<enum name="IOSFilePickerDriveSorting">
+  <int value="0" label="Sorted by name ascending"/>
+  <int value="1" label="Sorted by name descending"/>
+  <int value="2" label="Sorted by opened time ascending"/>
+  <int value="3" label="Sorted by modified time descending"/>
+  <int value="4" label="Sorted by modified time ascending"/>
+  <int value="5" label="Cancel sorting selection"/>
+</enum>
+
 <enum name="IOSFilePickerInstallError">
   <int value="0" label="The file picker was not found"/>
   <int value="1" label="The file picker configuration was not found"/>
   <int value="2" label="The file picker cannot submit the selection"/>
   <int value="3" label="The file picker cannot present a sub menu"/>
+</enum>
+
+<enum name="IOSFilePickerSelectedElement">
+  <int value="0" label="Drive"/>
 </enum>
 
 <enum name="IOSHomeActionType">
@@ -352,6 +414,8 @@ the generic promo launch. -->
   <int value="7" label="Safety Check tile"/>
   <int value="8" label="Parcel Tracking tile"/>
   <int value="9" label="Distant tab resumption tile"/>
+  <int value="10" label="Price Tracking Promo tile"/>
+  <int value="11" label="Tips tile"/>
 </enum>
 
 <enum name="IOSHomeCustomizationEntrypoint">
@@ -380,6 +444,18 @@ the generic promo launch. -->
   <int value="10" label="External action opened in Chrome"/>
 </enum>
 
+<!-- LINT.IfChange(IOSLocationBarLeadingIconType) -->
+
+<enum name="IOSLocationBarLeadingIconType">
+  <summary>The leading icon in the location bar</summary>
+  <int value="0" label="None"/>
+  <int value="1" label="Message (e.g. translate)"/>
+  <int value="2" label="Price insight"/>
+  <int value="3" label="Lens overlay"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/location_bar/ui_bundled/location_bar_metrics.h:IOSLocationBarLeadingIconType) -->
+
 <enum name="IOSMagicStackModuleType">
   <int value="-1" label="Invalid"/>
   <int value="0" label="Most Visited Tiles"/>
@@ -398,6 +474,9 @@ the generic promo launch. -->
   <int value="13" label="Set Up List Notifications"/>
   <int value="14" label="Placeholder"/>
   <int value="15" label="Price Tracking Promo"/>
+  <int value="16" label="Tips (with Product Image)"/>
+  <int value="17" label="Tips"/>
+  <int value="18" label="Send Tab to Self Promo"/>
 </enum>
 
 <enum name="IOSMiniMapConsentOutcome">
@@ -408,6 +487,14 @@ the generic promo launch. -->
   <int value="4" label="User opened settings (double count)"/>
   <int value="5" label="User dismissed"/>
   <int value="6" label="Popover displayed"/>
+</enum>
+
+<enum name="IOSMiniMapOutcome">
+  <int value="0" label="User exited normally"/>
+  <int value="1" label="User opened a URL"/>
+  <int value="2" label="User reported an issue"/>
+  <int value="3" label="User opened settings"/>
+  <int value="4" label="User opened a query"/>
 </enum>
 
 <enum name="IOSMultiWindowConfiguration">
@@ -927,6 +1014,13 @@ the generic promo launch. -->
   <int value="19" label="Apple, Multiple files"/>
 </enum>
 
+<enum name="IOSWebFileInputContentState">
+  <int value="0" label="Single file, empty"/>
+  <int value="1" label="Single file, already selected"/>
+  <int value="2" label="Multiple files, empty"/>
+  <int value="3" label="Multiple files, already selected"/>
+</enum>
+
 <enum name="IOSWidgetKitAction">
   <int value="0" label="Dino Widget - Game"/>
   <int value="1" label="Search Widget - Search"/>
@@ -1109,6 +1203,7 @@ the generic promo launch. -->
   <int value="2" label="Authorized"/>
   <int value="3" label="Provisional"/>
   <int value="4" label="Ephemeral"/>
+  <int value="5" label="Invalid"/>
 </enum>
 
 <enum name="TextSelectionDetectedEntityType">

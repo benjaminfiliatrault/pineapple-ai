@@ -37,6 +37,9 @@ class GURL;
 - (void)lensOverlay:(id<ChromeLensOverlay>)lensOverlay
     didRequestToOpenURL:(GURL)URL;
 
+// The lens overlay requested to open the overlay menu.
+- (void)lensOverlayDidOpenOverlayMenu:(id<ChromeLensOverlay>)lensOverlay;
+
 @end
 
 // Defines the interface for interacting with a Chrome Lens Overlay.
@@ -69,6 +72,10 @@ class GURL;
 
 // Resets the selection area to the initial position.
 - (void)resetSelectionAreaToInitialPosition:(void (^)())completion;
+
+// Updates the visibility of the top icons.
+- (void)setTopIconsHidden:(BOOL)hidden;
+
 @end
 
 namespace ios {

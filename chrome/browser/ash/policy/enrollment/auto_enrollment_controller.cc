@@ -259,8 +259,14 @@ void AutoEnrollmentController::Start() {
     auto_enrollment_check_type_ = AutoEnrollmentTypeChecker::CheckType::
         kForcedReEnrollmentExplicitlyRequired;
 
+    // TODO(b/353731379): BrowserPolicyConnector::ScheduleServiceInitialization.
+    if (device_management_service_) {
+      device_management_service_->ScheduleInitialization(0);
+    } else {
+      CHECK_IS_TEST();
+    }
+
     LOG(WARNING) << "Starting state determination";
-    device_management_service_->ScheduleInitialization(0);
     enrollment_state_fetcher_ = enrollment_state_fetcher_factory_.Run(
         base::BindRepeating(&AutoEnrollmentController::UpdateState,
                             weak_ptr_factory_.GetWeakPtr()),

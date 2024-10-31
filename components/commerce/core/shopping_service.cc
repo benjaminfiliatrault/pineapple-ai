@@ -186,7 +186,8 @@ ShoppingService::ShoppingService(
         parcel_tracking_proto_db,
     history::HistoryService* history_service,
     std::unique_ptr<commerce::WebExtractor> web_extractor,
-    sessions::TabRestoreService* tab_restore_service)
+    sessions::TabRestoreService* tab_restore_service,
+    TemplateURLService* template_url_service)
     : country_on_startup_(country_on_startup),
       locale_on_startup_(locale_on_startup),
       opt_guide_(opt_guide),
@@ -237,7 +238,7 @@ ShoppingService::ShoppingService(
   if (identity_manager) {
     account_checker_ = base::WrapUnique(new AccountChecker(
         country_on_startup_, locale_on_startup_, pref_service, identity_manager,
-        sync_service, url_loader_factory));
+        sync_service, url_loader_factory, template_url_service));
   }
 
   if (identity_manager && account_checker_) {
@@ -1678,7 +1679,9 @@ void ShoppingService::GetAllSubscriptions(
   if (subscriptions_manager_) {
     subscriptions_manager_->GetAllSubscriptions(type, std::move(callback));
   } else {
-    CHECK_IS_TEST();
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback),
+                                  std::vector<CommerceSubscription>()));
   }
 }
 
@@ -1688,18 +1691,15 @@ void ShoppingService::IsSubscribed(CommerceSubscription subscription,
     subscriptions_manager_->IsSubscribed(std::move(subscription),
                                          std::move(callback));
   } else {
-    CHECK_IS_TEST();
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), false));
   }
 }
 
 bool ShoppingService::IsSubscribedFromCache(
     const CommerceSubscription& subscription) {
-  if (subscriptions_manager_) {
-    return subscriptions_manager_->IsSubscribedFromCache(subscription);
-  } else {
-    CHECK_IS_TEST();
-  }
-  return false;
+  return subscriptions_manager_ &&
+         subscriptions_manager_->IsSubscribedFromCache(subscription);
 }
 
 void ShoppingService::FetchPriceEmailPref() {
@@ -1749,14 +1749,6 @@ void ShoppingService::StartTrackingParcels(
 }
 
 void ShoppingService::GetAllParcelStatuses(GetParcelStatusCallback callback) {
-  if (base::FeatureList::IsEnabled(kParcelTrackingTestData)) {
-    auto statuses = std::make_unique<std::vector<ParcelTrackingStatus>>();
-    statuses->push_back(GetParcelTrackingStatusTestData());
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback), true, std::move(statuses)));
-    return;
-  }
   if (parcels_manager_) {
     parcels_manager_->GetAllParcelStatuses(std::move(callback));
   } else {

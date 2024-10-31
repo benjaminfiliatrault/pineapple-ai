@@ -6,6 +6,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/numerics/safe_conversions.h"
 #include "build/build_config.h"
 
 namespace lens::features {
@@ -63,6 +64,10 @@ BASE_FEATURE(kLensOverlayContextualSearchbox,
              "LensOverlayContextualSearchbox",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kLensOverlaySurvey,
+             "LensOverlaySurvey",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 const base::FeatureParam<int> kLensOverlayMinRamMb{&kLensOverlay, "min_ram_mb",
                                                    /*default=value=*/-1};
 const base::FeatureParam<std::string> kActivityUrl{
@@ -81,8 +86,10 @@ const base::FeatureParam<bool> kLensOverlayUseTieredDownscaling{
     &kLensOverlay, "enable-tiered-downscaling", false};
 const base::FeatureParam<bool> kLensOverlaySendLatencyGen204{
     &kLensOverlay, "enable-gen204-latency", true};
-const base::FeatureParam<bool> kLensOverlaySendTaskCompletion204{
+const base::FeatureParam<bool> kLensOverlaySendTaskCompletionGen204{
     &kLensOverlay, "enable-gen204-task-completion", true};
+const base::FeatureParam<bool> kLensOverlaySendSemanticEventGen204{
+    &kLensOverlay, "enable-gen204-semantic-event", true};
 const base::FeatureParam<int> kLensOverlayImageMaxArea{
     &kLensOverlay, "image-dimensions-max-area", 1500000};
 const base::FeatureParam<int> kLensOverlayImageMaxHeight{
@@ -144,7 +151,7 @@ const base::FeatureParam<bool> kUseLensOverlayForVideoFrameSearch{
     &kLensOverlay, "use-for-video-frame-search", true};
 
 const base::FeatureParam<bool> kIsFindInPageEntryPointEnabled{
-    &kLensOverlay, "find-in-page-entry-point", true};
+    &kLensOverlay, "find-in-page-entry-point", false};
 
 const base::FeatureParam<bool> kIsOmniboxEntryPointEnabled{
     &kLensOverlay, "omnibox-entry-point", true};
@@ -260,6 +267,39 @@ constexpr base::FeatureParam<bool>
     kUseVideoContextForMultimodalLensOverlayRequests{
         &kLensOverlayContextualSearchbox,
         "use-video-context-for-multimodal-requests", false};
+
+constexpr base::FeatureParam<bool> kUseOptimizedRequestFlow{
+    &kLensOverlayContextualSearchbox, "use-optimized-request-flow", false};
+
+constexpr base::FeatureParam<std::string> kLensOverlayClusterInfoEndpointUrl{
+    &kLensOverlayContextualSearchbox, "cluster-info-endpoint-url",
+    "https://lensfrontend-pa.googleapis.com/v1/gsessionid"};
+
+constexpr base::FeatureParam<bool>
+    kLensOverlaySendLensInputsForContextualSuggest{
+        &kLensOverlayContextualSearchbox,
+        "send-lens-inputs-for-contextual-suggest", true};
+
+constexpr base::FeatureParam<bool> kLensOverlaySendLensInputsForLensSuggest{
+    &kLensOverlayContextualSearchbox, "send-lens-inputs-for-lens-suggest",
+    false};
+
+constexpr base::FeatureParam<bool>
+    kLensOverlaySendLensVisualInteractionDataForLensSuggest{
+        &kLensOverlayContextualSearchbox,
+        "send-lens-visual-interaction-data-for-lens-suggest", false};
+
+constexpr base::FeatureParam<size_t> kLensOverlayFileUploadLimitBytes{
+    &kLensOverlayContextualSearchbox, "file-upload-limit-bytes", 200000000};
+
+const base::FeatureParam<base::TimeDelta> kLensOverlaySurveyResultsTime{
+    &kLensOverlaySurvey, "results-time", base::Seconds(1)};
+
+constexpr base::FeatureParam<bool> kUsePdfVitParam{
+    &kLensOverlayContextualSearchbox, "use-pdf-vit-param", false};
+
+constexpr base::FeatureParam<bool> kUseWebpageVitParam{
+    &kLensOverlayContextualSearchbox, "use-webpage-vit-param", false};
 
 constexpr base::FeatureParam<std::string> kHomepageURLForLens{
     &kLensStandalone, "lens-homepage-url", "https://lens.google.com/v3/"};
@@ -419,7 +459,11 @@ bool GetLensOverlaySendLatencyGen204() {
 }
 
 bool GetLensOverlaySendTaskCompletionGen204() {
-  return kLensOverlaySendTaskCompletion204.Get();
+  return kLensOverlaySendTaskCompletionGen204.Get();
+}
+
+bool GetLensOverlaySendSemanticEventGen204() {
+  return kLensOverlaySendSemanticEventGen204.Get();
 }
 
 int GetLensOverlayImageMaxArea() {
@@ -488,6 +532,41 @@ bool UseVideoContextForTextOnlyLensOverlayRequests() {
 
 bool UseVideoContextForMultimodalLensOverlayRequests() {
   return kUseVideoContextForMultimodalLensOverlayRequests.Get();
+}
+
+bool UseOptimizedRequestFlow() {
+  return kUseOptimizedRequestFlow.Get();
+}
+
+std::string GetLensOverlayClusterInfoEndpointUrl() {
+  return kLensOverlayClusterInfoEndpointUrl.Get();
+}
+
+bool GetLensOverlaySendLensInputsForContextualSuggest() {
+  return kLensOverlaySendLensInputsForContextualSuggest.Get();
+}
+
+bool GetLensOverlaySendLensInputsForLensSuggest() {
+  return kLensOverlaySendLensInputsForLensSuggest.Get();
+}
+
+bool GetLensOverlaySendLensVisualInteractionDataForLensSuggest() {
+  return kLensOverlaySendLensVisualInteractionDataForLensSuggest.Get();
+}
+
+uint32_t GetLensOverlayFileUploadLimitBytes() {
+  size_t limit = kLensOverlayFileUploadLimitBytes.Get();
+  return base::IsValueInRangeForNumericType<uint32_t>(limit)
+             ? static_cast<uint32_t>(limit)
+             : 0;
+}
+
+bool UsePdfVitParam() {
+  return kUsePdfVitParam.Get();
+}
+
+bool UseWebpageVitParam() {
+  return kUseWebpageVitParam.Get();
 }
 
 bool UsePdfsAsContext() {
@@ -663,6 +742,10 @@ int GetLensOverlayImageContextMenuActionsTextReceivedTimeout() {
 
 bool IsLensOverlayContextualSearchboxEnabled() {
   return base::FeatureList::IsEnabled(kLensOverlayContextualSearchbox);
+}
+
+base::TimeDelta GetLensOverlaySurveyResultsTime() {
+  return kLensOverlaySurveyResultsTime.Get();
 }
 
 }  // namespace lens::features

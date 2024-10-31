@@ -38,6 +38,8 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/sysroot.gni")
 import("//build/config/ui.gni")
 import("//build/nocompile.gni")
+import("//build/rust/rust_bindgen.gni")
+import("//build/rust/rust_static_library.gni")
 import("//build/timestamp.gni")
 import("//build/util/process_version.gni")
 import("//build_overrides/build.gni")
@@ -243,7 +245,6 @@ component("base") {
     "containers/checked_iterators.h",
     "containers/circular_deque.h",
     "containers/contains.h",
-    "containers/dynamic_extent.h",
     "containers/enum_set.h",
     "containers/extend.h",
     "containers/fixed_flat_map.h",
@@ -548,6 +549,8 @@ component("base") {
     "profiler/metadata_recorder.h",
     "profiler/module_cache.cc",
     "profiler/module_cache.h",
+    "profiler/periodic_sampling_scheduler.cc",
+    "profiler/periodic_sampling_scheduler.h",
     "profiler/profile_builder.h",
     "profiler/register_context.h",
     "profiler/sample_metadata.cc",
@@ -568,6 +571,7 @@ component("base") {
     "profiler/stack_unwind_data.h",
     "profiler/suspendable_thread_delegate.h",
     "profiler/thread_delegate.h",
+    "profiler/thread_group_profiler_client.h",
     "profiler/unwinder.cc",
     "profiler/unwinder.h",
     "rand_util.cc",
@@ -1040,6 +1044,9 @@ component("base") {
   if (!is_nacl) {
     # Used by metrics/crc32, except on NaCl builds.
     deps += [ "//third_party/zlib" ]
+
+    # NaCl does not support Rust.
+    deps += [ ":rust_logger" ]
   }
 
   # `raw_ptr` cannot be made a component due to CRT symbol issues.
@@ -1545,6 +1552,7 @@ component("base") {
       "debug/crash_logging.h",
       "debug/stack_trace.cc",
       "debug/stack_trace.h",
+      "files/drive_info.h",
       "files/file_enumerator.cc",
       "files/file_enumerator.h",
       "files/file_proxy.cc",
@@ -1561,6 +1569,8 @@ component("base") {
       "files/scoped_temp_file.h",
       "json/json_file_value_serializer.cc",
       "json/json_file_value_serializer.h",
+      "logging/rust_log_integration.cc",
+      "logging/rust_log_integration.h",
       "memory/discardable_memory.cc",
       "memory/discardable_memory.h",
       "memory/discardable_memory_allocator.cc",
@@ -1633,6 +1643,10 @@ component("base") {
         "files/file_util_posix.cc",
         "memory/page_size_posix.cc",
       ]
+
+      if (!is_apple) {
+        sources += [ "files/drive_info_posix.cc" ]
+      }
     }
 
     if ((is_posix && !is_ios) || is_fuchsia) {
@@ -1737,6 +1751,7 @@ component("base") {
       "enterprise_util_win.cc",
       "file_version_info_win.cc",
       "file_version_info_win.h",
+      "files/drive_info_win.cc",
       "files/file_enumerator_win.cc",
       "files/file_path_watcher_win.cc",
       "files/file_util_win.cc",
@@ -1995,6 +2010,7 @@ component("base") {
       "apple/scoped_typeref.h",
       "file_version_info_apple.h",
       "file_version_info_apple.mm",
+      "files/drive_info_apple.mm",
       "files/file_util_apple.mm",
       "memory/platform_shared_memory_mapper_apple.cc",
       "memory/platform_shared_memory_region_apple.cc",
@@ -2021,6 +2037,8 @@ component("base") {
   # Desktop Mac.
   if (is_mac) {
     sources += [
+      "apple/mach_port_rendezvous.cc",
+      "apple/mach_port_rendezvous.h",
       "enterprise_util.cc",
       "enterprise_util.h",
       "enterprise_util_mac.mm",
@@ -2034,6 +2052,7 @@ component("base") {
       "mac/close_nocancel.cc",
       "mac/code_signature.cc",
       "mac/code_signature.h",
+      "mac/code_signature_spi.h",
       "mac/info_plist_data.h",
       "mac/info_plist_data.mm",
       "mac/launch_application.h",
@@ -2045,10 +2064,10 @@ component("base") {
       "mac/login_util.h",
       "mac/mac_util.h",
       "mac/mac_util.mm",
-      "mac/mach_port_rendezvous.cc",
-      "mac/mach_port_rendezvous.h",
       "mac/os_crash_dumps.cc",
       "mac/os_crash_dumps.h",
+      "mac/process_requirement.cc",
+      "mac/process_requirement.h",
       "mac/scoped_aedesc.h",
       "mac/scoped_authorizationref.h",
       "mac/scoped_authorizationref.mm",
@@ -2096,6 +2115,7 @@ component("base") {
       "ApplicationServices.framework",
       "AppKit.framework",
       "CoreFoundation.framework",
+      "DiskArbitration.framework",
       "IOKit.framework",
       "OpenDirectory.framework",
     ]
@@ -2133,12 +2153,12 @@ component("base") {
 
     if (use_blink) {
       sources += [
+        "apple/mach_port_rendezvous.cc",
+        "apple/mach_port_rendezvous.h",
         "files/file_path_watcher_kqueue.cc",
         "files/file_path_watcher_kqueue.h",
         "files/file_path_watcher_mac.cc",
         "ios/sim_header_shims.h",
-        "mac/mach_port_rendezvous.cc",
-        "mac/mach_port_rendezvous.h",
         "process/kill_ios.cc",
         "process/memory_mac.mm",
         "process/port_provider_mac.cc",
@@ -2451,6 +2471,25 @@ component("base") {
     configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_max" ]
   }
+}
+
+rust_bindgen("rust_log_bindgen") {
+  header = "logging/rust_log_integration.h"
+  cpp = true
+  visibility = [ ":*" ]
+}
+
+rust_static_library("rust_logger") {
+  allow_unsafe = true  # Unsafe needed for FFI.
+  deps = [
+    ":rust_log_bindgen",
+    "//third_party/rust/log/v0_4:lib",
+  ]
+  visibility = [ ":base" ]
+  sources = [ "logging/rust_logger.rs" ]
+  crate_root = "logging/rust_logger.rs"
+
+  cxx_bindings = [ "logging/rust_logger.rs" ]
 }
 
 if (is_linux || is_chromeos) {
@@ -2908,7 +2947,6 @@ if ((is_win && (current_cpu == "x64" || current_cpu == "arm64")) || is_mac ||
     no_default_deps = true
     if (!toolchain_for_rust_host_build_tools) {
       deps = [ "//build/config:common_deps_without_libcxx" ]
-      configs += [ "//build/config/sanitizers:link_shared_library" ]
     }
   }
 }
@@ -2929,7 +2967,6 @@ if (is_android && (current_cpu == "arm" || current_cpu == "arm64")) {
     no_default_deps = true
     if (!toolchain_for_rust_host_build_tools) {
       deps = [ "//build/config:common_deps_without_libcxx" ]
-      configs += [ "//build/config/sanitizers:link_shared_library" ]
     }
   }
 }
@@ -3264,6 +3301,7 @@ test("base_unittests") {
     "json/string_escape_unittest.cc",
     "json/values_util_unittest.cc",
     "lazy_instance_unittest.cc",
+    "logging/rust_log_integration_unittest.cc",
     "logging_unittest.cc",
     "memory/aligned_memory_unittest.cc",
     "memory/discardable_memory_backing_field_trial_unittest.cc",
@@ -3336,6 +3374,7 @@ test("base_unittests") {
     "process/process_util_unittest.cc",
     "profiler/metadata_recorder_unittest.cc",
     "profiler/module_cache_unittest.cc",
+    "profiler/periodic_sampling_scheduler_unittest.cc",
     "profiler/sample_metadata_unittest.cc",
     "profiler/stack_buffer_unittest.cc",
     "profiler/stack_copier_suspend_unittest.cc",
@@ -3553,6 +3592,7 @@ test("base_unittests") {
   }
 
   defines = []
+  frameworks = []
 
   deps = [
     ":base",
@@ -3621,6 +3661,18 @@ test("base_unittests") {
     public_deps = [
       ":base_unittests_bundle_data",
       ":base_unittests_noarc",
+    ]
+  }
+
+  if (is_mac) {
+    # Embed an Info.plist in the `base_unittests` executable.
+    # This allows //base/apple/mach_port_rendezvous_unittest.cc to exercise code
+    # paths that depend on the executable having an Info.plist
+    ldflags = [
+      "-sectcreate",
+      "__TEXT",
+      "__info_plist",
+      rebase_path("mac/base_unittests-Info.plist"),
     ]
   }
 
@@ -3873,6 +3925,7 @@ test("base_unittests") {
   if (is_mac) {
     sources += [
       "apple/call_with_eh_frame_unittest.mm",
+      "apple/mach_port_rendezvous_unittest.cc",
       "apple/scoped_cftyperef_unittest.cc",
       "apple/scoped_mach_vm_unittest.cc",
       "apple/scoped_nsautorelease_pool_unittest.mm",
@@ -3880,7 +3933,7 @@ test("base_unittests") {
       "enterprise_util_mac_unittest.mm",
       "mac/launch_application_unittest.mm",
       "mac/mac_util_unittest.mm",
-      "mac/mach_port_rendezvous_unittest.cc",
+      "mac/process_requirement_unittest.cc",
       "mac/scoped_sending_event_unittest.mm",
       "message_loop/message_pump_apple_unittest.mm",
       "power_monitor/thermal_state_observer_mac_unittest.mm",
@@ -3889,6 +3942,7 @@ test("base_unittests") {
       "system/sys_info_mac_unittest.mm",
     ]
     data_deps += [ "//base/mac:launch_application_test_helper" ]
+    frameworks += [ "Security.framework" ]
   }
 
   if (is_ios) {
@@ -3938,8 +3992,9 @@ test("base_unittests") {
 
   if (is_mac) {
     sources += [ "message_loop/message_pump_kqueue_unittest.cc" ]
-    frameworks = [
+    frameworks += [
       "CoreFoundation.framework",
+      "IOKit.framework",
       "Foundation.framework",
     ]
     deps += [ ":base_profiler_test_support_library" ]
@@ -4187,6 +4242,7 @@ if (enable_nocompile_tests) {
       "thread_annotations_nocompile.nc",
       "traits_bag_nocompile.nc",
       "types/expected_macros_nocompile.nc",
+      "types/optional_util_nocompile.nc",
       "types/pass_key_nocompile.nc",
       "types/variant_util_nocompile.nc",
       "unsafe_buffers_nocompile.nc",
@@ -4637,7 +4693,10 @@ if (is_android) {
   }
 
   android_library("callback_java") {
-    sources = [ "android/java/src/org/chromium/base/Callback.java" ]
+    sources = [
+      "android/java/src/org/chromium/base/Callback.java",
+      "android/java/src/org/chromium/base/CallbackUtils.java",
+    ]
     deps = [
       "//build/android:build_java",
       "//third_party/android_deps:com_google_code_findbugs_jsr305_java",
@@ -4877,27 +4936,18 @@ if (is_android) {
     ]
   }
 
+  # Most cached_flags code is in components/cached_flags. These classes are
+  # needed by :base_java_test_support to set and reset overrides and values
+  # returned.
   android_library("base_cached_flags_java") {
     deps = [
       ":base_java",
       ":base_shared_preferences_java",
-      "//base/version_info/android:version_constants_java",
       "//build/android:build_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
     ]
 
     sources = [
-      "android/java/src/org/chromium/base/cached_flags/AllCachedFieldTrialParameters.java",
-      "android/java/src/org/chromium/base/cached_flags/BooleanCachedFieldTrialParameter.java",
-      "android/java/src/org/chromium/base/cached_flags/CachedFieldTrialParameter.java",
-      "android/java/src/org/chromium/base/cached_flags/CachedFlag.java",
-      "android/java/src/org/chromium/base/cached_flags/CachedFlagUtils.java",
-      "android/java/src/org/chromium/base/cached_flags/CachedFlagsSafeMode.java",
-      "android/java/src/org/chromium/base/cached_flags/CachedFlagsSharedPreferences.java",
-      "android/java/src/org/chromium/base/cached_flags/DoubleCachedFieldTrialParameter.java",
-      "android/java/src/org/chromium/base/cached_flags/IntCachedFieldTrialParameter.java",
-      "android/java/src/org/chromium/base/cached_flags/StringCachedFieldTrialParameter.java",
-      "android/java/src/org/chromium/base/cached_flags/ValuesOverridden.java",
       "android/java/src/org/chromium/base/cached_flags/ValuesReturned.java",
     ]
   }
@@ -5162,7 +5212,6 @@ if (is_android) {
     deps = [
       ":base_java",
       ":base_java_test_support",
-      "//base:base_cached_flags_java",
       "//build/android:build_java",
       "//testing/android/junit:junit_test_support",
       "//third_party/androidx:androidx_test_core_java",
@@ -5202,9 +5251,6 @@ if (is_android) {
       "android/junit/src/org/chromium/base/UnownedUserDataHostTest.java",
       "android/junit/src/org/chromium/base/UnownedUserDataKeyTest.java",
       "android/junit/src/org/chromium/base/ValueChangedCallbackTest.java",
-      "android/junit/src/org/chromium/base/cached_flags/CachedFeatureFlagsSafeModeUnitTest.java",
-      "android/junit/src/org/chromium/base/cached_flags/CachedFieldTrialParameterUnitTest.java",
-      "android/junit/src/org/chromium/base/cached_flags/CachedFlagUnitTest.java",
       "android/junit/src/org/chromium/base/jank_tracker/FrameMetricsListenerTest.java",
       "android/junit/src/org/chromium/base/jank_tracker/FrameMetricsStoreTest.java",
       "android/junit/src/org/chromium/base/jank_tracker/JankActivityTrackerTest.java",
@@ -5252,7 +5298,6 @@ if (is_android) {
       "test/android/junit/src/org/chromium/base/test/util/SkipCheckTest.java",
     ]
     deps = [
-      ":base_cached_flags_java",
       ":base_java",
       ":base_java_process_launcher_test_support",
       ":base_java_test_support",
@@ -5375,7 +5420,7 @@ if (is_mac) {
     ]
   }
   fuzzer_test("base_mach_port_rendezvous_fuzzer") {
-    sources = [ "mac/mach_port_rendezvous_fuzzer.cc" ]
+    sources = [ "apple/mach_port_rendezvous_fuzzer.cc" ]
     deps = [
       "//base",
       "//testing/libfuzzer/fuzzers/mach:converter",

@@ -25,6 +25,7 @@ namespace blink {
 
 class LocalDOMWindow;
 class XRFrameTransport;
+class XRGPUProjectionLayer;
 class XRSession;
 class XRSystem;
 class XRWebGLLayer;
@@ -62,6 +63,9 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
   void SubmitWebGLLayer(XRWebGLLayer*, bool was_changed);
   void UpdateWebGLLayerViewports(XRWebGLLayer*);
 
+  void SubmitWebGPULayer(XRGPUProjectionLayer*, bool was_queried);
+  void UpdateWebGPULayerViewports(XRGPUProjectionLayer*);
+
   void Dispose();
   void OnFocusChanged();
 
@@ -72,6 +76,8 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
   // Adds an ImmersiveSessionObserver. Observers will be automatically removed
   // by Oilpan when they are destroyed, and their WeakMember becomes null.
   void AddImmersiveSessionObserver(ImmersiveSessionObserver*);
+
+  bool DrawingIntoSharedBuffer() const;
 
   virtual void Trace(Visitor*) const;
 

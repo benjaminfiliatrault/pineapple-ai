@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/constants/web_app_id_constants.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/containers/enum_set.h"
@@ -39,7 +40,6 @@
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar_observer.h"
@@ -86,6 +86,26 @@ bool IsLinkCapturingDisabledByDefaultBasedOnFlagState() {
 }
 
 }  // namespace
+
+// static
+bool WebAppRegistrar::IsSupportedDisplayModeForNavigationCapture(
+    blink::mojom::DisplayMode display_mode) {
+  // Explicitly disable navigation capturing on display modes that aren't
+  // supported.
+  switch (display_mode) {
+    case blink::mojom::DisplayMode::kUndefined:
+    case blink::mojom::DisplayMode::kTabbed:
+    case blink::mojom::DisplayMode::kPictureInPicture:
+      return false;
+    case blink::mojom::DisplayMode::kBrowser:
+    case blink::mojom::DisplayMode::kFullscreen:
+    case blink::mojom::DisplayMode::kMinimalUi:
+    case blink::mojom::DisplayMode::kWindowControlsOverlay:
+    case blink::mojom::DisplayMode::kBorderless:
+    case blink::mojom::DisplayMode::kStandalone:
+      return true;
+  }
+}
 
 WebAppRegistrar::WebAppRegistrar(Profile* profile) : profile_(profile) {}
 
@@ -406,7 +426,6 @@ std::optional<webapps::AppId> WebAppRegistrar::FindAppWithUrlInScope(
     const GURL& url) const {
   return FindBestAppWithUrlInScope(
       url, {
-               proto::InstallState::SUGGESTED_FROM_ANOTHER_DEVICE,
                proto::InstallState::INSTALLED_WITH_OS_INTEGRATION,
                proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
            });
@@ -630,11 +649,13 @@ void WebAppRegistrar::SetProvider(base::PassKey<WebAppProvider>,
 }
 
 void WebAppRegistrar::Start() {
+  auto user_installed_app_count = CountTotalUserInstalledAppsIncludingDiy();
   int num_user_installed_apps =
-      std::get<InstallableAppCount>(CountTotalUserInstalledAppsIncludingDiy())
-          .value();
+      std::get<InstallableAppCount>(user_installed_app_count).value();
   int num_user_installed_diy_apps =
-      std::get<DiyAppCount>(CountTotalUserInstalledAppsIncludingDiy()).value();
+      std::get<DiyAppCount>(user_installed_app_count).value();
+  int num_non_syncing_apps =
+      std::get<NonSyncingAppCount>(user_installed_app_count).value();
   int num_non_locally_installed = CountUserInstalledNotLocallyInstalledApps();
 
   base::UmaHistogramCounts1000("WebApp.InstalledCount.ByUser",
@@ -644,6 +665,15 @@ void WebAppRegistrar::Start() {
       num_non_locally_installed);
   base::UmaHistogramCounts1000("WebApp.DiyAppsInstalledCount.ByUser",
                                num_user_installed_diy_apps);
+
+  if (IsSyncEnabledForApps(profile_)) {
+    base::UmaHistogramCounts1000("WebApp.InstalledCount.NotSyncing.SyncEnabled",
+                                 num_non_syncing_apps);
+  } else {
+    base::UmaHistogramCounts1000(
+        "WebApp.InstalledCount.ByUserNotLocallyInstalled.SyncDisabled",
+        num_non_locally_installed);
+  }
 
 #if BUILDFLAG(IS_MAC)
   auto multi_profile_app_ids =
@@ -921,12 +951,6 @@ bool WebAppRegistrar::IsInstalledByPolicy(const webapps::AppId& app_id) const {
   return sources.Has(WebAppManagement::Type::kPolicy);
 }
 
-bool WebAppRegistrar::WasInstalledByDefaultOnly(
-    const webapps::AppId& app_id) const {
-  const WebApp* web_app = GetAppById(app_id);
-  return web_app && web_app->HasOnlySource(WebAppManagement::Type::kDefault);
-}
-
 bool WebAppRegistrar::WasInstalledByUser(const webapps::AppId& app_id) const {
   const WebApp* web_app = GetAppById(app_id);
   return web_app && web_app->WasInstalledByUser();
@@ -1085,13 +1109,20 @@ WebAppRegistrar::SaveAndGetInMemoryControlledFramePartitionConfig(
 
 bool WebAppRegistrar::CanCaptureLinksInScope(
     const webapps::AppId& app_id) const {
-  if (!base::FeatureList::IsEnabled(features::kPwaNavigationCapturing)) {
+  if (!base::FeatureList::IsEnabled(features::kPwaNavigationCapturing)
+#if BUILDFLAG(IS_CHROMEOS)
+      && !ChromeOsWebAppExperiments::
+             IsNavigationCapturingReimplEnabledForTargetApp(app_id)
+#endif
+  ) {
     return false;
   }
   if (!IsInstallState(app_id,
                       {proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
                        proto::InstallState::INSTALLED_WITH_OS_INTEGRATION}) ||
-      IsShortcutApp(app_id)) {
+      IsShortcutApp(app_id) ||
+      !IsSupportedDisplayModeForNavigationCapture(
+          GetAppEffectiveDisplayMode(app_id))) {
     return false;
   }
   return true;
@@ -1774,6 +1805,13 @@ bool IsRegistryEqual(const Registry& registry,
     if (exclude_current_os_integration) {
       web_app.SetCurrentOsIntegrationStates(proto::WebAppOsIntegrationState());
       web_app2.SetCurrentOsIntegrationStates(proto::WebAppOsIntegrationState());
+      // Tests that want to ignore current os integration state usually also
+      // want to ignore the presence/absece of the "user installed" source, as
+      // that is something else that is not synced across.
+      // TODO(https://crbug.com/372062068): Figure out a better way to handle
+      // differences in installed state.
+      web_app.RemoveSource(WebAppManagement::kUserInstalled);
+      web_app2.RemoveSource(WebAppManagement::kUserInstalled);
     }
     if (web_app != web_app2) {
       LOG(ERROR) << "Web apps are not equal:\n" << web_app << "\n" << web_app2;
@@ -1806,10 +1844,11 @@ int WebAppRegistrar::CountUserInstalledNotLocallyInstalledApps() const {
   return num_non_locally_installed;
 }
 
-std::tuple<DiyAppCount, InstallableAppCount>
+std::tuple<DiyAppCount, InstallableAppCount, NonSyncingAppCount>
 WebAppRegistrar::CountTotalUserInstalledAppsIncludingDiy() const {
   InstallableAppCount num_user_installed(0);
   DiyAppCount num_diy_apps_user_installed(0);
+  NonSyncingAppCount num_non_syncing_user_installed(0);
   for (const WebApp& app : GetApps()) {
     if ((app.install_state() == proto::INSTALLED_WITH_OS_INTEGRATION ||
          app.install_state() == proto::INSTALLED_WITHOUT_OS_INTEGRATION) &&
@@ -1817,10 +1856,14 @@ WebAppRegistrar::CountTotalUserInstalledAppsIncludingDiy() const {
       if (app.is_diy_app()) {
         ++num_diy_apps_user_installed.value();
       }
+      if (!app.IsSynced()) {
+        ++num_non_syncing_user_installed.value();
+      }
       ++num_user_installed.value();
     }
   }
-  return std::make_tuple(num_diy_apps_user_installed, num_user_installed);
+  return std::make_tuple(num_diy_apps_user_installed, num_user_installed,
+                         num_non_syncing_user_installed);
 }
 
 }  // namespace web_app

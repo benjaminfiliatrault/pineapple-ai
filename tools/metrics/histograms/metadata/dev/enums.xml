@@ -835,11 +835,6 @@ Called by update_protocol_commands_enum.py.-->
   <int value="4" label="Other"/>
 </enum>
 
-<enum name="DevToolsColorPickerOpenedFrom">
-  <int value="0" label="Sources panel"/>
-  <int value="1" label="Styles pane"/>
-</enum>
-
 <enum name="DevToolsCSSHintShown">
   <int value="0" label="Other"/>
   <int value="1" label="AlignContent"/>
@@ -1431,23 +1426,6 @@ Called by update_protocol_commands_enum.py.-->
   <int value="35" label="text/x.vue"/>
   <int value="36" label="text/javascript+snippet"/>
   <int value="37" label="text/javascript+eval"/>
-</enum>
-
-<enum name="DevToolsNetworkPanelMoreFiltersItemSelected">
-  <int value="0" label="Hide data URLs"/>
-  <int value="1" label="Hide extension URLs"/>
-  <int value="2" label="Blocked response cookies"/>
-  <int value="3" label="Blocked requests"/>
-  <int value="4" label="3rd-party requests"/>
-</enum>
-
-<enum name="DevToolsNetworkPanelMoreFiltersNumberOfSelectedChanged">
-  <int value="0" label="0"/>
-  <int value="1" label="1"/>
-  <int value="2" label="2"/>
-  <int value="3" label="3"/>
-  <int value="4" label="4"/>
-  <int value="5" label="5"/>
 </enum>
 
 <enum name="DevToolsOpenedByAction">

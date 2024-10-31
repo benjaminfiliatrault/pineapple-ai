@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import './strings.m.js';
+import '/strings.m.js';
 
 import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
@@ -234,7 +234,7 @@ export class ExperimentElement extends CrLitElement {
     // Populate clone elements with the proper text content.
     queries.forEach((query, i) => {
       const clone = this.getRequiredElement(query);
-      clone.textContent = itemsToSearch[i]!;
+      clone.textContent = (i === 3 ? '#' : '') + itemsToSearch[i]!;
     });
 
     // Add highlights to the first clone element with matches.

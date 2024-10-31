@@ -81,6 +81,7 @@
 #include "third_party/blink/public/mojom/page/display_cutout.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/draggable_region.mojom-forward.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom-shared.h"
+#include "ui/accessibility/ax_location_and_scroll_updates.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/platform/inspect/ax_event_recorder.h"
@@ -446,11 +447,7 @@ class CONTENT_EXPORT WebContentsImpl
   bool IsAudioMuted() override;
   void SetAudioMuted(bool mute) override;
   bool IsCurrentlyAudible() override;
-  bool IsConnectedToBluetoothDevice() override;
-  bool IsScanningForBluetoothDevices() override;
-  bool IsConnectedToSerialPort() override;
-  bool IsConnectedToHidDevice() override;
-  bool IsConnectedToUsbDevice() override;
+  bool IsCapabilityActive(CapabilityType capability_type) override;
   bool HasFileSystemAccessHandles() override;
   bool HasPictureInPictureVideo() override;
   bool HasPictureInPictureDocument() override;
@@ -472,6 +469,8 @@ class CONTENT_EXPORT WebContentsImpl
       std::unique_ptr<WebContents> inner_web_contents,
       RenderFrameHost* render_frame_host,
       bool is_full_page) override;
+  void AttachGuestPage(std::unique_ptr<GuestPageHolder> guest_page,
+                       RenderFrameHost* outer_render_frame_host) override;
   bool IsInnerWebContentsForGuest() override;
   RenderFrameHostImpl* GetOuterWebContentsFrame() override;
   WebContentsImpl* GetOuterWebContents() override;
@@ -714,7 +713,8 @@ class CONTENT_EXPORT WebContentsImpl
   void ProcessAccessibilityUpdatesAndEvents(
       ui::AXUpdatesAndEvents& details) override;
   void AccessibilityLocationChangesReceived(
-      const std::vector<ui::AXLocationChanges>& details) override;
+      const ui::AXTreeID& tree_id,
+      ui::AXLocationAndScrollUpdates& details) override;
   ui::AXNode* GetAccessibilityRootNode() override;
   std::string DumpAccessibilityTree(
       bool internal,
@@ -958,7 +958,9 @@ class CONTENT_EXPORT WebContentsImpl
                      bool use_prefetch_proxy,
                      const blink::mojom::Referrer& referrer,
                      const std::optional<url::Origin>& referring_origin,
-                     base::WeakPtr<PreloadingAttempt> attempt) override;
+                     base::WeakPtr<PreloadingAttempt> attempt,
+                     std::optional<PreloadingHoldbackStatus>
+                         holdback_status_override) override;
   std::unique_ptr<PrerenderHandle> StartPrerendering(
       const GURL& prerendering_url,
       PreloadingTriggerType trigger_type,
@@ -1097,6 +1099,8 @@ class CONTENT_EXPORT WebContentsImpl
                             bool user_gesture,
                             bool last_unlocked_by_target,
                             bool privileged) override;
+  bool IsWaitingForPointerLockPrompt(
+      RenderWidgetHostImpl* render_widget_host) override;
   bool RequestKeyboardLock(RenderWidgetHostImpl* render_widget_host,
                            bool esc_key_locked) override;
   void CancelKeyboardLock(RenderWidgetHostImpl* render_widget_host) override;
@@ -1293,11 +1297,15 @@ class CONTENT_EXPORT WebContentsImpl
   void IncrementHidActiveFrameCount();
   void DecrementHidActiveFrameCount();
 
+  // Modify the counter of frames in this WebContents actively using
+  // geolocation.
+  void IncrementGeolocationActiveFrameCount();
+  void DecrementGeolocationActiveFrameCount();
+
   // Notifies the delegate and observers when device connection types used by
   // the WebContents change.
-  void OnDeviceConnectionTypesChanged(
-      WebContentsObserver::DeviceConnectionType device_connection_type,
-      bool used);
+  void OnCapabilityTypesChanged(CapabilityType device_capability_type,
+                                bool used);
 
   // Modify the counter of frames in this WebContents actively using USB
   // devices.
@@ -1350,9 +1358,11 @@ class CONTENT_EXPORT WebContentsImpl
   // Sets the spatial navigation state.
   void SetSpatialNavigationDisabled(bool disabled);
 
+#if BUILDFLAG(IS_ANDROID)
   // Sets the Stylus handwriting feature status. This status is updated to web
   // preferences.
   void SetStylusHandwritingEnabled(bool enabled);
+#endif  // BUILDFLAG(IS_ANDROID)
 
   // Called when a file selection is to be done.
   void RunFileChooser(
@@ -2355,6 +2365,7 @@ class CONTENT_EXPORT WebContentsImpl
   size_t serial_active_frame_count_ = 0;
   size_t hid_active_frame_count_ = 0;
   size_t usb_active_frame_count_ = 0;
+  size_t geolocation_active_frame_count_ = 0;
 
   size_t file_system_access_handle_count_ = 0;
 
@@ -2420,9 +2431,8 @@ class CONTENT_EXPORT WebContentsImpl
 
   bool is_spatial_navigation_disabled_ = false;
 
-  bool stylus_handwriting_enabled_ = false;
-
 #if BUILDFLAG(IS_ANDROID)
+  bool stylus_handwriting_enabled_ = false;
   bool long_press_link_select_text_ = false;
 #endif
 
@@ -2582,18 +2592,15 @@ class CONTENT_EXPORT WebContentsImpl
 
   // If this window was opened as a new partitioned popin this will be the
   // frame of the opener. This will only have a value if `is_popup_` is true.
+  // If the opener frame is deleted the popin should be closed by
+  // `PartitionedPopinsController`.
   // See https://explainers-by-googlers.github.io/partitioned-popins/
-  // TODO(crbug.com/340606651): If this is cleared after being set or navigated
-  // the popin should be forced to close. Ownership here need to be firmed up.
   base::WeakPtr<RenderFrameHostImpl> partitioned_popin_opener_;
 
   // Each window can have at most one open partitioned popin, and this will be a
   // pointer to it. If this is set `partitioned_popin_opener_` must be null as
   // no popin can open a popin.
   // See https://explainers-by-googlers.github.io/partitioned-popins/
-  // TODO(crbug.com/340606651): Ownership here is likely weaker than possible.
-  // Given the 1:1 relationship here the opened popin could probably be a
-  // unique_ptr cleared via a WebContentsModalDialogManager observer on close.
   base::WeakPtr<WebContents> opened_partitioned_popin_;
 
   base::WeakPtrFactory<WebContentsImpl> loading_weak_factory_{this};

@@ -13,6 +13,7 @@
 #include "content/public/browser/render_frame_metadata_provider.h"
 #include "content/public/browser/render_widget_host_observer.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/android/modal_dialog_manager_bridge.h"
 #include "ui/android/view_android_observer.h"
 #include "ui/android/window_android_observer.h"
 #include "ui/events/back_gesture_event.h"
@@ -62,21 +63,14 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
     //
     // Also set when the active page has a BeforeUnload handler and we need to
     // animate the active page back so the user can interact with the
-    // BeforeUnload prompt. TODO(liuwilliam): Worth considering a
-    // `kDisplayingCancelAnimationForBeforeUnload` to reduce the compexity in
-    // the `State`'s transition.
+    // BeforeUnload prompt.
     kDisplayingCancelAnimation,
 
-    // Set after the browser has dispatched BeforeUnload IPC to the renderer and
-    // is waiting for the response, and the cancel animation has brought back
-    // the active page to the center of the viewport. This is an optional state:
-    // if the cancel animation hasn't finished before the renderer has
-    // responded, we will skip this state.
-    kWaitingForBeforeUnloadResponse,
-
-    // TODO(crbug.com/40896070): If we were to bring the active page back
-    // to let the user interact with the prompt (e.g., camera access), we need a
-    // state for that.
+    // Set when a BeforeUnload dialog is shown for the tracked navigation, and
+    // the cancel animation has finished to bring the active page back to the
+    // center of the viewport. From here the user can interact with the dialog
+    // to either start ot cancel the navigation.
+    kWaitingForBeforeUnloadUserInteraction,
 
     // Set when `OnGestureInvoked` is called, signaling the user has decided
     // to start the history navigation. Animations are displayed to bring the
@@ -133,27 +127,31 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
   // Indicates the animation abort reason for UMA metrics.
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused. Upon adding a new value, add it
-  // to `enums.xml` as well.
+  // to `tools/metrics/histograms/metadata/navigation/enums.xml` as well.
   enum class AnimationAbortReason {
     // The subscribed `RenderWidgetHost` was destroyed.
     kRenderWidgetHostDestroyed = 0,
 
+    // http://crbug.com/360888470: We don't abort the transition for redirect or
+    // when a new navigation commits. When those happens we let the invoke or
+    // cross-fade to finish. We also do not wait for Viz to activate a new
+    // frame before cross-fading.
     kMainCommitOnSubframeTransition = 1,
-    kNewCommitInPrimaryMainFrame = 2,
-    kCrossOriginRedirect = 3,
-    kNewCommitWhileDisplayingInvokeAnimation = 4,
-    kNewCommitWhileDisplayingCanceledAnimation = 5,
-    kNewCommitWhileWaitingForNewRendererToDraw = 6,
-    kNewCommitWhileWaitingForContentForNavigationEntryShown = 7,
-    kNewCommitWhileDisplayingCrossFadeAnimation = 8,
-    kNewCommitWhileWaitingForBeforeUnloadResponse = 9,
+    // Deprecated kNewCommitInPrimaryMainFrame = 2,
+    // Deprecated kCrossOriginRedirect = 3,
+    // Deprecated kNewCommitWhileDisplayingInvokeAnimation = 4,
+    // Deprecated kNewCommitWhileDisplayingCanceledAnimation = 5,
+    // Deprecated kNewCommitWhileWaitingForNewRendererToDraw = 6,
+    // Deprecated kNewCommitWhileWaitingForContentForNavigationEntryShown = 7,
+    // Deprecated kNewCommitWhileDisplayingCrossFadeAnimation = 8,
+    // Deprecated kNewCommitWhileWaitingForBeforeUnloadResponse = 9,
+
     kMultipleNavigationRequestsCreated = 10,
 
     // The navigation entry was deleted when the navigation was ready to commit.
     kNavigationEntryDeletedBeforeCommit = 11,
 
-    // The new frame is not activated in time.
-    kPostNavigationFirstFrameTimeout = 12,
+    // Deprecated kPostNavigationFirstFrameTimeout = 12,
 
     // The user started a new gesture while the first one is still on-going.
     kChainedBack = 13,
@@ -168,7 +166,16 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
 
     kCompositorDetached = 16,
 
-    kMaxValue = kCompositorDetached
+    // The animation manager is destroyed. This can happen when a visible
+    // `WebContents` is destroyed when its NativeView, layer and compositor are
+    // still intact, thus bypassing other observer hooks.
+    kAnimationManagerDestroyed = 17,
+
+    // Abort the animation when the physical size of the screen has changed.
+    // This can happen when the user rotates the phone mid-animation.
+    kPhysicalSizeChanged = 18,
+
+    kMaxValue = kPhysicalSizeChanged,
   };
 
   // Indicates what animation state caused input event suppression.
@@ -225,6 +232,7 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
       RenderFrameHostImpl* new_host);
   void OnNavigationCancelledBeforeStart(NavigationHandle* navigation_handle);
   void MaybeRecordIgnoredInput(const blink::WebInputEvent& event);
+  void OnBeforeUnloadDialogShown(int64_t navigation_id);
 
   // Notifies when the transition needs to be aborted.
   void AbortAnimation(AnimationAbortReason abort_reason);
@@ -287,6 +295,8 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
 
     // Two states to track the BeforeUnload handler. They are optional if the
     // active page does not have a BeforeUnload handler.
+    //
+    // The browser has asked the renderer to run the BeforeUnload handler.
     kBeforeUnloadDispatched,
     // This state functions as a boolean flag to distinguish how we get to
     // `kStarted`:
@@ -301,11 +311,14 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
     // The navigation is cancelled before it starts. Terminal state 1/3.
     // Reachable from `kNotStarted` and `kBeforeUnloadDispatched`.
     kCancelledBeforeStart,
+
     // The navigation has started in the browser.
     kStarted,
+
     // The navigation has either committed to a new doc, or an error page.
     // Terminal state 2/3.
     kCommitted,
+
     // The navigation has been cancelled (cancelled by a secondary navigation,
     // or aborted by the user). Terminal state 3/3.
     kCancelled,
@@ -395,6 +408,8 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
   // hasn't produced a frame yet.
   void OnPostNavigationFirstFrameTimeout();
 
+  void PostNavigationFirstFrameActivated();
+
   void ResetLiveOverlayLayer();
 
   // Calculate the start and end position of the rrect for the fallback UX, in
@@ -403,6 +418,9 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
   gfx::PointF CalculateRRectEndPx() const;
 
   int DipToPx(int dip) const;
+
+  void DeferDialogs();
+  void ResumeDialogs();
 
   const BackForwardTransitionAnimationManager::NavigationDirection
       nav_direction_;
@@ -550,6 +568,14 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
 
   IgnoringInputReason ignoring_input_reason_ =
       IgnoringInputReason::kNoOccurrence;
+
+  // Stores the token that identify the deferred dialogs. During the animated
+  // transition, the live page could show the user some permission prompts or
+  // alerts before unloaded. We suppress these dialogs during the transition.
+  // These dialogs will be re-presented if the swipe gesture does not unload the
+  // live page.
+  int deferred_dialog_token_ =
+      ui::ModalDialogManagerBridge::kInvalidDialogToken;
 
   base::WeakPtrFactory<BackForwardTransitionAnimator> weak_ptr_factory_{this};
 };

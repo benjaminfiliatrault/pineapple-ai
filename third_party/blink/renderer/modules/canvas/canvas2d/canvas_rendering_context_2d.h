@@ -260,8 +260,13 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
  private:
   friend class CanvasRenderingContext2DAutoRestoreSkCanvas;
-  FRIEND_TEST_ALL_PREFIXES(CanvasRenderingContext2DTest,
+  friend class CanvasRenderingContext2DTest;
+  FRIEND_TEST_ALL_PREFIXES(CanvasRenderingContext2DTestAccelerated,
                            PrepareMailboxWhenContextIsLostWithFailedRestore);
+
+  // Handles a page visibility change that occurs when the canvas is paintable.
+  // TODO(crbug.com/40280152): Fold this method into PageVisibilityChanged().
+  void OnPageVisibilityChangeWhenPaintable();
 
   bool Restore();
 

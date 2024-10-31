@@ -41,6 +41,7 @@
 #import "components/omnibox/browser/zero_suggest_provider.h"
 #import "components/optimization_guide/core/model_execution/model_execution_prefs.h"
 #import "components/optimization_guide/core/optimization_guide_prefs.h"
+#import "components/optimization_guide/optimization_guide_buildflags.h"
 #import "components/password_manager/core/browser/password_manager.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/payments/core/payment_prefs.h"
@@ -54,11 +55,12 @@
 #import "components/prefs/pref_service.h"
 #import "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #import "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#import "components/saved_tab_groups/pref_names.h"
+#import "components/saved_tab_groups/public/pref_names.h"
 #import "components/search_engines/template_url_prepopulate_data.h"
 #import "components/segmentation_platform/embedder/default_model/device_switcher_result_dispatcher.h"
 #import "components/segmentation_platform/embedder/home_modules/tips_manager/tips_manager.h"
 #import "components/segmentation_platform/public/segmentation_platform_service.h"
+#import "components/send_tab_to_self/pref_names.h"
 #import "components/sessions/core/session_id_generator.h"
 #import "components/sharing_message/sharing_sync_preference.h"
 #import "components/signin/core/browser/active_primary_accounts_metrics_recorder.h"
@@ -110,6 +112,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/price_tracking_promo/price_tracking_promo_prefs.h"
 #import "ios/chrome/browser/ui/content_suggestions/safety_check/safety_check_prefs.h"
+#import "ios/chrome/browser/ui/content_suggestions/tips/tips_prefs.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/features.h"
 #import "ios/chrome/browser/upgrade/model/upgrade_constants.h"
 #import "ios/chrome/browser/voice/model/voice_search_prefs_registration.h"
@@ -118,6 +121,10 @@
 #import "ios/components/cookie_util/cookie_constants.h"
 #import "ios/web/common/features.h"
 #import "ui/base/l10n/l10n_util.h"
+
+#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
+#import "components/optimization_guide/core/model_execution/model_execution_prefs.h"
+#endif
 
 namespace {
 
@@ -536,6 +543,10 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   PushNotificationService::RegisterLocalStatePrefs(registry);
   TipsNotificationClient::RegisterLocalStatePrefs(registry);
 
+#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
+  optimization_guide::model_execution::prefs::RegisterLocalStatePrefs(registry);
+#endif
+
   // Preferences related to the profile manager.
   registry->RegisterStringPref(prefs::kLastUsedProfile, std::string());
   registry->RegisterBooleanPref(prefs::kLegacyProfileHidden, false);
@@ -793,6 +804,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   PrefProxyConfigTrackerImpl::RegisterProfilePrefs(registry);
   PushNotificationService::RegisterProfilePrefs(registry);
   RegisterPriceTrackingPromoPrefs(registry);
+  tips_prefs::RegisterPrefs(registry);
   RegisterVoiceSearchBrowserStatePrefs(registry);
   safe_browsing::RegisterProfilePrefs(registry);
   segmentation_platform::SegmentationPlatformService::RegisterProfilePrefs(
@@ -817,7 +829,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   [BookmarkMediator registerBrowserStatePrefs:registry];
   [BookmarkPathCache registerBrowserStatePrefs:registry];
   [BookmarksHomeMediator registerBrowserStatePrefs:registry];
-  [ContentSuggestionsMediator registerBrowserStatePrefs:registry];
+  [ContentSuggestionsMediator registerProfilePrefs:registry];
   [HandoffManager registerBrowserStatePrefs:registry];
   [SigninCoordinator registerProfilePrefs:registry];
   [SigninPromoViewMediator registerProfilePrefs:registry];
@@ -1110,6 +1122,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterInt64Pref(kNtpShownBookmarksFolder, 3);
 
   registry->RegisterDictionaryPref(prefs::kIosPreRestoreAccountInfo);
+
+  registry->RegisterStringPref(
+      send_tab_to_self::prefs::kIOSSendTabToSelfLastReceivedTabURLPref,
+      std::string());
 }
 
 // This method should be periodically pruned of year+ old migrations.
@@ -1373,13 +1389,6 @@ void MigrateObsoleteProfilePrefs(const base::FilePath& state_path,
 
 void MigrateObsoleteUserDefault() {
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-
-  // Added 08/2023.
-  [defaults removeObjectForKey:@"userHasInteractedWithPinnedTabsOverflow"];
-
-  // Added 10/2023
-  [defaults removeObjectForKey:@"PathToBrowserStateToKeep"];
-  [defaults removeObjectForKey:@"HasBrowserStateBeenRemoved"];
 
   // TODO(b/322004644): Remove in M124+. Added 02/2024.
   [defaults removeObjectForKey:@"TimestampAppLaunchedOnColdStart"];

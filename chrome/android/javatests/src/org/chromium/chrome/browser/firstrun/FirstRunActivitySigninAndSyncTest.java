@@ -76,8 +76,8 @@ import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
-import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
+import org.chromium.components.signin.test.util.TestAccounts;
 import org.chromium.ui.test.util.DeviceRestriction;
 
 import java.util.concurrent.ExecutionException;
@@ -147,7 +147,7 @@ public class FirstRunActivitySigninAndSyncTest {
                 HistogramWatcher.newBuilder()
                         .expectNoRecords("Signin.SigninStartedAccessPoint")
                         .build();
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_1);
+        mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT1);
 
         launchFirstRunActivityAndWaitForNativeInitialization();
         onView(withId(R.id.signin_fre_selected_account)).check(matches(isDisplayed()));
@@ -161,29 +161,9 @@ public class FirstRunActivitySigninAndSyncTest {
     @Test
     @MediumTest
     @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
-    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
-    public void continueButtonClickShowsSyncConsentPage() {
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_1);
-        HistogramWatcher signinStartedWatcher =
-                HistogramWatcher.newSingleRecordWatcher(
-                        "Signin.SigninStartedAccessPoint", SigninAccessPoint.START_PAGE);
-
-        launchFirstRunActivityAndWaitForNativeInitialization();
-        waitUntilCurrentPageIs(SigninFirstRunFragment.class);
-        onView(withId(R.id.signin_fre_selected_account)).check(matches(isDisplayed()));
-
-        clickButton(R.id.signin_fre_continue_button);
-
-        signinStartedWatcher.assertExpected();
-        waitUntilCurrentPageIs(SyncConsentFirstRunFragment.class);
-    }
-
-    @Test
-    @MediumTest
-    @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
     @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     public void continueButtonClickShowsHistorySyncPage() {
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_1);
+        mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT1);
         launchFirstRunActivityAndWaitForNativeInitialization();
         waitUntilCurrentPageIs(SigninFirstRunFragment.class);
         onView(withId(R.id.signin_fre_selected_account)).check(matches(isDisplayed()));
@@ -200,7 +180,7 @@ public class FirstRunActivitySigninAndSyncTest {
         ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS,
     })
     public void destroyHistorySyncActivityWhenAccountIsRemoved() {
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_1);
+        mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT1);
         launchFirstRunActivityAndWaitForNativeInitialization();
         waitUntilCurrentPageIs(SigninFirstRunFragment.class);
 
@@ -209,7 +189,7 @@ public class FirstRunActivitySigninAndSyncTest {
         // History sync opt-in screen should be displayed.
         waitUntilCurrentPageIs(HistorySyncFirstRunFragment.class);
 
-        mAccountManagerTestRule.removeAccount(AccountManagerTestRule.TEST_ACCOUNT_1.getId());
+        mAccountManagerTestRule.removeAccount(TestAccounts.ACCOUNT1.getId());
 
         // History sync opt-in screen should be dismissed when the primary account is cleared
         ApplicationTestUtils.waitForActivityState(mFirstRunActivity, Stage.DESTROYED);
@@ -222,7 +202,7 @@ public class FirstRunActivitySigninAndSyncTest {
     @Policies.Add(@Policies.Item(key = "ForceSafeSearch", string = "true"))
     @DisabledTest(message = "https://crbug.com/1382901")
     public void continueButtonClickShowsSyncConsentPageWithChildAccount() {
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
+        mAccountManagerTestRule.addAccount(TestAccounts.CHILD_ACCOUNT);
         launchFirstRunActivityAndWaitForNativeInitialization();
         waitUntilCurrentPageIs(SigninFirstRunFragment.class);
         onView(withId(R.id.signin_fre_selected_account)).check(matches(isDisplayed()));
@@ -249,7 +229,7 @@ public class FirstRunActivitySigninAndSyncTest {
     @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     @Restriction(DeviceRestriction.RESTRICTION_TYPE_NON_AUTO)
     public void continueButtonClickShowsHistorySyncPageWithChildAccount() {
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
+        mAccountManagerTestRule.addAccount(TestAccounts.CHILD_ACCOUNT);
         launchFirstRunActivityAndWaitForNativeInitialization();
         waitUntilCurrentPageIs(SigninFirstRunFragment.class);
         onView(withId(R.id.signin_fre_selected_account)).check(matches(isDisplayed()));
@@ -272,7 +252,7 @@ public class FirstRunActivitySigninAndSyncTest {
     @Policies.Add(@Policies.Item(key = "ForceSafeSearch", string = "true"))
     @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
     public void dismissButtonNotShownOnResetForChildAccount() throws ExecutionException {
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
+        mAccountManagerTestRule.addAccount(TestAccounts.CHILD_ACCOUNT);
         launchFirstRunActivityAndWaitForNativeInitialization();
         waitUntilCurrentPageIs(SigninFirstRunFragment.class);
         onView(withId(R.id.signin_fre_dismiss_button)).check(matches(not(isDisplayed())));
@@ -282,21 +262,6 @@ public class FirstRunActivitySigninAndSyncTest {
         pressBack();
 
         onView(withId(R.id.signin_fre_dismiss_button)).check(matches(not(isDisplayed())));
-    }
-
-    @Test
-    @MediumTest
-    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
-    public void continueButtonClickSkipsSyncConsentPageWhenCannotUseGooglePlayServices() {
-        when(mExternalAuthUtilsMock.canUseGooglePlayServices()).thenReturn(false);
-        launchFirstRunActivityAndWaitForNativeInitialization();
-        waitUntilCurrentPageIs(SigninFirstRunFragment.class);
-        onView(withId(R.id.signin_fre_selected_account)).check(matches(not(isDisplayed())));
-        onView(withId(R.id.signin_fre_dismiss_button)).check(matches(not(isDisplayed())));
-
-        clickButton(R.id.signin_fre_continue_button);
-
-        ApplicationTestUtils.waitForActivityState(mFirstRunActivity, Stage.DESTROYED);
     }
 
     @Test
@@ -325,7 +290,7 @@ public class FirstRunActivitySigninAndSyncTest {
     public void continueButtonClickShowsSearchEnginePageWhenItIsEnabled() {
         when(mLocalManagerDelegateMock.getSearchEnginePromoShowType())
                 .thenReturn(SearchEnginePromoType.SHOW_NEW);
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_1);
+        mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT1);
         launchFirstRunActivityAndWaitForNativeInitialization();
         waitUntilCurrentPageIs(SigninFirstRunFragment.class);
         if (!isAutomotive()) {
@@ -345,7 +310,7 @@ public class FirstRunActivitySigninAndSyncTest {
     public void dismissButtonClickShowsSearchEnginePageWhenItIsEnabled() {
         when(mLocalManagerDelegateMock.getSearchEnginePromoShowType())
                 .thenReturn(SearchEnginePromoType.SHOW_NEW);
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_1);
+        mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT1);
         launchFirstRunActivityAndWaitForNativeInitialization();
         waitUntilCurrentPageIs(SigninFirstRunFragment.class);
         onView(withId(R.id.signin_fre_selected_account)).check(matches(isDisplayed()));
@@ -353,25 +318,6 @@ public class FirstRunActivitySigninAndSyncTest {
         clickButton(R.id.signin_fre_dismiss_button);
 
         waitUntilCurrentPageIs(DefaultSearchEngineFirstRunFragment.class);
-    }
-
-    @Test
-    @MediumTest
-    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
-    @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
-    public void acceptingSyncEndsFreAndEnablesSync() {
-        when(mExternalAuthUtilsMock.canUseGooglePlayServices(any())).thenReturn(true);
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.AADC_ADULT_ACCOUNT);
-        launchFirstRunActivityAndWaitForNativeInitialization();
-        waitUntilCurrentPageIs(SigninFirstRunFragment.class);
-        clickButton(R.id.signin_fre_continue_button);
-        completeAutoDeviceLockIfNeeded();
-        waitUntilCurrentPageIs(SyncConsentFirstRunFragment.class);
-
-        clickButton(R.id.button_primary);
-
-        ApplicationTestUtils.waitForActivityState(mFirstRunActivity, Stage.DESTROYED);
-        SyncTestUtil.waitForSyncFeatureEnabled();
     }
 
     @Test
@@ -396,25 +342,6 @@ public class FirstRunActivitySigninAndSyncTest {
 
     @Test
     @MediumTest
-    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
-    @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
-    public void refusingSyncEndsFreAndDoesNotEnableSync() {
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.AADC_ADULT_ACCOUNT);
-        launchFirstRunActivityAndWaitForNativeInitialization();
-        waitUntilCurrentPageIs(SigninFirstRunFragment.class);
-        clickButton(R.id.signin_fre_continue_button);
-        completeAutoDeviceLockIfNeeded();
-        waitUntilCurrentPageIs(SyncConsentFirstRunFragment.class);
-
-        clickMoreThenClickButton(R.id.button_secondary);
-
-        ApplicationTestUtils.waitForActivityState(mFirstRunActivity, Stage.DESTROYED);
-
-        assertFalse(SyncTestUtil.hasSyncConsent());
-    }
-
-    @Test
-    @MediumTest
     @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
     public void refusingHistorySyncEndsFreAndDoesNotEnableHistorySync() {
@@ -435,35 +362,13 @@ public class FirstRunActivitySigninAndSyncTest {
 
     @Test
     @MediumTest
-    @Features.DisableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
-    @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
-    public void clickingSettingsEndsFreAndStartsEnablingSync() {
-        when(mExternalAuthUtilsMock.canUseGooglePlayServices(any())).thenReturn(true);
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_1);
-        launchFirstRunActivityAndWaitForNativeInitialization();
-        waitUntilCurrentPageIs(SigninFirstRunFragment.class);
-        clickButton(R.id.signin_fre_continue_button);
-        completeAutoDeviceLockIfNeeded();
-        waitUntilCurrentPageIs(SyncConsentFirstRunFragment.class);
-
-        onView(withId(R.id.signin_details_description)).perform(new LinkClick());
-
-        ApplicationTestUtils.waitForActivityState(mFirstRunActivity, Stage.DESTROYED);
-
-        // Sync consent is granted but sync-the-feature won't become enabled until the user clicks
-        // the "Confirm" button in settings.
-        SyncTestUtil.waitForSyncConsent();
-    }
-
-    @Test
-    @MediumTest
     // ChildAccountStatusSupplier uses AppRestrictions to quickly detect non-supervised cases,
     // adding at least one policy via AppRestrictions prevents that.
     @Policies.Add(@Policies.Item(key = "ForceSafeSearch", string = "true"))
     @DisabledTest(message = "https://crbug.com/1392133")
     public void acceptingSyncForChildAccountEndsFreAndEnablesSync() {
         when(mExternalAuthUtilsMock.canUseGooglePlayServices(any())).thenReturn(true);
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
+        mAccountManagerTestRule.addAccount(TestAccounts.CHILD_ACCOUNT);
         launchFirstRunActivityAndWaitForNativeInitialization();
         waitUntilCurrentPageIs(SigninFirstRunFragment.class);
         onView(withId(R.id.signin_fre_selected_account)).check(matches(isDisplayed()));
@@ -482,41 +387,11 @@ public class FirstRunActivitySigninAndSyncTest {
     // ChildAccountStatusSupplier uses AppRestrictions to quickly detect non-supervised cases,
     // adding at least one policy via AppRestrictions prevents that.
     @Policies.Add(@Policies.Item(key = "ForceSafeSearch", string = "true"))
-    @Features.DisableFeatures({ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS})
-    @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
-    public void refusingSyncForChildAccountEndsFreAndDoesNotEnableSync() {
-        when(mExternalAuthUtilsMock.canUseGooglePlayServices(any())).thenReturn(true);
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
-        launchFirstRunActivityAndWaitForNativeInitialization();
-        waitUntilCurrentPageIs(SigninFirstRunFragment.class);
-        onView(withId(R.id.signin_fre_selected_account)).check(matches(isDisplayed()));
-        clickButton(R.id.signin_fre_continue_button);
-        completeAutoDeviceLockIfNeeded();
-        waitUntilCurrentPageIs(SyncConsentFirstRunFragment.class);
-
-        clickMoreThenClickButton(R.id.button_secondary);
-
-        ApplicationTestUtils.waitForActivityState(mFirstRunActivity, Stage.DESTROYED);
-
-        CriteriaHelper.pollUiThread(
-                () -> {
-                    return IdentityServicesProvider.get()
-                            .getIdentityManager(ProfileManager.getLastUsedRegularProfile())
-                            .hasPrimaryAccount(ConsentLevel.SIGNIN);
-                });
-        assertFalse(SyncTestUtil.hasSyncConsent());
-    }
-
-    @Test
-    @MediumTest
-    // ChildAccountStatusSupplier uses AppRestrictions to quickly detect non-supervised cases,
-    // adding at least one policy via AppRestrictions prevents that.
-    @Policies.Add(@Policies.Item(key = "ForceSafeSearch", string = "true"))
     @Features.EnableFeatures({ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS})
     @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
     public void refusingHistorySyncForChildAccountEndsFreAndDoesNotEnableHistorySync() {
         when(mExternalAuthUtilsMock.canUseGooglePlayServices(any())).thenReturn(true);
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
+        mAccountManagerTestRule.addAccount(TestAccounts.CHILD_ACCOUNT);
         launchFirstRunActivityAndWaitForNativeInitialization();
         waitUntilCurrentPageIs(SigninFirstRunFragment.class);
         onView(withId(R.id.signin_fre_selected_account)).check(matches(isDisplayed()));
@@ -545,7 +420,7 @@ public class FirstRunActivitySigninAndSyncTest {
     @DisabledTest(message = "https://crbug.com/1459076")
     public void clickingSettingsThenCancelForChildAccountDoesNotEnableSync() {
         when(mExternalAuthUtilsMock.canUseGooglePlayServices(any())).thenReturn(true);
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
+        mAccountManagerTestRule.addAccount(TestAccounts.CHILD_ACCOUNT);
         launchFirstRunActivityAndWaitForNativeInitialization();
         waitUntilCurrentPageIs(SigninFirstRunFragment.class);
         clickButton(R.id.signin_fre_continue_button);
@@ -637,7 +512,7 @@ public class FirstRunActivitySigninAndSyncTest {
 
     private void completeAutoDeviceLockIfNeeded() {
         if (mFirstRunActivity.getCurrentFragmentForTesting() instanceof SigninFirstRunFragment) {
-            SigninTestUtil.completeAutoDeviceLockIfNeeded(
+            SigninTestUtil.completeAutoDeviceLockForFirstRunIfNeeded(
                     (SigninFirstRunFragment) mFirstRunActivity.getCurrentFragmentForTesting());
         }
     }

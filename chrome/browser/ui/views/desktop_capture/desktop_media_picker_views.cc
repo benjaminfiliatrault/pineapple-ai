@@ -46,7 +46,6 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "media/base/media_switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
@@ -329,12 +328,6 @@ std::unique_ptr<views::ScrollView> CreateScrollView(bool audio_requested) {
 
 }  // namespace
 
-// Enable an updated dialog UI for the getDisplayMedia picker dialog under the
-// preferCurrentTab constraint.
-BASE_FEATURE(kShareThisTabDialog,
-             "ShareThisTabDialog",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 bool DesktopMediaPickerDialogView::AudioSupported(DesktopMediaList::Type type) {
   switch (type) {
     case DesktopMediaList::Type::kScreen:
@@ -427,6 +420,8 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
   description_label->SetMultiLine(true);
   description_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   description_label->SetTextStyle(views::style::STYLE_BODY_3);
+  description_label->SetEnabledColorId(
+      kColorDesktopMediaPickerDescriptionLabel);
   description_label_ = AddChildView(std::move(description_label));
 
   std::vector<std::pair<std::u16string, std::unique_ptr<View>>> panes;
@@ -472,8 +467,7 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
         screen_scroll_view->SetContents(list_controller->CreateView(
             kGenericScreenStyle, kSingleScreenStyle, screen_title_text,
             DesktopMediaList::Type::kScreen));
-        // If the DisplayMediaPickerRedesign flag is active, clip max height to
-        // 1.5 item heights to allow space for the audio-toggle controller.
+        // Allow space for the audio-toggle controller.
         screen_scroll_view->ClipHeightTo(
             kGenericScreenStyle.item_size.height(),
             kGenericScreenStyle.item_size.height() * 3 / 2);
@@ -1212,7 +1206,7 @@ void DesktopMediaPickerViews::NotifyDialogResult(const DesktopMediaID& source) {
 // static
 std::unique_ptr<DesktopMediaPicker> DesktopMediaPicker::Create(
     const content::MediaStreamRequest* request) {
-  if (base::FeatureList::IsEnabled(kShareThisTabDialog) && request &&
+  if (request &&
       request->video_type ==
           blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB) {
     return std::make_unique<ShareThisTabDialogViews>();

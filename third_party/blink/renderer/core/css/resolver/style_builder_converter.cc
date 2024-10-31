@@ -65,6 +65,7 @@
 #include "third_party/blink/renderer/core/css/css_ratio_value.h"
 #include "third_party/blink/renderer/core/css/css_reflect_value.h"
 #include "third_party/blink/renderer/core/css/css_relative_color_value.h"
+#include "third_party/blink/renderer/core/css/css_repeat_value.h"
 #include "third_party/blink/renderer/core/css/css_scoped_keyword_value.h"
 #include "third_party/blink/renderer/core/css/css_shadow_value.h"
 #include "third_party/blink/renderer/core/css/css_uri_value.h"
@@ -214,18 +215,23 @@ DynamicRangeLimit StyleBuilderConverterBase::ConvertDynamicRangeLimit(
     const CSSValue& value) {
   if (auto* mix_value =
           DynamicTo<cssvalue::CSSDynamicRangeLimitMixValue>(value)) {
-    const DynamicRangeLimit limit1 =
-        ConvertDynamicRangeLimit(mix_value->Limit1());
-    const DynamicRangeLimit limit2 =
-        ConvertDynamicRangeLimit(mix_value->Limit2());
-    const float fraction = 0.01f * mix_value->Percentage().GetFloatValue();
+    float standard_mix_sum = 0.f;
+    float constrained_high_mix_sum = 0.f;
+    float fraction_sum = 0.f;
+    for (size_t i = 0; i < mix_value->Limits().size(); ++i) {
+      const DynamicRangeLimit limit =
+          ConvertDynamicRangeLimit(*mix_value->Limits()[i]);
+      const float fraction =
+          0.01f * mix_value->Percentages()[i]->GetFloatValue();
+      fraction_sum += fraction;
+      standard_mix_sum += fraction * limit.standard_mix;
+      constrained_high_mix_sum += fraction * limit.constrained_high_mix;
+    }
+    CHECK_NE(fraction_sum, 0.f);
     return DynamicRangeLimit(
-        /*standard_mix=*/(1 - fraction) * limit1.standard_mix +
-            fraction * limit2.standard_mix,
-        /*constrained_high_mix=*/(1 - fraction) * limit1.constrained_high_mix +
-            fraction * limit2.constrained_high_mix);
-  }
-  if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
+        /*standard_mix=*/standard_mix_sum / fraction_sum,
+        /*constrained_high_mix=*/constrained_high_mix_sum / fraction_sum);
+  } else if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
     switch (identifier_value->GetValueID()) {
       case CSSValueID::kHigh:
         return DynamicRangeLimit(cc::PaintFlags::DynamicRangeLimit::kHigh);
@@ -1850,8 +1856,9 @@ Length StyleBuilderConverter::ConvertLengthSizing(StyleResolverState& state,
     case CSSValueID::kMaxContent:
     case CSSValueID::kWebkitMaxContent:
       return Length::MaxContent();
+    case CSSValueID::kStretch:
     case CSSValueID::kWebkitFillAvailable:
-      return Length::FillAvailable();
+      return Length::Stretch();
     case CSSValueID::kWebkitFitContent:
     case CSSValueID::kFitContent:
       return Length::FitContent();
@@ -2255,6 +2262,61 @@ LengthSize StyleBuilderConverter::ConvertRadius(StyleResolverState& state,
   return LengthSize(radius_width, radius_height);
 }
 
+GapColorDataList StyleBuilderConverter::ConvertGapColorDataList(
+    StyleResolverState& state,
+    const CSSValue& value,
+    bool for_visited_link) {
+  // The `value` will not be a list in two scenarios:
+  // 1. When using the legacy 'column-rule-color'.
+  // 2. When the fast parse path is taken (see
+  // CSSParserFastPaths::MaybeParseValue). In these cases, construct a
+  // GapColorDataList with a single StyleColor.
+  if (!DynamicTo<CSSValueList>(value)) {
+    return GapColorDataList(ConvertStyleColor(state, value, for_visited_link));
+  }
+  CHECK(RuntimeEnabledFeatures::CSSGapDecorationEnabled());
+
+  // The CSS Gap Decorations API accepts a space separated list of values.
+  // These values can be an auto repeater, an integer repeater, or a single
+  // color.
+  // See: https://kbabbitt.github.io/css-gap-decorations/#column-row-rule-color
+  const auto& values = To<CSSValueList>(value);
+  GapDataVector gap_data_list;
+  gap_data_list.ReserveInitialCapacity(values.length());
+
+  for (const auto& curr_value : values) {
+    GapColorData gap_data;
+    if (auto* gap_repeat_value =
+            DynamicTo<cssvalue::CSSRepeatValue>(curr_value.Get())) {
+      StyleColorVector gap_colors;
+      gap_colors.ReserveInitialCapacity(gap_repeat_value->Values().length());
+      for (const auto& color : gap_repeat_value->Values()) {
+        gap_colors.push_back(
+            ConvertStyleColor(state, *color, for_visited_link));
+      }
+
+      StyleColorRepeater* color_repeater;
+      if (gap_repeat_value->IsAutoRepeatValue()) {
+        color_repeater =
+            MakeGarbageCollected<StyleColorRepeater>(std::move(gap_colors));
+      } else {
+        int repeat_count = gap_repeat_value->Repetitions()->ComputeInteger(
+            state.CssToLengthConversionData());
+        color_repeater = MakeGarbageCollected<StyleColorRepeater>(
+            std::move(gap_colors), repeat_count);
+      }
+      gap_data = GapColorData(color_repeater);
+    } else {
+      gap_data = GapColorData(
+          ConvertStyleColor(state, *curr_value.Get(), for_visited_link));
+    }
+
+    gap_data_list.push_back(gap_data);
+  }
+
+  return GapColorDataList(std::move(gap_data_list));
+}
+
 ShadowData StyleBuilderConverter::ConvertShadow(
     const CSSToLengthConversionData& conversion_data,
     StyleResolverState* state,
@@ -2395,10 +2457,41 @@ StyleViewTransitionGroup StyleBuilderConverter::ConvertViewTransitionGroup(
       ConvertCustomIdent(state, value)->GetName());
 }
 
-ScopedCSSName* StyleBuilderConverter::ConvertViewTransitionName(
+StyleViewTransitionCaptureMode
+StyleBuilderConverter::ConvertViewTransitionCaptureMode(
     StyleResolverState& state,
     const CSSValue& value) {
-  return ConvertNoneOrCustomIdent(state, value);
+  if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
+    switch (ident->GetValueID()) {
+      case CSSValueID::kLayered:
+        return StyleViewTransitionCaptureMode::kLayered;
+      case CSSValueID::kFlat:
+        return StyleViewTransitionCaptureMode::kFlat;
+      default:
+        NOTREACHED();
+    }
+  }
+
+  return StyleViewTransitionCaptureMode::kLayered;
+}
+
+StyleViewTransitionName* StyleBuilderConverter::ConvertViewTransitionName(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  state.SetHasTreeScopedReference();
+  if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
+    switch (ident->GetValueID()) {
+      case CSSValueID::kNone:
+        return nullptr;
+      case CSSValueID::kAuto:
+        // TODO: tree scope for auto
+        return StyleViewTransitionName::Auto(&state.GetDocument());
+      default:
+        NOTREACHED();
+    }
+  }
+  ScopedCSSName* name = ConvertCustomIdent(state, value);
+  return StyleViewTransitionName::Create(name->GetName(), name->GetTreeScope());
 }
 
 ScopedCSSNameList* StyleBuilderConverter::ConvertViewTransitionClass(
@@ -2417,8 +2510,13 @@ ScopedCSSNameList* StyleBuilderConverter::ConvertViewTransitionClass(
   return MakeGarbageCollected<ScopedCSSNameList>(std::move(names));
 }
 
-StyleColor ResolveColorValue(const CSSValue& value,
-                             const ResolveColorValueContext& context) {
+namespace {
+
+const CSSValue& ResolveLightDarkPair(const CSSLightDarkValuePair& value,
+                                     const ResolveColorValueContext& context);
+
+StyleColor ResolveColorValueImpl(const CSSValue& value,
+                                 const ResolveColorValueContext& context) {
   if (auto* color_value = DynamicTo<cssvalue::CSSColor>(value)) {
     Color result_color = color_value->Value();
     result_color.ResolveNonFiniteValues();
@@ -2448,9 +2546,9 @@ StyleColor ResolveColorValue(const CSSValue& value,
 
   if (auto* color_mix_value = DynamicTo<cssvalue::CSSColorMixValue>(value)) {
     const StyleColor style_color1 =
-        ResolveColorValue(color_mix_value->Color1(), context);
+        ResolveColorValueImpl(color_mix_value->Color1(), context);
     const StyleColor style_color2 =
-        ResolveColorValue(color_mix_value->Color2(), context);
+        ResolveColorValueImpl(color_mix_value->Color2(), context);
     double alpha_multiplier = 0.0;
     double mix_amount = 0.0;
     // TODO(crbug.com/40238188): Not sure what is appropriate to return when
@@ -2476,7 +2574,7 @@ StyleColor ResolveColorValue(const CSSValue& value,
   if (auto* relative_color_value =
           DynamicTo<cssvalue::CSSRelativeColorValue>(value)) {
     const StyleColor origin_color =
-        ResolveColorValue(relative_color_value->OriginColor(), context);
+        ResolveColorValueImpl(relative_color_value->OriginColor(), context);
     const StyleColor::UnresolvedRelativeColor* unresolved_relative_color =
         MakeGarbageCollected<StyleColor::UnresolvedRelativeColor>(
             origin_color, relative_color_value->ColorInterpolationSpace(),
@@ -2494,11 +2592,50 @@ StyleColor ResolveColorValue(const CSSValue& value,
   }
 
   auto& light_dark_pair = To<CSSLightDarkValuePair>(value);
-  const CSSValue& color_value =
-      context.used_color_scheme == mojom::blink::ColorScheme::kLight
-          ? light_dark_pair.First()
-          : light_dark_pair.Second();
-  return ResolveColorValue(color_value, context);
+  const CSSValue& color_value = ResolveLightDarkPair(light_dark_pair, context);
+  return ResolveColorValueImpl(color_value, context);
+}
+
+const CSSValue& ResolveLightDarkPair(
+    const CSSLightDarkValuePair& light_dark_pair,
+    const ResolveColorValueContext& context) {
+  return context.used_color_scheme == mojom::blink::ColorScheme::kLight
+             ? light_dark_pair.First()
+             : light_dark_pair.Second();
+}
+
+bool ShouldConvertLegacyColorSpaceToSRGB(const CSSValue& value) {
+  return value.IsRelativeColorValue() || value.IsColorMixValue();
+}
+
+}  // anonymous namespace
+
+StyleColor ResolveColorValue(const CSSValue& value,
+                             const ResolveColorValueContext& context) {
+  // The rules for converting at the top level should apply transitively through
+  // light-dark().
+  if (auto* light_dark_pair = DynamicTo<CSSLightDarkValuePair>(value)) {
+    const CSSValue& light_dark_result =
+        ResolveLightDarkPair(*light_dark_pair, context);
+    return ResolveColorValue(light_dark_result, context);
+  }
+
+  StyleColor result = ResolveColorValueImpl(value, context);
+  if (ShouldConvertLegacyColorSpaceToSRGB(value) && result.IsAbsoluteColor()) {
+    Color color = result.GetColor();
+    if (Color::IsLegacyColorSpace(color.GetColorSpace())) {
+      // Missing components can be carried forward when converting rgb(...) to
+      // color(srgb, ...) since the two color spaces have analogous components.
+      // For other legacy spaces, conversion to color(srgb, ...) requires
+      // resolving missing components.
+      const bool resolve_missing_components =
+          (color.GetColorSpace() != Color::ColorSpace::kSRGBLegacy);
+      color.ConvertToColorSpace(Color::ColorSpace::kSRGB,
+                                resolve_missing_components);
+      result = StyleColor(color);
+    }
+  }
+  return result;
 }
 
 StyleColor StyleBuilderConverter::ConvertStyleColor(StyleResolverState& state,
@@ -2948,7 +3085,7 @@ static const CSSValue& ComputeColorValue(
       .is_in_web_app_scope = document.IsInWebAppScope(),
       .for_visited_link = false};
   const StyleColor style_color = ResolveColorValue(color_value, context);
-  return *ComputedStyleUtils::ValueForColor(style_color);
+  return *style_color.ToCSSValue();
 }
 
 static const CSSValue& ComputeRegisteredPropertyValue(

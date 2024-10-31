@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "third_party/blink/renderer/core/css/counter_style_map.h"
-#include "third_party/blink/renderer/core/css/css_appearance_auto_base_select_value_pair.h"
 #include "third_party/blink/renderer/core/css/css_attr_value_tainting.h"
 #include "third_party/blink/renderer/core/css/css_axis_value.h"
 #include "third_party/blink/renderer/core/css/css_basic_shape_values.h"
@@ -47,6 +46,7 @@
 #include "third_party/blink/renderer/core/css/css_property_value.h"
 #include "third_party/blink/renderer/core/css/css_ratio_value.h"
 #include "third_party/blink/renderer/core/css/css_ray_value.h"
+#include "third_party/blink/renderer/core/css/css_repeat_value.h"
 #include "third_party/blink/renderer/core/css/css_revert_layer_value.h"
 #include "third_party/blink/renderer/core/css/css_revert_value.h"
 #include "third_party/blink/renderer/core/css/css_scoped_keyword_value.h"
@@ -816,34 +816,6 @@ CSSLightDarkValuePair* ConsumeLightDark(Func consume_value,
   }
   stream.ConsumeWhitespace();
   return MakeGarbageCollected<CSSLightDarkValuePair>(light_value, dark_value);
-}
-
-CSSAppearanceAutoBaseSelectValuePair* ConsumeAppearanceAutoBaseSelectColor(
-    CSSParserTokenStream& stream,
-    const CSSParserContext& context) {
-  if (stream.Peek().FunctionId() !=
-      CSSValueID::kInternalAppearanceAutoBaseSelect) {
-    return nullptr;
-  }
-
-  CSSValue* auto_value;
-  CSSValue* base_select_value;
-  {
-    CSSParserTokenStream::RestoringBlockGuard guard(stream);
-    stream.ConsumeWhitespace();
-    auto_value = ConsumeColor(stream, context);
-    if (!auto_value || !ConsumeCommaIncludingWhitespace(stream)) {
-      return nullptr;
-    }
-    base_select_value = ConsumeColor(stream, context);
-    if (!base_select_value || !stream.AtEnd()) {
-      return nullptr;
-    }
-    guard.Release();
-  }
-  stream.ConsumeWhitespace();
-  return MakeGarbageCollected<CSSAppearanceAutoBaseSelectValuePair>(
-      auto_value, base_select_value);
 }
 
 // https://drafts.csswg.org/css-syntax/#typedef-any-value
@@ -2079,7 +2051,7 @@ CSSValue* ConsumeColorContrast(CSSParserTokenStream& stream,
 namespace {
 
 bool SystemAccentColorAllowed(const CSSParserContext& context) {
-  if (!RuntimeEnabledFeatures::CSSSystemAccentColorEnabled()) {
+  if (!RuntimeEnabledFeatures::CSSAccentColorKeywordEnabled()) {
     return false;
   }
 
@@ -2139,14 +2111,6 @@ CSSValue* ConsumeColorInternal(CSSParserTokenStream& stream,
   if (CSSValue* functional_syntax_color =
           parser.ConsumeFunctionalSyntaxColor(stream, context)) {
     return functional_syntax_color;
-  }
-
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
-      IsUASheetBehavior(context.Mode())) {
-    if (CSSAppearanceAutoBaseSelectValuePair* auto_base_select_pair =
-            ConsumeAppearanceAutoBaseSelectColor(stream, context)) {
-      return auto_base_select_pair;
-    }
   }
 
   if (allowed_colors == AllowedColors::kAll) {
@@ -3201,7 +3165,7 @@ static CSSValue* ConsumePaint(CSSParserTokenStream& stream,
         /*is_animation_tainted=*/false,
         /*must_contain_variable_reference=*/false,
         /*restricted_value=*/false, /*comma_ends_declaration=*/true,
-        important_ignored, context.GetExecutionContext());
+        important_ignored, context);
     if (!argument) {
       return nullptr;
     }
@@ -3627,6 +3591,19 @@ void CountKeywordOnlyPropertyUsage(CSSPropertyID property,
     case CSSPropertyID::kOverflowY:
       if (value_id == CSSValueID::kOverlay) {
         context.Count(WebFeature::kCSSValueOverflowOverlay);
+      }
+      break;
+    case CSSPropertyID::kWritingMode:
+    case CSSPropertyID::kWebkitWritingMode:
+      if (value_id == CSSValueID::kVerticalRl || value_id == CSSValueID::kTb ||
+          value_id == CSSValueID::kTbRl) {
+        context.Count(WebFeature::kCssValueWritingModeVerticalRl);
+      } else if (value_id == CSSValueID::kVerticalLr) {
+        context.Count(WebFeature::kCssValueWritingModeVerticalLr);
+      } else if (value_id == CSSValueID::kSidewaysRl) {
+        context.Count(WebFeature::kCssValueWritingModeSidewaysRl);
+      } else if (value_id == CSSValueID::kSidewaysLr) {
+        context.Count(WebFeature::kCssValueWritingModeSidewaysLr);
       }
       break;
     default:
@@ -4998,31 +4975,98 @@ CSSValue* ParseBorderWidthSide(CSSParserTokenStream& stream,
 
 const CSSValue* ParseBorderStyleSide(CSSParserTokenStream& stream,
                                      const CSSParserContext& context) {
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
-      IsUASheetBehavior(context.Mode()) &&
-      stream.Peek().FunctionId() ==
-          CSSValueID::kInternalAppearanceAutoBaseSelect) {
-    CSSValue* auto_value;
-    CSSValue* base_select_value;
-    {
-      CSSParserTokenStream::RestoringBlockGuard guard(stream);
-      stream.ConsumeWhitespace();
-      auto_value = ConsumeIdent(stream);
-      if (!auto_value || !ConsumeCommaIncludingWhitespace(stream)) {
-        return nullptr;
-      }
-      base_select_value = ConsumeIdent(stream);
-      if (!base_select_value || !stream.AtEnd()) {
-        return nullptr;
-      }
-      guard.Release();
-    }
-    stream.ConsumeWhitespace();
-    return MakeGarbageCollected<CSSAppearanceAutoBaseSelectValuePair>(
-        auto_value, base_select_value);
-  }
   return ParseLonghand(CSSPropertyID::kBorderLeftStyle, CSSPropertyID::kBorder,
                        context, stream);
+}
+
+cssvalue::CSSRepeatValue* ConsumeGapColorRepeatFunction(
+    CSSParserTokenStream& stream,
+    const CSSParserContext& context) {
+  DCHECK_EQ(stream.Peek().GetType(), kFunctionToken);
+  CSSParserTokenStream::RestoringBlockGuard guard(stream);
+
+  stream.ConsumeWhitespace();
+
+  CSSPrimitiveValue* repetition_value = nullptr;
+  CSSValueList* repeated_colors = CSSValueList::CreateSpaceSeparated();
+
+  if (IdentMatches<CSSValueID::kAuto>(stream.Peek().Id())) {
+    CHECK(stream.ConsumeIncludingWhitespace().Id() == CSSValueID::kAuto);
+  } else {
+    // Means it's an integer repetition.
+    repetition_value = ConsumeIntegerOrNumberCalc(
+        stream, context, CSSPrimitiveValue::ValueRange::kPositiveInteger);
+    if (!repetition_value) {
+      return nullptr;
+    }
+  }
+
+  // After auto/integer we expect a comma.
+  if (!ConsumeCommaIncludingWhitespace(stream)) {
+    return nullptr;
+  }
+
+  while (!stream.AtEnd()) {
+    CSSValue* color = ConsumeColor(stream, context);
+    if (!color) {
+      return nullptr;
+    }
+    repeated_colors->Append(*color);
+  }
+
+  if (repeated_colors->length() == 0) {
+    return nullptr;
+  }
+
+  guard.Release();
+  stream.ConsumeWhitespace();
+
+  return MakeGarbageCollected<cssvalue::CSSRepeatValue>(repetition_value,
+                                                        *repeated_colors);
+}
+
+CSSValue* ConsumeGapDecorationColorList(CSSParserTokenStream& stream,
+                                        const CSSParserContext& context) {
+  // Consume single color if the Gap decoration feature flag is not
+  // enabled.
+  if (!RuntimeEnabledFeatures::CSSGapDecorationEnabled()) {
+    return ConsumeColor(stream, context);
+  }
+
+  // List to holds all the color values.
+  CSSValueList* values = CSSValueList::CreateSpaceSeparated();
+
+  if (stream.AtEnd()) {
+    return nullptr;
+  }
+
+  // Flag to limit to one auto-repeat.
+  bool seen_auto_repeat = false;
+
+  // Consume the color values(s) in the stream.
+  do {
+    if (stream.Peek().FunctionId() == CSSValueID::kRepeat) {
+      auto* repeat_value = ConsumeGapColorRepeatFunction(stream, context);
+      if (!repeat_value) {
+        return nullptr;
+      }
+      if (repeat_value->IsAutoRepeatValue()) {
+        if (seen_auto_repeat) {
+          return nullptr;
+        }
+        seen_auto_repeat = true;
+      }
+      values->Append(*repeat_value);
+    } else {
+      CSSValue* color = ConsumeColor(stream, context);
+      if (!color) {
+        break;
+      }
+      values->Append(*color);
+    }
+  } while (!stream.AtEnd());
+
+  return values;
 }
 
 CSSValue* ConsumeShadow(CSSParserTokenStream& stream,
@@ -6507,6 +6551,10 @@ bool ValidWidthOrHeightKeyword(CSSValueID id, const CSSParserContext& context) {
     }
     return true;
   }
+  if (RuntimeEnabledFeatures::LayoutStretchEnabled() &&
+      id == CSSValueID::kStretch) {
+    return true;
+  }
   return false;
 }
 
@@ -7268,12 +7316,6 @@ CSSValue* ConsumeBorderColorSide(CSSParserTokenStream& stream,
   bool allow_quirky_colors = IsQuirksModeBehavior(context.Mode()) &&
                              (shorthand == CSSPropertyID::kInvalid ||
                               shorthand == CSSPropertyID::kBorderColor);
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
-      stream.Peek().FunctionId() ==
-          CSSValueID::kInternalAppearanceAutoBaseSelect &&
-      IsUASheetBehavior(context.Mode())) {
-    return ConsumeAppearanceAutoBaseSelectColor(stream, context);
-  }
   return ConsumeColorInternal(stream, context, allow_quirky_colors,
                               AllowedColors::kAll);
 }
@@ -7281,29 +7323,6 @@ CSSValue* ConsumeBorderColorSide(CSSParserTokenStream& stream,
 CSSValue* ConsumeBorderWidth(CSSParserTokenStream& stream,
                              const CSSParserContext& context,
                              UnitlessQuirk unitless) {
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
-      IsUASheetBehavior(context.Mode()) &&
-      stream.Peek().FunctionId() ==
-          CSSValueID::kInternalAppearanceAutoBaseSelect) {
-    CSSValue* auto_value;
-    CSSValue* base_select_value;
-    {
-      CSSParserTokenStream::RestoringBlockGuard guard(stream);
-      stream.ConsumeWhitespace();
-      auto_value = ConsumeLineWidth(stream, context, unitless);
-      if (!auto_value || !ConsumeCommaIncludingWhitespace(stream)) {
-        return nullptr;
-      }
-      base_select_value = ConsumeLineWidth(stream, context, unitless);
-      if (!base_select_value || !stream.AtEnd()) {
-        return nullptr;
-      }
-      guard.Release();
-    }
-    stream.ConsumeWhitespace();
-    return MakeGarbageCollected<CSSAppearanceAutoBaseSelectValuePair>(
-        auto_value, base_select_value);
-  }
   return ConsumeLineWidth(stream, context, unitless);
 }
 
@@ -7467,6 +7486,7 @@ AtomicString ConsumeCounterStyleNameInPrelude(CSSParserTokenStream& stream,
   }
 
   if (context.Mode() != kUASheetMode) {
+    // NOTE: Keep in sync with ListStyleType::ApplyValue().
     if (name_token.Id() == CSSValueID::kDecimal ||
         name_token.Id() == CSSValueID::kDisc ||
         name_token.Id() == CSSValueID::kCircle ||

@@ -14,16 +14,21 @@
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "base/feature_list.h"
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
+#include "chromeos/ash/components/dbus/cros_disks/cros_disks_client.h"
 #include "chromeos/ash/components/dbus/upstart/upstart_client.h"
 #include "chromeos/ash/components/disks/disk.h"
 #include "chromeos/ash/components/disks/disk_mount_manager.h"
@@ -55,6 +60,27 @@ constexpr char kDummyUuid[] = "00000000000000000000000000000000DEADBEEF";
 // system/core/libcutils/include/private/android_filesystem_config.h.
 constexpr uint32_t kAndroidAppUidStart = 10000;
 constexpr uint32_t kAndroidAppUidEnd = 19999;
+
+// Enum representing the result of PrepareForRemovableMediaUnmount(). Used for
+// Arc.VmRemovableMediaUnmount.Result UMA. Should not be renumbered and should
+// be kept in sync with tools/metrics/histograms/metadata/arc/enums.xml.
+enum class ArcVmRemovableMediaUnmountResult {
+  kSuccess = 0,
+  kFailedMojoTimeout = 1,
+  kFailedArcSideError = 2,
+  kFailedInstanceNotFound = 3,
+  kMaxValue = kFailedInstanceNotFound,
+};
+
+void ReportRemovableMediaUnmountResult(
+    ArcVmRemovableMediaUnmountResult result) {
+  base::UmaHistogramEnumeration("Arc.VmRemovableMediaUnmount.Result", result);
+}
+
+void ReportRemovableMediaUnmountDuration(base::TimeDelta duration) {
+  base::UmaHistogramMediumTimes("Arc.VmRemovableMediaUnmount.Duration",
+                                duration);
+}
 
 // Singleton factory for ArcVolumeMounterBridge.
 class ArcVolumeMounterBridgeFactory
@@ -104,8 +130,12 @@ ArcVolumeMounterBridge::ArcVolumeMounterBridge(content::BrowserContext* context,
   DCHECK(pref_service_);
   arc_bridge_service_->volume_mounter()->AddObserver(this);
   arc_bridge_service_->volume_mounter()->SetHost(this);
-  DCHECK(DiskMountManager::GetInstance());
-  DiskMountManager::GetInstance()->AddObserver(this);
+
+  DiskMountManager* const manager = DiskMountManager::GetInstance();
+  DCHECK(manager);
+  manager->AddObserver(this);
+
+  chromeos::PowerManagerClient::Get()->AddObserver(this);
 
   change_registerar_.Init(pref_service_);
   // Start monitoring |kArcVisibleExternalStorages| changes. Note that the
@@ -117,8 +147,12 @@ ArcVolumeMounterBridge::ArcVolumeMounterBridge(content::BrowserContext* context,
 }
 
 ArcVolumeMounterBridge::~ArcVolumeMounterBridge() {
-  DCHECK(DiskMountManager::GetInstance());
-  DiskMountManager::GetInstance()->RemoveObserver(this);
+  chromeos::PowerManagerClient::Get()->RemoveObserver(this);
+
+  DiskMountManager* const manager = DiskMountManager::GetInstance();
+  DCHECK(manager);
+  manager->RemoveObserver(this);
+
   arc_bridge_service_->volume_mounter()->SetHost(nullptr);
   arc_bridge_service_->volume_mounter()->RemoveObserver(this);
 }
@@ -147,11 +181,11 @@ void ArcVolumeMounterBridge::SendAllMountEvents() {
 
 // Notifies ARC of MyFiles volume by sending a mount event.
 void ArcVolumeMounterBridge::SendMountEventForMyFiles() {
-  mojom::VolumeMounterInstance* volume_mounter_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->volume_mounter(),
-                                  OnMountEvent);
+  mojom::VolumeMounterInstance* const instance = ARC_GET_INSTANCE_FOR_METHOD(
+      arc_bridge_service_->volume_mounter(), OnMountEvent);
 
-  if (!volume_mounter_instance) {
+  if (!instance) {
+    VLOG(1) << "No volume mounter instance";
     return;
   }
 
@@ -164,7 +198,7 @@ void ArcVolumeMounterBridge::SendMountEventForMyFiles() {
   // Conditionally set MyFiles to be visible for P and invisible for R. In R, we
   // use IsVisibleRead so this is not needed.
   const bool is_p = arc::GetArcAndroidSdkVersionAsInt() == arc::kArcVersionP;
-  volume_mounter_instance->OnMountEvent(mojom::MountPointInfo::New(
+  instance->OnMountEvent(mojom::MountPointInfo::New(
       DiskMountManager::MOUNTING, kMyFilesPath, kMyFilesPath, kMyFilesUuid,
       device_label, device_type, is_p));
 }
@@ -299,6 +333,154 @@ void ArcVolumeMounterBridge::OnMountEvent(
   }
 }
 
+void ArcVolumeMounterBridge::DropArcCaches(
+    const base::FilePath& mount_path,
+    DiskMountManager::ArcDelegate::Callback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(
+      ash::CrosDisksClient::GetRemovableDiskMountPoint().IsParent(mount_path));
+
+  if (suspend_state_ == SuspendState::READY_TO_SUSPEND) {
+    // Caches for all removable media should already be cleaned up.
+    std::move(callback).Run(/*success=*/true);
+    return;
+  }
+
+  VLOG(1) << "Queueing unmount request for " << mount_path;
+  unmount_requests_.emplace(mount_path, std::move(callback));
+
+  if (unmount_callback_.is_null()) {
+    ProcessPendingRemovableMediaUnmountRequest();
+  }
+}
+
+void ArcVolumeMounterBridge::ProcessPendingRemovableMediaUnmountRequest() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(unmount_callback_.is_null());
+
+  if (unmount_requests_.empty()) {
+    // No pending requests.
+    return;
+  }
+
+  // Process the oldest pending request.
+  base::FilePath mount_path;
+  std::tie(mount_path, unmount_callback_) =
+      std::move(unmount_requests_.front());
+  unmount_requests_.pop();
+
+  mojom::VolumeMounterInstance* const instance = ARC_GET_INSTANCE_FOR_METHOD(
+      arc_bridge_service_->volume_mounter(), PrepareForRemovableMediaUnmount);
+  if (!instance) {
+    VLOG(1) << "No volume mounter instance";
+    std::move(unmount_callback_).Run(/*success=*/false);
+    if (IsArcVmEnabled()) {
+      ReportRemovableMediaUnmountResult(
+          ArcVmRemovableMediaUnmountResult::kFailedInstanceNotFound);
+    }
+    ProcessPendingRemovableMediaUnmountRequest();
+    return;
+  }
+
+  // `unmount_callback_` will run at one of the following timing (whichever that
+  // happens first):
+  // - when the mojo method callback (`unmount_mojo_callback_`) runs,
+  // - when the `unmount_timeout_` has elapsed, or
+  // - when `OnReadyToSuspend` is called.
+  // The timeout is set to ensure that host-side unmount is not blocked for too
+  // long even when ARC is not responsive or takes too long to drop caches.
+
+  unmount_mojo_callback_.Reset(base::BindOnce(
+      &ArcVolumeMounterBridge::OnArcPreparedForRemovableMediaUnmount,
+      weak_ptr_factory_.GetWeakPtr(), mount_path, false /* is_timeout */));
+
+  unmount_mojo_start_time_ = base::TimeTicks::Now();
+
+  instance->PrepareForRemovableMediaUnmount(mount_path,
+                                            unmount_mojo_callback_.callback());
+
+  unmount_timer_.Start(
+      FROM_HERE, unmount_timeout_,
+      base::BindOnce(
+          &ArcVolumeMounterBridge::OnArcPreparedForRemovableMediaUnmount,
+          weak_ptr_factory_.GetWeakPtr(), mount_path, true /* is_timeout */,
+          false /* success */));
+}
+
+void ArcVolumeMounterBridge::OnArcPreparedForRemovableMediaUnmount(
+    const base::FilePath& mount_path,
+    bool is_timeout,
+    bool success) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(unmount_callback_);
+  VLOG(1) << __func__ << " called for " << mount_path;
+
+  if (IsArcVmEnabled()) {
+    ReportRemovableMediaUnmountDuration(base::TimeTicks::Now() -
+                                        unmount_mojo_start_time_);
+    if (success) {
+      ReportRemovableMediaUnmountResult(
+          ArcVmRemovableMediaUnmountResult::kSuccess);
+    } else {
+      ReportRemovableMediaUnmountResult(
+          is_timeout ? ArcVmRemovableMediaUnmountResult::kFailedMojoTimeout
+                     : ArcVmRemovableMediaUnmountResult::kFailedArcSideError);
+    }
+  }
+  std::move(unmount_callback_).Run(success);
+
+  // Cancel the other un-run callback so that this method won't be called twice
+  // for the same `UnmountRequest`.
+  unmount_mojo_callback_.Cancel();
+  unmount_timer_.Stop();
+
+  ProcessPendingRemovableMediaUnmountRequest();
+}
+
+void ArcVolumeMounterBridge::OnReadyToSuspend(bool success) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  VLOG(1) << __func__ << " called";
+
+  LOG_IF(ERROR, !success) << "Failed to unmount some of removable drives or "
+                          << "drop caches on ARC side before suspension. "
+                          << "Host-side unmount might fail.";
+
+  if (suspend_state_ == SuspendState::NOT_READY_TO_SUSPEND) {
+    suspend_state_ = SuspendState::READY_TO_SUSPEND;
+  }
+
+  // Even if `suspend_state_` is NO_SUSPEND, we run all the pending callbacks.
+  DCHECK(suspend_state_ == SuspendState::NO_SUSPEND ||
+         suspend_state_ == SuspendState::READY_TO_SUSPEND);
+
+  unmount_mojo_callback_.Cancel();
+  unmount_timer_.Stop();
+
+  // Run all the pending callbacks with true, because even when `success` is
+  // false we don't know for which device the unmount failed.
+  if (unmount_callback_) {
+    std::move(unmount_callback_).Run(/*success=*/true);
+  }
+  while (!unmount_requests_.empty()) {
+    std::move(std::get<1>(unmount_requests_.front())).Run(/*success=*/true);
+    unmount_requests_.pop();
+  }
+}
+
+void ArcVolumeMounterBridge::SuspendImminent(
+    power_manager::SuspendImminent::Reason reason) {
+  VLOG(1) << __func__ << " called";
+  DCHECK(suspend_state_ == SuspendState::NO_SUSPEND);
+  suspend_state_ = SuspendState::NOT_READY_TO_SUSPEND;
+}
+
+void ArcVolumeMounterBridge::SuspendDone(base::TimeDelta sleep_duration) {
+  VLOG(1) << __func__ << " called";
+  DCHECK(suspend_state_ == SuspendState::NOT_READY_TO_SUSPEND ||
+         suspend_state_ == SuspendState::READY_TO_SUSPEND);
+  suspend_state_ = SuspendState::NO_SUSPEND;
+}
+
 void ArcVolumeMounterBridge::SendMountEventForRemovableMedia(
     DiskMountManager::MountEvent event,
     const std::string& source_path,
@@ -307,21 +489,33 @@ void ArcVolumeMounterBridge::SendMountEventForRemovableMedia(
     const std::string& device_label,
     ash::DeviceType device_type,
     bool visible) {
-  mojom::VolumeMounterInstance* volume_mounter_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->volume_mounter(),
-                                  OnMountEvent);
+  mojom::VolumeMounterInstance* const instance = ARC_GET_INSTANCE_FOR_METHOD(
+      arc_bridge_service_->volume_mounter(), OnMountEvent);
 
-  if (!volume_mounter_instance) {
+  if (!instance) {
+    VLOG(1) << "No volume mounter instance";
     return;
   }
-  volume_mounter_instance->OnMountEvent(
+  instance->OnMountEvent(
       mojom::MountPointInfo::New(event, source_path, mount_path, fs_uuid,
                                  device_label, device_type, visible));
+}
+
+void ArcVolumeMounterBridge::OnConnectionReady() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  DiskMountManager* const manager = DiskMountManager::GetInstance();
+  DCHECK(manager);
+  manager->SetArcDelegate(this);
 }
 
 void ArcVolumeMounterBridge::OnConnectionClosed() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   external_storage_mount_points_are_ready_ = false;
+
+  DiskMountManager* const manager = DiskMountManager::GetInstance();
+  DCHECK(manager);
+  manager->SetArcDelegate(nullptr);
 }
 
 void ArcVolumeMounterBridge::RequestAllMountPoints() {

@@ -59,9 +59,21 @@ class AutoEnrollmentTypeCheckerTest : public testing::Test {
   ~AutoEnrollmentTypeCheckerTest() override = default;
 
  protected:
+  void SetUp() override {
+    // TODO(b/353731379): Remove when removing legacy state determination code.
+    command_line_.GetProcessCommandLine()->AppendSwitchASCII(
+        ash::switches::kEnterpriseEnableUnifiedStateDetermination,
+        AutoEnrollmentTypeChecker::kUnifiedStateDeterminationNever);
+  }
+
   void SetUpFlexDeviceWithFREOnFlexEnabled() {
     enrollment_test_helper_.SetUpFlexDevice();
     enrollment_test_helper_.EnableFREOnFlex();
+  }
+
+  void SetUpFlexDeviceWithFREOnFlexDisabled() {
+    enrollment_test_helper_.SetUpFlexDevice();
+    enrollment_test_helper_.DisableFREOnFlex();
   }
 
   void SetupFREEnabled() {
@@ -355,7 +367,7 @@ TEST_F(AutoEnrollmentTypeCheckerTest,
        FRERequiredOnFlexEnabledByCommandLineSwitch) {
   SetUpFlexDeviceWithFREOnFlexEnabled();
 
-  EXPECT_TRUE(AutoEnrollmentTypeChecker::IsFREEnabled());
+  EXPECT_EQ(AutoEnrollmentTypeChecker::IsFREEnabled(), is_google_branded_);
   EXPECT_EQ(AutoEnrollmentTypeChecker::GetFRERequirementAccordingToVPD(
                 &fake_statistics_provider_),
             AutoEnrollmentTypeChecker::FRERequirement::kDisabled);
@@ -372,8 +384,8 @@ TEST_F(AutoEnrollmentTypeCheckerTest,
 }
 
 TEST_F(AutoEnrollmentTypeCheckerTest,
-       FRERequiredOnFlexNotEnabledByCommandLineSwitch) {
-  enrollment_test_helper_.SetUpFlexDevice();
+       FRERequiredOnFlexFREOnFlexDisabledByCommandLineSwitch) {
+  SetUpFlexDeviceWithFREOnFlexDisabled();
 
   EXPECT_FALSE(AutoEnrollmentTypeChecker::IsFREEnabled());
   EXPECT_EQ(AutoEnrollmentTypeChecker::GetFRERequirementAccordingToVPD(
@@ -382,6 +394,21 @@ TEST_F(AutoEnrollmentTypeCheckerTest,
 }
 
 // TODO(b/353731379): Remove when removing legacy state determination code.
+TEST_F(AutoEnrollmentTypeCheckerTest,
+       FRERequiredOnFlexFREOnFlexNoCommandLineSwitch) {
+  enrollment_test_helper_.SetUpFlexDevice();
+  command_line_.GetProcessCommandLine()->AppendSwitchASCII(
+      ash::switches::kEnterpriseEnableUnifiedStateDetermination,
+      AutoEnrollmentTypeChecker::kUnifiedStateDeterminationAlways);
+
+  EXPECT_EQ(AutoEnrollmentTypeChecker::IsFREEnabled(), is_google_branded_);
+  EXPECT_EQ(AutoEnrollmentTypeChecker::GetFRERequirementAccordingToVPD(
+                &fake_statistics_provider_),
+            is_google_branded_
+                ? AutoEnrollmentTypeChecker::FRERequirement::kExplicitlyRequired
+                : AutoEnrollmentTypeChecker::FRERequirement::kDisabled);
+}
+
 TEST_F(AutoEnrollmentTypeCheckerTest,
        DetermineAutoEnrollmentCheckTypeOnFlexWhenTokenPresent) {
   enrollment_test_helper_.SetUpFlexDevice();
@@ -392,8 +419,7 @@ TEST_F(AutoEnrollmentTypeCheckerTest,
                                                 kBrandCodeValue);
   command_line_.GetProcessCommandLine()->AppendSwitchASCII(
       ash::switches::kEnterpriseEnableUnifiedStateDetermination,
-      AutoEnrollmentTypeChecker::AutoEnrollmentTypeChecker::
-          kUnifiedStateDeterminationNever);
+      AutoEnrollmentTypeChecker::kUnifiedStateDeterminationNever);
 
   EXPECT_EQ(AutoEnrollmentTypeChecker::IsInitialEnrollmentEnabled(),
             is_google_branded_);
@@ -422,8 +448,7 @@ TEST_F(AutoEnrollmentTypeCheckerTest,
                                                 kBrandCodeValue);
   command_line_.GetProcessCommandLine()->AppendSwitchASCII(
       ash::switches::kEnterpriseEnableUnifiedStateDetermination,
-      AutoEnrollmentTypeChecker::AutoEnrollmentTypeChecker::
-          kUnifiedStateDeterminationNever);
+      AutoEnrollmentTypeChecker::kUnifiedStateDeterminationNever);
 
   EXPECT_EQ(AutoEnrollmentTypeChecker::IsInitialEnrollmentEnabled(),
             is_google_branded_);
@@ -449,8 +474,7 @@ TEST_F(AutoEnrollmentTypeCheckerTest,
                                                 kBrandCodeValue);
   command_line_.GetProcessCommandLine()->AppendSwitchASCII(
       ash::switches::kEnterpriseEnableUnifiedStateDetermination,
-      AutoEnrollmentTypeChecker::AutoEnrollmentTypeChecker::
-          kUnifiedStateDeterminationNever);
+      AutoEnrollmentTypeChecker::kUnifiedStateDeterminationNever);
 
   EXPECT_EQ(AutoEnrollmentTypeChecker::IsInitialEnrollmentEnabled(),
             is_google_branded_);
@@ -478,8 +502,7 @@ TEST_F(AutoEnrollmentTypeCheckerTest,
                                                 kBrandCodeValue);
   command_line_.GetProcessCommandLine()->AppendSwitchASCII(
       ash::switches::kEnterpriseEnableUnifiedStateDetermination,
-      AutoEnrollmentTypeChecker::AutoEnrollmentTypeChecker::
-          kUnifiedStateDeterminationNever);
+      AutoEnrollmentTypeChecker::kUnifiedStateDeterminationNever);
 
   EXPECT_EQ(AutoEnrollmentTypeChecker::IsInitialEnrollmentEnabled(),
             is_google_branded_);
@@ -492,6 +515,14 @@ TEST_F(AutoEnrollmentTypeCheckerTest,
 
 class AutoEnrollmentTypeCheckerUSDStatusTest
     : public AutoEnrollmentTypeCheckerTest {
+ public:
+  void SetUp() override {
+    AutoEnrollmentTypeCheckerTest::SetUp();
+    // TODO(b/353731379): Remove when removing legacy state determination code.
+    command_line_.GetProcessCommandLine()->RemoveSwitch(
+        ash::switches::kEnterpriseEnableUnifiedStateDetermination);
+  }
+
  protected:
   base::HistogramTester histograms_;
 };
@@ -516,8 +547,7 @@ TEST_F(AutoEnrollmentTypeCheckerUSDStatusTest, FlexDevice) {
 TEST_F(AutoEnrollmentTypeCheckerUSDStatusTest, AlwaysSwitch) {
   command_line_.GetProcessCommandLine()->AppendSwitchASCII(
       ash::switches::kEnterpriseEnableUnifiedStateDetermination,
-      AutoEnrollmentTypeChecker::AutoEnrollmentTypeChecker::
-          kUnifiedStateDeterminationAlways);
+      AutoEnrollmentTypeChecker::kUnifiedStateDeterminationAlways);
 
   AutoEnrollmentTypeChecker::IsUnifiedStateDeterminationEnabled();
 
@@ -528,8 +558,7 @@ TEST_F(AutoEnrollmentTypeCheckerUSDStatusTest, AlwaysSwitch) {
 TEST_F(AutoEnrollmentTypeCheckerUSDStatusTest, NeverSwitch) {
   command_line_.GetProcessCommandLine()->AppendSwitchASCII(
       ash::switches::kEnterpriseEnableUnifiedStateDetermination,
-      AutoEnrollmentTypeChecker::AutoEnrollmentTypeChecker::
-          kUnifiedStateDeterminationNever);
+      AutoEnrollmentTypeChecker::kUnifiedStateDeterminationNever);
 
   AutoEnrollmentTypeChecker::IsUnifiedStateDeterminationEnabled();
 
@@ -570,18 +599,21 @@ class AutoEnrollmentTypeCheckerUnifiedStateDeterminationTestP
  protected:
   void SetUp() override {
     AutoEnrollmentTypeCheckerTest::SetUp();
+    // TODO(b/353731379): Remove when removing legacy state determination code.
+    command_line_.GetProcessCommandLine()->RemoveSwitch(
+        ash::switches::kEnterpriseEnableUnifiedStateDetermination);
     if (device_os_ == DeviceOs::Nonchrome) {
       enrollment_test_helper_.SetUpNonchromeDevice();
     } else if (device_os_ == DeviceOs::FlexWithoutFRE) {
-      enrollment_test_helper_.SetUpFlexDevice();
+      SetUpFlexDeviceWithFREOnFlexDisabled();
     } else if (device_os_ == DeviceOs::FlexWithFRE) {
       SetUpFlexDeviceWithFREOnFlexEnabled();
     }
   }
 
   bool IsFRESupportedByDevice() {
-    return (google_branded_ && device_os_ == DeviceOs::Chrome) ||
-           device_os_ == DeviceOs::FlexWithFRE;
+    return google_branded_ && (device_os_ == DeviceOs::Chrome ||
+                               device_os_ == DeviceOs::FlexWithFRE);
   }
 
   bool IsOfficialGoogleOS() {

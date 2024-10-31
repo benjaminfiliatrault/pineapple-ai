@@ -7,6 +7,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/autofill/autofill_prediction_improvements/save_autofill_prediction_improvements_controller.h"
 #include "chrome/browser/ui/views/accessibility/theme_tracking_non_accessible_image_view.h"
+#include "chrome/browser/ui/views/autofill/popup/autofill_prediction_improvements/prediction_improvements_icon_image_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
@@ -41,10 +42,7 @@ constexpr int kButtonRadius = 12;
 // The padding between the header (image and title) and the elements around it.
 constexpr int kHeaderPadding = 20;
 
-constexpr int kHeaderImageWidthAndHeight = 36;
 constexpr int kBubbleWidth = 320;
-constexpr gfx::Size kHeaderImageSize(kHeaderImageWidthAndHeight,
-                                     kHeaderImageWidthAndHeight);
 
 std::unique_ptr<views::View> BuildPredictedValueRow(const std::string key,
                                                     const std::string value) {
@@ -116,7 +114,6 @@ std::unique_ptr<views::ImageButton> CreateFeedbackButton(
   button->SetTooltipText(tooltip);
   button->GetViewAccessibility().SetRole(ax::mojom::Role::kMenuItem);
   button->SetLayoutManager(std::make_unique<views::BoxLayout>());
-  button->GetViewAccessibility().SetIsIgnored(true);
   // This is used in tests only.
   button->SetID(
       is_thumbs_up
@@ -216,6 +213,8 @@ SaveAutofillPredictionImprovementsBubbleView::
       views::BoxLayout::Orientation::kVertical));
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
       views::DialogContentType::kControl, views::DialogContentType::kControl));
+  SetAccessibleTitle(l10n_util::GetStringUTF16(
+      IDS_AUTOFILL_PREDICTION_IMPROVEMENTS_SAVE_DIALOG_TITLE));
 
   const int kVerficalSpacing = ChromeLayoutProvider::Get()->GetDistanceMetric(
       DISTANCE_CONTROL_LIST_VERTICAL);
@@ -269,7 +268,7 @@ void SaveAutofillPredictionImprovementsBubbleView::AddedToWidget() {
           .SetOrientation(views::BoxLayout::Orientation::kHorizontal)
           .SetBetweenChildSpacing(kHorizontalSpacing)
           .SetMainAxisAlignment(views::LayoutAlignment::kStart)
-          .SetCrossAxisAlignment(views::LayoutAlignment::kStretch)
+          .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
           // The bottom padding has to be subtracted by the distance between the
           // information that will be saved, so to avoid double padding.
           .SetInsideBorderInsets(gfx::Insets::TLBR(
@@ -279,20 +278,14 @@ void SaveAutofillPredictionImprovementsBubbleView::AddedToWidget() {
                                   DISTANCE_CONTROL_LIST_VERTICAL)),
               kHeaderPadding))
           .Build();
-  auto image = std::make_unique<ThemeTrackingNonAccessibleImageView>(
-      ui::ImageModel::FromResourceId(
-          IDR_AUTOFILL_PREDICTION_IMPROVEMENTS_SAVE_LOGO),
-      ui::ImageModel::FromResourceId(
-          IDR_AUTOFILL_PREDICTION_IMPROVEMENTS_SAVE_LOGO),
-      base::BindRepeating(&views::BubbleDialogDelegate::GetBackgroundColor,
-                          base::Unretained(this)));
-  image->SetImageSize(kHeaderImageSize);
-  header_container->AddChildView(std::move(image));
+  header_container->AddChildView(
+      autofill_prediction_improvements::
+          CreateLargePredictionImprovementsIconImageView());
   header_container->AddChildView(
       views::Builder<views::Label>()
           .SetText(l10n_util::GetStringUTF16(
               IDS_AUTOFILL_PREDICTION_IMPROVEMENTS_SAVE_DIALOG_TITLE))
-          .SetTextStyle(views::style::STYLE_HEADLINE_4_BOLD)
+          .SetTextStyle(views::style::STYLE_HEADLINE_4)
           .SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT)
           .Build());
   GetBubbleFrameView()->SetHeaderView(std::move(header_container));

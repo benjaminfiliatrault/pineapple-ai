@@ -24,7 +24,7 @@ class TabContentsDataImpl : public TabContentsData {
   TabContentsDataImpl(const TabContentsDataImpl&) = delete;
   TabContentsDataImpl& operator=(const TabContentsDataImpl&) = delete;
 
-  size_t TabCountRecursive() const override;
+  size_t TotalTabCount() const override;
   size_t IndexOfFirstNonPinnedTab() const override;
 
   tabs::TabModel* GetTabAtIndexRecursive(size_t index) const override;
@@ -68,7 +68,7 @@ std::unique_ptr<TabContentsData> CreateTabContentsDataImpl() {
   }
 }
 
-size_t TabContentsDataImpl::TabCountRecursive() const {
+size_t TabContentsDataImpl::TotalTabCount() const {
   return contents_data_.size();
 }
 
@@ -106,8 +106,8 @@ void TabContentsDataImpl::AddTabRecursive(
     size_t index,
     std::optional<tab_groups::TabGroupId> new_group_id,
     bool new_pinned_state) {
-  tab_model->set_group(new_group_id);
-  tab_model->set_pinned(new_pinned_state);
+  tab_model->SetGroup(new_group_id);
+  tab_model->SetPinned(new_pinned_state);
   contents_data_.insert(contents_data_.begin() + index, std::move(tab_model));
 }
 
@@ -120,7 +120,7 @@ std::unique_ptr<tabs::TabModel> TabContentsDataImpl::RemoveTabAtIndexRecursive(
   contents_data_.erase(contents_data_.begin() + index);
 
   // Update the tab.
-  old_data->set_group(std::nullopt);
+  old_data->SetGroup(std::nullopt);
 
   return old_data;
 }
@@ -132,8 +132,8 @@ void TabContentsDataImpl::MoveTabRecursive(
     bool new_pinned_state) {
   tabs::TabModel* tab_model = GetTabAtIndexRecursive(initial_index);
 
-  tab_model->set_pinned(new_pinned_state);
-  tab_model->set_group(new_group_id);
+  tab_model->SetPinned(new_pinned_state);
+  tab_model->SetGroup(new_group_id);
 
   // Move the tab to the destination index.
   if (initial_index != final_index) {

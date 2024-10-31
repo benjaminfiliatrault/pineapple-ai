@@ -120,6 +120,8 @@ CastSocketImpl::CastSocketImpl(
   DCHECK(open_params.ip_endpoint.address().IsValid());
 }
 
+CastSocket::~CastSocket() = default;
+
 CastSocketImpl::~CastSocketImpl() {
   // Ensure that resources are freed but do not run pending callbacks that
   // would result in re-entrancy.
@@ -675,7 +677,8 @@ CastSocketImpl::CastSocketMessageDelegate::CastSocketMessageDelegate(
   DCHECK(socket_);
 }
 
-CastSocketImpl::CastSocketMessageDelegate::~CastSocketMessageDelegate() {}
+CastSocketImpl::CastSocketMessageDelegate::~CastSocketMessageDelegate() =
+    default;
 
 // CastTransport::Delegate implementation.
 void CastSocketImpl::CastSocketMessageDelegate::OnError(

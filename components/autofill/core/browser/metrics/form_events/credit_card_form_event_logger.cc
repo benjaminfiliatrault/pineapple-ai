@@ -18,6 +18,7 @@
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_utils.h"
 #include "components/autofill/core/browser/metrics/form_events/form_events.h"
+#include "components/autofill/core/browser/metrics/form_interactions_ukm_logger.h"
 #include "components/autofill/core/browser/metrics/payments/card_unmask_flow_metrics.h"
 #include "components/autofill/core/browser/metrics/payments/virtual_card_standalone_cvc_suggestion_metrics.h"
 #include "components/autofill/core/browser/payments/autofill_offer_manager.h"
@@ -34,14 +35,10 @@
 namespace autofill::autofill_metrics {
 
 CreditCardFormEventLogger::CreditCardFormEventLogger(
-    bool is_in_any_main_frame,
-    AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
+    autofill_metrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
     PersonalDataManager* personal_data_manager,
     AutofillClient* client)
-    : FormEventLoggerBase("CreditCard",
-                          is_in_any_main_frame,
-                          form_interactions_ukm_logger,
-                          client),
+    : FormEventLoggerBase("CreditCard", form_interactions_ukm_logger, client),
       current_authentication_flow_(UnmaskAuthFlowType::kNone),
       personal_data_manager_(personal_data_manager),
       client_(client) {}
@@ -277,7 +274,7 @@ void CreditCardFormEventLogger::OnDidSelectCardSuggestion(
         // TODO(crbug.com/40146355): Use instrument ID for server credit cards.
         const CreditCard* suggested_credit_card =
             personal_data_manager_->payments_data_manager().GetCreditCardByGUID(
-                suggestion.GetBackendId<Suggestion::Guid>().value());
+                suggestion.GetPayload<Suggestion::Guid>().value());
         if (!suggested_credit_card) {
           // Ignore non credit card suggestions in the popup like separators,
           // manage payment methods, etc.

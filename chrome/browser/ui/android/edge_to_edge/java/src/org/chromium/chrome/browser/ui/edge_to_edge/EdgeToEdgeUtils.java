@@ -14,8 +14,6 @@ import androidx.core.view.WindowInsetsCompat;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ResettersForTesting;
-import org.chromium.base.cached_flags.BooleanCachedFieldTrialParameter;
-import org.chromium.base.cached_flags.StringCachedFieldTrialParameter;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.blink.mojom.ViewportFit;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -24,6 +22,8 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.components.browser_ui.display_cutout.DisplayCutoutController;
 import org.chromium.components.browser_ui.display_cutout.DisplayCutoutController.SafeAreaInsetsTracker;
+import org.chromium.components.cached_flags.BooleanCachedFieldTrialParameter;
+import org.chromium.components.cached_flags.StringCachedFieldTrialParameter;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.base.DeviceFormFactor;
 
@@ -118,22 +118,9 @@ public class EdgeToEdgeUtils {
      * drawing edge to edge on start up.
      */
     public static boolean isEnabled() {
-        return isLegacyWebsiteOptInEnabled()
-                || isEdgeToEdgeBottomChinEnabled()
-                || isEdgeToEdgeWebOptInEnabled();
-    }
-
-    /**
-     * Whether drawing website opt-in is enabled.
-     *
-     * <p>When enabled, Chrome will add bottom padding to the root view if the current tab / UI is
-     * not a tab with `viewport-fit=cover`. Additionally, bottom attached UI will be padded to avoid
-     * drawing into the bottom navigation bar region.
-     *
-     * @deprecated This method will be removed. External references should use {@link #isEnabled()}.
-     */
-    public static boolean isLegacyWebsiteOptInEnabled() {
-        return ChromeFeatureList.sDrawEdgeToEdge.isEnabled();
+        return isEdgeToEdgeBottomChinEnabled()
+                || isEdgeToEdgeWebOptInEnabled()
+                || isEdgeToEdgeEverywhereEnabled();
     }
 
     /**
@@ -152,6 +139,11 @@ public class EdgeToEdgeUtils {
      */
     public static boolean isEdgeToEdgeWebOptInEnabled() {
         return ChromeFeatureList.sEdgeToEdgeWebOptIn.isEnabled();
+    }
+
+    /** Whether edge-to-edge should be enabled everywhere. */
+    public static boolean isEdgeToEdgeEverywhereEnabled() {
+        return ChromeFeatureList.sEdgeToEdgeEverywhere.isEnabled();
     }
 
     /** Whether key native pages should draw to edge. */
@@ -263,7 +255,7 @@ public class EdgeToEdgeUtils {
     static boolean isPageOptedIntoEdgeToEdge(
             Tab tab, @WebContentsObserver.ViewportFitType int value) {
         if (tab == null || tab.isNativePage()) {
-            return ChromeFeatureList.sDrawNativeEdgeToEdge.isEnabled();
+            return isNativeTabDrawingToEdge(tab);
         }
         if (sAlwaysDrawWebEdgeToEdgeForTesting) {
             return true;

@@ -18,6 +18,7 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
+#include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/strings/escape.h"
 #include "base/strings/utf_string_conversions.h"
@@ -56,6 +57,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/no_renderer_crashes_assertion.h"
 #include "content/shell/browser/shell.h"
+#include "content/test/content_browser_test_utils_internal.h"
 #include "net/base/net_errors.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -783,9 +785,9 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, LevelDBLogFileTest) {
 
   {
     base::ScopedAllowBlockingForTesting allow_blocking;
-    int64_t size;
-    EXPECT_TRUE(base::GetFileSize(log_file_path, &size));
-    EXPECT_GT(size, 0);
+    std::optional<int64_t> size = base::GetFileSize(log_file_path);
+    ASSERT_TRUE(size.has_value());
+    EXPECT_GT(size.value(), 0);
   }
 }
 
@@ -918,8 +920,7 @@ void CorruptDatabase(const base::FilePath& idb_data_path) {
                                   base::FileEnumerator::FILES);
   for (base::FilePath idb_file = enumerator.Next(); !idb_file.empty();
        idb_file = enumerator.Next()) {
-    int64_t size(0);
-    GetFileSize(idb_file, &size);
+    int64_t size = base::GetFileSize(idb_file).value_or(0);
 
     if (idb_file.Extension() == FILE_PATH_LITERAL(".ldb")) {
       num_files++;
@@ -1180,6 +1181,42 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest,
 
   const int kTestCompactBytes = 300 * 1024;  // 300kB
   EXPECT_LT(after_deleting, kTestCompactBytes);
+}
+
+// Saves a File that
+//   a) has been sliced (avoids the fast-copy path)
+//   b) is over 32768 bytes
+// to IndexedDB.  Regression test for crbug.com/369670458
+// Unfortunately this can't use SimpleTest because it requires user activation,
+// which is provided by `ExecJs()`.
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, LargeSlicedFile) {
+  // Generate test file.
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_dir;
+  base::FilePath file_path;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir.GetPath(), &file_path));
+  ASSERT_TRUE(base::WriteFile(file_path, base::RandBytesAsVector(102400)));
+
+  // Simulate user uploading the test file.
+  std::unique_ptr<FileChooserDelegate> delegate(
+      new FileChooserDelegate(file_path, base::DoNothing()));
+  shell()->web_contents()->SetDelegate(delegate.get());
+  ASSERT_TRUE(
+      NavigateToURL(shell(), GetTestUrl("indexeddb", "bug_369670458.html")));
+  TestNavigationObserver same_tab_observer(
+      shell()->web_contents(), 1, MessageLoopRunner::QuitMode::IMMEDIATE,
+      /*ignore_uncommitted_navigations=*/true);
+  EXPECT_TRUE(ExecJs(shell()->web_contents(),
+                     "document.getElementById('fileInput').click();"));
+  same_tab_observer.Wait();
+
+  // This part is copied from `SimpleTest()`.
+  std::string result = shell()->web_contents()->GetLastCommittedURL().ref();
+  if (result != "pass") {
+    std::string js_result = EvalJs(shell(), "getLog()").ExtractString();
+    FAIL() << "Failed: " << js_result;
+  }
 }
 
 // Complex multi-step (converted from pyauto) tests begin here.

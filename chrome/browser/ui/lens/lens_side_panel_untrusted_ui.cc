@@ -12,6 +12,7 @@
 #include "base/strings/strcat.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/lens/lens_overlay_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_theme_utils.h"
 #include "chrome/browser/ui/webui/searchbox/realbox_handler.h"
@@ -45,6 +46,14 @@ LensSidePanelUntrustedUI::LensSidePanelUntrustedUI(content::WebUI* web_ui)
   html_source->AddLocalizedString(
       "networkErrorPageBottomLine",
       IDS_SIDE_PANEL_COMPANION_ERROR_PAGE_SECOND_LINE);
+  html_source->AddLocalizedString(
+      "searchboxGhostLoaderHintTextPrimary",
+      IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_LOADING_HINT_PRIMARY);
+  html_source->AddLocalizedString(
+      "searchboxGhostLoaderHintTextSecondary",
+      IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_LOADING_HINT_SECONDARY);
+  html_source->AddLocalizedString("searchboxGhostLoaderErrorText",
+                                  IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_ERROR_TEXT);
 
   // Add finch flags
   html_source->AddString(
@@ -99,6 +108,7 @@ LensSidePanelUntrustedUI::LensSidePanelUntrustedUI(content::WebUI* web_ui)
   html_source->AddLocalizedString("searchBoxHintMultimodal",
                                   IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_MULTIMODAL);
   html_source->AddBoolean("isLensSearchbox", true);
+  html_source->AddBoolean("queryAutocompleteOnEmptyInput", true);
 }
 
 void LensSidePanelUntrustedUI::BindInterface(
@@ -106,6 +116,13 @@ void LensSidePanelUntrustedUI::BindInterface(
         receiver) {
   lens_side_panel_page_factory_receiver_.reset();
   lens_side_panel_page_factory_receiver_.Bind(std::move(receiver));
+}
+
+void LensSidePanelUntrustedUI::BindInterface(
+    mojo::PendingReceiver<lens::mojom::LensGhostLoaderPageHandlerFactory>
+        receiver) {
+  lens_ghost_loader_page_factory_receiver_.reset();
+  lens_ghost_loader_page_factory_receiver_.Bind(std::move(receiver));
 }
 
 void LensSidePanelUntrustedUI::BindInterface(
@@ -148,6 +165,36 @@ void LensSidePanelUntrustedUI::CreateSidePanelPageHandler(
   // Once the interface is bound, we want to connect this instance with the
   // appropriate instance of LensOverlayController.
   controller->BindSidePanel(std::move(receiver), std::move(page));
+}
+
+void LensSidePanelUntrustedUI::BindInterface(
+    mojo::PendingReceiver<help_bubble::mojom::HelpBubbleHandlerFactory>
+        receiver) {
+  if (help_bubble_handler_factory_receiver_.is_bound()) {
+    help_bubble_handler_factory_receiver_.reset();
+  }
+  help_bubble_handler_factory_receiver_.Bind(std::move(receiver));
+}
+
+void LensSidePanelUntrustedUI::CreateGhostLoaderPage(
+    mojo::PendingRemote<lens::mojom::LensGhostLoaderPage> page) {
+  LensOverlayController* controller =
+      LensOverlayController::GetController(web_ui());
+  // TODO(crbug.com/360724768): See above.
+  if (!controller) {
+    return;
+  }
+  // Once the interface is bound, we want to connect this instance with the
+  // appropriate instance of LensOverlayController.
+  controller->BindSidePanelGhostLoader(std::move(page));
+}
+
+void LensSidePanelUntrustedUI::CreateHelpBubbleHandler(
+    mojo::PendingRemote<help_bubble::mojom::HelpBubbleClient> client,
+    mojo::PendingReceiver<help_bubble::mojom::HelpBubbleHandler> handler) {
+  help_bubble_handler_ = std::make_unique<user_education::HelpBubbleHandler>(
+      std::move(handler), std::move(client), this,
+      std::vector<ui::ElementIdentifier>{kLensSidePanelSearchBoxElementId});
 }
 
 LensSidePanelUntrustedUI::~LensSidePanelUntrustedUI() = default;

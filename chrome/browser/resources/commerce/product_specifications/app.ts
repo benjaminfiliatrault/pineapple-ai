@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '../strings.m.js';
+import '/strings.m.js';
 import './header.js';
 import './loading_state.js';
 import './new_column_selector.js';
@@ -29,21 +29,20 @@ import type {Uuid} from 'chrome://resources/mojo/mojo/public/mojom/base/uuid.moj
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './app.html.js';
-import type {BuyingOptionsLink} from './buying_options_section.js';
+import type {BuyingOptions} from './buying_options_section.js';
 import type {ProductDescription} from './description_section.js';
 import type {HeaderElement} from './header.js';
 import type {NewColumnSelectorElement} from './new_column_selector.js';
 import {SectionType} from './product_selection_menu.js';
 import type {ProductSelectorElement} from './product_selector.js';
 import {Router} from './router.js';
-import type {PriceInsightsInfo, ProductInfo, ProductSpecifications, ProductSpecificationsProduct} from './shopping_service.mojom-webui.js';
+import type {ProductInfo, ProductSpecifications, ProductSpecificationsProduct} from './shopping_service.mojom-webui.js';
 import {UserFeedback} from './shopping_service.mojom-webui.js';
 import type {TableElement} from './table.js';
 import type {UrlListEntry} from './utils.js';
 import {WindowProxy} from './window_proxy.js';
 
 interface AggregatedProductData {
-  priceInsightsInfo: PriceInsightsInfo|null;
   productInfo: ProductInfo|null;
   spec: ProductSpecificationsProduct|null;
 }
@@ -53,7 +52,7 @@ interface LoadingState {
   urlCount: number;
 }
 
-export type Content = string|ProductDescription|BuyingOptionsLink|null;
+export type Content = string|ProductDescription|BuyingOptions|null;
 
 interface ProductDetail {
   title: string|null;
@@ -109,15 +108,18 @@ enum AppState {
 
 function getProductDetails(
     product: ProductSpecificationsProduct|null,
-    productSpecs: ProductSpecifications, productInfo: ProductInfo|null,
-    priceInsightsInfo: PriceInsightsInfo|null): ProductDetail[] {
+    productSpecs: ProductSpecifications,
+    productInfo: ProductInfo|null): ProductDetail[] {
   const productDetails: ProductDetail[] = [];
 
-  // First add rows that don't come directly from the product
-  // specifications backend.
+  // First add rows that don't come directly from the product specifications
+  // backend. This includes the current price and buying options URL.
   productDetails.push({
     title: loadTimeData.getString('priceRowTitle'),
-    content: productInfo?.currentPrice || null,
+    content: {
+      price: productInfo?.currentPrice || '',
+      jackpotUrl: product?.buyingOptionsUrl.url || '',
+    },
   });
 
   // The second row is the product-level summary.
@@ -156,12 +158,6 @@ function getProductDetails(
     }
   });
 
-  // The last row is buying options.
-  productDetails.push({
-    title: null,
-    content: {jackpotUrl: priceInsightsInfo?.jackpot.url ?? ''},
-  });
-
   return productDetails;
 }
 
@@ -189,6 +185,13 @@ function findProductInResults(clusterId: bigint, specs: ProductSpecifications):
 
   return null;
 }
+
+// Custom event types for the start and end of the loading animation.
+export const LOADING_START_EVENT_TYPE: string = 'loading-animation-start';
+export const LOADING_END_EVENT_TYPE: string = 'loading-animation-end';
+
+const LOADING_ANIMATION_SLIDE_PX = 16;
+const LOADING_ANIMATION_SLIDE_DURATION_MS = 200;
 
 export class ProductSpecificationsElement extends PolymerElement {
   static get is() {
@@ -227,8 +230,6 @@ export class ProductSpecificationsElement extends PolymerElement {
   private eventTracker_: EventTracker = new EventTracker();
   private id_: Uuid|null = null;
   private listenerIds_: number[] = [];
-  private loadingAnimationSlidePx_: number = 16;
-  private loadingAnimationSlideDurationMs_: number = 200;
   private minLoadingAnimationMs_: number = 500;
   private productSpecificationsFeatureState_: ProductSpecificationsFeatureState;
   private shoppingApi_: BrowserProxy = BrowserProxyImpl.getInstance();
@@ -299,9 +300,8 @@ export class ProductSpecificationsElement extends PolymerElement {
     this.eventTracker_.removeAll();
   }
 
-  // TODO(b/364337413): update tests to not rely on animation rendering time
-  resetMinLoadingAnimationMsForTesting(newValue = 0) {
-    this.minLoadingAnimationMs_ = newValue;
+  disableMinLoadingAnimationMsForTesting() {
+    this.minLoadingAnimationMs_ = 0;
   }
 
   private async loadTable_(state: ProductSpecificationsFeatureState) {
@@ -319,6 +319,14 @@ export class ProductSpecificationsElement extends PolymerElement {
       const {set} = await this.shoppingApi_.getProductSpecificationsSetByUuid(
           {value: idParam});
       if (set) {
+        const {disclosureShown} =
+            await this.shoppingApi_.maybeShowProductSpecificationDisclosure(
+                /* urls= */[], /* name= */ '', idParam);
+        if (disclosureShown) {
+          this.showEmptyState_ = true;
+          this.id_ = null;
+          return;
+        }
         document.title = set.name;
         this.setName_ = set.name;
         this.populateTable_(set.urls.map(url => (url.url)));
@@ -414,11 +422,19 @@ export class ProductSpecificationsElement extends PolymerElement {
   }
 
   private async populateTable_(urls: string[]) {
+    this.$.errorToast.hide();
+
+    // Transition directly to the empty state if there are no URLs.
+    if (urls.length === 0) {
+      this.tableColumns_ = [];
+      this.showEmptyState_ = true;
+      return;
+    }
+
     await this.enterLoadingState_(urls.length);
 
     const start = Date.now();
     this.showEmptyState_ = false;
-    this.$.errorToast.hide();
 
     const tableColumns: TableColumn[] = [];
     if (urls.length) {
@@ -441,9 +457,8 @@ export class ProductSpecificationsElement extends PolymerElement {
             url,
             imageUrl: info?.imageUrl?.url || product?.imageUrl?.url || '',
           },
-          productDetails: getProductDetails(
-              product || null, productSpecs, info || null,
-              aggregatedDataByUrl.get(url)?.priceInsightsInfo || null),
+          productDetails:
+              getProductDetails(product || null, productSpecs, info || null),
         });
       }));
 
@@ -471,19 +486,6 @@ export class ProductSpecificationsElement extends PolymerElement {
     return !WindowProxy.getInstance().onLine;
   }
 
-  private async getPriceInsightsInfoForUrls_(urls: string[]):
-      Promise<Map<string, PriceInsightsInfo>> {
-    const infoMap: Map<string, PriceInsightsInfo> = new Map();
-    for (const url of urls) {
-      const {priceInsightsInfo} =
-          await this.shoppingApi_.getPriceInsightsInfoForUrl({url});
-      if (priceInsightsInfo && priceInsightsInfo.clusterId) {
-        infoMap.set(url, priceInsightsInfo);
-      }
-    }
-    return infoMap;
-  }
-
   private async getProductInfoForUrls_(urls: string[]):
       Promise<Map<string, ProductInfo>> {
     const infoMap: Map<string, ProductInfo> = new Map();
@@ -499,8 +501,6 @@ export class ProductSpecificationsElement extends PolymerElement {
   private async aggregateProductDataByUrl_(
       urls: string[], specs: ProductSpecifications):
       Promise<Map<string, AggregatedProductData>> {
-    const urlToPriceInsightsInfoMap: Map<string, PriceInsightsInfo> =
-        await this.getPriceInsightsInfoForUrls_(urls);
     const urlToProductInfoMap: Map<string, ProductInfo> =
         await this.getProductInfoForUrls_(urls);
     const specProductMap: Map<string, ProductSpecificationsProduct> = new Map();
@@ -513,11 +513,9 @@ export class ProductSpecificationsElement extends PolymerElement {
 
     const aggregatedDatas: Map<string, AggregatedProductData> = new Map();
     urls.forEach((url) => {
-      const priceInsightsInfo = urlToPriceInsightsInfoMap.get(url);
       const productInfo = urlToProductInfoMap.get(url);
       const productSpecs = specProductMap.get(url);
       aggregatedDatas.set(url, {
-        priceInsightsInfo: priceInsightsInfo ?? null,
         productInfo: productInfo ?? null,
         spec: productSpecs ?? null,
       });
@@ -584,7 +582,8 @@ export class ProductSpecificationsElement extends PolymerElement {
     }
     const {disclosureShown} =
         await this.shoppingApi_.maybeShowProductSpecificationDisclosure(
-            urls.map(url => ({url})), this.setName_ ? this.setName_ : '');
+            urls.map(url => ({url})), this.setName_ ? this.setName_ : '',
+            /* set_id= */ '');
     // If the disclosure is shown, we won't update the current set.
     if (!disclosureShown) {
       this.modifyUrls_(urls);
@@ -752,36 +751,40 @@ export class ProductSpecificationsElement extends PolymerElement {
         'experimentalFeatureDisclaimer', loadTimeData.getString('userEmail'));
   }
 
-  private fadeAndSlideOutSummaryContainer_(): Animation {
-    return this.$.summaryContainer.animate(
-        [
-          {opacity: 1, transform: 'translateY(0px)'},
-          {
-            opacity: 0,
-            transform: `translateY(-${this.loadingAnimationSlidePx_}px)`,
-          },
-        ],
-        {
-          duration: this.loadingAnimationSlideDurationMs_,
-          easing: 'ease-out',
-          fill: 'forwards',
-        });
+  private async fadeAndSlideOutSummaryContainer_() {
+    await this.$.summaryContainer
+        .animate(
+            [
+              {opacity: 1, transform: 'translateY(0px)'},
+              {
+                opacity: 0,
+                transform: `translateY(-${LOADING_ANIMATION_SLIDE_PX}px)`,
+              },
+            ],
+            {
+              duration: LOADING_ANIMATION_SLIDE_DURATION_MS,
+              easing: 'ease-out',
+              fill: 'forwards',
+            })
+        .finished;
   }
 
-  private fadeAndSlideInSummaryContainer_(): Animation {
-    return this.$.summaryContainer.animate(
-        [
-          {
-            opacity: 0,
-            transform: `translateY(${this.loadingAnimationSlidePx_}px)`,
-          },
-          {opacity: 1, transform: 'translateY(0px)'},
-        ],
-        {
-          duration: this.loadingAnimationSlideDurationMs_,
-          easing: 'ease-out',
-          fill: 'forwards',
-        });
+  private async fadeAndSlideInSummaryContainer_() {
+    await this.$.summaryContainer
+        .animate(
+            [
+              {
+                opacity: 0,
+                transform: `translateY(${LOADING_ANIMATION_SLIDE_PX}px)`,
+              },
+              {opacity: 1, transform: 'translateY(0px)'},
+            ],
+            {
+              duration: LOADING_ANIMATION_SLIDE_DURATION_MS,
+              easing: 'ease-out',
+              fill: 'forwards',
+            })
+        .finished;
   }
 
   // Resolves upon updating the loading state.
@@ -789,25 +792,34 @@ export class ProductSpecificationsElement extends PolymerElement {
     if ([AppState.ERROR, AppState.SYNC_SCREEN, AppState.LOADING].includes(
             this.appState_)) {
       this.loadingState_ = {loading: true, urlCount};
+      this.dispatchLoadingStartEvent_();
       return Promise.resolve();
     }
 
-    const anim = this.fadeAndSlideOutSummaryContainer_();
-    return new Promise<void>(resolve => {
-      anim.addEventListener('finish', () => {
-        this.loadingState_ = {loading: true, urlCount};
-        resolve();
-        this.fadeAndSlideInSummaryContainer_();
-      });
+    return new Promise<void>(async resolve => {
+      await this.fadeAndSlideInSummaryContainer_();
+      this.loadingState_ = {loading: true, urlCount};
+      resolve();
+      await this.fadeAndSlideInSummaryContainer_();
+      this.dispatchLoadingStartEvent_();
     });
   }
 
-  private exitLoadingState_() {
-    const anim = this.fadeAndSlideOutSummaryContainer_();
-    anim.addEventListener('finish', () => {
-      this.loadingState_ = {loading: false, urlCount: 0};
-      this.fadeAndSlideInSummaryContainer_();
-    });
+  private async exitLoadingState_() {
+    await this.fadeAndSlideOutSummaryContainer_();
+    this.loadingState_ = {loading: false, urlCount: 0};
+    await this.fadeAndSlideInSummaryContainer_();
+    this.dispatchLoadingEndEvent_();
+  }
+
+  private dispatchLoadingStartEvent_() {
+    this.dispatchEvent(new CustomEvent(
+        LOADING_START_EVENT_TYPE, {bubbles: true, composed: true}));
+  }
+
+  private dispatchLoadingEndEvent_() {
+    this.dispatchEvent(new CustomEvent(
+        LOADING_END_EVENT_TYPE, {bubbles: true, composed: true}));
   }
 }
 

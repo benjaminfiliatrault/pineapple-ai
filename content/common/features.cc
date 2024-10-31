@@ -128,12 +128,6 @@ BASE_FEATURE(kEmbeddingRequiresOptIn,
              "EmbeddingRequiresOptIn",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enable back/forward cache for screen reader users. This flag should be
-// removed once the https://crbug.com/1271450 is resolved.
-BASE_FEATURE(kEnableBackForwardCacheForScreenReader,
-             "EnableBackForwardCacheForScreenReader",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Enable back/forward cache when a page which has subframe(s) with ongoing
 // navigation(s) is navigated. Currently, this is only for navigations which
 // don't need URLLoaders or haven't yet sent network requests. This flag should
@@ -179,6 +173,12 @@ BASE_FEATURE(kFedCmSameSiteLax,
 BASE_FEATURE(kFedCmSameSiteNone,
              "FedCmSameSiteNone",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Allows showing the filtered out accounts after the user attempts to login to
+// an account.
+BASE_FEATURE(kFedCmShowFilteredAccounts,
+             "FedCmShowFilteredAccounts",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables installed web app matching for getInstalledRelatedApps API.
 BASE_FEATURE(kFilterInstalledAppsWebAppMatching,
@@ -228,6 +228,13 @@ BASE_FEATURE(kFledgeBidderWorkletThreadPool,
              "FledgeBidderWorkletThreadPool",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+#if BUILDFLAG(IS_ANDROID)
+// Makes FLEDGE worklets on Android not use the main thread for their mojo.
+BASE_FEATURE(kFledgeAndroidWorkletOffMainThread,
+             "FledgeAndroidWorkletOffMainThread",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
 // The scaling factor for calculating the number of bidder worklet threads based
 // on the number of Interest Groups.
 // Formula: #threads = 1 + scaling_factor * log10(#IGs)
@@ -252,16 +259,6 @@ BASE_FEATURE(kFocusRenderWidgetHostViewAndroidOnActionDown,
 BASE_FEATURE(kFontSrcLocalMatching,
              "FontSrcLocalMatching",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-#if BUILDFLAG(IS_ANDROID)
-// Controls whether building a database of unique font names is performed
-// using the Fontations library. If off, FreeType is used instead.
-// Used as a kill switch, expected to be removed after one stable cycle
-// of using Fontations. See https://crbug.com/349952802
-BASE_FEATURE(kFontIndexingFontations,
-             "FontIndexingFontations",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
 
 // Feature controlling whether or not memory pressure signals will be forwarded
 // to the GPU process.
@@ -304,6 +301,12 @@ BASE_FEATURE(kHandleChildThreadTypeChangesInBrowser,
              "HandleChildThreadTypeChangesInBrowser",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
+
+// A feature to experiment with removing the soft process limit. See
+// https://crbug.com/369342694.
+BASE_FEATURE(kRemoveRendererProcessLimit,
+             "RemoveRendererProcessLimit",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // A feature flag for the memory-backed code cache.
 BASE_FEATURE(kInMemoryCodeCache,
@@ -392,6 +395,12 @@ BASE_FEATURE(kPreloadingConfig,
              "PreloadingConfig",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// This feature makes it so that having pending views increase the priority of a
+// RenderProcessHost even when there is a priority override.
+BASE_FEATURE(kPriorityOverridePendingViews,
+             "PriorityOverridePendingViews",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables exposure of the core milestone 1 (M1) APIs in the renderer without an
 // origin trial token: Attribution Reporting, FLEDGE, Topics.
 BASE_FEATURE(kPrivacySandboxAdsAPIsM1Override,
@@ -420,11 +429,16 @@ BASE_FEATURE(kSendBeaconThrowForBlobWithNonSimpleType,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // When enabled, try to reuse an unlocked renderer process when COOP swap is
-// happening on prerender initial navigation. Please see crbug.com/1519131 for
+// happening on prerender initial navigation. Please see crbug.com/41492112 for
 // more details.
 BASE_FEATURE(kProcessReuseOnPrerenderCOOPSwap,
              "ProcessReuseOnPrerenderCOOPSwap",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_ANDROID)
+             base::FEATURE_DISABLED_BY_DEFAULT
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+);
 
 // Enables process sharing for sites that do not require a dedicated process
 // by using a default SiteInstance. Default SiteInstances will only be used
@@ -556,6 +570,14 @@ BASE_FEATURE(kTrustedTypesFromLiteral,
              "TrustedTypesFromLiteral",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Validate the code signing identity of the network process before establishing
+// a Mojo connection with it.
+#if BUILDFLAG(IS_MAC)
+BASE_FEATURE(kValidateNetworkServiceProcessIdentity,
+             "ValidateNetworkServiceProcessIdentity",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_MAC)
+
 // Pre-warm up the network process on browser startup.
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kWarmUpNetworkProcess,
@@ -584,9 +606,9 @@ BASE_FEATURE(kWindowOpenFileSelectFix,
              "WindowOpenFileSelectFix",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Flag guard for fix for crbug.com/346629231.
-BASE_FEATURE(kScrollBubblingFix,
-             "ScrollBubblingFix",
+// Flag guard for fix for crbug.com/40942531.
+BASE_FEATURE(kLimitCrossOriginNonActivatedPaintHolding,
+             "LimitCrossOriginNonActivatedPaintHolding",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Please keep features in alphabetical order.

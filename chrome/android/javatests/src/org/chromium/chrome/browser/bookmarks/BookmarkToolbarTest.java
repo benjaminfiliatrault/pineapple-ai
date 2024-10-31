@@ -208,7 +208,6 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
         mBookmarkToolbar.initializeSearchView(
                 mSearchDelegate, R.string.bookmark_toolbar_search, R.id.search_menu_id);
         mBookmarkToolbar.setSortMenuIds(BookmarkToolbarMediator.SORT_MENU_IDS);
-        mBookmarkToolbar.setBookmarkOpener(mBookmarkOpener);
         mBookmarkToolbar.setSelectionDelegate(mSelectionDelegate);
         mBookmarkToolbar.setBookmarkUiMode(BookmarkUiMode.FOLDER);
         mBookmarkToolbar.setIsDialogUi(true);
@@ -247,7 +246,6 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
         for (int menuId : applicableMenuIds) {
             boolean isVisible = !hiddenIdSet.contains(menuId);
             MenuItem menuItem = mBookmarkToolbar.getMenu().findItem(menuId);
-            assertNotNull(menuId);
             assertEquals(
                     "Mismatched visibility for menu item " + menuItem,
                     isVisible,
@@ -259,7 +257,6 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
         for (int menuId : applicableMenuIds) {
             boolean isEnabled = !disabledIds.contains(menuId);
             MenuItem menuItem = mBookmarkToolbar.getMenu().findItem(menuId);
-            assertNotNull(menuId);
             assertEquals(
                     "Mismatched enabled state for menu item " + menuItem,
                     isEnabled,

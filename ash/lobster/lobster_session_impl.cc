@@ -9,55 +9,83 @@
 #include <optional>
 #include <string>
 
+#include "ash/lobster/lobster_entry_point_enums.h"
 #include "ash/lobster/lobster_image_actuator.h"
+#include "ash/lobster/lobster_metrics_recorder.h"
 #include "ash/public/cpp/lobster/lobster_client.h"
 #include "ash/public/cpp/lobster/lobster_image_candidate.h"
+#include "ash/public/cpp/lobster/lobster_metrics_state_enums.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/types/expected.h"
-#include "ui/base/ime/ash/ime_bridge.h"
-#include "ui/base/ime/input_method.h"
 
 namespace ash {
 
-namespace {
-
-ui::TextInputClient* GetFocusedTextInputClient() {
-  const ui::InputMethod* input_method =
-      IMEBridge::Get()->GetInputContextHandler()->GetInputMethod();
-  if (!input_method || !input_method->GetTextInputClient()) {
-    return nullptr;
-  }
-  return input_method->GetTextInputClient();
-}
-
-}  // namespace
-
 LobsterSessionImpl::LobsterSessionImpl(
     std::unique_ptr<LobsterClient> client,
-    const LobsterCandidateStore& candidate_store)
-    : client_(std::move(client)), candidate_store_(candidate_store) {
-  client_->SetActiveSession(this);
+    const LobsterCandidateStore& candidate_store,
+    LobsterEntryPoint entry_point)
+    : client_(std::move(client)),
+      candidate_store_(candidate_store),
+      entry_point_(entry_point) {
+  switch (entry_point_) {
+    case LobsterEntryPoint::kPicker:
+      RecordLobsterState(LobsterMetricState::kPickerTriggerFired);
+      break;
+    case LobsterEntryPoint::kRightClickMenu:
+      RecordLobsterState(LobsterMetricState::kRightClickTriggerFired);
+      break;
+  }
 }
 
-LobsterSessionImpl::LobsterSessionImpl(std::unique_ptr<LobsterClient> client)
-    : LobsterSessionImpl(std::move(client), LobsterCandidateStore()) {}
+LobsterSessionImpl::LobsterSessionImpl(std::unique_ptr<LobsterClient> client,
+                                       LobsterEntryPoint entry_point)
+    : LobsterSessionImpl(std::move(client),
+                         LobsterCandidateStore(),
+                         entry_point) {}
 
-LobsterSessionImpl::~LobsterSessionImpl() {
-  client_->SetActiveSession(nullptr);
-}
+LobsterSessionImpl::~LobsterSessionImpl() = default;
 
 void LobsterSessionImpl::DownloadCandidate(int candidate_id,
                                            const base::FilePath& file_path,
                                            StatusCallback status_callback) {
-  InflateCandidateAndPerformAction(
-      candidate_id,
+  RecordLobsterState(LobsterMetricState::kCandidateDownload);
+
+  std::optional<LobsterImageCandidate> candidate =
+      candidate_store_.FindCandidateById(candidate_id);
+
+  if (!candidate.has_value()) {
+    LOG(ERROR) << "No candidate found.";
+    std::move(status_callback).Run(false);
+    RecordLobsterState(LobsterMetricState::kCandidateDownloadError);
+    return;
+  }
+
+  client_->InflateCandidate(
+      candidate->seed, candidate->query,
       base::BindOnce(
-          [](const base::FilePath& file_path, const std::string& image_bytes) {
-            WriteImageToPath(file_path, image_bytes);
+          [](LobsterClient* lobster_client, const base::FilePath& file_path,
+             StatusCallback status_callback, const LobsterResult& result) {
+            if (!result.has_value() || result->size() == 0) {
+              LOG(ERROR) << "No image candidate";
+              std::move(status_callback).Run(false);
+              RecordLobsterState(LobsterMetricState::kCandidateDownloadError);
+              return;
+            }
+
+            WriteImageToPath(
+                file_path, (*result)[0].image_bytes,
+                base::BindOnce(
+                    [](StatusCallback status_callback, bool success) {
+                      std::move(status_callback).Run(success);
+                      RecordLobsterState(
+                          success
+                              ? LobsterMetricState::kCandidateDownloadSuccess
+                              : LobsterMetricState::kCandidateDownloadError);
+                    },
+                    std::move(status_callback)));
           },
-          file_path),
-      std::move(status_callback));
+          client_.get(), file_path, std::move(status_callback)));
 }
 
 void LobsterSessionImpl::RequestCandidates(const std::string& query,
@@ -71,24 +99,91 @@ void LobsterSessionImpl::RequestCandidates(const std::string& query,
 
 void LobsterSessionImpl::CommitAsInsert(int candidate_id,
                                         StatusCallback status_callback) {
-  InflateCandidateAndPerformAction(
-      candidate_id, base::BindOnce([](const std::string& image_bytes) {
-        InsertImageOrCopyToClipboard(GetFocusedTextInputClient(), image_bytes);
-      }),
-      std::move(status_callback));
+  RecordLobsterState(LobsterMetricState::kCommitAsInsert);
+
+  std::optional<LobsterImageCandidate> candidate =
+      candidate_store_.FindCandidateById(candidate_id);
+
+  if (!candidate.has_value()) {
+    LOG(ERROR) << "No candidate found.";
+    std::move(status_callback).Run(false);
+    RecordLobsterState(LobsterMetricState::kCommitAsInsertError);
+    return;
+  }
+
+  client_->InflateCandidate(
+      candidate->seed, candidate->query,
+      base::BindOnce(
+          [](LobsterClient* lobster_client, StatusCallback status_callback,
+             const LobsterResult& result) {
+            if (!result.has_value() || result->size() == 0) {
+              LOG(ERROR) << "No image candidate";
+              std::move(status_callback).Run(false);
+              RecordLobsterState(LobsterMetricState::kCommitAsInsertError);
+              return;
+            }
+
+            // Queue the data to be inserted later.
+            lobster_client->QueueInsertion(
+                (*result)[0].image_bytes, base::BindOnce([](bool success) {
+                  RecordLobsterState(
+                      success ? LobsterMetricState::kCommitAsInsertSuccess
+                              : LobsterMetricState::kCommitAsInsertError);
+                }));
+
+            // We only know whether the insertion is successful or not after the
+            // webui is closed. Therefore, as long as the inflation request is
+            // successful, we return true back to WebUI and close WebUI.
+            std::move(status_callback).Run(true);
+
+            // Close the WebUI.
+            lobster_client->CloseUI();
+          },
+          client_.get(), std::move(status_callback)));
 }
 
 void LobsterSessionImpl::CommitAsDownload(int candidate_id,
                                           const base::FilePath& file_path,
                                           StatusCallback status_callback) {
-  InflateCandidateAndPerformAction(
-      candidate_id,
+  RecordLobsterState(LobsterMetricState::kCommitAsDownload);
+
+  std::optional<LobsterImageCandidate> candidate =
+      candidate_store_.FindCandidateById(candidate_id);
+
+  if (!candidate.has_value()) {
+    LOG(ERROR) << "No candidate found.";
+    std::move(status_callback).Run(false);
+    RecordLobsterState(LobsterMetricState::kCommitAsDownloadError);
+    return;
+  }
+
+  client_->InflateCandidate(
+      candidate->seed, candidate->query,
       base::BindOnce(
-          [](const base::FilePath& file_path, const std::string& image_bytes) {
-            WriteImageToPath(file_path, image_bytes);
+          [](LobsterClient* lobster_client, const base::FilePath& file_path,
+             StatusCallback status_callback, const LobsterResult& result) {
+            if (!result.has_value() || result->size() == 0) {
+              LOG(ERROR) << "No image candidate";
+              std::move(status_callback).Run(false);
+              RecordLobsterState(LobsterMetricState::kCommitAsDownloadError);
+              return;
+            }
+
+            WriteImageToPath(
+                file_path, (*result)[0].image_bytes,
+                base::BindOnce(
+                    [](LobsterClient* lobster_client,
+                       StatusCallback status_callback, bool success) {
+                      std::move(status_callback).Run(success);
+                      // Close the WebUI.
+                      lobster_client->CloseUI();
+                      RecordLobsterState(
+                          success ? LobsterMetricState::kCommitAsDownloadSuccess
+                                  : LobsterMetricState::kCommitAsDownloadError);
+                    },
+                    lobster_client, std::move(status_callback)));
           },
-          file_path),
-      std::move(status_callback));
+          client_.get(), file_path, std::move(status_callback)));
 }
 
 void LobsterSessionImpl::PreviewFeedback(
@@ -132,37 +227,22 @@ void LobsterSessionImpl::OnRequestCandidates(RequestCandidatesCallback callback,
   std::move(callback).Run(result);
 }
 
-void LobsterSessionImpl::InflateCandidateAndPerformAction(
-    int candidate_id,
-    ActionCallback action_callback,
-    StatusCallback status_callback) {
-  std::optional<LobsterImageCandidate> candidate =
-      candidate_store_.FindCandidateById(candidate_id);
-  if (!candidate.has_value()) {
-    LOG(ERROR) << "No candidate found.";
-    std::move(status_callback).Run(false);
-    return;
-  }
+void LobsterSessionImpl::LoadUI(std::optional<std::string> query,
+                                LobsterMode mode) {
+  client_->LoadUI(query, mode);
+}
 
-  client_->InflateCandidate(
-      candidate->seed, candidate->query,
-      base::BindOnce(
-          [](ActionCallback action_callback, const LobsterResult& result) {
-            if (!result.has_value()) {
-              LOG(ERROR) << "No image candidate";
-              return false;
-            }
+void LobsterSessionImpl::ShowUI() {
+  client_->ShowUI();
+}
 
-            // TODO: b/348283703 - Return the value of action callback.
-            std::move(action_callback).Run((*result)[0].image_bytes);
-            return true;
-          },
-          std::move(action_callback))
-          .Then(base::BindOnce(
-              [](StatusCallback status_callback, bool success) {
-                std::move(status_callback).Run(success);
-              },
-              std::move(status_callback))));
+void LobsterSessionImpl::CloseUI() {
+  client_->CloseUI();
+}
+
+void LobsterSessionImpl::RecordWebUIMetricEvent(
+    ash::LobsterMetricState metric_event) {
+  RecordLobsterState(metric_event);
 }
 
 }  // namespace ash

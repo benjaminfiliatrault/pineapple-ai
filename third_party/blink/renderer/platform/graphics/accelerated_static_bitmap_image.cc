@@ -84,9 +84,8 @@ AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
 
 // static
 scoped_refptr<AcceleratedStaticBitmapImage>
-AcceleratedStaticBitmapImage::CreateFromExternalMailbox(
-    const gpu::MailboxHolder& mailbox_holder,
-    gpu::SharedImageUsageSet usage,
+AcceleratedStaticBitmapImage::CreateFromExternalSharedImage(
+    const gpu::ExportedSharedImage& exported_shared_image,
     const SkImageInfo& sk_image_info,
     bool is_origin_top_left,
     bool supports_display_compositing,
@@ -100,23 +99,9 @@ AcceleratedStaticBitmapImage::CreateFromExternalMailbox(
   if (!sii) {
     return nullptr;
   }
-  // TODO(crbug.com/1494911): Obtain metadata from the original
-  // ClientSharedImage instead once we add the code that allows
-  // ClientSharedImage data to be sent over Mojo.
-  gfx::ColorSpace color_space =
-      sk_image_info.colorSpace()
-          ? gfx::ColorSpace(*(sk_image_info.colorSpace()))
-          : gfx::ColorSpace::CreateSRGB();
+
   scoped_refptr<gpu::ClientSharedImage> shared_image =
-      sii->AddReferenceToSharedImage(
-          mailbox_holder.sync_token, mailbox_holder.mailbox,
-          viz::SkColorTypeToSinglePlaneSharedImageFormat(
-              sk_image_info.colorType()),
-          gfx::SkISizeToSize(sk_image_info.dimensions()), color_space,
-          (is_origin_top_left) ? kTopLeft_GrSurfaceOrigin
-                               : kBottomLeft_GrSurfaceOrigin,
-          sk_image_info.alphaType(), gpu::SharedImageUsageSet(usage),
-          mailbox_holder.texture_target);
+      sii->ImportSharedImage(exported_shared_image);
   auto release_token = sii->GenVerifiedSyncToken();
   // No need to keep the original image after the new reference has been added.
   // Need to update the sync token, however.
@@ -133,10 +118,11 @@ AcceleratedStaticBitmapImage::CreateFromExternalMailbox(
       },
       shared_gpu_context, shared_image);
 
+  auto texture_target = shared_image->GetTextureTarget();
+
   return base::AdoptRef(new AcceleratedStaticBitmapImage(
-      std::move(shared_image), release_token, 0u, sk_image_info,
-      mailbox_holder.texture_target, is_origin_top_left,
-      supports_display_compositing, is_overlay_candidate,
+      std::move(shared_image), release_token, 0u, sk_image_info, texture_target,
+      is_origin_top_left, supports_display_compositing, is_overlay_candidate,
       ImageOrientationEnum::kDefault, shared_gpu_context,
       base::PlatformThreadRef(),
       ThreadScheduler::Current()->CleanupTaskRunner(),
@@ -209,35 +195,26 @@ bool AcceleratedStaticBitmapImage::CopyToTexture(
   DCHECK(mailbox_ref_->is_cross_thread() ||
          dest_gl != ContextProvider()->ContextGL());
 
-  // Get a texture id that |destProvider| knows about and copy from it.
-  dest_gl->WaitSyncTokenCHROMIUM(mailbox_ref_->sync_token().GetConstData());
-  GLuint source_texture_id = dest_gl->CreateAndTexStorage2DSharedImageCHROMIUM(
-      shared_image_->mailbox().name);
-  dest_gl->BeginSharedImageAccessDirectCHROMIUM(
-      source_texture_id, GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM);
+  // Create a texture that |destProvider| knows about and copy from it.
+  auto source_si_texture = shared_image_->CreateGLTexture(dest_gl);
+  auto source_scoped_si_access = source_si_texture->BeginAccess(
+      mailbox_ref_->sync_token(), /*readonly=*/true);
   dest_gl->CopySubTextureCHROMIUM(
-      source_texture_id, 0, dest_target, dest_texture_id, dest_level,
-      dest_point.x(), dest_point.y(), source_sub_rectangle.x(),
+      source_scoped_si_access->texture_id(), 0, dest_target, dest_texture_id,
+      dest_level, dest_point.x(), dest_point.y(), source_sub_rectangle.x(),
       source_sub_rectangle.y(), source_sub_rectangle.width(),
       source_sub_rectangle.height(), unpack_flip_y,
       /*unpack_premultiply_alpha=*/GL_FALSE,
       /*unpack_unmultiply_alpha=*/
       unpack_premultiply_alpha ? GL_FALSE : GL_TRUE);
-  dest_gl->EndSharedImageAccessDirectCHROMIUM(source_texture_id);
-  dest_gl->DeleteTextures(1, &source_texture_id);
+  auto sync_token = gpu::SharedImageTexture::ScopedAccess::EndAccess(
+      std::move(source_scoped_si_access));
 
   // We need to update the texture holder's sync token to ensure that when this
   // mailbox is recycled or deleted, it is done after the copy operation above.
-  gpu::SyncToken sync_token;
-  dest_gl->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
   mailbox_ref_->set_sync_token(sync_token);
 
   return true;
-}
-
-bool AcceleratedStaticBitmapImage::CopyToResourceProvider(
-    CanvasResourceProvider* resource_provider) {
-  return CopyToResourceProvider(resource_provider, Rect());
 }
 
 bool AcceleratedStaticBitmapImage::CopyToResourceProvider(
@@ -435,9 +412,9 @@ void AcceleratedStaticBitmapImage::EnsureSyncTokenVerified() {
 }
 
 gpu::MailboxHolder AcceleratedStaticBitmapImage::GetMailboxHolder() const {
-  if (!IsValid())
+  if (!IsValid()) {
     return gpu::MailboxHolder();
-
+  }
   return gpu::MailboxHolder(shared_image_->mailbox(),
                             mailbox_ref_->sync_token(), texture_target_);
 }
@@ -447,8 +424,14 @@ AcceleratedStaticBitmapImage::GetSharedImage() const {
   if (!IsValid()) {
     return nullptr;
   }
-
   return shared_image_;
+}
+
+gpu::SyncToken AcceleratedStaticBitmapImage::GetSyncToken() const {
+  if (!IsValid()) {
+    return gpu::SyncToken();
+  }
+  return mailbox_ref_->sync_token();
 }
 
 void AcceleratedStaticBitmapImage::Transfer() {

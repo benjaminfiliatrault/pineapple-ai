@@ -281,24 +281,23 @@ bool NavigationTransitionUtils::
   // `is_same_rfh_or_early_commit`.
   CHECK(navigation_request.HasRenderFrameHost());
 
-  auto* destination_entry = navigation_request.GetNavigationEntry();
-  if (!destination_entry) {
-    // We don't always have a destination entry (e.g., a new (non-history)
-    // subframe navigation). However if this is a session history navigation, we
-    // most-likely have a destination entry to navigate toward, from which we
-    // need to purge any existing screenshot.
-    return false;
-  }
-
   NavigationControllerImpl& navigation_controller =
       navigation_request.frame_tree_node()->navigator().controller();
-  auto* last_committed_entry = navigation_controller.GetLastCommittedEntry();
 
-  // Remove the screenshot from the destination before checking the conditions.
-  // We might not capture for this navigation due to some conditions, but the
-  // navigation still continues (to commit/finish), for which we need to remove
-  // the screenshot from the destination entry.
-  RemoveScreenshotFromDestination(navigation_controller, destination_entry);
+  if (auto* destination_entry = navigation_request.GetNavigationEntry()) {
+    // Remove the screenshot from the destination before checking the
+    // conditions. We might not capture for this navigation due to some
+    // conditions, but the navigation still continues, for which we need to
+    // remove the screenshot from the destination entry.
+    RemoveScreenshotFromDestination(navigation_controller, destination_entry);
+  } else {
+    // We don't always have a destination entry (e.g., a new (non-history)
+    // subframe navigation). However we should still capture for navigations
+    // even without destination entries, as the screenshots are captured for the
+    // origin entries of the navigations.
+  }
+
+  auto* last_committed_entry = navigation_controller.GetLastCommittedEntry();
 
   if (gfx::Animation::PrefersReducedMotion()) {
     last_committed_entry->navigation_transition_data()
@@ -318,7 +317,7 @@ bool NavigationTransitionUtils::
     return false;
   }
 
-  if (!navigation_request.IsInMainFrame()) {
+  if (!navigation_request.IsInPrimaryMainFrame()) {
     // See crbug.com/40896219: We will present the fallback UX for navigations
     // in the subframes.
     if (!last_committed_entry->navigation_transition_data()
@@ -326,17 +325,8 @@ bool NavigationTransitionUtils::
              .has_value()) {
       last_committed_entry->navigation_transition_data()
           .set_cache_hit_or_miss_reason(
-              CacheHitOrMissReason::kCacheMissSubframe);
+              CacheHitOrMissReason::kCacheMissNonPrimaryMainFrame);
     }
-    InvokeTestCallbackForNoScreenshot(navigation_request);
-    return false;
-  }
-
-  if (navigation_request.frame_tree_node()
-          ->current_frame_host()
-          ->LoadedWithCacheControlNoStoreHeader()) {
-    last_committed_entry->navigation_transition_data()
-        .set_cache_hit_or_miss_reason(CacheHitOrMissReason::kCacheMissCCNS);
     InvokeTestCallbackForNoScreenshot(navigation_request);
     return false;
   }
@@ -488,10 +478,11 @@ void NavigationTransitionUtils::SetSameDocumentNavigationEntryScreenshotToken(
     return;
   }
 
+  auto* last_committed_entry = nav_controller.GetLastCommittedEntry();
   if (gfx::Animation::PrefersReducedMotion()) {
-    auto* entry = nav_controller.GetLastCommittedEntry();
-    entry->navigation_transition_data().set_cache_hit_or_miss_reason(
-        CacheHitOrMissReason::kCacheMissPrefersReducedMotion);
+    last_committed_entry->navigation_transition_data()
+        .set_cache_hit_or_miss_reason(
+            CacheHitOrMissReason::kCacheMissPrefersReducedMotion);
     return;
   }
 
@@ -504,27 +495,53 @@ void NavigationTransitionUtils::SetSameDocumentNavigationEntryScreenshotToken(
     return;
   }
 
+#if BUILDFLAG(IS_ANDROID)
+  RenderFrameHostImpl* current_rfh =
+      navigation_request.frame_tree_node()->current_frame_host();
+  RenderWidgetHostView* rwhv = current_rfh->GetView();
+  if (auto* window_android = rwhv->GetNativeView()->GetWindowAndroid();
+      !window_android || !window_android->GetCompositor()) {
+    last_committed_entry->navigation_transition_data()
+        .set_cache_hit_or_miss_reason(
+            CacheHitOrMissReason::kNoRootWindowOrCompositor);
+    return;
+  }
+#endif
+
   // NOTE: `destination_token` is to set on the last committed entry (the
   // screenshot's destination), instead of the destination entry of this
   // `navigation_request` (`navigation_request.GetNavigationEntry()`).
 
   // `blink::SameDocNavigationScreenshotDestinationToken` is guaranteed
   // non-empty.
-  nav_controller.GetLastCommittedEntry()
-      ->navigation_transition_data()
+  last_committed_entry->navigation_transition_data()
       .SetSameDocumentNavigationEntryScreenshotToken(*destination_token);
 
   CHECK(GetHostFrameSinkManager());
 
-  int request_sequence = nav_controller.GetLastCommittedEntry()
-                             ->navigation_transition_data()
+  // It is possible to issue two CopyOutputRequests against the last committed
+  // entry. This happens when a same-RFH navigation commits in the browser at
+  // the same time as a same-document navigation commits in the renderer. For
+  // example,
+  // 1. Browser has a navigation A->B. At ready to commit, browser sends a
+  // screenshot request for A.
+  // 2. Renderer commits a same-document navigation from A->A'. The renderer
+  // issues a copy request for A at the same time as sending the commit message.
+  // Bump the `copy_output_request_sequence()` to prevent double-caching the
+  // screenshot for A.
+  //
+  // TODO(https://crbug.com/372301997): We will miss caching a screenshot for A'
+  // in this case. Record that reason explicitly.
+  last_committed_entry->navigation_transition_data()
+      .increment_copy_output_request_sequence();
+  int request_sequence = last_committed_entry->navigation_transition_data()
                              .copy_output_request_sequence();
 
   GetHostFrameSinkManager()->SetOnCopyOutputReadyCallback(
       *destination_token,
       base::BindOnce(&CacheScreenshotImpl, nav_controller.GetWeakPtr(),
                      navigation_request.GetWeakPtr(),
-                     nav_controller.GetLastCommittedEntry()->GetUniqueID(),
+                     last_committed_entry->GetUniqueID(),
                      /*is_copied_from_embedder=*/false, request_sequence,
                      SupportsETC1NonPowerOfTwo(navigation_request)));
 }

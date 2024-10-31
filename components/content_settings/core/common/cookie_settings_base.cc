@@ -619,9 +619,6 @@ CookieSettingsBase::GetCookieSettingInternal(
     url = websocket_mapped_url;
   }
 
-  const bool is_third_party_request =
-      IsThirdPartyRequest(url, site_for_cookies);
-
   // Auto-allow in extensions or for WebUI embedding a secure origin.
   if (ShouldAlwaysAllowCookies(url, first_party_url)) {
     if (info) {
@@ -632,8 +629,11 @@ CookieSettingsBase::GetCookieSettingInternal(
                                      /*is_explicit_setting=*/false,
                                      /*third_party_cookie_allow_mechanism=*/
                                      ThirdPartyCookieAllowMechanism::kNone,
-                                     is_third_party_request};
+                                     /*is_third_party_request=*/false};
   }
+
+  const bool is_third_party_request =
+      IsThirdPartyRequest(url, site_for_cookies);
 
   SettingInfo setting_info;
   ContentSetting cookie_setting = GetContentSetting(
@@ -745,20 +745,23 @@ CookieSettingsBase::GetCookieSettingInternal(
 std::optional<net::cookie_util::StorageAccessStatus>
 CookieSettingsBase::GetStorageAccessStatus(
     const GURL& url,
-    const net::SiteForCookies& site_for_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     base::optional_ref<const url::Origin> top_frame_origin,
     net::CookieSettingOverrides overrides) const {
-  if (!IsThirdPartyRequest(url, site_for_for_cookies)) {
+  if (!IsThirdPartyRequest(url, site_for_cookies)) {
     return std::nullopt;
   }
-  if (IsFullCookieAccessAllowed(url, site_for_for_cookies, top_frame_origin,
+  if (IsFullCookieAccessAllowed(url, site_for_cookies, top_frame_origin,
                                 overrides)) {
     return net::cookie_util::StorageAccessStatus::kActive;
   }
-  overrides.Put(
-      net::CookieSettingOverride::kStorageAccessGrantEligibleViaHeader);
-  if (IsFullCookieAccessAllowed(url, site_for_for_cookies, top_frame_origin,
-                                overrides)) {
+  if (!overrides.Has(net::CookieSettingOverride::kStorageAccessGrantEligible) &&
+      !overrides.Has(
+          net::CookieSettingOverride::kStorageAccessGrantEligibleViaHeader) &&
+      IsFullCookieAccessAllowed(
+          url, site_for_cookies, top_frame_origin,
+          base::Union(overrides, {net::CookieSettingOverride::
+                                      kStorageAccessGrantEligibleViaHeader}))) {
     return net::cookie_util::StorageAccessStatus::kInactive;
   }
   return net::cookie_util::StorageAccessStatus::kNone;

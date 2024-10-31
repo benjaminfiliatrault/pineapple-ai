@@ -43,11 +43,12 @@ bool CanUseZeroCopyImages(const media::VideoFrame& frame) {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC)
   return false;
 #else
-  return frame.HasTextures() && (frame.format() == media::PIXEL_FORMAT_ARGB ||
-                                 frame.format() == media::PIXEL_FORMAT_XRGB ||
-                                 frame.format() == media::PIXEL_FORMAT_ABGR ||
-                                 frame.format() == media::PIXEL_FORMAT_XBGR ||
-                                 frame.format() == media::PIXEL_FORMAT_BGRA);
+  return frame.HasSharedImage() &&
+         (frame.format() == media::PIXEL_FORMAT_ARGB ||
+          frame.format() == media::PIXEL_FORMAT_XRGB ||
+          frame.format() == media::PIXEL_FORMAT_ABGR ||
+          frame.format() == media::PIXEL_FORMAT_XBGR ||
+          frame.format() == media::PIXEL_FORMAT_BGRA);
 #endif
 }
 
@@ -166,8 +167,8 @@ scoped_refptr<StaticBitmapImage> CreateImageFromVideoFrame(
         frame, SharedGpuContext::ContextProviderWrapper());
 
     return AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
-        frame->shared_image(), frame->mailbox_holder(0).sync_token, 0u,
-        sk_image_info, frame->mailbox_holder(0).texture_target,
+        frame->shared_image(), frame->acquire_sync_token(), 0u, sk_image_info,
+        frame->shared_image()->GetTextureTarget(),
         frame->metadata().texture_origin_is_top_left,
         // Pass nullptr for |context_provider_wrapper|, because we don't
         // know which context the mailbox came from. It is used only to
@@ -257,7 +258,7 @@ bool DrawVideoFrameIntoResourceProvider(
   DCHECK(resource_provider);
   DCHECK(gfx::Rect(resource_provider->Size()).Contains(dest_rect));
 
-  if (frame->HasTextures()) {
+  if (frame->HasSharedImage()) {
     if (!raster_context_provider) {
       DLOG(ERROR) << "Unable to process a texture backed VideoFrame w/o a "
                      "RasterContextProvider.";

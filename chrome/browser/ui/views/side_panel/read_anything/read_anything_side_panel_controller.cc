@@ -27,7 +27,7 @@
 #include "components/language/core/browser/language_model.h"
 #include "components/language/core/browser/language_model_manager.h"
 #include "components/language/core/common/locale_util.h"
-#include "components/user_education/common/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_controller.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_types.h"
@@ -224,8 +224,7 @@ void ReadAnythingSidePanelController::UpdateIphVisibility() {
     user_ed->MaybeShowFeaturePromo(
         feature_engagement::kIPHReadingModeSidePanelFeature);
   } else {
-    user_ed->EndFeaturePromo(
-        feature_engagement::kIPHReadingModeSidePanelFeature,
-        user_education::EndFeaturePromoReason::kAbortPromo);
+    user_ed->AbortFeaturePromo(
+        feature_engagement::kIPHReadingModeSidePanelFeature);
   }
 }

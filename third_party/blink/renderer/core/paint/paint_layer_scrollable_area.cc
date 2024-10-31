@@ -194,7 +194,7 @@ void PaintLayerScrollableArea::DisposeImpl() {
       frame_view->RemoveUserScrollableArea(this);
       frame_view->RemoveAnimatingScrollableArea(this);
       frame_view->RemovePendingSnapUpdate(this);
-      probe::UpdateScrollableFlag(GetLayoutBox()->GetNode());
+      probe::UpdateScrollableFlag(GetLayoutBox()->GetNode(), false);
     }
   }
 
@@ -240,9 +240,7 @@ void PaintLayerScrollableArea::ApplyPendingHistoryRestoreScrollOffset() {
   // TODO(pnoland): attempt to restore the anchor in more places than this.
   // Anchor-based restore should allow for earlier restoration.
   bool did_restore = RestoreScrollAnchor(
-      {pending_view_state_->state.scroll_anchor_data_.selector_,
-       LayoutPoint(pending_view_state_->state.scroll_anchor_data_.offset_),
-       pending_view_state_->state.scroll_anchor_data_.simhash_});
+      {pending_view_state_->state.scroll_anchor_data_, *this});
   if (!did_restore) {
     SetScrollOffset(pending_view_state_->state.scroll_offset_,
                     mojom::blink::ScrollType::kProgrammatic,
@@ -437,10 +435,7 @@ void PaintLayerScrollableArea::UpdateScrollOffset(
 
   // The ScrollOffsetTranslation paint property depends on the scroll offset.
   // (see: PaintPropertyTreeBuilder::UpdateScrollAndScrollTranslation).
-  // Intersection observation cached rects affected by the scroll are not
-  // invalidated because it's hard to find all of them. Validity of cached
-  // rects is checked in IntersectionGeometry::PrepareComputeGeometry().
-  GetLayoutBox()->SetNeedsPaintPropertyUpdatePreservingCachedRects();
+  GetLayoutBox()->SetNeedsPaintPropertyUpdate();
   frame_view->UpdateIntersectionObservationStateOnScroll(new_offset -
                                                          scroll_offset_);
 
@@ -1138,7 +1133,7 @@ bool PaintLayerScrollableArea::IsApplyingScrollStart() const {
       return false;
     }
     if (RuntimeEnabledFeatures::CSSScrollStartTargetEnabled() &&
-        GetScrollStartTargets()) {
+        GetScrollStartTarget()) {
       return true;
     }
     return RuntimeEnabledFeatures::CSSScrollStartEnabled() &&
@@ -1938,11 +1933,11 @@ void PaintLayerScrollableArea::UpdateFocusDataForSnapAreas() {
 
   for (auto& fragment : layout_box->PhysicalFragments()) {
     if (auto* snap_areas = fragment.SnapAreas()) {
-      for (const LayoutBox* snap_area : *snap_areas) {
-        cc::ElementId element_id = CompositorElementIdFromDOMNodeId(
-            snap_area->GetNode()->GetDomNodeId());
-        container_data->UpdateSnapAreaFocus(
-            id_to_index.at(element_id), snap_area->GetNode()->HasFocusWithin());
+      for (Element* snap_area : *snap_areas) {
+        cc::ElementId element_id =
+            CompositorElementIdFromDOMNodeId(snap_area->GetDomNodeId());
+        container_data->UpdateSnapAreaFocus(id_to_index.at(element_id),
+                                            snap_area->HasFocusWithin());
       }
     }
   }
@@ -2562,7 +2557,7 @@ void PaintLayerScrollableArea::UpdateScrollableAreaSet() {
   } else {
     frame_view->RemoveUserScrollableArea(this);
   }
-  probe::UpdateScrollableFlag(GetLayoutBox()->GetNode());
+  probe::UpdateScrollableFlag(GetLayoutBox()->GetNode(), std::nullopt);
 
   layer_->DidUpdateScrollsOverflow();
 
@@ -2592,8 +2587,7 @@ bool PaintLayerScrollableArea::ShouldScrollOnMainThread() const {
     return true;
   }
 
-  if (RuntimeEnabledFeatures::ExcludePopupMainThreadScrollingReasonEnabled() &&
-      !GetLayoutBox()->GetFrame()->Client()->GetWebFrame()) {
+  if (!GetLayoutBox()->GetFrame()->Client()->GetWebFrame()) {
     // If there's no WebFrame, then there's no WebFrameWidget, and we can't do
     // threaded scrolling. This currently only happens in a WebPagePopup.
     return true;
@@ -2604,7 +2598,7 @@ bool PaintLayerScrollableArea::ShouldScrollOnMainThread() const {
     if (const auto* properties =
             GetLayoutBox()->FirstFragment().PaintProperties()) {
       if (const auto* scroll = properties->Scroll()) {
-        return paint_artifact_compositor->GetMainThreadScrollingReasons(
+        return paint_artifact_compositor->GetMainThreadRepaintReasons(
                    *scroll) !=
                cc::MainThreadScrollingReason::kNotScrollingOnMain;
       }
@@ -3353,6 +3347,11 @@ PaintLayerScrollableArea::EnsureSnappedQueryScrollSnapshot() {
   return *rare_data.snapped_query_snapshot_;
 }
 
+SnappedQueryScrollSnapshot*
+PaintLayerScrollableArea::GetSnappedQueryScrollSnapshot() {
+  return RareData() ? RareData()->snapped_query_snapshot_ : nullptr;
+}
+
 void PaintLayerScrollableArea::CreateAndSetSnappedQueryScrollSnapshotIfNeeded(
     cc::TargetSnapAreaElementIds ids) {
   if (!RuntimeEnabledFeatures::CSSSnapContainerQueriesEnabled()) {
@@ -3375,8 +3374,7 @@ void PaintLayerScrollableArea::CreateAndSetSnappedQueryScrollSnapshotIfNeeded(
     if (ContainerQueryEvaluator* evaluator =
             target->GetContainerQueryEvaluator()) {
       if (evaluator->DependsOnSnapped()) {
-        evaluator->SetPendingSnappedStateFromScrollSnapshot(
-            EnsureSnappedQueryScrollSnapshot());
+        EnsureSnappedQueryScrollSnapshot();
       }
     }
   }

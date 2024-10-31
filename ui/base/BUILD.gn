@@ -47,6 +47,8 @@ component("ui_data_pack") {
     ":base",
     "//chromeos/crosapi/mojom",  # This target requires minimal dependencies.
     "//ios/chrome/tools/strings:generate_localizable_strings",
+    "//third_party/blink/renderer/core:core",
+    "//third_party/blink/renderer/platform:platform",
     "//ui/gfx:*",
   ]
 
@@ -72,21 +74,6 @@ component("ui_data_pack") {
   ]
 
   defines = [ "IS_UI_DATA_PACK_IMPL" ]
-
-  if (is_chromeos) {
-    sources += [
-      "resource/temporary_shared_resource_path_chromeos.cc",
-      "resource/temporary_shared_resource_path_chromeos.h",
-    ]
-  }
-
-  if (is_chromeos_lacros) {
-    sources += [
-      "resource/data_pack_with_resource_sharing_lacros.cc",
-      "resource/data_pack_with_resource_sharing_lacros.h",
-    ]
-    deps += [ "//components/version_info" ]
-  }
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 }
@@ -189,8 +176,6 @@ component("base") {
     "models/menu_separator_types.h",
     "models/simple_combobox_model.cc",
     "models/simple_combobox_model.h",
-    "models/simple_menu_model.cc",
-    "models/simple_menu_model.h",
     "models/table_model.cc",
     "models/table_model.h",
     "models/table_model_observer.h",
@@ -328,8 +313,6 @@ component("base") {
       "cocoa/defaults_utils.mm",
       "cocoa/find_pasteboard.h",
       "cocoa/find_pasteboard.mm",
-      "cocoa/menu_controller.h",
-      "cocoa/menu_controller.mm",
       "cocoa/menu_utils.h",
       "cocoa/menu_utils.mm",
       "cocoa/nsmenu_additions.h",
@@ -344,8 +327,6 @@ component("base") {
       "cocoa/remote_accessibility_api.mm",
       "cocoa/secure_password_input.h",
       "cocoa/secure_password_input.mm",
-      "cocoa/text_services_context_menu.h",
-      "cocoa/text_services_context_menu.mm",
       "cocoa/tool_tip_base_view.h",
       "cocoa/tool_tip_base_view.mm",
       "cocoa/touch_bar_util.h",
@@ -375,10 +356,6 @@ component("base") {
       "l10n/l10n_util_mac.h",
       "l10n/l10n_util_mac.mm",
     ]
-  }
-
-  if (is_chromeos_lacros) {
-    sources += [ "resource/resource_bundle_lacros.cc" ]
   }
 
   if (is_ios) {
@@ -413,7 +390,6 @@ component("base") {
       "owned_window_anchor.h",
       "pointer/pointer_device.h",
       "pointer/pointer_device_util.cc",
-      "pointer/touch_editing_controller.h",
       "text/bytes_formatting.cc",
       "text/bytes_formatting.h",
       "themed_vector_icon.cc",
@@ -786,8 +762,6 @@ static_library("test_support") {
     "interaction/element_test_util.h",
     "interaction/expect_call_in_scope.h",
     "interaction/interaction_sequence_test_util.h",
-    "interaction/interaction_test_util.cc",
-    "interaction/interaction_test_util.h",
     "interaction/interactive_test.cc",
     "interaction/interactive_test.h",
     "interaction/interactive_test_internal.cc",
@@ -804,8 +778,6 @@ static_library("test_support") {
 
   if (is_mac) {
     sources += [
-      "interaction/interaction_test_util_mac.h",
-      "interaction/interaction_test_util_mac.mm",
       "test/cocoa_helper.h",
       "test/cocoa_helper.mm",
       "test/menu_test_observer.h",
@@ -865,6 +837,7 @@ static_library("test_support") {
   public_deps = [
     ":base",
     "//ui/base/idle",
+    "//ui/base/interaction:test_support",
   ]
 
   if (!is_ios) {
@@ -1037,7 +1010,6 @@ test("ui_base_unittests") {
     "l10n/time_format_unittest.cc",
     "models/image_model_unittest.cc",
     "models/simple_combobox_model_unittest.cc",
-    "models/simple_menu_model_unittest.cc",
     "models/tree_node_iterator_unittest.cc",
     "pointer/touch_ui_controller_unittest.cc",
     "prediction/empty_filter_unittests.cc",
@@ -1110,7 +1082,6 @@ test("ui_base_unittests") {
       "cocoa/cocoa_base_utils_unittest.mm",
       "cocoa/constrained_window/constrained_window_animation_unittest.mm",
       "cocoa/defaults_utils_unittest.mm",
-      "cocoa/menu_controller_unittest.mm",
       "cocoa/nsmenu_additions_unittest.mm",
       "cocoa/nsmenuitem_additions_unittest.mm",
       "cocoa/touch_bar_util_unittest.mm",
@@ -1119,10 +1090,6 @@ test("ui_base_unittests") {
       "l10n/l10n_util_mac_unittest.mm",
       "test/view_tree_validator_unittest.mm",
     ]
-  }
-
-  if (is_chromeos_lacros) {
-    sources += [ "resource/data_pack_with_resource_sharing_lacros_unittest.cc" ]
   }
 
   if (is_ios) {

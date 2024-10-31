@@ -38,6 +38,7 @@ import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.data_sharing.DataSharingServiceFactory;
 import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.data_sharing.ui.invitation_dialog.DataSharingInvitationDialogCoordinator;
 import org.chromium.chrome.browser.hub.HubFieldTrial;
@@ -48,22 +49,23 @@ import org.chromium.chrome.browser.tab_ui.RecyclerViewPosition;
 import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tab_ui.TabSwitcherCustomViewManager;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabList;
-import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabGridDialogMediator.DialogController;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.GridCardOnClickListenerProvider;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcherMessageManager.MessageUpdateObserver;
-import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvider;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
-import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateProvider;
+import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.data_sharing.DataSharingService;
+import org.chromium.components.data_sharing.ServiceStatus;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -139,6 +141,7 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
             new OneshotSupplierImpl<>();
     private final Callback<EdgeToEdgeController> mOnEdgeToEdgeControllerChangedCallback =
             new ValueChangedCallback<>(this::onEdgeToEdgeControllerChanged);
+    private final @Nullable TabGroupLabeller mTabGroupLabeller;
 
     /** Lazily initialized when shown. */
     private @Nullable TabGridDialogCoordinator mTabGridDialogCoordinator;
@@ -155,7 +158,7 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
     /**
      * @param activity The {@link Activity} that hosts the pane.
      * @param profileProviderSupplier The supplier for profiles.
-     * @param tabModelFilterSupplier The supplier of the tab model filter fo rthis pane.
+     * @param tabGroupModelFilterSupplier The supplier of the tab model filter fo rthis pane.
      * @param tabContentManager For management of thumbnails.
      * @param tabCreatorManager For creating new tabs.
      * @param browserControlsStateProvider For determining thumbnail size.
@@ -181,7 +184,7 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
     public TabSwitcherPaneCoordinator(
             @NonNull Activity activity,
             @NonNull OneshotSupplier<ProfileProvider> profileProviderSupplier,
-            @NonNull ObservableSupplier<TabModelFilter> tabModelFilterSupplier,
+            @NonNull ObservableSupplier<TabGroupModelFilter> tabGroupModelFilterSupplier,
             @NonNull TabContentManager tabContentManager,
             @NonNull TabCreatorManager tabCreatorManager,
             @NonNull BrowserControlsStateProvider browserControlsStateProvider,
@@ -233,7 +236,7 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
 
             mContainerViewModel = containerViewModel;
 
-            TabGroupModelFilter filter = (TabGroupModelFilter) tabModelFilterSupplier.get();
+            TabGroupModelFilter filter = tabGroupModelFilterSupplier.get();
             Profile profile = mProfileProviderSupplier.get().getOriginalProfile();
             ActionConfirmationManager actionConfirmationManager =
                     filter.isIncognitoBranded()
@@ -250,7 +253,7 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
                                                 browserControlsStateProvider,
                                                 bottomSheetController,
                                                 dataSharingTabManager,
-                                                tabModelFilterSupplier,
+                                                tabGroupModelFilterSupplier,
                                                 tabContentManager,
                                                 tabCreatorManager,
                                                 coordinatorView,
@@ -269,7 +272,7 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
             mMediator =
                     new TabSwitcherPaneMediator(
                             resetHandler,
-                            tabModelFilterSupplier,
+                            tabGroupModelFilterSupplier,
                             mDialogControllerSupplier,
                             containerViewModel,
                             parentView,
@@ -284,7 +287,7 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
                             activity,
                             browserControlsStateProvider,
                             tabContentManager,
-                            tabModelFilterSupplier);
+                            tabGroupModelFilterSupplier);
 
             var recyclerViewTimer = new UptimeMillisTimer();
 
@@ -299,7 +302,7 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
                             activity,
                             browserControlsStateProvider,
                             mModalDialogManager,
-                            tabModelFilterSupplier,
+                            tabGroupModelFilterSupplier,
                             mMultiThumbnailCardProvider,
                             /* actionOnRelatedTabs= */ true,
                             actionConfirmationManager,
@@ -362,18 +365,33 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
                             coordinatorView,
                             /* rootView= */ parentView,
                             browserControlsStateProvider,
-                            tabModelFilterSupplier,
+                            tabGroupModelFilterSupplier,
                             tabContentManager,
                             tabListCoordinator,
                             bottomSheetController,
                             mode,
-                            onTabGroupCreation);
+                            onTabGroupCreation,
+                            desktopWindowStateProvider,
+                            mEdgeToEdgeSupplier);
             mTabListEditorManager = tabListEditorManager;
             mMediator.setTabListEditorControllerSupplier(
                     mTabListEditorManager.getControllerSupplier());
 
             mMessageManager = messageManager;
             mMessageManager.registerMessages(tabListCoordinator);
+
+            DataSharingService dataSharingService =
+                    DataSharingServiceFactory.getForProfile(profile);
+            @NonNull ServiceStatus serviceStatus = dataSharingService.getServiceStatus();
+            if (serviceStatus.isAllowedToJoin()) {
+                mTabGroupLabeller =
+                        new TabGroupLabeller(
+                                profile,
+                                mTabListCoordinator.getTabListNotificationHandler(),
+                                tabGroupModelFilterSupplier);
+            } else {
+                mTabGroupLabeller = null;
+            }
 
             mOnVisibilityChanged.onResult(isVisibleSupplier.addObserver(mOnVisibilityChanged));
         }
@@ -397,6 +415,9 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
         if (mEdgeToEdgePadAdjuster != null && mEdgeToEdgeSupplier.get() != null) {
             mEdgeToEdgeSupplier.get().unregisterAdjuster(mEdgeToEdgePadAdjuster);
             mEdgeToEdgePadAdjuster = null;
+        }
+        if (mTabGroupLabeller != null) {
+            mTabGroupLabeller.destroy();
         }
     }
 
@@ -431,6 +452,9 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
                 tabList == null ? null : tabs, /* quickMode= */ false);
         mMessageManager.afterReset(tabs.size());
         mTabListOnScrollListener.postUpdate(mTabListCoordinator.getContainerView());
+        if (mTabGroupLabeller != null) {
+            mTabGroupLabeller.showAll();
+        }
     }
 
     /** Performs soft cleanup which removes thumbnails to relieve memory usage. */
@@ -545,6 +569,16 @@ public class TabSwitcherPaneCoordinator implements BackPressHandler {
     /** Returns a nested supplier for the scrolling state of the view. */
     public OneshotSupplier<ObservableSupplier<Boolean>> getIsScrollingSupplier() {
         return mIsScrollingSupplier;
+    }
+
+    /**
+     * Sets the content sensitivity on the recycler view of the tab switcher.
+     *
+     * @param contentIsSensitive True if the tab switcher is sensitive.
+     */
+    public void setTabSwitcherContentSensitivity(boolean contentIsSensitive) {
+        mContainerViewModel.set(
+                TabListContainerProperties.IS_CONTENT_SENSITIVE, contentIsSensitive);
     }
 
     @Override

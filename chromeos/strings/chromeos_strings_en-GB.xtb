@@ -20,6 +20,7 @@
 <translation id="1070066693520972135">WEP</translation>
 <translation id="1071587090247825784">Firewall detected</translation>
 <translation id="1075811647922107217">Page size</translation>
+<translation id="108084407137234521">Can't summarise a transcript fewer than <ph name="MIN_WORD_LENGTH" /> words</translation>
 <translation id="1082009148392559545">Downloading the screen saver</translation>
 <translation id="1094693127011229778">IP address is unavailable</translation>
 <translation id="1100902271996134409">Creating images…</translation>
@@ -43,6 +44,7 @@
 <translation id="11743817593307477">Use arrow keys to move this control to the game action that you want. Use the enter key to place the control. Use the escape key to cancel.</translation>
 <translation id="1175697296044146566">This <ph name="DEVICE_TYPE" /> is managed by <ph name="MANAGER" />.</translation>
 <translation id="1175951029573070619">Average (<ph name="SIGNAL_STRENGTH" />)</translation>
+<translation id="1178581264944972037">Pause</translation>
 <translation id="1180621378971766337">cosy</translation>
 <translation id="1181037720776840403">Remove</translation>
 <translation id="1191518099344003522">APN is enabled.</translation>
@@ -218,6 +220,7 @@
 <translation id="1905710495812624430">Maximum allowed attempts exceeded.</translation>
 <translation id="1908234395526491708">UDP request failures</translation>
 <translation id="1908394185991500139">arrow left</translation>
+<translation id="1914144885717544695">on Friday</translation>
 <translation id="1923388006036088459">Accent colours</translation>
 <translation id="1945403655450283000">Recorder</translation>
 <translation id="1947737735496445907">Printed</translation>
@@ -248,7 +251,6 @@
 <translation id="2085089206770112532">Display brightness down</translation>
 <translation id="2086091080968010660">Time based changes may not be accurate. Turn on system location access in Settings.</translation>
 <translation id="2102231663024125441">Text editing</translation>
-<translation id="2102648867808308635">Help me read this page</translation>
 <translation id="2105810540595158374">Device is a game controller.</translation>
 <translation id="2119172414412204879"><ph name="BOARD_NAME" />, version <ph name="MILESTONE_VERSION" /></translation>
 <translation id="2124643134650336457">Currently only available in English (US)</translation>
@@ -257,6 +259,7 @@
 <translation id="2138109643290557664">Float on by</translation>
 <translation id="2141644705054017895"><ph name="PERCENTAGE_VALUE" />%</translation>
 <translation id="2148716181193084225">Today</translation>
+<translation id="215206000155329774"><ph name="INTENT" />; <ph name="QUERY_TEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="2152882202543497059"><ph name="NUMBER" /> photos</translation>
 <translation id="2154460308960858308">Clear search</translation>
 <translation id="2157660087437850958">emoji picker</translation>
@@ -375,6 +378,7 @@
 <translation id="2713444072780614174">White</translation>
 <translation id="2715723665057727940">river</translation>
 <translation id="2717139507051041123">Enable dark colour mode</translation>
+<translation id="2726755229438917165">on Monday</translation>
 <translation id="2728460467788544679">Clear all print history</translation>
 <translation id="2731700343119398978">Please wait…</translation>
 <translation id="2740531572673183784">OK</translation>
@@ -414,9 +418,11 @@
 <translation id="3031560714565892478">Device is a video camera.</translation>
 <translation id="3042927241478734594">Exit recording?</translation>
 <translation id="3054177598518735801"><ph name="CURRENT_VALUE" />mA</translation>
+<translation id="3055176406666937744">Can't summarise a transcript longer than <ph name="MAX_WORD_LENGTH" /> words</translation>
 <translation id="3056720590588772262">Endpoint</translation>
 <translation id="3060579846059757016">Outlines</translation>
 <translation id="3061850252076394168">enable Select to Speak</translation>
+<translation id="3066772729299747758">on Tuesday</translation>
 <translation id="3069085583900247081">Test failed</translation>
 <translation id="3078740164268491126">table</translation>
 <translation id="3081652522083185657">light</translation>
@@ -450,6 +456,7 @@
 <translation id="3226657629376379887">Layout actions menu</translation>
 <translation id="3227186760713762082">Divide the <ph name="CATEGORY_TEXT" /> value by <ph name="CONVERSION_RATE" /></translation>
 <translation id="3237710083340813756">Rewrite</translation>
+<translation id="3245518008592055173">Can't create names for a transcript fewer than <ph name="MIN_WORD_LENGTH" /> words</translation>
 <translation id="3246869037381808805">Print jobs older than 1 day will be removed</translation>
 <translation id="324961752321393509">Your administrator doesn't allow closing this app</translation>
 <translation id="3263941347294171263">Unplug and replug the <ph name="DEVICE_NAME" /> to continue the update process</translation>
@@ -463,6 +470,7 @@
 <translation id="3305294846493618482">more</translation>
 <translation id="3310640316857623290">DNS latency significantly above allowable threshold</translation>
 <translation id="3321030238473337787">Playback speed</translation>
+<translation id="3327613592010997943">You'll be able to use this device again on <ph name="DAY" /> at <ph name="TIME" />.</translation>
 <translation id="3328783797891415197">Test running</translation>
 <translation id="3340011300870565703">Device has <ph name="BATTERY_PERCENTAGE" />% right bud battery.</translation>
 <translation id="3340978935015468852">settings</translation>
@@ -472,6 +480,7 @@
 <translation id="3361618936611118375">sushi</translation>
 <translation id="3368922792935385530">Connected</translation>
 <translation id="3369013195428705271">Are you sure you want to clear all print history? Your ongoing print jobs will not be cleared.</translation>
+<translation id="3369632935976756339"><ph name="INTENT" />; <ph name="QUERY_TEXT" />; <ph name="SUBTEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="3373141842870501561">Earth flow wallpaper</translation>
 <translation id="33736539805963175"><ph name="LETTERS_COLOR" /> background with the letter <ph name="LETTERS_LETTER" /></translation>
 <translation id="3383623117265110236">Exclusive</translation>
@@ -499,7 +508,6 @@
 <translation id="3502426834823382181">view all apps</translation>
 <translation id="3510890413042482857">Send <ph name="BEGIN_LINK1" />performance trace data<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">ChromeOS update</translation>
-<translation id="3522508178835057262">For now, a transcript longer than <ph name="MAX_WORD_LENGTH" /> words is not supported</translation>
 <translation id="3527036260304016759">Failed – Unknown error</translation>
 <translation id="353214771040290298">Finished editing</translation>
 <translation id="3532980081107202182">About <ph name="MIN_REMAINING" /> minutes remaining</translation>
@@ -611,6 +619,7 @@
 <translation id="409427325554347132">Save test details</translation>
 <translation id="409469431304488632">Experiment</translation>
 <translation id="4095829376260267438">WPA2/WPA3</translation>
+<translation id="4105182082354119881">Can't create names for a transcript longer than <ph name="MAX_WORD_LENGTH" /> words</translation>
 <translation id="4110686435123617899">Select album <ph name="TITLE" /> <ph name="DESC" /></translation>
 <translation id="4111761024568264522">USB touchpad</translation>
 <translation id="4113067922640381334">You now have access to new <ph name="BEGIN_LINK_WALLPAPER_SUBPAGE" />wallpapers<ph name="END_LINK_WALLPAPER_SUBPAGE" /></translation>
@@ -619,6 +628,7 @@
 <translation id="4130035430755296270">Keep hovering for more layout options</translation>
 <translation id="4130750466177569591">I agree</translation>
 <translation id="4131410914670010031">Black and white</translation>
+<translation id="4137700675046373159">on Saturday</translation>
 <translation id="4143226836069425823">Tap on another keyboard key to replace</translation>
 <translation id="4145784616224233563">HTTP firewall</translation>
 <translation id="4147897805161313378">Google Photos</translation>
@@ -641,6 +651,7 @@
 <translation id="4227825898293920515">Password expires in <ph name="TIME" /></translation>
 <translation id="4238516577297848345">No print jobs in progress</translation>
 <translation id="4239069858505860023">GPRS</translation>
+<translation id="4249717042534905822">on Sunday</translation>
 <translation id="4250229828105606438">Screenshot</translation>
 <translation id="4251839292699800785">Stylish office</translation>
 <translation id="4258281355379922695">HTTP latency</translation>
@@ -660,6 +671,7 @@
 <translation id="4333390807948134856"><ph name="KEY_NAME" /> key pressed</translation>
 <translation id="4334293042716981313">You can also <ph name="BEGIN_LINK_FREEFORM_SUBPAGE" />write your own prompt<ph name="END_LINK_FREEFORM_SUBPAGE" /></translation>
 <translation id="4354430579665871434">key</translation>
+<translation id="4356100841225547054">Turn off volume</translation>
 <translation id="4361257691546579041">APN is type default.</translation>
 <translation id="437294888293595148">Reset all shortcuts</translation>
 <translation id="437477383107495720">bunnies</translation>
@@ -715,7 +727,6 @@
 <translation id="458794348635939462">Failed to resolve all hosts</translation>
 <translation id="4593212453765072419">Proxy authentication required</translation>
 <translation id="4594021849294327751">Create transcript</translation>
-<translation id="4602266091140407479">Mic</translation>
 <translation id="4607282946861182308">Can't create images of this. Try another prompt.</translation>
 <translation id="4609350030397390689">Keyboard brightness down</translation>
 <translation id="4623061655523261501">Recording names generated successfully</translation>
@@ -754,7 +765,6 @@
 <translation id="4809927044794281115">Light theme</translation>
 <translation id="4813136279048157860">My Images</translation>
 <translation id="4813345808229079766">Connection</translation>
-<translation id="4824527342590024245">For now, a transcript fewer than <ph name="MIN_WORD_LENGTH" /> words is not supported</translation>
 <translation id="4830894019733815633">canyon</translation>
 <translation id="4832079907277790330">Select folder in the Files app…</translation>
 <translation id="4835901797422965222">No active networks</translation>
@@ -815,12 +825,12 @@
 <translation id="5089810972385038852">State</translation>
 <translation id="5090362543162270857">IPsec (IKEv2)</translation>
 <translation id="5095761549884461003">Unplug the <ph name="DEVICE_NAME" /> USB cable and then reinsert it to continue the update process</translation>
-<translation id="5095864667399748231">Toggle mute</translation>
 <translation id="5099354524039520280">up</translation>
 <translation id="5107243100836678918">Shortcut without <ph name="META_KEY" /> key might conflict with some app's shortcut. Press this shortcut again to continue using it, or press a new shortcut using the <ph name="KEY" /> key. <ph name="LINK_BEGIN" />Learn more<ph name="LINK_END" /></translation>
 <translation id="5108781503443873320">Similar:</translation>
 <translation id="5130848777448318809">ponies</translation>
 <translation id="5137451382116112100">Full</translation>
+<translation id="5140788690559353412">When you lose access to your school account, you will no longer have access to the associated email and Google Drive files such as Gmail, Docs, Slides and more.</translation>
 <translation id="5142961317498132443">Authentication</translation>
 <translation id="5144311987923128508">Confirm button is now disabled</translation>
 <translation id="5144887194300568405">Copy translation</translation>
@@ -898,6 +908,7 @@
 <translation id="550600468576850160">meadow</translation>
 <translation id="551689408806449779">Device has been disconnected. Try reconnecting to test</translation>
 <translation id="5519195206574732858">LTE</translation>
+<translation id="5527146180235316490">Mic options</translation>
 <translation id="5534900277405737921">Terrain</translation>
 <translation id="554067135846762198">coral and tan</translation>
 <translation id="5543701552415191873">locked</translation>
@@ -914,6 +925,7 @@
 <translation id="5595623927872580850">grey</translation>
 <translation id="5596627076506792578">More options</translation>
 <translation id="5600027863942488546"><ph name="KEY_NAME" /> key tested</translation>
+<translation id="5606865426897221650">Tab</translation>
 <translation id="5613201299517339763">You've been signed out</translation>
 <translation id="5620281292257375798">Internal only</translation>
 <translation id="5630438231335788050">Bauhaus</translation>
@@ -943,6 +955,7 @@
 <translation id="5760715441271661976">Portal state</translation>
 <translation id="5763838252932650682">Restarting and updating <ph name="APP_NAME" /></translation>
 <translation id="576835345334454681">Display brightness up</translation>
+<translation id="5775340474232476653">Your teacher has ended class</translation>
 <translation id="5779818640587041940">Keep screen on when recording</translation>
 <translation id="57838592816432529">Mute</translation>
 <translation id="5784136236926853061">High HTTP latency</translation>
@@ -1008,6 +1021,7 @@
 <translation id="6075872808778243331">(Android) HTTP Latency</translation>
 <translation id="6078323886959318429">Add shortcut</translation>
 <translation id="6091080061796993741">yellow</translation>
+<translation id="6093853427925392522">Make sure that you use the Content Transfer app by Google to move your school account data to your personal account before you lose access.</translation>
 <translation id="6104112872696127344">Scanning has been cancelled</translation>
 <translation id="6106186594183574873">To finish, enter your old password</translation>
 <translation id="6108689792487843350">Gateway is unreachable</translation>
@@ -1020,6 +1034,7 @@
 <translation id="6122191549521593678">Online</translation>
 <translation id="6122277663991249694">Chrome OS input method service</translation>
 <translation id="6127426868813166163">White</translation>
+<translation id="613049107179582049">When Chromebook audio is on, Recorder captures all audio playing on this device</translation>
 <translation id="6136285399872347291">backspace</translation>
 <translation id="6137614725462089991">cyberpunk</translation>
 <translation id="6137767437444130246">User certificate</translation>
@@ -1114,6 +1129,7 @@
 <translation id="6527081081771465939">Unknown Wi-Fi security protocol</translation>
 <translation id="6535178685492749208">You're offline. Feedback will be sent later.</translation>
 <translation id="6543412779435705598">tacos</translation>
+<translation id="6550369542114086980">on Thursday</translation>
 <translation id="6551839203326557324">apples</translation>
 <translation id="65526652485742171">Confirm button is now enabled</translation>
 <translation id="6557784757915238407">APN is type <ph name="ATTACH" />.</translation>
@@ -1139,7 +1155,6 @@
 <translation id="6650062777702288430">Kana/alphanumeric switch</translation>
 <translation id="6657240842932274095">Allow system services to use your location?</translation>
 <translation id="6657585470893396449">Password</translation>
-<translation id="6659594942844771486">Tab</translation>
 <translation id="66621959568103627">coral pink</translation>
 <translation id="6667885109186363316"><ph name="SEA_PEN_INTRO_FIRST_PARAGRAPH" />
           <ph name="LINE_BREAK" />
@@ -1244,6 +1259,7 @@
 <translation id="7130438335435247835">Access Point Name (APN)</translation>
 <translation id="7134436342991564651">{0,plural, =1{Name server}other{Name servers}}</translation>
 <translation id="7135814714616751706">Search shortcuts</translation>
+<translation id="7141470099673912333">Content Transfer</translation>
 <translation id="7143207342074048698">Connecting</translation>
 <translation id="7144878232160441200">Retry</translation>
 <translation id="7144954474087165241">pagoda</translation>
@@ -1260,6 +1276,7 @@
 <translation id="7180865173735832675">Customise</translation>
 <translation id="7182063559013288142">Instant hotspot</translation>
 <translation id="7184043045742675738">Click on any key to customise your button. Reposition key with mouse or arrow keys.</translation>
+<translation id="7187669805838282391">on Wednesday</translation>
 <translation id="7206979415662233817">Terms of Service</translation>
 <translation id="7210635925306941239">cyan</translation>
 <translation id="7212547870105584639">Manage network APN settings. APNs establish a connection between a cellular network and the internet. <ph name="BEGIN_LINK_LEARN_MORE" />Learn more<ph name="END_LINK_LEARN_MORE" /></translation>
@@ -1306,6 +1323,7 @@ Download the transcription model (up to 100 MB) to get these transcriptions.</tr
 <translation id="7388959671917308825">Built-in touchpad</translation>
 <translation id="7397270852490618635">Turn Light theme off</translation>
 <translation id="7401543881546089382">Delete shortcut</translation>
+<translation id="7405493795721832710"><ph name="DEVICE_NAME" /> is ready to be updated</translation>
 <translation id="741244894080940828">conversion</translation>
 <translation id="7415801143053185905">Very high HTTP latency</translation>
 <translation id="7425037327577270384">Help me write</translation>
@@ -1320,6 +1338,7 @@ Download the transcription model (up to 100 MB) to get these transcriptions.</tr
 <translation id="7500205272584643581">Allow Recorder to detect and label speakers?</translation>
 <translation id="7501957181231305652">or</translation>
 <translation id="7502658306369382406">IPv6 address</translation>
+<translation id="7503342217608032738">Device can't be used</translation>
 <translation id="7507061649493508884">A radiant <ph name="FLOWER_COLOR" /> <ph name="FLOWER_TYPE" /></translation>
 <translation id="7513770521371759388">bottom</translation>
 <translation id="7514365320538308">Download</translation>
@@ -1334,11 +1353,13 @@ Download the transcription model (up to 100 MB) to get these transcriptions.</tr
 <translation id="7551123448725492271">Device is an audio device.</translation>
 <translation id="7559239713112547082">Preview screenshot</translation>
 <translation id="7561454561030345039">This action is managed by your administrator</translation>
+<translation id="7561759921596375678">Turn on volume</translation>
 <translation id="7569444139234840525"><ph name="QUERY_TEXT" /> · /<ph name="PHONETICS" />/</translation>
 <translation id="7570674786725311828">USB touchscreen</translation>
 <translation id="757747079855995705">stone</translation>
 <translation id="7590883480672980941">Input settings</translation>
 <translation id="7595982850646262331"><ph name="TIME_VALUE" /> left</translation>
+<translation id="7600430297804876776">The <ph name="MANAGER" /> administrator has set when this <ph name="DEVICE_TYPE" /> can be used.</translation>
 <translation id="7613724632293948900">Reposition with mouse or arrow keys.</translation>
 <translation id="7618774594543487847">Neutral</translation>
 <translation id="7620771111601174153">Find out more in the Help Centre</translation>
@@ -1392,7 +1413,9 @@ Download the transcription model (up to 100 MB) to get these transcriptions.</tr
 <translation id="785170686607360576">tulip</translation>
 <translation id="7856267634822906833">Bluetooth touchscreen</translation>
 <translation id="7859006200041800233">cactus flower</translation>
+<translation id="7865217133132122390">Turn on mic</translation>
 <translation id="7869143217755017858">Disable dark mode</translation>
+<translation id="7878972877380405573">Summarise with Help me read</translation>
 <translation id="7881066108824108340">DNS</translation>
 <translation id="7882358943899516840">Provider type</translation>
 <translation id="7882501334836096755">Public key</translation>
@@ -1419,6 +1442,7 @@ Download the transcription model (up to 100 MB) to get these transcriptions.</tr
 <translation id="7983597390787556680">{NUM_ROOL_APPS,plural, =1{‘<ph name="APP_NAME_1" />’ was started automatically}other{# apps were started automatically}}</translation>
 <translation id="7994702968232966508">EAP method</translation>
 <translation id="8004582292198964060">Browser</translation>
+<translation id="8010765388850538088">Learn more about Generative AI</translation>
 <translation id="8017679124341497925">Shortcut edited</translation>
 <translation id="802154636333426148">Download failed</translation>
 <translation id="8028993641010258682">Size</translation>
@@ -1428,6 +1452,7 @@ Download the transcription model (up to 100 MB) to get these transcriptions.</tr
 <translation id="8045012663542226664">Microphone mute</translation>
 <translation id="8054112564438735763">beige</translation>
 <translation id="8062968459344882447"><ph name="CHARACTERS_COLOR" /> <ph name="CHARACTERS_SUBJECTS" /> on a <ph name="CHARACTERS_BACKGROUND" /> background</translation>
+<translation id="8064337065720789104"><ph name="QUERY_TEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="8067126283828232460">APN is connected.</translation>
 <translation id="8067208048261192356">brown</translation>
 <translation id="8067224607978179455">Delete <ph name="ACTION_NAME" /></translation>
@@ -1440,6 +1465,7 @@ Download the transcription model (up to 100 MB) to get these transcriptions.</tr
 <translation id="8088963492174775412">Press to record</translation>
 <translation id="8094062939584182041">Allow Google to email you about this issue</translation>
 <translation id="8104083085214006426">You are using an open and unsecure network</translation>
+<translation id="8110942816572072814">Your teacher has locked your screen</translation>
 <translation id="811820734797650957">(Android) Gateway can be pinged</translation>
 <translation id="8129620843620772246"><ph name="TEMPERATURE_C" />° C</translation>
 <translation id="8131740175452115882">Confirm</translation>
@@ -1456,12 +1482,12 @@ Download the transcription model (up to 100 MB) to get these transcriptions.</tr
 <translation id="8179976553408161302">Enter</translation>
 <translation id="8183975772394450380">beach</translation>
 <translation id="819278132617411009">Use Google AI to be more productive</translation>
+<translation id="8200772114523450471">Resume</translation>
 <translation id="8206859287963243715">Mobile</translation>
 <translation id="8208861521865154048">Perks</translation>
 <translation id="8226628635270268143">Choose your favourite photos and albums</translation>
 <translation id="8227119283605456246">Attach file</translation>
 <translation id="8230672074305416752">Failed to ping the default network gateway</translation>
-<translation id="8236972776513018241">Transcript</translation>
 <translation id="8238771987802558562">Choose an APN</translation>
 <translation id="8246209727385807362">Unknown operator</translation>
 <translation id="8250926778281121244">rust</translation>
@@ -1531,11 +1557,13 @@ Download the transcription model (up to 100 MB) to get these transcriptions.</tr
 <translation id="8557447961879934694">WPA2</translation>
 <translation id="8575298406870537639">Your operator may require this option to connect to their network. Contact your operator for details.</translation>
 <translation id="8576249514688522074">Uninitialised</translation>
+<translation id="8584654835905316966">A restart is required to complete the installation of firmware for <ph name="DEVICE_NAME" /> to version <ph name="VERSION" />. Your computer may appear to reboot several times. This behaviour is expected.</translation>
 <translation id="8593058461203131755">pause media</translation>
 <translation id="8620617069779373398">Roaming status</translation>
 <translation id="8626489604350149811">More actions for <ph name="APN_NAME" /></translation>
 <translation id="86356131183441916">Light purple</translation>
 <translation id="8647595191512746911">Audio transcription</translation>
+<translation id="8650852232143958317">Take your Gmail and Google Drive files with you</translation>
 <translation id="8651481478098336970">volume mute</translation>
 <translation id="8655295600908251630">Channel</translation>
 <translation id="8655828773034788261">Share URL:</translation>
@@ -1587,7 +1615,6 @@ Download the transcription model (up to 100 MB) to get these transcriptions.</tr
 <translation id="8864415976656252616">No suggested content. See top help content.</translation>
 <translation id="8868741746785112895">GUID</translation>
 <translation id="8876270629542503161">Device is a tablet.</translation>
-<translation id="8878117140814294155">Toggle mute on microphone</translation>
 <translation id="8881098542468797602">Test succeeded</translation>
 <translation id="8882789155418924367">owls</translation>
 <translation id="8892443466059986410">Cancel shortcut editing</translation>
@@ -1664,6 +1691,7 @@ Download the transcription model (up to 100 MB) to get these transcriptions.</tr
 <translation id="917720651393141712">Test</translation>
 <translation id="9188992814426075118">Your keyboard can automatically match your wallpaper</translation>
 <translation id="9189000703457422362">Can't connect to this network using automatically detected APNs. Contact your mobile operator for more information.</translation>
+<translation id="9190726385682694354"><ph name="QUERY_TEXT" />; <ph name="SUBTEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="9193744392140377127">APN*</translation>
 <translation id="9195918315673527512">Selected joystick keys are <ph name="KEYS" />. Tap on the button to edit the control</translation>
 <translation id="9204237731135241582">Can't contact the gateway from Android apps</translation>
@@ -1684,5 +1712,6 @@ Download the transcription model (up to 100 MB) to get these transcriptions.</tr
 <translation id="982713511914535780">Run discharge test</translation>
 <translation id="98515147261107953">Landscape</translation>
 <translation id="987264212798334818">General</translation>
+<translation id="994473081369871639">Turn off mic</translation>
 <translation id="995062385528875723">Can’t use accented letters, non-Latin alphabet or symbols</translation>
 </translationbundle>

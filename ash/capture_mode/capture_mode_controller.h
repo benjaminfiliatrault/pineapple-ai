@@ -16,7 +16,6 @@
 #include "ash/capture_mode/capture_mode_types.h"
 #include "ash/capture_mode/video_recording_watcher.h"
 #include "ash/public/cpp/capture_mode/capture_mode_delegate.h"
-#include "ash/public/cpp/scanner/scanner_action.h"
 #include "ash/public/cpp/session/session_observer.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback_forward.h"
@@ -51,6 +50,8 @@ class CaptureModeBehavior;
 class CaptureModeCameraController;
 class CaptureModeObserver;
 class BaseCaptureModeSession;
+class ScannerActionViewModel;
+class SearchResultsPanel;
 
 // Defines a callback type that will be invoked when an attempt to delete the
 // given `path` is completed with the given status `delete_successful`.
@@ -130,6 +131,16 @@ class ASH_EXPORT CaptureModeController
   CaptureModeEducationController* education_controller() {
     return education_controller_.get();
   }
+  views::Widget* search_results_panel_widget() {
+    return search_results_panel_widget_.get();
+  }
+
+  // Returns the search results panel, or nullptr if none exists.
+  SearchResultsPanel* GetSearchResultsPanel() const;
+
+  // Shows the results panel with the captured region as `image` and the search
+  // results `url`.
+  void ShowSearchResultsPanel(const gfx::ImageSkia& image, GURL url);
 
   // Returns true if a capture mode session is currently active. If you only
   // need to call this method, but don't need the rest of the controller, use
@@ -252,11 +263,14 @@ class ASH_EXPORT CaptureModeController
 
   // Called only while a capture session is in progress to perform the actual
   // capture depending on the current selected `source_` and `type_`, and ends
-  // the capture session.
-  void PerformCapture();
+  // the capture session. `capture_type` indicates what type of capture to do.
+  void PerformCapture(
+      PerformCaptureType capture_type = PerformCaptureType::kCapture);
 
   // Called by a capture session behavior to perform an image capture search.
-  void PerformImageSearch();
+  // `capture_type` indicates the type of search to perform on the captured
+  // image.
+  void PerformImageSearch(PerformCaptureType capture_type);
 
   void EndVideoRecording(EndRecordingReason reason);
 
@@ -333,6 +347,22 @@ class ASH_EXPORT CaptureModeController
   // Returns true is annotating should be supported for the current capture mode
   // behavior.
   bool IsAnnotatingSupported() const;
+
+  // Calls the delegate to send a multimodal search with `image` and `text`.
+  void SendMultimodalSearch(const gfx::ImageSkia& image,
+                            const std::string& text);
+
+  // Called by `CaptureModeDelegate` when the search result is fetched.
+  // Opens `url` and `image` if the following conditions are met:
+  //  - The current capture mode session is active.
+  //  - The current session object is the same as the one that initiated the
+  //  search request (i.e. the given `session_of_request`).
+  //  - The captured region on the screen has not changed since the request was
+  //  made.
+  void OnSearchUrlFetched(BaseCaptureModeSession* session_of_request,
+                          const gfx::Rect& captured_region,
+                          const gfx::ImageSkia& image,
+                          GURL url);
 
   // recording::mojom::RecordingServiceClient:
   void OnRecordingEnded(recording::mojom::RecordingStatus status,
@@ -478,13 +508,29 @@ class ASH_EXPORT CaptureModeController
 
   // Called back when an image has been captured to trigger a search request.
   // `jpeg_bytes` is the buffer containing the captured image in a JPEG format.
+  // `capture_type` indicates the type of search to perform on the captured
+  // image.
   void OnImageCapturedForSearch(
+      PerformCaptureType capture_type,
       bool was_cursor_originally_blocked,
       scoped_refptr<base::RefCountedMemory> jpeg_bytes);
 
+  // Called back when text detection is complete to show copy text and smart
+  // actions buttons if needed. `captured_region` is the selected region at the
+  // time of the text detection request. If the selected region has changed
+  // since the request was made, then the detected text result is discarded and
+  // no buttons are shown.
+  void OnTextDetectionComplete(const gfx::Rect& captured_region,
+                               std::string detected_text);
+
+  // Called back when the copy text button is clicked. This will copy `text` to
+  // clipboard, show a notification, and close the capture session.
+  void OnCopyTextButtonClicked(const std::u16string& text);
+
   // Called back when the Scanner feature has processed a captured image to
   // suggest available Scanner actions.
-  void OnScannerActionsFetched(std::vector<ScannerAction> scanner_actions);
+  void OnScannerActionsFetched(
+      std::vector<ScannerActionViewModel> scanner_actions);
 
   // Called back when an attempt to save the image file has been completed, with
   // `file_saved_path` indicating whether the attempt succeeded or failed. If
@@ -583,8 +629,10 @@ class ASH_EXPORT CaptureModeController
   // Called by the DLP manager when it's checked for any on-screen content
   // restriction at the time when the capture operation is attempted. `proceed`
   // will be set to true if the capture operation should continue, false if it
-  // should be aborted.
-  void OnDlpRestrictionCheckedAtPerformingCapture(bool proceed);
+  // should be aborted. `capture_type` indicates what type of capture to do.
+  void OnDlpRestrictionCheckedAtPerformingCapture(
+      PerformCaptureType capture_type,
+      bool proceed);
 
   // Called after the video recording was written to the final file location.
   // `should_delete_file` indicates if the file was deleted due to an error.
@@ -674,6 +722,9 @@ class ASH_EXPORT CaptureModeController
   CaptureModeSource source_ = CaptureModeSource::kRegion;
   RecordingType recording_type_ = RecordingType::kWebM;
 
+  // Contains `SearchResultsPanel` as its contents view.
+  std::unique_ptr<views::Widget> search_results_panel_widget_;
+
   // A blocking task runner for file IO operations.
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
 
@@ -744,7 +795,8 @@ class ASH_EXPORT CaptureModeController
 
   base::OnceClosure on_video_recording_started_callback_for_test_;
 
-  base::OnceClosure on_image_captured_for_search_callback_for_test_;
+  base::RepeatingCallback<void(PerformCaptureType capture_type)>
+      on_image_captured_for_search_callback_for_test_;
 
   // Timers used to schedule recording of the number of screenshots taken.
   base::RepeatingTimer num_screenshots_taken_in_last_day_scheduler_;

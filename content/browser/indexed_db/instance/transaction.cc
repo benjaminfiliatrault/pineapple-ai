@@ -508,11 +508,11 @@ uint64_t Transaction::CreateExternalObjects(
         if (info->file) {
           DCHECK_NE(info->size, IndexedDBExternalObject::kUnknownSize);
           (*external_objects)[i] = IndexedDBExternalObject(
-              std::move(info->blob), info->uuid, info->file->name,
-              info->mime_type, info->file->last_modified, info->size);
+              std::move(info->blob), info->file->name, info->mime_type,
+              info->file->last_modified, info->size);
         } else {
           (*external_objects)[i] = IndexedDBExternalObject(
-              std::move(info->blob), info->uuid, info->mime_type, info->size);
+              std::move(info->blob), info->mime_type, info->size);
         }
         break;
       }
@@ -646,20 +646,20 @@ Status Transaction::CommitPhaseTwo() {
 
     switch (mode_) {
       case blink::mojom::IDBTransactionMode::ReadOnly:
-        UMA_HISTOGRAM_MEDIUM_TIMES(
+        DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES(
             "WebCore.IndexedDB.Transaction.ReadOnly.TimeActive", active_time);
         base::UmaHistogramMediumTimes(
             "WebCore.IndexedDB.Transaction.ReadOnly.TimeActive2", active_time2);
         break;
       case blink::mojom::IDBTransactionMode::ReadWrite:
-        UMA_HISTOGRAM_MEDIUM_TIMES(
+        DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES(
             "WebCore.IndexedDB.Transaction.ReadWrite.TimeActive", active_time);
         base::UmaHistogramMediumTimes(
             "WebCore.IndexedDB.Transaction.ReadWrite.TimeActive2",
             active_time2);
         break;
       case blink::mojom::IDBTransactionMode::VersionChange:
-        UMA_HISTOGRAM_MEDIUM_TIMES(
+        DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES(
             "WebCore.IndexedDB.Transaction.VersionChange.TimeActive",
             active_time);
         base::UmaHistogramMediumTimes(

@@ -593,8 +593,8 @@ TrustedSignalsCacheImpl::TrustedSignalsCacheImpl(
 TrustedSignalsCacheImpl::~TrustedSignalsCacheImpl() = default;
 
 mojo::PendingRemote<auction_worklet::mojom::TrustedSignalsCache>
-TrustedSignalsCacheImpl::CreateMojoPipe(SignalsType signals_type,
-                                        const url::Origin& script_origin) {
+TrustedSignalsCacheImpl::CreateRemote(SignalsType signals_type,
+                                      const url::Origin& script_origin) {
   mojo::PendingRemote<auction_worklet::mojom::TrustedSignalsCache> out;
   receiver_set_.Add(this, out.InitWithNewPipeAndPassReceiver(),
                     ReceiverRestrictions{signals_type, script_origin});
@@ -973,13 +973,13 @@ void TrustedSignalsCacheImpl::StartBiddingSignalsFetch(
       // will not retain pointers to them.
       bidding_partitions.emplace_back(
           cache_entry->partition_id, &cache_entry->interest_group_names,
-          &cache_entry->keys, &cache_key->fetch_key.main_frame_origin.host(),
-          &cache_key->additional_params);
+          &cache_entry->keys, &cache_key->additional_params);
     }
   }
   fetch->fetcher->FetchBiddingSignals(
-      url_loader_factory_.get(), fetch_it->first.trusted_signals_url,
-      bidding_and_auction_key, bidding_partition_map,
+      url_loader_factory_.get(), fetch_it->first.main_frame_origin.host(),
+      fetch_it->first.trusted_signals_url, bidding_and_auction_key,
+      bidding_partition_map,
       base::BindOnce(&TrustedSignalsCacheImpl::OnFetchComplete,
                      base::Unretained(this), fetch_it));
 }
@@ -1013,13 +1013,13 @@ void TrustedSignalsCacheImpl::StartScoringSignalsFetch(
       scoring_partitions.emplace_back(
           cache_entry->partition_id, &cache_key->render_url,
           &cache_key->component_render_urls,
-          &cache_key->fetch_key.main_frame_origin.host(),
           &cache_key->additional_params);
     }
   }
   fetch->fetcher->FetchScoringSignals(
-      url_loader_factory_.get(), fetch_it->first.trusted_signals_url,
-      bidding_and_auction_key, scoring_partition_map,
+      url_loader_factory_.get(), fetch_it->first.main_frame_origin.host(),
+      fetch_it->first.trusted_signals_url, bidding_and_auction_key,
+      scoring_partition_map,
       base::BindOnce(&TrustedSignalsCacheImpl::OnFetchComplete,
                      base::Unretained(this), fetch_it));
 }

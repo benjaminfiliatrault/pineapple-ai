@@ -139,6 +139,7 @@ component("views_examples_lib") {
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
     "//ui/lottie",
+    "//ui/menus",
     "//ui/message_center",
     "//ui/native_theme",
     "//ui/resources",
@@ -147,7 +148,10 @@ component("views_examples_lib") {
     "//ui/views",
   ]
 
-  public_deps = [ "//ui/base/mojom:mojom" ]
+  public_deps = [
+    "//ui/base/mojom:mojom",
+    "//ui/base/mojom:ui_base_types",
+  ]
 
   if (is_win) {
     deps += [ "//third_party/wtl" ]

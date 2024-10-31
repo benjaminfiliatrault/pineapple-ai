@@ -12,11 +12,12 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
+#include "chrome/browser/ui/user_education/browser_user_education_interface.h"
 #include "components/sharing_message/sharing_dialog_data.h"
-#include "components/user_education/common/feature_promo_controller.h"
-#include "components/user_education/common/feature_promo_handle.h"
-#include "components/user_education/common/feature_promo_result.h"
-#include "components/user_education/common/new_badge_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_handle.h"
+#include "components/user_education/common/feature_promo/feature_promo_result.h"
+#include "components/user_education/common/new_badge/new_badge_controller.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
@@ -405,11 +406,10 @@ bool TestBrowserWindow::MaybeShowStartupFeaturePromo(
   return feature_promo_controller_->MaybeShowStartupPromo(std::move(params));
 }
 
-bool TestBrowserWindow::EndFeaturePromo(
-    const base::Feature& iph_feature,
-    user_education::EndFeaturePromoReason close_reason) {
+bool TestBrowserWindow::AbortFeaturePromo(const base::Feature& iph_feature) {
   return feature_promo_controller_ &&
-         feature_promo_controller_->EndPromo(iph_feature, close_reason);
+         feature_promo_controller_->EndPromo(
+             iph_feature, user_education::EndFeaturePromoReason::kAbortPromo);
 }
 
 user_education::FeaturePromoHandle
@@ -421,14 +421,27 @@ TestBrowserWindow::CloseFeaturePromoAndContinue(
              : user_education::FeaturePromoHandle();
 }
 
-void TestBrowserWindow::NotifyFeatureEngagementEvent(const char* event_name) {}
+bool TestBrowserWindow::NotifyFeaturePromoFeatureUsed(
+    const base::Feature& feature,
+    FeaturePromoFeatureUsedAction action) {
+  if (feature_promo_controller_ &&
+      action == FeaturePromoFeatureUsedAction::kClosePromoIfPresent) {
+    return feature_promo_controller_->EndPromo(
+        feature, user_education::EndFeaturePromoReason::kFeatureEngaged);
+  }
+  return false;
+}
 
-void TestBrowserWindow::NotifyPromoFeatureUsed(const base::Feature& feature) {}
+void TestBrowserWindow::NotifyAdditionalConditionEvent(const char* event_name) {
+}
 
 user_education::DisplayNewBadge TestBrowserWindow::MaybeShowNewBadgeFor(
     const base::Feature& new_badge_feature) {
   return user_education::DisplayNewBadge();
 }
+
+void TestBrowserWindow::NotifyNewBadgeFeatureUsed(
+    const base::Feature& feature) {}
 
 user_education::FeaturePromoController*
 TestBrowserWindow::SetFeaturePromoController(

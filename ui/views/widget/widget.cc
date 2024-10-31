@@ -21,6 +21,7 @@
 #include "base/trace_event/base_tracing.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "ui/accessibility/platform/ax_platform.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/default_style.h"
 #include "ui/base/hit_test.h"
@@ -411,8 +412,9 @@ void Widget::Init(InitParams params) {
       params.name = params.delegate->GetContentsView()->GetClassName();
   }
 
-  if (params.parent && GetWidgetForNativeView(params.parent))
+  if (params.parent && GetWidgetForNativeView(params.parent)) {
     parent_ = GetWidgetForNativeView(params.parent)->GetWeakPtr();
+  }
 
   // Subscripbe to parent's paint-as-active change.
   if (parent_) {
@@ -482,10 +484,13 @@ void Widget::Init(InitParams params) {
   // send accessible event notifications. From that point on, any view that is
   // connected to the RootView will be able to send accessible events.
   root_view_->GetViewAccessibility().SetRootViewIsReadyToNotifyEvents();
+
   // We need to add the RootView's ViewAccessibility as an observer of the
   // widget, so that when the widget is closed, the accessible data is set
   // accordingly.
   AddObserver(&root_view_->GetViewAccessibility());
+
+  ax_mode_observation_.Observe(&ui::AXPlatform::GetInstance());
 
   // Copy the elements of params that will be used after it is moved.
   const InitParams::Type type = params.type;
@@ -551,7 +556,7 @@ void Widget::Init(InitParams params) {
   }
 
   if (parent_) {
-    parent_->GetSublevelManager()->TrackChildWidget(this);
+    parent_->OnChildAdded(this);
   }
 
   native_theme_observation_.Observe(GetNativeTheme());
@@ -837,6 +842,8 @@ void Widget::CloseWithReason(ClosedReason closed_reason) {
   SaveWindowPlacement();
   ClearFocusFromWidget();
 
+  ax_mode_observation_.Reset();
+
   observers_.Notify(&WidgetObserver::OnWidgetClosing, this);
 
   internal::AnyWidgetObserverSingleton::GetInstance()->OnAnyWidgetClosing(this);
@@ -856,6 +863,8 @@ void Widget::CloseNow() {
   // Set this so that Widget::Close() early outs. In general this operation is
   // a one-way and can't be undone.
   widget_closed_ = true;
+
+  ax_mode_observation_.Reset();
 
   observers_.Notify(&WidgetObserver::OnWidgetClosing, this);
   internal::AnyWidgetObserverSingleton::GetInstance()->OnAnyWidgetClosing(this);
@@ -2103,6 +2112,19 @@ void Widget::OnNativeThemeUpdated(ui::NativeTheme* observed_theme) {
   ThemeChanged();
 }
 
+void Widget::OnAXModeAdded(ui::AXMode mode) {
+  if (mode == ui::AXMode::kNativeAPIs) {
+    auto* root_view = GetRootView();
+    if (root_view) {
+      // The root view's accessibility cache is always fully initialized, so we
+      // only have to recursively complete for its descendants.
+      for (View* child : root_view->children()) {
+        child->GetViewAccessibility().CompleteCacheInitialization();
+      }
+    }
+  }
+}
+
 void Widget::SetColorModeOverride(
     std::optional<ui::ColorProviderKey::ColorMode> color_mode) {
   color_mode_override_ = color_mode;
@@ -2296,10 +2318,10 @@ void Widget::SetParent(Widget* parent) {
   }
 
   if (old_parent) {
-    old_parent->GetSublevelManager()->UntrackChildWidget(this);
+    old_parent->OnChildRemoved(this);
   }
   if (parent) {
-    parent->GetSublevelManager()->TrackChildWidget(this);
+    parent->OnChildAdded(this);
   }
 }
 
@@ -2366,6 +2388,9 @@ void Widget::HandleWidgetDestroying() {
   if (GetFocusManager() && root_view_) {
     GetFocusManager()->ViewRemoved(root_view_.get());
   }
+  if (parent_) {
+    parent_->OnChildRemoved(this);
+  }
   observers_.Notify(&WidgetObserver::OnWidgetDestroying, this);
   if (non_client_view_) {
     non_client_view_->WindowClosing();
@@ -2379,6 +2404,8 @@ void Widget::HandleWidgetDestroyed() {
   if (native_widget_destroyed_) {
     return;
   }
+
+  ax_mode_observation_.Reset();
 
   observers_.Notify(&WidgetObserver::OnWidgetDestroyed, this);
 
@@ -2404,6 +2431,14 @@ void Widget::HandleWidgetDestroyed() {
   // WIDGET_OWNS_NATIVE_WIDGET the NativeWidget will be cleaned up through
   // |owned_native_widget_|
   native_widget_.reset();
+}
+
+void Widget::OnChildAdded(Widget* child_widget) {
+  observers_.Notify(&WidgetObserver::OnWidgetChildAdded, this, child_widget);
+}
+
+void Widget::OnChildRemoved(Widget* child_widget) {
+  observers_.Notify(&WidgetObserver::OnWidgetChildRemoved, this, child_widget);
 }
 
 BEGIN_METADATA_BASE(Widget)

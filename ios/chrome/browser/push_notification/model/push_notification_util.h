@@ -26,7 +26,8 @@ enum class SettingsAuthorizationStatus {
   AUTHORIZED,
   PROVISIONAL,
   EPHEMERAL,
-  kMaxValue = EPHEMERAL
+  INVALID,
+  kMaxValue = INVALID
 };
 }  // namespace push_notification
 
@@ -87,6 +88,9 @@ enum class SettingsAuthorizationStatus {
 // push notifications. This is used for features that require knowledge of
 // status changes on notification permissions.
 + (UNAuthorizationStatus)getSavedPermissionSettings;
+
+// Gets the authorization status from iOS and updates prefs if needed.
++ (void)updateAuthorizationStatusPref;
 
 // This function updates the value stored in the prefService that represents the
 // user's iOS settings permission status for push notifications. If there is a

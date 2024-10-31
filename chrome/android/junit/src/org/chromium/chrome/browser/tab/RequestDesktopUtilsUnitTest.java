@@ -252,7 +252,6 @@ public class RequestDesktopUtilsUnitTest {
         when(mActivity.getResources()).thenReturn(mResources);
 
         TrackerFactory.setTrackerForTests(mTracker);
-        disableGlobalDefaultsExperimentFeatures();
 
         ShadowSysUtils.setMemoryInMB(7000);
         ShadowDisplayAndroid.setDisplayAndroid(mDisplayAndroid);
@@ -309,7 +308,7 @@ public class RequestDesktopUtilsUnitTest {
     public void testSetRequestDesktopSiteContentSettingsForUrl_DefaultBlock_Incognito() {
         // Incognito profile type.
         when(mProfile.isOffTheRecord()).thenReturn(true);
-        when(mProfile.isPrimaryOTRProfile()).thenReturn(true);
+        when(mProfile.isPrimaryOtrProfile()).thenReturn(true);
         mRdsDefaultValue = ContentSettingValues.BLOCK;
 
         RequestDesktopUtils.setRequestDesktopSiteContentSettingsForUrl(mProfile, mGoogleUrl, true);
@@ -329,7 +328,7 @@ public class RequestDesktopUtilsUnitTest {
     public void testSetRequestDesktopSiteContentSettingsForUrl_DefaultAllow_Incognito() {
         // Incognito profile type.
         when(mProfile.isOffTheRecord()).thenReturn(true);
-        when(mProfile.isPrimaryOTRProfile()).thenReturn(true);
+        when(mProfile.isPrimaryOtrProfile()).thenReturn(true);
         mRdsDefaultValue = ContentSettingValues.ALLOW;
 
         RequestDesktopUtils.setRequestDesktopSiteContentSettingsForUrl(mProfile, mGoogleUrl, false);
@@ -923,14 +922,5 @@ public class RequestDesktopUtilsUnitTest {
             }
         }
         FeatureList.setTestValues(mTestValues);
-    }
-
-    private void disableGlobalDefaultsExperimentFeatures() {
-        enableFeatureWithParams("RequestDesktopSiteDefaults", null, false);
-        enableFeatureWithParams("RequestDesktopSiteDefaultsControl", null, false);
-        enableFeatureWithParams("RequestDesktopSiteDefaultsControlCohort1", null, false);
-        enableFeatureWithParams("RequestDesktopSiteDefaultsEnabledCohort1", null, false);
-        enableFeatureWithParams("RequestDesktopSiteDefaultsControlCohort2", null, false);
-        enableFeatureWithParams("RequestDesktopSiteDefaultsEnabledCohort2", null, false);
     }
 }

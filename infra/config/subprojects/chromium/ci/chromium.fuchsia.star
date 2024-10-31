@@ -26,6 +26,10 @@ ci.defaults.set(
     main_console_view = "main",
     cq_mirrors_console_view = "mirrors",
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
+    experiments = {
+        # crbug.com/355218109
+        "chromium.use_per_builder_build_dir_name": 100,
+    },
     health_spec = health_spec.DEFAULT,
     notifies = ["cr-fuchsia"],
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
@@ -74,7 +78,7 @@ ci.builder(
         consoles.console_view_entry(
             branch_selector = branches.selector.MAIN,
             console_view = "sheriff.fuchsia",
-            category = "gardener|ci|x64",
+            category = "ci|x64",
             short_name = "det",
         ),
     ],
@@ -156,7 +160,7 @@ ci.builder(
         consoles.console_view_entry(
             branch_selector = branches.selector.MAIN,
             console_view = "sheriff.fuchsia",
-            category = "gardener|ci|arm64",
+            category = "ci|arm64",
             short_name = "cast",
         ),
     ],
@@ -245,7 +249,7 @@ ci.builder(
         consoles.console_view_entry(
             branch_selector = branches.selector.MAIN,
             console_view = "sheriff.fuchsia",
-            category = "gardener|ci|x64",
+            category = "ci|x64",
             short_name = "cast-dbg",
         ),
     ],
@@ -282,6 +286,9 @@ ci.builder(
             "x64",
         ],
     ),
+    # Do not forget to update
+    # infra/config/subprojects/chromium/ci/chromium.clang.star when adding or
+    # removing targets.
     targets = targets.bundle(
         targets = [
             "fuchsia_standard_tests",
@@ -337,7 +344,7 @@ ci.builder(
         consoles.console_view_entry(
             branch_selector = branches.selector.MAIN,
             console_view = "sheriff.fuchsia",
-            category = "gardener|ci|x64",
+            category = "ci|x64",
             short_name = "cast",
         ),
     ],

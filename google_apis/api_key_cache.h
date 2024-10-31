@@ -30,9 +30,6 @@ class COMPONENT_EXPORT(GOOGLE_APIS) ApiKeyCache {
   ~ApiKeyCache();
 
   const std::string& api_key() const { return api_key_; }
-#if BUILDFLAG(SUPPORT_EXTERNAL_GOOGLE_API_KEY)
-  void set_api_key(const std::string& api_key) { api_key_ = api_key; }
-#endif
   const std::string& api_key_non_stable() const { return api_key_non_stable_; }
   const std::string& api_key_remoting() const { return api_key_remoting_; }
   const std::string& api_key_soda() const { return api_key_soda_; }
@@ -43,22 +40,22 @@ class COMPONENT_EXPORT(GOOGLE_APIS) ApiKeyCache {
   const std::string& api_key_sharing() const { return api_key_sharing_; }
   const std::string& api_key_read_aloud() const { return api_key_read_aloud_; }
   const std::string& api_key_fresnel() const { return api_key_fresnel_; }
+  const std::string& api_key_boca() const { return api_key_boca_; }
 #endif
 
   const std::string& metrics_key() const { return metrics_key_; }
 
   const std::string& GetClientID(OAuth2Client client) const;
-#if BUILDFLAG(IS_IOS)
-  void SetClientID(OAuth2Client client, const std::string& client_id);
-#endif
-
   const std::string& GetClientSecret(OAuth2Client client) const;
-#if BUILDFLAG(IS_IOS)
-  void SetClientSecret(OAuth2Client client, const std::string& client_secret);
-#endif
 
   bool HasAPIKeyConfigured() const;
   bool HasOAuthClientConfigured() const;
+
+#if BUILDFLAG(SUPPORT_EXTERNAL_GOOGLE_API_KEY)
+  void set_api_key(const std::string& api_key) { api_key_ = api_key; }
+  void SetClientID(OAuth2Client client, const std::string& client_id);
+  void SetClientSecret(OAuth2Client client, const std::string& client_secret);
+#endif
 
  private:
   std::string api_key_;
@@ -72,6 +69,7 @@ class COMPONENT_EXPORT(GOOGLE_APIS) ApiKeyCache {
   std::string api_key_sharing_;
   std::string api_key_read_aloud_;
   std::string api_key_fresnel_;
+  std::string api_key_boca_;
 #endif
 
   std::string metrics_key_;

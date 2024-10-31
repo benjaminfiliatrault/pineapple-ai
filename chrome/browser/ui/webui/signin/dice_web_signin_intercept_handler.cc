@@ -41,6 +41,10 @@
 
 namespace {
 
+BASE_FEATURE(kSigninInterceptSimpleButtons,
+             "SigninInterceptSimpleButtons",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 constexpr char kEnterprizeBadgeSource[] = "cr:domain";
 constexpr char kSupervisedBadgeSource[] = "cr20:kite";
 
@@ -70,8 +74,9 @@ base::Value::Dict GetAccountInfoValue(const AccountInfo& info) {
   std::string_view avatar_badge = "";
   if (IsManaged(info)) {
     avatar_badge = kEnterprizeBadgeSource;
-  } else if (IsSupervisedUser(info.capabilities) && base::FeatureList::IsEnabled(
-      supervised_user::kShowKiteForSupervisedUsers)) {
+  } else if (IsSupervisedUser(info.capabilities) &&
+             base::FeatureList::IsEnabled(
+                 supervised_user::kShowKiteForSupervisedUsers)) {
     avatar_badge = kSupervisedBadgeSource;
   }
   account_info_value.Set("avatarBadge", avatar_badge);
@@ -318,7 +323,7 @@ std::string DiceWebSigninInterceptHandler::GetChromeSigninTitle() {
   // calling code waits for Account Capabilities to be fetched (with a timeout),
   // so Account Capabilities will be available for the vast majority of users.
   if (base::FeatureList::IsEnabled(
-          supervised_user::kCustomWebSignInInterceptForSupervisedUsersUi) &&
+          supervised_user::kCustomProfileStringsForSupervisedUsers) &&
       bubble_parameters_.intercepted_account.capabilities
               .is_subject_to_parental_controls() == signin::Tribool::kTrue) {
     return l10n_util::GetStringUTF8(
@@ -333,11 +338,12 @@ std::string DiceWebSigninInterceptHandler::GetChromeSigninSubtitle() {
   // calling code waits for Account Capabilities to be fetched (with a timeout),
   // so Account Capabilities will be available for the vast majority of users.
   if (base::FeatureList::IsEnabled(
-          supervised_user::kCustomWebSignInInterceptForSupervisedUsersUi) &&
-      bubble_parameters_.intercepted_account.capabilities
-              .is_subject_to_parental_controls() == signin::Tribool::kTrue) {
-    return l10n_util::GetStringUTF8(
-        IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_SUBTITLE_SUPERVISED);
+          supervised_user::kCustomProfileStringsForSupervisedUsers) &&
+      intercepted_account().capabilities.is_subject_to_parental_controls() ==
+          signin::Tribool::kTrue) {
+    return l10n_util::GetStringFUTF8(
+        IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_SUBTITLE_SUPERVISED,
+        base::UTF8ToUTF16(intercepted_account().email));
   }
   return l10n_util::GetStringUTF8(
       IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_SUBTITLE);
@@ -359,12 +365,21 @@ std::string DiceWebSigninInterceptHandler::GetBodyTitle() {
 std::string DiceWebSigninInterceptHandler::GetBodyText() {
   if (bubble_parameters_.interception_type ==
       WebSigninInterceptor::SigninInterceptionType::kProfileSwitch) {
-    return switches::IsExplicitBrowserSigninUIOnDesktopEnabled()
-               ? l10n_util::GetStringFUTF8(
-                     IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_DESC_V2,
-                     base::UTF8ToUTF16(intercepted_account().email))
-               : l10n_util::GetStringUTF8(
-                     IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_DESC);
+    if (!switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
+      return l10n_util::GetStringUTF8(
+          IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_DESC);
+    }
+    if (base::FeatureList::IsEnabled(
+            supervised_user::kCustomProfileStringsForSupervisedUsers) &&
+        intercepted_account().capabilities.is_subject_to_parental_controls() ==
+            signin::Tribool::kTrue) {
+      return l10n_util::GetStringFUTF8(
+          IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_DESC_V2_SUPERVISED,
+          base::UTF8ToUTF16(intercepted_account().email));
+    }
+    return l10n_util::GetStringFUTF8(
+        IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_DESC_V2,
+        base::UTF8ToUTF16(intercepted_account().email));
   }
 
   CHECK(bubble_parameters_.interception_type ==
@@ -386,6 +401,14 @@ std::string DiceWebSigninInterceptHandler::GetBodyText() {
   }
 
   if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
+    if (base::FeatureList::IsEnabled(
+            supervised_user::kCustomProfileStringsForSupervisedUsers) &&
+        intercepted_account().capabilities.is_subject_to_parental_controls() ==
+            signin::Tribool::kTrue) {
+      return l10n_util::GetStringFUTF8(
+          IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_DESC_SUPERVISED,
+          base::UTF8ToUTF16(intercepted_account().email));
+    }
     return l10n_util::GetStringFUTF8(
         IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_DESC,
         base::UTF8ToUTF16(primary_account().given_name),
@@ -422,10 +445,15 @@ std::string DiceWebSigninInterceptHandler::GetConfirmButtonLabel() {
             : IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CONFIRM_SWITCH_BUTTON_LABEL);
   }
 
-  return l10n_util::GetStringUTF8(
-      switches::IsExplicitBrowserSigninUIOnDesktopEnabled()
-          ? IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CREATE_PROFILE_BUTTON_LABEL
-          : IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_NEW_PROFILE_BUTTON_LABEL);
+  int button_label =
+      IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_NEW_PROFILE_BUTTON_LABEL;
+  if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled() &&
+      !base::FeatureList::IsEnabled(kSigninInterceptSimpleButtons)) {
+    button_label =
+        IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CREATE_PROFILE_BUTTON_LABEL;
+  }
+
+  return l10n_util::GetStringUTF8(button_label);
 }
 
 std::string DiceWebSigninInterceptHandler::GetCancelButtonLabel() {
@@ -435,10 +463,13 @@ std::string DiceWebSigninInterceptHandler::GetCancelButtonLabel() {
         IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CANCEL_SWITCH_BUTTON_LABEL);
   }
 
-  return l10n_util::GetStringUTF8(
-      switches::IsExplicitBrowserSigninUIOnDesktopEnabled()
-          ? IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_STAY_HERE_BUTTON_LABEL
-          : IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CANCEL_BUTTON_LABEL);
+  int button_label = IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CANCEL_BUTTON_LABEL;
+  if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled() &&
+      !base::FeatureList::IsEnabled(kSigninInterceptSimpleButtons)) {
+    button_label = IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_STAY_HERE_BUTTON_LABEL;
+  }
+
+  return l10n_util::GetStringUTF8(button_label);
 }
 
 std::string DiceWebSigninInterceptHandler::GetManagedDisclaimerText() {
@@ -473,5 +504,5 @@ std::string DiceWebSigninInterceptHandler::GetManagedDisclaimerText() {
 
 bool DiceWebSigninInterceptHandler::GetShouldUseV2Design() {
   return bubble_parameters_.interception_type !=
-             WebSigninInterceptor::SigninInterceptionType::kProfileSwitch;
+         WebSigninInterceptor::SigninInterceptionType::kProfileSwitch;
 }

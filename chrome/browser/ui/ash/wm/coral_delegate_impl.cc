@@ -4,8 +4,10 @@
 
 #include "chrome/browser/ui/ash/wm/coral_delegate_impl.h"
 
+#include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/desks/desks_templates_app_launch_handler.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
@@ -14,16 +16,23 @@
 #include "components/app_constants/constants.h"
 #include "components/app_restore/restore_data.h"
 #include "components/user_manager/user_manager.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 
 namespace {
+
+constexpr base::TimeDelta kClearLaunchDataDuration = base::Seconds(20);
 
 std::unique_ptr<app_restore::RestoreData> CoralGroupToRestoreData(
     coral::mojom::GroupPtr group) {
   auto restore_data = std::make_unique<app_restore::RestoreData>();
   std::vector<GURL> tab_urls;
-  for (const coral::mojom::EntityKeyPtr& entity : group->entities) {
-    if (entity->is_tab_url()) {
-      tab_urls.push_back(entity->get_tab_url());
+  std::vector<std::string> app_ids;
+  for (const coral::mojom::EntityPtr& entity : group->entities) {
+    if (entity->is_tab()) {
+      tab_urls.push_back(entity->get_tab()->url);
+    } else if (entity->is_app()) {
+      app_ids.push_back(entity->get_app()->id);
     }
   }
 
@@ -32,12 +41,24 @@ std::unique_ptr<app_restore::RestoreData> CoralGroupToRestoreData(
         restore_data
             ->mutable_app_id_to_launch_list()[app_constants::kChromeAppId];
     // All tabs go into the same window.
-    auto& app_restore_data = launch_list[/*window_id=*/0];
+    auto& app_restore_data =
+        launch_list[/*window_id=*/Browser::kDefaultRestoreId];
     app_restore_data = std::make_unique<app_restore::AppRestoreData>();
     app_restore_data->browser_extra_info.urls = std::move(tab_urls);
   }
 
-  // TODO(http::/b/365839465): Handle apps.
+  for (const std::string& app_id : app_ids) {
+    auto& launch_list = restore_data->mutable_app_id_to_launch_list()[app_id];
+    auto& app_restore_data = launch_list[/*window_id=*/0];
+    app_restore_data = std::make_unique<app_restore::AppRestoreData>();
+
+    // TODO(http://b/365839465): These fields are required to launch an app.
+    // Retrieve them from full restore read handler.
+    app_restore_data->container = 0;
+    app_restore_data->display_id =
+        display::Screen::GetScreen()->GetPrimaryDisplay().id();
+    app_restore_data->disposition = 3;
+  }
 
   return restore_data;
 }
@@ -102,6 +123,10 @@ CoralDelegateImpl::CoralDelegateImpl() = default;
 
 CoralDelegateImpl::~CoralDelegateImpl() = default;
 
+void CoralDelegateImpl::OnPostLoginLaunchComplete() {
+  app_launch_handler_.reset();
+}
+
 void CoralDelegateImpl::LaunchPostLoginGroup(coral::mojom::GroupPtr group) {
   if (app_launch_handler_) {
     return;
@@ -117,17 +142,21 @@ void CoralDelegateImpl::LaunchPostLoginGroup(coral::mojom::GroupPtr group) {
   app_launch_handler_->LaunchCoralGroup(
       CoralGroupToRestoreData(std::move(group)),
       DesksTemplatesAppLaunchHandler::GetNextLaunchId());
+
+  // Clears the launch handler after a given duration.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&CoralDelegateImpl::OnPostLoginLaunchComplete,
+                     weak_ptr_factory_.GetWeakPtr()),
+      kClearLaunchDataDuration);
 }
 
-void CoralDelegateImpl::MoveTabsInGroupToNewDesk(coral::mojom::GroupPtr group) {
+void CoralDelegateImpl::MoveTabsInGroupToNewDesk(
+    const std::vector<coral::mojom::Tab>& tabs) {
   Browser* target_browser = nullptr;
-  for (const auto& entity : group->entities) {
-    if (!entity->is_tab_url()) {
-      continue;
-    }
-
+  for (const auto& tab : tabs) {
     // Find the index of the tab item on its browser window.
-    const auto& tab_url = entity->get_tab_url();
+    const auto& tab_url = tab.url;
     int tab_index = -1;
     Browser* source_browser = FindTabOnActiveDesk(tab_url, tab_index);
     if (source_browser) {
@@ -144,10 +173,10 @@ void CoralDelegateImpl::MoveTabsInGroupToNewDesk(coral::mojom::GroupPtr group) {
       bool was_pinned = source_tab_strip->IsTabPinned(tab_index);
       int add_types =
           was_pinned ? AddTabTypes::ADD_PINNED : AddTabTypes::ADD_ACTIVE;
-      std::unique_ptr<tabs::TabModel> tab =
+      std::unique_ptr<tabs::TabModel> tab_model =
           source_tab_strip->DetachTabAtForInsertion(tab_index);
-      target_browser->tab_strip_model()->InsertDetachedTabAt(-1, std::move(tab),
-                                                             add_types);
+      target_browser->tab_strip_model()->InsertDetachedTabAt(
+          -1, std::move(tab_model), add_types);
     }
   }
 

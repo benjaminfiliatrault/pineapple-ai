@@ -27,7 +27,7 @@ import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.options.AutofillOptionsFragment;
 import org.chromium.chrome.browser.autofill.options.AutofillOptionsFragment.AutofillOptionsReferrer;
-import org.chromium.chrome.browser.autofill.settings.SettingsLauncherHelper;
+import org.chromium.chrome.browser.autofill.settings.SettingsNavigationHelper;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -39,8 +39,8 @@ import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
 import org.chromium.chrome.browser.password_check.PasswordCheck;
 import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
 import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
+import org.chromium.chrome.browser.password_manager.PasswordAccessLossDialogHelper;
 import org.chromium.chrome.browser.password_manager.PasswordExportLauncher;
-import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
 import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
 import org.chromium.chrome.browser.password_manager.settings.PasswordsPreference;
 import org.chromium.chrome.browser.preferences.Pref;
@@ -58,6 +58,7 @@ import org.chromium.chrome.browser.sync.settings.SyncPromoPreference;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeatures;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.chrome.browser.toolbar.ToolbarPositionController;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor;
 import org.chromium.chrome.browser.tracing.settings.DeveloperSettings;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
@@ -68,7 +69,7 @@ import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerBottomS
 import org.chromium.components.autofill.AutofillFeatures;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
+import org.chromium.components.browser_ui.settings.SettingsNavigation;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
@@ -366,6 +367,7 @@ public class MainSettings extends ChromeBaseSettingsFragment
         updateSearchEnginePreference();
         updateAutofillPreferences();
         updatePlusAddressesPreference();
+        updateAddressBarPreference();
 
         boolean isTabGroupSyncAutoOpenConfigurable =
                 TabGroupSyncFeatures.isTabGroupSyncEnabled(getProfile())
@@ -377,12 +379,6 @@ public class MainSettings extends ChromeBaseSettingsFragment
             addPreferenceIfAbsent(PREF_TABS);
         } else {
             removePreferenceIfPresent(PREF_TABS);
-        }
-
-        if (ChromeFeatureList.sAndroidBottomToolbar.isEnabled()) {
-            addPreferenceIfAbsent(PREF_ADDRESS_BAR);
-        } else {
-            removePreferenceIfPresent(PREF_ADDRESS_BAR);
         }
 
         Preference homepagePref = addPreferenceIfAbsent(PREF_HOMEPAGE);
@@ -471,9 +467,9 @@ public class MainSettings extends ChromeBaseSettingsFragment
                             .isSyncDisabledByEnterprisePolicy()) {
                         SyncSettingsUtils.showSyncDisabledByAdministratorToast(context);
                     } else if (isSyncConsentAvailable) {
-                        SettingsLauncher settingsLauncher =
-                                SettingsLauncherFactory.createSettingsLauncher();
-                        settingsLauncher.launchSettingsActivity(context, ManageSyncSettings.class);
+                        SettingsNavigation settingsNavigation =
+                                SettingsNavigationFactory.createSettingsNavigation();
+                        settingsNavigation.startSettings(context, ManageSyncSettings.class);
                     } else {
                         // TODO(crbug.com/40067770): Remove after rolling out
                         // REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS.
@@ -518,8 +514,8 @@ public class MainSettings extends ChromeBaseSettingsFragment
             preference.setFragment(null);
             preference.setOnPreferenceClickListener(
                     unused -> {
-                        SettingsLauncherFactory.createSettingsLauncher()
-                                .launchSettingsActivity(
+                        SettingsNavigationFactory.createSettingsNavigation()
+                                .startSettings(
                                         getContext(),
                                         AutofillOptionsFragment.class,
                                         AutofillOptionsFragment.createRequiredArgs(
@@ -533,12 +529,13 @@ public class MainSettings extends ChromeBaseSettingsFragment
         findPreference(PREF_AUTOFILL_PAYMENTS)
                 .setOnPreferenceClickListener(
                         preference ->
-                                SettingsLauncherHelper.showAutofillCreditCardSettings(
+                                SettingsNavigationHelper.showAutofillCreditCardSettings(
                                         getActivity()));
         findPreference(PREF_AUTOFILL_ADDRESSES)
                 .setOnPreferenceClickListener(
                         preference ->
-                                SettingsLauncherHelper.showAutofillProfileSettings(getActivity()));
+                                SettingsNavigationHelper.showAutofillProfileSettings(
+                                        getActivity()));
         PasswordsPreference passwordsPreference = findPreference(PREF_PASSWORDS);
         passwordsPreference.setProfile(getProfile());
         passwordsPreference.setOnPreferenceClickListener(
@@ -565,8 +562,8 @@ public class MainSettings extends ChromeBaseSettingsFragment
                             && getArguments()
                                     .getBoolean(PasswordExportLauncher.START_PASSWORDS_EXPORT);
             if (startPasswordsExportFlow) {
-                PasswordManagerHelper.getForProfile(getProfile())
-                        .launchExportFlow(getContext(), mModalDialogManagerSupplier);
+                PasswordAccessLossDialogHelper.launchExportFlow(
+                        getContext(), getProfile(), mModalDialogManagerSupplier);
                 getArguments().putBoolean(PasswordExportLauncher.START_PASSWORDS_EXPORT, false);
             }
         }
@@ -592,6 +589,15 @@ public class MainSettings extends ChromeBaseSettingsFragment
                     });
         } else {
             removePreferenceIfPresent(PREF_PLUS_ADDRESSES);
+        }
+    }
+
+    private void updateAddressBarPreference() {
+        if (ToolbarPositionController.isToolbarPositionCustomizationEnabled(getContext(), false)) {
+            Preference addressBarPreference = addPreferenceIfAbsent(PREF_ADDRESS_BAR);
+            addressBarPreference.setSummary(ToolbarPositionController.getToolbarPositionResId());
+        } else {
+            removePreferenceIfPresent(PREF_ADDRESS_BAR);
         }
     }
 

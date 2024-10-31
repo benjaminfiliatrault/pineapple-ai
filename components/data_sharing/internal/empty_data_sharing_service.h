@@ -28,6 +28,9 @@ class EmptyDataSharingService : public DataSharingService {
   DataSharingNetworkLoader* GetDataSharingNetworkLoader() override;
   base::WeakPtr<syncer::DataTypeControllerDelegate>
   GetCollaborationGroupControllerDelegate() override;
+  bool IsGroupDataModelLoaded() override;
+  std::optional<GroupData> ReadGroup(const GroupId& group_id) override;
+  std::set<GroupData> ReadAllGroups() override;
   void ReadAllGroups(
       base::OnceCallback<void(const GroupsDataSetOrFailureOutcome&)> callback)
       override;
@@ -52,8 +55,13 @@ class EmptyDataSharingService : public DataSharingService {
       const GroupId& group_id,
       const std::string& member_email,
       base::OnceCallback<void(PeopleGroupActionOutcome)> callback) override;
+  void LeaveGroup(
+      const GroupId& group_id,
+      base::OnceCallback<void(PeopleGroupActionOutcome)> callback) override;
   bool ShouldInterceptNavigationForShareURL(const GURL& url) override;
-  void HandleShareURLNavigationIntercepted(const GURL& url) override;
+  void HandleShareURLNavigationIntercepted(
+      const GURL& url,
+      std::unique_ptr<ShareURLInterceptionContext> context) override;
   std::unique_ptr<GURL> GetDataSharingURL(const GroupData& group_data) override;
   ParseURLResult ParseDataSharingURL(const GURL& url) override;
   void EnsureGroupVisibility(
@@ -64,6 +72,8 @@ class EmptyDataSharingService : public DataSharingService {
       const GroupToken& group_token,
       base::OnceCallback<void(const SharedDataPreviewOrFailureOutcome&)>
           callback) override;
+  void SetUIDelegate(
+      std::unique_ptr<DataSharingUIDelegate> ui_delegate) override;
   DataSharingUIDelegate* GetUIDelegate() override;
   ServiceStatus GetServiceStatus() override;
 };

@@ -105,6 +105,12 @@ group = 'test'
 [crate.base64]
 group = 'test'
 
+[crate.bstr]
+ban_features = [
+    # The unicode feature is not audited for UB-Risk-2.
+    'unicode'
+]
+
 [crate.bytes]
 group = 'test'
 
@@ -153,10 +159,12 @@ ban_features = [
 ]
 
 [crate.log]
-group = 'test'
 
 [crate.nom]
 remove_deps = ['minimal-lexical']
+
+[crate.png]
+extra_kv = { allow_unstable_features = 'portable_simd' }
 
 [crate.prost]
 extra_input_roots = ['../README.md']

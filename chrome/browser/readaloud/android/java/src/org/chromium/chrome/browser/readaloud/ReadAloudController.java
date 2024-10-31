@@ -41,6 +41,8 @@ import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.device.DeviceConditions;
+import org.chromium.chrome.browser.fullscreen.FullscreenManager;
+import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserver;
@@ -63,7 +65,6 @@ import org.chromium.chrome.modules.readaloud.PlaybackListener;
 import org.chromium.chrome.modules.readaloud.Player;
 import org.chromium.chrome.modules.readaloud.ReadAloudPlaybackHooks;
 import org.chromium.chrome.modules.readaloud.ReadAloudPlaybackHooksFactory;
-import org.chromium.chrome.modules.readaloud.ReadAloudPlaybackHooksProvider;
 import org.chromium.chrome.modules.readaloud.contentjs.Extractor;
 import org.chromium.chrome.modules.readaloud.contentjs.Highlighter;
 import org.chromium.chrome.modules.readaloud.contentjs.Highlighter.Mode;
@@ -122,13 +123,17 @@ public class ReadAloudController
     private final TabModel mIncognitoTabModel;
     @Nullable private Player mPlayerCoordinator;
     private final ObservableSupplier<LayoutManager> mLayoutManagerSupplier;
-    private TapToSeekSelectionManager mTapToSeekSelectionManager;
     private final UserEducationHelper mUserEducationHelper;
 
     private TabModelTabObserver mTabObserver;
     private TabModelTabObserver mIncognitoTabObserver;
 
     private boolean mPausedForIncognito;
+
+    /** The fullscreen state of the browser. */
+    private final FullscreenManager mFullscreenManager;
+
+    private final FullscreenManager.Observer mFullscreenObserver;
 
     private final BottomSheetController mBottomSheetController;
     private final BottomControlsStacker mBottomControlsStacker;
@@ -489,7 +494,8 @@ public class ReadAloudController
             ObservableSupplier<LayoutManager> layoutManagerSupplier,
             ActivityWindowAndroid activityWindowAndroid,
             ActivityLifecycleDispatcher activityLifecycleDispatcher,
-            OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier) {
+            OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier,
+            FullscreenManager fullscreenManager) {
         sInstances.add(this);
         mCallbackController = new CallbackController();
         ReadAloudFeatures.init();
@@ -514,8 +520,7 @@ public class ReadAloudController
                         activity, mProfileSupplier, new Handler(Looper.getMainLooper()));
         mActivePlaybackTabSupplier = new ObservableSupplierImpl<>();
         if (ReadAloudFeatures.isTapToSeekEnabled()) {
-            mTapToSeekSelectionManager =
-                    new TapToSeekSelectionManager(this, mActivePlaybackTabSupplier);
+            new TapToSeekSelectionManager(this, mActivePlaybackTabSupplier);
         }
         if (NetworkChangeNotifier.isInitialized()) {
             NetworkChangeNotifier.addConnectionTypeObserver(this);
@@ -523,6 +528,21 @@ public class ReadAloudController
         mLayoutStateProviderSupplier = layoutStateProviderSupplier;
         mLayoutStateProviderSupplier.onAvailable(
                 mCallbackController.makeCancelable(this::addLayoutStateObserver));
+        mFullscreenManager = fullscreenManager;
+        mFullscreenObserver =
+                new FullscreenManager.Observer() {
+                    @Override
+                    public void onEnterFullscreen(Tab tab, FullscreenOptions options) {
+                        maybeHidePlayer();
+                    }
+
+                    @Override
+                    public void onExitFullscreen(Tab tab) {
+                        maybeShowPlayer();
+                    }
+                };
+
+        mFullscreenManager.addObserver(mFullscreenObserver);
     }
 
     private void addLayoutStateObserver(LayoutStateProvider layoutStateProvider) {
@@ -948,8 +968,9 @@ public class ReadAloudController
             if (factory != null) {
                 mPlaybackHooks = factory.getForProfile(mProfileSupplier.get());
             } else {
-                mPlaybackHooks =
-                        ReadAloudPlaybackHooksProvider.getForProfile(mProfileSupplier.get());
+                // If no downstream factory exists, use an empty instantiation
+                // of the interface using defaults.
+                mPlaybackHooks = new ReadAloudPlaybackHooks() {};
             }
             mPlayerCoordinator = mPlaybackHooks.createPlayer(/* delegate= */ this);
             mPlayerCoordinator.addObserver(this);

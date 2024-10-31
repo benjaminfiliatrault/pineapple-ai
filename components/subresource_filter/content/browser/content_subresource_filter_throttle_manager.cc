@@ -156,7 +156,7 @@ void ContentSubresourceFilterThrottleManager::ReadyToCommitInFrameNavigation(
              base::Contains(
                  ad_frames_,
                  frame_host->GetParentOrOuterDocument()->GetFrameTreeNodeId()),
-             base::NotFatalUntil::M132);
+             base::NotFatalUntil::M134);
     ad_evidence.set_is_complete();
     ad_evidence_for_navigation = ad_evidence;
 
@@ -307,11 +307,11 @@ void ContentSubresourceFilterThrottleManager::DidFinishInFrameNavigation(
     // (regardless of the URL).
     CHECK(!(navigation_handle->GetURL().IsAboutBlank() &&
             EnsureFrameAdEvidence(navigation_handle).IndicatesAdFrame()),
-          base::NotFatalUntil::M132);
+          base::NotFatalUntil::M134);
   } else {
     CHECK(navigation_handle->IsInMainFrame() ||
               EnsureFrameAdEvidence(navigation_handle).is_complete(),
-          base::NotFatalUntil::M129);
+          base::NotFatalUntil::M134);
   }
 
   bool did_inherit_opener_activation;
@@ -323,8 +323,7 @@ void ContentSubresourceFilterThrottleManager::DidFinishInFrameNavigation(
     statistics_.reset();
     if (filter) {
       statistics_ = std::make_unique<PageLoadStatistics>(
-          filter->activation_state(), kSafeBrowsingRulesetConfig.uma_tag,
-          navigation_handle, frame_host);
+          filter->activation_state(), kSafeBrowsingRulesetConfig.uma_tag);
       if (filter->activation_state().enable_logging) {
         CHECK(filter->activation_state().activation_level !=
                   mojom::ActivationLevel::kDisabled,
@@ -561,7 +560,7 @@ void ContentSubresourceFilterThrottleManager::OnChildFrameNavigationEvaluated(
            base::Contains(ad_frames_,
                           navigation_handle->GetParentFrameOrOuterDocument()
                               ->GetFrameTreeNodeId()),
-           base::NotFatalUntil::M132);
+           base::NotFatalUntil::M134);
 
   ad_evidence.UpdateFilterListResult(
       InterpretLoadPolicyAsEvidence(load_policy));
@@ -774,7 +773,7 @@ void ContentSubresourceFilterThrottleManager::SetIsAdFrame(
   CHECK(base::Contains(tracked_ad_evidence_, frame_tree_node_id),
         base::NotFatalUntil::M129);
   CHECK_EQ(tracked_ad_evidence_.at(frame_tree_node_id).IndicatesAdFrame(),
-           is_ad_frame, base::NotFatalUntil::M129);
+           is_ad_frame, base::NotFatalUntil::M134);
   CHECK(render_frame_host->GetParentOrOuterDocument(),
         base::NotFatalUntil::M129);
 

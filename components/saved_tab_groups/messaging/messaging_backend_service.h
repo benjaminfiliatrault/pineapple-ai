@@ -9,8 +9,9 @@
 #include "base/observer_list_types.h"
 #include "base/supports_user_data.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/saved_tab_groups/messaging/activity_log.h"
 #include "components/saved_tab_groups/messaging/message.h"
-#include "components/saved_tab_groups/types.h"
+#include "components/saved_tab_groups/public/types.h"
 
 namespace tab_groups::messaging {
 class InstantMessageDelegate;
@@ -36,8 +37,20 @@ class MessagingBackendService : public KeyedService,
   // This needs to be provided to the `MessagingBackendService` through
   // `MessagingBackendService::SetInstantMessageDelegate(...)`.
   class InstantMessageDelegate : public base::CheckedObserver {
+   public:
+    // Callback for informing the backend service whether a message could be
+    // displayed.
+    using SuccessCallback = base::OnceCallback<void(bool)>;
+
     // Invoked when the frontend needs to display an instant message.
-    virtual void DisplayInstantaneousMessage(InstantMessage message) = 0;
+    // When a decision has been made whether it can be displayed or not, invoke
+    // `success_callback` with `true` if it was displayed, and `false`
+    // otherwise. This enables the backend to either:
+    // *   Success: Clear the message from internal storage.
+    // *   Failure: Prepare the message to be redelivered at a later time.
+    virtual void DisplayInstantaneousMessage(
+        InstantMessage message,
+        SuccessCallback success_callback) = 0;
   };
 
   ~MessagingBackendService() override = default;
@@ -67,6 +80,11 @@ class MessagingBackendService : public KeyedService,
       std::optional<PersistentNotificationType> type) = 0;
   virtual std::vector<PersistentMessage> GetMessages(
       std::optional<PersistentNotificationType> type) = 0;
+
+  // Central method to query the list of rows to be shown in the activity log
+  // UI. Will return an empty list if the service has not been initialized.
+  virtual std::vector<ActivityLogItem> GetActivityLog(
+      const ActivityLogQueryParams& params) = 0;
 };
 
 }  // namespace tab_groups::messaging

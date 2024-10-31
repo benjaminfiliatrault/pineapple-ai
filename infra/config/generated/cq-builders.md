@@ -29,8 +29,6 @@ These builders must pass before a CL may land that affects files outside of
 
 * [android-cronet-arm-rel](https://ci.chromium.org/p/chromium/builders/try/android-cronet-arm-rel) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""android-cronet-arm-rel""))
 
-* [android-x64-cast](https://ci.chromium.org/p/chromium/builders/try/android-x64-cast) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""android-x64-cast""))
-
 * [android-x64-rel](https://ci.chromium.org/p/chromium/builders/try/android-x64-rel) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""android-x64-rel""))
 
 * [android-x86-rel](https://ci.chromium.org/p/chromium/builders/try/android-x86-rel) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""android-x86-rel""))
@@ -108,7 +106,7 @@ builder.
   * [`//build/android/.+`](https://cs.chromium.org/chromium/src/build/android/)
   * [`//build/config/android/.+`](https://cs.chromium.org/chromium/src/build/config/android/)
 
-* [android-cronet-x64-dbg-14-tests](https://ci.chromium.org/p/chromium/builders/try/android-cronet-x64-dbg-14-tests) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""android-cronet-x64-dbg-14-tests""))
+* [android-cronet-x64-dbg-15-tests](https://ci.chromium.org/p/chromium/builders/try/android-cronet-x64-dbg-15-tests) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""android-cronet-x64-dbg-15-tests""))
 
   Location filters:
   * [`//components/cronet/.+`](https://cs.chromium.org/chromium/src/components/cronet/)
@@ -124,7 +122,7 @@ builder.
   * [`//build/android/.+`](https://cs.chromium.org/chromium/src/build/android/)
   * [`//build/config/android/.+`](https://cs.chromium.org/chromium/src/build/config/android/)
 
-* [android-cronet-x86-dbg-lollipop-tests](https://ci.chromium.org/p/chromium/builders/try/android-cronet-x86-dbg-lollipop-tests) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""android-cronet-x86-dbg-lollipop-tests""))
+* [android-cronet-x86-dbg-marshmallow-tests](https://ci.chromium.org/p/chromium/builders/try/android-cronet-x86-dbg-marshmallow-tests) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""android-cronet-x86-dbg-marshmallow-tests""))
 
   Location filters:
   * [`//components/cronet/.+`](https://cs.chromium.org/chromium/src/components/cronet/)
@@ -222,7 +220,6 @@ builder.
   * [`//third_party/blink/renderer/modules/webgpu/.+`](https://cs.chromium.org/chromium/src/third_party/blink/renderer/modules/webgpu/)
   * [`//third_party/blink/renderer/platform/graphics/gpu/.+`](https://cs.chromium.org/chromium/src/third_party/blink/renderer/platform/graphics/gpu/)
   * [`//tools/clang/scripts/update.py`](https://cs.chromium.org/search?q=+file:tools/clang/scripts/update.py)
-  * [`//tools/mb/mb_config_expectations/tryserver.chromium.android.json`](https://cs.chromium.org/search?q=+file:tools/mb/mb_config_expectations/tryserver.chromium.android.json)
   * [`//ui/gl/.+`](https://cs.chromium.org/chromium/src/ui/gl/)
   * exclude: [`//.*\.md`](https://cs.chromium.org/search?q=+file:.*\.md)
 
@@ -396,7 +393,6 @@ builder.
   * [`//media/renderers/.+`](https://cs.chromium.org/chromium/src/media/renderers/)
   * [`//media/video/.+`](https://cs.chromium.org/chromium/src/media/video/)
   * [`//services/viz/.+`](https://cs.chromium.org/chromium/src/services/viz/)
-  * [`//testing/buildbot/chromium.gpu.fyi.json`](https://cs.chromium.org/search?q=+file:testing/buildbot/chromium.gpu.fyi.json)
   * [`//testing/trigger_scripts/.+`](https://cs.chromium.org/chromium/src/testing/trigger_scripts/)
   * [`//third_party/blink/renderer/modules/mediastream/.+`](https://cs.chromium.org/chromium/src/third_party/blink/renderer/modules/mediastream/)
   * [`//third_party/blink/renderer/modules/webcodecs/.+`](https://cs.chromium.org/chromium/src/third_party/blink/renderer/modules/webcodecs/)
@@ -404,7 +400,6 @@ builder.
   * [`//third_party/blink/renderer/modules/webgpu/.+`](https://cs.chromium.org/chromium/src/third_party/blink/renderer/modules/webgpu/)
   * [`//third_party/blink/renderer/platform/graphics/gpu/.+`](https://cs.chromium.org/chromium/src/third_party/blink/renderer/platform/graphics/gpu/)
   * [`//tools/clang/scripts/update.py`](https://cs.chromium.org/search?q=+file:tools/clang/scripts/update.py)
-  * [`//tools/mb/mb_config_expectations/tryserver.chromium.android.json`](https://cs.chromium.org/search?q=+file:tools/mb/mb_config_expectations/tryserver.chromium.android.json)
   * [`//ui/gl/.+`](https://cs.chromium.org/chromium/src/ui/gl/)
   * exclude: [`//.*\.md`](https://cs.chromium.org/search?q=+file:.*\.md)
 
@@ -543,7 +538,6 @@ builder.
   * [`//third_party/blink/renderer/modules/webgpu/.+`](https://cs.chromium.org/chromium/src/third_party/blink/renderer/modules/webgpu/)
   * [`//third_party/blink/renderer/platform/graphics/gpu/.+`](https://cs.chromium.org/chromium/src/third_party/blink/renderer/platform/graphics/gpu/)
   * [`//tools/clang/scripts/update.py`](https://cs.chromium.org/search?q=+file:tools/clang/scripts/update.py)
-  * [`//tools/mb/mb_config_expectations/tryserver.chromium.linux.json`](https://cs.chromium.org/search?q=+file:tools/mb/mb_config_expectations/tryserver.chromium.linux.json)
   * [`//ui/gl/.+`](https://cs.chromium.org/chromium/src/ui/gl/)
   * exclude: [`//.*\.md`](https://cs.chromium.org/search?q=+file:.*\.md)
 
@@ -592,7 +586,6 @@ builder.
   * [`//third_party/blink/renderer/modules/webgpu/.+`](https://cs.chromium.org/chromium/src/third_party/blink/renderer/modules/webgpu/)
   * [`//third_party/blink/renderer/platform/graphics/gpu/.+`](https://cs.chromium.org/chromium/src/third_party/blink/renderer/platform/graphics/gpu/)
   * [`//tools/clang/scripts/update.py`](https://cs.chromium.org/search?q=+file:tools/clang/scripts/update.py)
-  * [`//tools/mb/mb_config_expectations/tryserver.chromium.mac.json`](https://cs.chromium.org/search?q=+file:tools/mb/mb_config_expectations/tryserver.chromium.mac.json)
   * [`//ui/gl/.+`](https://cs.chromium.org/chromium/src/ui/gl/)
   * exclude: [`//.*\.md`](https://cs.chromium.org/search?q=+file:.*\.md)
 
@@ -607,6 +600,11 @@ builder.
 
   Location filters:
   * [`//infra/config/generated/builders/[^/]+/[^/]+/targets/.+\.json`](https://cs.chromium.org/search?q=+file:infra/config/generated/builders/[^/]+/[^/]+/targets/.+\.json)
+
+* [targets-config-verifier-dev](https://ci.chromium.org/p/chromium/builders/try/targets-config-verifier-dev) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""targets-config-verifier-dev""))
+
+  Location filters:
+  * [`//infra/config/generated/builders-dev/[^/]+/[^/]+/targets/.+\.json`](https://cs.chromium.org/search?q=+file:infra/config/generated/builders-dev/[^/]+/[^/]+/targets/.+\.json)
 
 * [win-arm64-rel](https://ci.chromium.org/p/chromium/builders/try/win-arm64-rel) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""win-arm64-rel""))
 
@@ -677,7 +675,6 @@ builder.
   * [`//third_party/blink/renderer/modules/xr/.+`](https://cs.chromium.org/chromium/src/third_party/blink/renderer/modules/xr/)
   * [`//third_party/blink/renderer/platform/graphics/gpu/.+`](https://cs.chromium.org/chromium/src/third_party/blink/renderer/platform/graphics/gpu/)
   * [`//tools/clang/scripts/update.py`](https://cs.chromium.org/search?q=+file:tools/clang/scripts/update.py)
-  * [`//tools/mb/mb_config_expectations/tryserver.chromium.win.json`](https://cs.chromium.org/search?q=+file:tools/mb/mb_config_expectations/tryserver.chromium.win.json)
   * [`//ui/gl/.+`](https://cs.chromium.org/chromium/src/ui/gl/)
   * exclude: [`//.*\.md`](https://cs.chromium.org/search?q=+file:.*\.md)
 
@@ -688,12 +685,8 @@ by CQ. These are often used to test new configurations before they are added
 as required builders.
 
 ### chromium
-* [android-cronet-x86-dbg-lollipop-fyi-tests](https://ci.chromium.org/p/chromium/builders/try/android-cronet-x86-dbg-lollipop-fyi-tests) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""android-cronet-x86-dbg-lollipop-fyi-tests""))
-  * Experiment percentage: 100.0
-
-  Location filters:
-  * [`//base/.+`](https://cs.chromium.org/chromium/src/base/)
-  * [`//net/.+`](https://cs.chromium.org/chromium/src/net/)
+* [android-desktop-x64-compile-rel](https://ci.chromium.org/p/chromium/builders/try/android-desktop-x64-compile-rel) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""android-desktop-x64-compile-rel""))
+  * Experiment percentage: 50.0
 
 * [chromeos-js-coverage-rel](https://ci.chromium.org/p/chromium/builders/try/chromeos-js-coverage-rel) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""chromeos-js-coverage-rel""))
   * Experiment percentage: 50.0
@@ -721,7 +714,7 @@ as required builders.
   * Experiment percentage: 5.0
 
 * [linux-full-remote-rel](https://ci.chromium.org/p/chromium/builders/try/linux-full-remote-rel) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""linux-full-remote-rel""))
-  * Experiment percentage: 1.0
+  * Experiment percentage: 10.0
 
 * [mac14-arm64-rel](https://ci.chromium.org/p/chromium/builders/try/mac14-arm64-rel) ([definition](https://cs.chromium.org/search?q=+file:/try/.*\.star$+""mac14-arm64-rel""))
   * Experiment percentage: 100.0

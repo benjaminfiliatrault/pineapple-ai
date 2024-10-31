@@ -7,7 +7,11 @@
 #include "ash/capture_mode/capture_mode_controller.h"
 #include "ash/capture_mode/capture_mode_session.h"
 #include "ash/capture_mode/capture_mode_types.h"
+#include "ash/capture_mode/capture_region_overlay_controller.h"
 #include "ash/capture_mode/recording_type_menu_view.h"
+#include "ash/style/pill_button.h"
+#include "ui/views/layout/box_layout_view.h"
+#include "ui/views/view_utils.h"
 
 namespace ash {
 
@@ -57,6 +61,10 @@ views::Widget* CaptureModeSessionTestApi::GetCaptureModeSettingsWidget() {
 
 views::Widget* CaptureModeSessionTestApi::GetCaptureLabelWidget() {
   return session_->capture_label_widget_.get();
+}
+
+views::Widget* CaptureModeSessionTestApi::GetActionContainerWidget() {
+  return session_->action_container_widget_.get();
 }
 
 views::Widget* CaptureModeSessionTestApi::GetRecordingTypeMenuWidget() {
@@ -116,6 +124,27 @@ bool CaptureModeSessionTestApi::AreAllUisVisible() {
 
 gfx::Rect CaptureModeSessionTestApi::GetSelectedWindowTargetBounds() {
   return session_->GetSelectedWindowTargetBounds();
+}
+
+std::vector<PillButton*> CaptureModeSessionTestApi::GetActionButtons() const {
+  std::vector<PillButton*> action_buttons;
+
+  // The action container widget, and thus the container view, may not have been
+  // created yet when this function is called. In this case, return an empty
+  // vector.
+  if (session_->action_container_widget_) {
+    CHECK(session_->action_container_view_);
+    for (views::View* button : session_->action_container_view_->children()) {
+      action_buttons.emplace_back(views::AsViewClass<PillButton>(button));
+    }
+  }
+
+  return action_buttons;
+}
+
+CaptureRegionOverlayController*
+CaptureModeSessionTestApi::GetCaptureRegionOverlayController() const {
+  return session_->capture_region_overlay_controller_.get();
 }
 
 }  // namespace ash

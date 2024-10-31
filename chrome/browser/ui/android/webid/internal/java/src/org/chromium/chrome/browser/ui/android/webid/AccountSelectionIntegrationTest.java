@@ -50,7 +50,6 @@ import org.chromium.blink.mojom.RpMode;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.ui.android.webid.data.IdentityCredentialTokenError;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -77,8 +76,8 @@ public class AccountSelectionIntegrationTest extends AccountSelectionIntegration
     @ParameterAnnotations.ClassParameter
     private static List<ParameterSet> sClassParams =
             Arrays.asList(
-                    new ParameterSet().value(RpMode.WIDGET).name("widget"),
-                    new ParameterSet().value(RpMode.BUTTON).name("button"));
+                    new ParameterSet().value(RpMode.PASSIVE).name("passive"),
+                    new ParameterSet().value(RpMode.ACTIVE).name("active"));
 
     private @BottomSheetController.SheetState int mExpectedSheetState;
 
@@ -87,14 +86,10 @@ public class AccountSelectionIntegrationTest extends AccountSelectionIntegration
     public AccountSelectionIntegrationTest(@RpMode.EnumType int rpMode) {
         mRpMode = rpMode;
         mExpectedSheetState =
-                rpMode == RpMode.BUTTON
+                rpMode == RpMode.ACTIVE
                         ? BottomSheetController.SheetState.HALF
                         : BottomSheetController.SheetState.FULL;
     }
-
-    private static final String TEST_ERROR_CODE = "invalid_request";
-    private static final IdentityCredentialTokenError TOKEN_ERROR =
-            new IdentityCredentialTokenError(TEST_ERROR_CODE, TEST_URL);
 
     @Test
     @MediumTest
@@ -357,47 +352,5 @@ public class AccountSelectionIntegrationTest extends AccountSelectionIntegration
                     Criteria.checkThat(
                             mActivityTestRule.getActivity().isDestroyed(), Matchers.is(false));
                 });
-    }
-
-    @Test
-    @MediumTest
-    public void testErrorDialogBackDismissesAndCallsCallback() {
-        runOnUiThreadBlocking(
-                () -> {
-                    mAccountSelection.showErrorDialog(
-                            EXAMPLE_ETLD_PLUS_ONE,
-                            TEST_ETLD_PLUS_ONE_2,
-                            IDP_METADATA,
-                            RpContext.SIGN_IN,
-                            TOKEN_ERROR);
-                });
-        pollUiThread(() -> getBottomSheetState() == mExpectedSheetState);
-
-        Espresso.pressBack();
-
-        waitForEvent(mMockBridge).onDismissed(IdentityRequestDialogDismissReason.BACK_PRESS);
-        verify(mMockBridge, never()).onAccountSelected(any(), any());
-    }
-
-    @Test
-    @MediumTest
-    public void testErrorDialogSwipeDismissesAndCallsCallback() {
-        runOnUiThreadBlocking(
-                () -> {
-                    mAccountSelection.showErrorDialog(
-                            EXAMPLE_ETLD_PLUS_ONE,
-                            TEST_ETLD_PLUS_ONE_2,
-                            IDP_METADATA,
-                            RpContext.SIGN_IN,
-                            TOKEN_ERROR);
-                });
-        pollUiThread(() -> getBottomSheetState() == mExpectedSheetState);
-        BottomSheetTestSupport sheetSupport = new BottomSheetTestSupport(mBottomSheetController);
-        runOnUiThreadBlocking(
-                () -> {
-                    sheetSupport.suppressSheet(BottomSheetController.StateChangeReason.SWIPE);
-                });
-        waitForEvent(mMockBridge).onDismissed(IdentityRequestDialogDismissReason.SWIPE);
-        verify(mMockBridge, never()).onAccountSelected(any(), any());
     }
 }

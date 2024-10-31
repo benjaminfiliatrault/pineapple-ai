@@ -13,7 +13,10 @@ import {CrViewManagerElement} from 'chrome://resources/ash/common/cr_elements/cr
 import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {GraduationScreen} from '../mojom/graduation_ui.mojom-webui.js';
+
 import {getTemplate} from './graduation_app.html.js';
+import {getGraduationUiHandler} from './graduation_ui_handler.js';
 
 export enum Screens {
   /**
@@ -43,6 +46,13 @@ export enum ScreenSwitchEvents {
   OFFLINE = 'offline',
 }
 
+/**
+ * The event that is fired on the current screen signaling that the app has
+ * switched to it. Screens can listen for this event and perform actions on
+ * becoming active.
+ */
+export const ScreenSwitchedEvent: string = 'on-screen-switched';
+
 export interface GraduationApp {
   $: {
     viewManager: CrViewManagerElement,
@@ -63,7 +73,13 @@ export class GraduationApp extends PolymerElement {
   override ready() {
     super.ready();
     this.addEventListeners();
+    this.authenticate();
     this.switchToScreen(navigator.onLine ? Screens.WELCOME : Screens.OFFLINE);
+  }
+
+  private async authenticate(): Promise<void> {
+    // TODO(b.corp.google.com/374815862): Handle authentication result.
+    getGraduationUiHandler().authenticateWebview();
   }
 
   getCurrentScreenForTest(): Screens {
@@ -80,6 +96,12 @@ export class GraduationApp extends PolymerElement {
     });
 
     this.addEventListener(ScreenSwitchEvents.SHOW_ERROR, () => {
+      // An error caused by an offline event can surface after the offline
+      // screen is already shown. Don't show the error screen so the app has a
+      // chance to reload when it comes online.
+      if (this.currentScreen === Screens.OFFLINE) {
+        return;
+      }
       this.switchToScreen(Screens.ERROR);
     });
 
@@ -99,11 +121,28 @@ export class GraduationApp extends PolymerElement {
     }
     this.currentScreen = screen;
     this.$.viewManager.switchView(this.currentScreen);
+    this.onScreenSwitched(this.currentScreen);
   }
 
   private canSwitchToScreen(screen: Screens): boolean {
     return this.currentScreen !== screen &&
         this.currentScreen !== Screens.ERROR;
+  }
+
+  private onScreenSwitched(screen: Screens) {
+    switch (screen) {
+      case Screens.WELCOME:
+        getGraduationUiHandler().onScreenSwitched(GraduationScreen.kWelcome);
+        break;
+      case Screens.TAKEOUT_UI:
+        getGraduationUiHandler().onScreenSwitched(GraduationScreen.kTakeoutUi);
+        break;
+      case Screens.ERROR:
+        getGraduationUiHandler().onScreenSwitched(GraduationScreen.kError);
+        break;
+    }
+    this.shadowRoot!.querySelector(screen)!.dispatchEvent(
+        new CustomEvent(ScreenSwitchedEvent));
   }
 }
 customElements.define(GraduationApp.is, GraduationApp);

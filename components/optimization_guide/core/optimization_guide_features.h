@@ -18,6 +18,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/optimization_guide/core/model_execution/feature_keys.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/proto/hints.pb.h"
@@ -77,6 +78,14 @@ COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kTextSafetyRemoteFallback);
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kOnDeviceModelValidation);
+
+#if !BUILDFLAG(IS_ANDROID)
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+BASE_DECLARE_FEATURE(kAiSettingsPageRefresh);
+
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+extern const base::FeatureParam<bool> kShowAiSettingsForTesting;
+#endif
 
 typedef base::EnumSet<proto::RequestContext,
                       proto::RequestContext_MIN,
@@ -381,10 +390,26 @@ int GetOnDeviceModelMaxTokensForExecute();
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 int GetOnDeviceModelMaxTokensForOutput();
 
+// The maximum total tokens, for input and output combined.
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+uint32_t GetOnDeviceModelMaxTokens();
+
 // Returns the number of crashes without a successful response before the
 // on-device model won't be used.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 int GetOnDeviceModelCrashCountBeforeDisable();
+
+// Feature params for handling exponential backoff after crashes.
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+base::TimeDelta GetOnDeviceModelMaxCrashBackoffTime();
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+base::TimeDelta GetOnDeviceModelCrashBackoffBaseTime();
+
+// Feature params for handling exponential backoff after timeouts.
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+base::TimeDelta GetOnDeviceModelMaxTimeoutBackoffTime();
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+base::TimeDelta GetOnDeviceModelTimeoutBackoffBaseTime();
 
 // Returns the number of sessions that timed out before the on-device model
 // won't be used.

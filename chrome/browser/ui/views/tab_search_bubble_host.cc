@@ -17,7 +17,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/layout_constants.h"
-#include "chrome/browser/ui/tabs/organization/tab_declutter_controller.h"
 #include "chrome/browser/ui/tabs/organization/tab_organization_service.h"
 #include "chrome/browser/ui/tabs/organization/tab_organization_service_factory.h"
 #include "chrome/browser/ui/tabs/organization/tab_organization_utils.h"
@@ -39,6 +38,7 @@
 #include "ui/compositor/compositor.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/widget/widget.h"
+
 namespace {
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -61,13 +61,14 @@ TabSearchOpenAction GetActionForEvent(const ui::Event& event) {
 
 }  // namespace
 
-TabSearchBubbleHost::TabSearchBubbleHost(views::Button* button,
-                                         Profile* profile)
+TabSearchBubbleHost::TabSearchBubbleHost(
+    views::Button* button,
+    BrowserWindowInterface* browser_window_interface)
     : button_(button),
-      profile_(profile),
+      profile_(browser_window_interface->GetProfile()),
       webui_bubble_manager_(WebUIBubbleManager::Create<TabSearchUI>(
           button,
-          profile,
+          browser_window_interface,
           GURL(chrome::kChromeUITabSearchURL),
           IDS_ACCNAME_TAB_SEARCH)),
       widget_open_timer_(base::BindRepeating([](base::TimeDelta time_elapsed) {
@@ -75,7 +76,7 @@ TabSearchBubbleHost::TabSearchBubbleHost(views::Button* button,
                                       time_elapsed);
       })) {
   auto* const tab_organization_service =
-      TabOrganizationServiceFactory::GetForProfile(profile);
+      TabOrganizationServiceFactory::GetForProfile(profile_.get());
   if (tab_organization_service) {
     tab_organization_observation_.Observe(tab_organization_service);
   }
@@ -118,7 +119,29 @@ void TabSearchBubbleHost::OnWidgetVisibilityChanged(views::Widget* widget,
             *bubble_created_time_,
             webui_bubble_manager_->bubble_using_cached_web_contents(),
             webui_bubble_manager_->contents_warmup_level()));
+    const PrefService* prefs = profile_->GetPrefs();
+    const auto section = tab_search_prefs::GetTabSearchSectionFromInt(
+        prefs->GetInteger(tab_search_prefs::kTabSearchTabIndex));
+    const auto organization_feature =
+        tab_search_prefs::GetTabOrganizationFeatureFromInt(
+            prefs->GetInteger(tab_search_prefs::kTabOrganizationFeature));
     bubble_created_time_.reset();
+    if (section == tab_search::mojom::TabSearchSection::kSearch) {
+      return;
+    }
+    if (organization_feature ==
+            tab_search::mojom::TabOrganizationFeature::kSelector ||
+        organization_feature ==
+            tab_search::mojom::TabOrganizationFeature::kNone) {
+      base::UmaHistogramEnumeration(
+          "Tab.Organization.SelectorCTR",
+          tab_search::mojom::SelectorCTREvent::kSelectorShown);
+    } else if (organization_feature ==
+               tab_search::mojom::TabOrganizationFeature::kDeclutter) {
+      base::UmaHistogramEnumeration(
+          "Tab.Organization.DeclutterCTR",
+          tab_search::mojom::DeclutterCTREvent::kDeclutterShown);
+    }
   }
 }
 
@@ -144,9 +167,8 @@ void TabSearchBubbleHost::OnOrganizationAccepted(const Browser* browser) {
 
 void TabSearchBubbleHost::OnUserInvokedFeature(const Browser* browser) {
   if (browser == GetBrowser()) {
-    const int tab_organization_tab_index = 1;
     ShowTabSearchBubble(
-        false, tab_organization_tab_index,
+        false, tab_search::mojom::TabSearchSection::kOrganize,
         tab_search::mojom::TabOrganizationFeature::kAutoTabGroups);
   }
 }
@@ -158,20 +180,6 @@ void TabSearchBubbleHost::BeforeBubbleWidgetShowed(views::Widget* widget) {
   DCHECK(!bubble_widget_observation_.IsObserving());
   bubble_widget_observation_.Observe(widget);
   widget_open_timer_.Reset(widget);
-
-  // The declutter controller is set in the WebUI controller, which notifies the
-  // page handler. This works because the contents wrapper is created by the
-  // `webui_bubble_manager_` during `webui_bubble_manager_->ShowBubble()`.
-  // TODO (b/360724768): Refactor how WebUI page handlers can access specific
-  // contexts more efficiently.
-  CHECK(webui_bubble_manager_->GetContentsWrapper());
-  CHECK(webui_bubble_manager_->GetContentsWrapper()->web_contents());
-  content::WebUI* web_ui =
-      webui_bubble_manager_->GetContentsWrapper()->web_contents()->GetWebUI();
-
-  CHECK(web_ui);
-  web_ui->GetController()->GetAs<TabSearchUI>()->InstallTabDeclutterController(
-      GetBrowser()->GetFeatures().tab_declutter_controller());
 
   widget->GetCompositor()->RequestSuccessfulPresentationTimeForNextFrame(
       base::BindOnce(
@@ -189,13 +197,14 @@ void TabSearchBubbleHost::BeforeBubbleWidgetShowed(views::Widget* widget) {
 
 bool TabSearchBubbleHost::ShowTabSearchBubble(
     bool triggered_by_keyboard_shortcut,
-    int tab_index,
+    tab_search::mojom::TabSearchSection section,
     tab_search::mojom::TabOrganizationFeature organization_feature) {
   TRACE_EVENT0("ui", "TabSearchBubbleHost::ShowTabSearchBubble");
   base::trace_event::EmitNamedTrigger("show-tab-search-bubble");
-  if (tab_index >= 0) {
-    profile_->GetPrefs()->SetInteger(tab_search_prefs::kTabSearchTabIndex,
-                                     tab_index);
+  if (section != tab_search::mojom::TabSearchSection::kNone) {
+    profile_->GetPrefs()->SetInteger(
+        tab_search_prefs::kTabSearchTabIndex,
+        tab_search_prefs::GetIntFromTabSearchSection(section));
   }
 
   if (organization_feature !=
@@ -212,9 +221,9 @@ bool TabSearchBubbleHost::ShowTabSearchBubble(
 
   // Close the Tab Search IPH if it is showing.
   if (auto* const browser = GetBrowser()) {
-    browser->window()->EndFeaturePromo(
+    browser->window()->NotifyFeaturePromoFeatureUsed(
         feature_engagement::kIPHTabSearchFeature,
-        user_education::EndFeaturePromoReason::kFeatureEngaged);
+        FeaturePromoFeatureUsedAction::kClosePromoIfPresent);
   }
 
   std::optional<gfx::Rect> anchor;

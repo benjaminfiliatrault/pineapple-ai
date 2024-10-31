@@ -29,7 +29,7 @@
 #include "components/language/core/browser/language_model.h"
 #include "components/language/core/browser/language_model_manager.h"
 #include "components/live_caption/caption_util.h"
-#include "components/user_education/common/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_controller.h"
 #include "components/vector_icons/vector_icons.h"
 #include "media/base/media_switches.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -164,13 +164,19 @@ void MediaToolbarButtonView::ClosePromoBubble(bool engaged) {
     return;
   }
 
-  const auto result =
-      engaged ? user_education::EndFeaturePromoReason::kFeatureEngaged
-              : user_education::EndFeaturePromoReason::kAbortPromo;
-  browser_->window()->EndFeaturePromo(
-      feature_engagement::kIPHLiveCaptionFeature, result);
-  browser_->window()->EndFeaturePromo(
-      feature_engagement::kIPHGMCCastStartStopFeature, result);
+  if (engaged) {
+    browser_->window()->NotifyFeaturePromoFeatureUsed(
+        feature_engagement::kIPHLiveCaptionFeature,
+        FeaturePromoFeatureUsedAction::kClosePromoIfPresent);
+    browser_->window()->NotifyFeaturePromoFeatureUsed(
+        feature_engagement::kIPHGMCCastStartStopFeature,
+        FeaturePromoFeatureUsedAction::kClosePromoIfPresent);
+  } else {
+    browser_->window()->AbortFeaturePromo(
+        feature_engagement::kIPHLiveCaptionFeature);
+    browser_->window()->AbortFeaturePromo(
+        feature_engagement::kIPHGMCCastStartStopFeature);
+  }
 }
 
 BEGIN_METADATA(MediaToolbarButtonView)

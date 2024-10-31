@@ -46,6 +46,7 @@
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/native_theme/native_theme_features.h"
+#include "ui/native_theme/native_theme_utils.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/build_info.h"
@@ -270,8 +271,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            raw_ref(features::kPeriodicBackgroundSync)},
           {wf::EnablePushMessagingSubscriptionChange,
            raw_ref(features::kPushSubscriptionChangeEvent)},
-          {wf::EnableRestrictGamepadAccess,
-           raw_ref(features::kRestrictGamepadAccess)},
           {wf::EnableSecurePaymentConfirmation,
            raw_ref(features::kSecurePaymentConfirmation)},
           {wf::EnableSecurePaymentConfirmationDebug,
@@ -314,6 +313,8 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           {wf::EnableWebXRFrontFacing,
            raw_ref(device::features::kWebXrIncubations)},
           {wf::EnableWebXRFrameRate,
+           raw_ref(device::features::kWebXrIncubations)},
+          {wf::EnableWebXRGPUBinding,
            raw_ref(device::features::kWebXrIncubations)},
           {wf::EnableWebXRHandInput,
            raw_ref(device::features::kWebXrHandInput)},
@@ -409,8 +410,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            raw_ref(features::kTouchTextEditingRedesign)},
           {"TrustedTypesFromLiteral",
            raw_ref(features::kTrustedTypesFromLiteral)},
-          {"WebSerialBluetooth",
-           raw_ref(features::kEnableBluetoothSerialPortProfileInSerialApi)},
           {"MediaStreamTrackTransfer",
            raw_ref(features::kMediaStreamTrackTransfer)},
           {"PrivateNetworkAccessPermissionPrompt",
@@ -484,6 +483,8 @@ void SetRuntimeFeaturesFromCommandLine(const base::CommandLine& command_line) {
        blink::switches::kDisableStandardizedBrowserZoom, false},
       {wrf::EnableCSSCustomStateDeprecatedSyntax,
        blink::switches::kCSSCustomStateDeprecatedSyntaxEnabled, true},
+      {wrf::EnableSelectParserRelaxation,
+       blink::switches::kDisableSelectParserRelaxation, false},
       {wrf::EnableTextFragmentIdentifiers,
        switches::kDisableScrollToTextFragment, false},
       {wrf::EnableWebAuthenticationRemoteDesktopSupport,
@@ -518,24 +519,6 @@ void SetRuntimeFeaturesFromCommandLine(const base::CommandLine& command_line) {
     int port;
     if (base::StringToInt(port_str, &port) && port == 0) {
       WebRuntimeFeatures::EnableAutomationControlled(true);
-    }
-  }
-
-  // Enable or disable BeforeunloadEventCancelByPreventDefault for Enterprise
-  // Policy. This overrides any existing settings via base::Feature.
-  if (command_line.HasSwitch(
-          blink::switches::kBeforeunloadEventCancelByPreventDefaultPolicy)) {
-    const std::string value = command_line.GetSwitchValueASCII(
-        blink::switches::kBeforeunloadEventCancelByPreventDefaultPolicy);
-    if (value ==
-        blink::switches::
-            kBeforeunloadEventCancelByPreventDefaultPolicy_ForceEnable) {
-      WebRuntimeFeatures::EnableBeforeunloadEventCancelByPreventDefault(true);
-    }
-    if (value ==
-        blink::switches::
-            kBeforeunloadEventCancelByPreventDefaultPolicy_ForceDisable) {
-      WebRuntimeFeatures::EnableBeforeunloadEventCancelByPreventDefault(false);
     }
   }
 }

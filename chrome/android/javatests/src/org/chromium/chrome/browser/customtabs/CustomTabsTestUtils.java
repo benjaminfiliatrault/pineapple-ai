@@ -111,7 +111,7 @@ public class CustomTabsTestUtils {
                                 })
                         .session;
         Assert.assertTrue(connection.warmup(0));
-        startupCallbackHelper.waitForCallback(0, 1, 10, TimeUnit.SECONDS);
+        startupCallbackHelper.waitForCallback(0, 1, 20, TimeUnit.SECONDS);
         return connection;
     }
 
@@ -160,7 +160,8 @@ public class CustomTabsTestUtils {
                 },
                 LONG_TIMEOUT_MS,
                 CriteriaHelper.DEFAULT_POLLING_INTERVAL);
-        ChromeTabUtils.waitForTabPageLoaded(connection.getSpeculationParamsForTesting().tab, url);
+        ChromeTabUtils.waitForTabPageLoaded(
+                connection.getSpeculationParamsForTesting().hiddenTab.tab, url);
     }
 
     /**

@@ -292,6 +292,7 @@ int CreditCard::IconResourceId(Suggestion::Icon icon) {
       return get_icon(IDR_AUTOFILL_METADATA_CC_GENERIC,
                       IDR_AUTOFILL_CC_GENERIC);
     case Suggestion::Icon::kAutofillPredictionImprovements:
+
     case Suggestion::Icon::kAccount:
     case Suggestion::Icon::kClear:
     case Suggestion::Icon::kCode:
@@ -564,9 +565,7 @@ void CreditCard::SetRawInfoWithVerificationStatus(FieldType type,
       break;
 
     default:
-      NOTREACHED_IN_MIGRATION()
-          << "Attempting to set unknown info-type " << type;
-      break;
+      NOTREACHED() << "Attempting to set unknown info-type " << type;
   }
 }
 
@@ -761,6 +760,15 @@ int CreditCard::Compare(const CreditCard& credit_card) const {
   }
   if (record_type_ != RecordType::kLocalCard &&
       credit_card.record_type_ == RecordType::kLocalCard) {
+    return 1;
+  }
+
+  if (static_cast<int>(card_info_retrieval_enrollment_state_) <
+      static_cast<int>(credit_card.card_info_retrieval_enrollment_state_)) {
+    return -1;
+  }
+  if (static_cast<int>(card_info_retrieval_enrollment_state_) >
+      static_cast<int>(credit_card.card_info_retrieval_enrollment_state_)) {
     return 1;
   }
   return 0;
@@ -1232,7 +1240,9 @@ std::ostream& operator<<(std::ostream& os, const CreditCard& credit_card) {
             << " " << credit_card.card_art_url().spec() << " "
             << base::UTF16ToUTF8(credit_card.product_description()) << " "
             << credit_card.product_terms_url().spec() << " "
-            << credit_card.cvc();
+            << credit_card.cvc() << " "
+            << base::to_underlying(
+                   credit_card.card_info_retrieval_enrollment_state());
 }
 
 void CreditCard::SetNameOnCardFromSeparateParts() {

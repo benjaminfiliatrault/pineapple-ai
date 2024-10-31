@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
+import 'chrome://resources/cr_elements/cr_spinner_style.css.js';
 import './shared_style.css.js';
 import './prefs/pref_toggle_button.js';
 import './user_utils_mixin.js';
@@ -30,6 +31,7 @@ import {PasskeysBrowserProxyImpl} from './passkeys_browser_proxy.js';
 import type {BlockedSite, BlockedSitesListChangedListener, CredentialsChangedListener} from './password_manager_proxy.js';
 import {PasswordManagerImpl} from './password_manager_proxy.js';
 import type {PrefToggleButtonElement} from './prefs/pref_toggle_button.js';
+
 import type {Route} from './router.js';
 import {RouteObserverMixin, Router, UrlParam} from './router.js';
 import {getTemplate} from './settings_section.html.js';
@@ -383,6 +385,13 @@ export class SettingsSectionElement extends SettingsSectionElementBase {
 
   private onMovePasswordsClicked_(e: Event) {
     e.preventDefault();
+    // <if expr="not is_chromeos">
+    if (loadTimeData.getBoolean('isBatchUploadDesktopEnabled')) {
+      SyncBrowserProxyImpl.getInstance().openBatchUpload();
+      return;
+    }
+    // </if>
+
     this.showMovePasswordsDialog_ = true;
   }
 

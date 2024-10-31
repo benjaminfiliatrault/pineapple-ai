@@ -13,8 +13,8 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
-#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/task/updateable_sequenced_task_runner.h"
 #include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -80,10 +80,11 @@ class TransactionTest : public testing::Test {
     bucket_context_ = std::make_unique<BucketContext>(
         GetOrCreateBucket(
             storage::BucketInitParams::ForDefaultBucket(storage_key)),
-        temp_dir_.GetPath(), std::move(delegate), quota_manager_->proxy(),
-        /*io_task_runner=*/base::SequencedTaskRunner::GetCurrentDefault(),
+        temp_dir_.GetPath(), std::move(delegate),
+        scoped_refptr<base::UpdateableSequencedTaskRunner>(),
+        quota_manager_->proxy(),
         /*blob_storage_context=*/mojo::NullRemote(),
-        /*file_system_access_context=*/mojo::NullRemote(), base::DoNothing());
+        /*file_system_access_context=*/mojo::NullRemote());
 
     bucket_context_->InitBackingStoreIfNeeded(true);
     db_ = bucket_context_->AddDatabase(

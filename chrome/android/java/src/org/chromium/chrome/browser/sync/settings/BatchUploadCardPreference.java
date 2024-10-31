@@ -145,6 +145,15 @@ public class BatchUploadCardPreference extends Preference
         hideBatchUploadCardAndUpdate();
     }
 
+    private boolean hasAnyItems() {
+        for (LocalDataDescription desc : mLocalDataDescriptionsMap.values()) {
+            if (desc.itemCount() > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void update() {
         // Calling getLocalDataDescriptions() API when sync is in configuring state should be
         // avoided. Since it will return an empty map, which could be inconsistent with the actual
@@ -161,15 +170,7 @@ public class BatchUploadCardPreference extends Preference
                         : Set.of(DataType.BOOKMARKS, DataType.READING_LIST, DataType.PASSWORDS),
                 localDataDescriptionsMap -> {
                     mLocalDataDescriptionsMap = localDataDescriptionsMap;
-                    int sum =
-                            mLocalDataDescriptionsMap.values().stream()
-                                    .map(LocalDataDescription::itemCount)
-                                    .reduce(0, Integer::sum);
-                    if (sum == 0) {
-                        setVisible(false);
-                    } else {
-                        setVisible(true);
-                    }
+                    setVisible(hasAnyItems());
                     notifyChanged();
                 });
     }
@@ -177,11 +178,18 @@ public class BatchUploadCardPreference extends Preference
     private void setupBatchUploadCardView(View card) {
         // It does not make sense to set the card text when there are no local data. An early return
         // here would also avoid showing the card with a wrong text before it hides.
-        if (mLocalDataDescriptionsMap == null
-                || mLocalDataDescriptionsMap.values().stream()
-                                .map(LocalDataDescription::itemCount)
-                                .reduce(0, Integer::sum)
-                        == 0) {
+        if (mLocalDataDescriptionsMap == null || !hasAnyItems()) {
+            return;
+        }
+
+        // TODO(b/354686035): Handle accounts with non-displayable email address.
+        CoreAccountInfo accountInfo =
+                IdentityServicesProvider.get()
+                        .getIdentityManager(mProfile)
+                        .getPrimaryAccountInfo(ConsentLevel.SIGNIN);
+        // setupBatchUploadCardView() is called asynchronously through onBindViewHolder(), so it
+        // could be called while there is no primary account.
+        if (accountInfo == null) {
             return;
         }
 
@@ -192,7 +200,7 @@ public class BatchUploadCardPreference extends Preference
         button.setOnClickListener(
                 v -> {
                     BatchUploadDialogCoordinator.show(
-                            context, mProfile, mLocalDataDescriptionsMap, mDialogManager, this);
+                            context, mLocalDataDescriptionsMap, mDialogManager, this);
                 });
 
         ImageView image = (ImageView) card.findViewById(R.id.signin_settings_card_icon);
@@ -223,11 +231,6 @@ public class BatchUploadCardPreference extends Preference
         }
 
         TextView text = (TextView) card.findViewById(R.id.signin_settings_card_description);
-        // TODO(b/354686035): Handle accounts with non-displayable email address.
-        CoreAccountInfo accountInfo =
-                IdentityServicesProvider.get()
-                        .getIdentityManager(mProfile)
-                        .getPrimaryAccountInfo(ConsentLevel.SIGNIN);
         if (localItemsCountExcludingPasswords == 0) {
             text.setText(
                     context.getResources()

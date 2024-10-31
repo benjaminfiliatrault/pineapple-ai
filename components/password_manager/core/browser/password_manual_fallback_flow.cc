@@ -195,7 +195,7 @@ void PasswordManualFallbackFlow::OnSuggestionsHidden() {}
 void PasswordManualFallbackFlow::DidSelectSuggestion(
     const Suggestion& suggestion) {
   CHECK(SupportsSuggestionType(suggestion.type));
-  if (!suggestion.is_acceptable) {
+  if (!suggestion.IsAcceptable()) {
     return;
   }
   switch (suggestion.type) {
@@ -232,7 +232,7 @@ void PasswordManualFallbackFlow::DidAcceptSuggestion(
     const Suggestion& suggestion,
     const SuggestionMetadata& metadata) {
   CHECK(SupportsSuggestionType(suggestion.type));
-  if (!suggestion.is_acceptable) {
+  if (!suggestion.IsAcceptable()) {
     return;
   }
   const PasswordForm* const form = password_form_cache_->GetPasswordForm(
@@ -376,11 +376,16 @@ void PasswordManualFallbackFlow::MaybeAuthenticateBeforeFilling(
         base::BindOnce(&PasswordManualFallbackFlow::OnBiometricReauthCompleted,
                        weak_ptr_factory_.GetWeakPtr(), std::move(fill_fields));
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
     const std::u16string origin = base::UTF8ToUTF16(GetShownOrigin(
         url::Origin::Create(password_manager_driver_->GetLastCommittedURL())));
+#endif
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
     message =
         l10n_util::GetStringFUTF16(IDS_PASSWORD_MANAGER_FILLING_REAUTH, origin);
+#elif BUILDFLAG(IS_CHROMEOS)
+    message = l10n_util::GetStringFUTF16(
+        IDS_PASSWORD_MANAGER_FILLING_REAUTH_CHROMEOS, origin);
 #endif
     authenticator_->AuthenticateWithMessage(
         message, metrics_util::TimeCallbackMediumTimes(

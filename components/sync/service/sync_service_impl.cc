@@ -28,6 +28,7 @@
 #include "build/build_config.h"
 #include "components/signin/public/base/gaia_id_hash.h"
 #include "components/signin/public/base/signin_metrics.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -45,13 +46,13 @@
 #include "components/sync/engine/shutdown_reason.h"
 #include "components/sync/engine/sync_encryption_handler.h"
 #include "components/sync/invalidations/sync_invalidations_service.h"
-#include "components/sync/model/sync_error.h"
 #include "components/sync/service/backend_migrator.h"
 #include "components/sync/service/configure_context.h"
 #include "components/sync/service/data_type_manager_impl.h"
 #include "components/sync/service/local_data_description.h"
 #include "components/sync/service/sync_auth_manager.h"
 #include "components/sync/service/sync_engine_factory.h"
+#include "components/sync/service/sync_error.h"
 #include "components/sync/service/sync_feature_status_for_migrations_recorder.h"
 #include "components/sync/service/sync_prefs.h"
 #include "components/sync/service/sync_prefs_policy_handler.h"
@@ -200,7 +201,7 @@ void MaybeClearAccountKeyedPreferences(
     const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
     SyncUserSettingsImpl& user_settings) {
 #if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
-  if (accounts_in_cookie_jar_info.accounts_are_fresh) {
+  if (accounts_in_cookie_jar_info.AreAccountsFresh()) {
     // Clear settings for accounts no longer in the cookie jar. On Android
     // and iOS this is done when the account is removed from the OS instead.
     std::vector<signin::GaiaIdHash> hashes =
@@ -408,9 +409,7 @@ void SyncServiceImpl::Initialize(DataTypeController::TypeVector controllers) {
                          user_settings_->IsInitialSyncFeatureSetupComplete());
 
   if (registered_trusted_vault_auto_upgrade_synthetic_field_trial_group_
-          .has_value() &&
-      base::FeatureList::IsEnabled(
-          syncer::kTrustedVaultAutoUpgradeSyntheticFieldTrial)) {
+          .has_value()) {
     CHECK(registered_trusted_vault_auto_upgrade_synthetic_field_trial_group_
               ->is_valid());
     registered_trusted_vault_auto_upgrade_synthetic_field_trial_group_
@@ -459,15 +458,20 @@ void SyncServiceImpl::StartSyncingWithServer() {
 }
 
 DataTypeSet SyncServiceImpl::GetRegisteredDataTypesForTest() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK_IS_TEST();
   return data_type_manager_->GetRegisteredDataTypes();
 }
 
-bool SyncServiceImpl::HasAnyDatatypeErrorForTest(DataTypeSet types) const {
+bool SyncServiceImpl::HasAnyModelErrorForTest(DataTypeSet types) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (auto type : types) {
-    auto it = data_type_error_map_.find(type);
-    if (it != data_type_error_map_.end() &&
-        it->second.error_type() == syncer::SyncError::DATATYPE_ERROR) {
+  CHECK_IS_TEST();
+  CHECK(data_type_manager_);
+
+  for (DataType type : types) {
+    DataTypeController* controller =
+        data_type_manager_->GetControllerForTest(type);  // IN-TEST
+    if (controller && controller->state() == DataTypeController::FAILED) {
       return true;
     }
   }
@@ -477,12 +481,14 @@ bool SyncServiceImpl::HasAnyDatatypeErrorForTest(DataTypeSet types) const {
 void SyncServiceImpl::GetThrottledDataTypesForTest(
     base::OnceCallback<void(DataTypeSet)> cb) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK_IS_TEST();
+
   if (!engine_ || !engine_->IsInitialized()) {
     std::move(cb).Run(DataTypeSet());
     return;
   }
 
-  engine_->GetThrottledDataTypesForTest(std::move(cb));
+  engine_->GetThrottledDataTypesForTest(std::move(cb));  // IN-TEST
 }
 
 // static
@@ -943,8 +949,7 @@ SyncService::UserActionableError SyncServiceImpl::GetUserActionableError()
     case GoogleServiceAuthError::REQUEST_CANCELED:
     case GoogleServiceAuthError::CHALLENGE_RESPONSE_REQUIRED:
       // Transient errors aren't reachable.
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
     case GoogleServiceAuthError::SERVICE_ERROR:
     case GoogleServiceAuthError::SCOPE_LIMITED_UNRECOVERABLE_ERROR:
     case GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS:
@@ -957,8 +962,7 @@ SyncService::UserActionableError SyncServiceImpl::GetUserActionableError()
       break;
     // Conventional value for counting the states, never used.
     case GoogleServiceAuthError::NUM_STATES:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 
   if (user_settings_->IsPassphraseRequiredForPreferredDataTypes()) {
@@ -1079,7 +1083,7 @@ void SyncServiceImpl::OnEngineInitialized(bool success,
   if (identity_manager_) {
     signin::AccountsInCookieJarInfo accounts_in_cookie_jar_info =
         identity_manager_->GetAccountsInCookieJar();
-    if (accounts_in_cookie_jar_info.accounts_are_fresh) {
+    if (accounts_in_cookie_jar_info.AreAccountsFresh()) {
       OnAccountsInCookieUpdated(accounts_in_cookie_jar_info,
                                 GoogleServiceAuthError::AuthErrorNone());
     }
@@ -1215,7 +1219,7 @@ void SyncServiceImpl::OnActionableProtocolError(
       ResetEngine(ResetEngineReason::kResetLocalData);
       break;
     case UNKNOWN_ACTION:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
   DVLOG(2) << "Notify observers OnActionableProtocolError";
   NotifyObservers();
@@ -1239,7 +1243,6 @@ void SyncServiceImpl::OnNewInvalidatedDataTypes() {
 void SyncServiceImpl::OnConfigureDone(
     const DataTypeManager::ConfigureResult& result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  data_type_error_map_ = result.data_type_status_table.GetAllErrors();
 
   DVLOG(1) << "SyncServiceImpl::OnConfigureDone called with status: "
            << result.status;
@@ -1493,17 +1496,18 @@ void SyncServiceImpl::OnSelectedTypesPrefChange() {
 
 SyncClient* SyncServiceImpl::GetSyncClientForTest() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK_IS_TEST();
   return sync_client_.get();
 }
 
 void SyncServiceImpl::ReportDataTypeErrorForTest(DataType type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK_IS_TEST();
-  CHECK(data_type_manager_->GetControllerMap().find(type) !=
-        data_type_manager_->GetControllerMap().end());
-  data_type_manager_->GetControllerMap()
-      .find(type)
-      ->second->ReportBridgeErrorForTest();  // IN-TEST
+
+  DataTypeController* controller =
+      data_type_manager_->GetControllerForTest(type);  // IN-TEST
+  CHECK(controller);
+  controller->ReportBridgeErrorForTest();  // IN-TEST
 }
 
 void SyncServiceImpl::AddObserver(SyncServiceObserver* observer) {
@@ -1720,13 +1724,15 @@ SyncCycleSnapshot SyncServiceImpl::GetLastCycleSnapshotForDebugging() const {
 void SyncServiceImpl::HasUnsyncedItemsForTest(
     base::OnceCallback<void(bool)> cb) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK_IS_TEST();
   DCHECK(engine_);
   DCHECK(engine_->IsInitialized());
-  engine_->HasUnsyncedItemsForTest(std::move(cb));
+  engine_->HasUnsyncedItemsForTest(std::move(cb));  // IN-TEST
 }
 
 BackendMigrator* SyncServiceImpl::GetBackendMigratorForTest() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK_IS_TEST();
   return migrator_.get();
 }
 
@@ -1803,14 +1809,36 @@ void SyncServiceImpl::OnAccountsInCookieUpdated(
 
 void SyncServiceImpl::OnPrimaryAccountChanged(
     const signin::PrimaryAccountChangeEvent& event_details) {
-  if (event_details.GetEventTypeFor(signin::ConsentLevel::kSignin) !=
-      signin::PrimaryAccountChangeEvent::Type::kCleared) {
-    return;
+  // When setting the primary account (at either ConsentLevel), record metrics.
+  for (signin::ConsentLevel consent_level :
+       {signin::ConsentLevel::kSignin, signin::ConsentLevel::kSync}) {
+    switch (event_details.GetEventTypeFor(consent_level)) {
+      case signin::PrimaryAccountChangeEvent::Type::kNone:
+      case signin::PrimaryAccountChangeEvent::Type::kCleared:
+        break;
+      case signin::PrimaryAccountChangeEvent::Type::kSet:
+        CHECK(event_details.GetSetPrimaryAccountAccessPoint().has_value());
+        signin_metrics::AccessPoint access_point =
+            event_details.GetSetPrimaryAccountAccessPoint().value();
+
+        // The history opt-in state can only be queried after sync's internal
+        // account state has been updated. That may or may not have happened
+        // yet; depends on the order of IdentityManager observers
+        // (SyncServiceImpl vs SyncAuthManager).
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                &SyncServiceImpl::RecordHistoryOptInStateOnSigninHistograms,
+                weak_factory_.GetWeakPtr(), access_point, consent_level));
+    }
   }
 
-  MaybeClearAccountKeyedPreferences(identity_manager_,
-                                    identity_manager_->GetAccountsInCookieJar(),
-                                    *user_settings_);
+  if (event_details.GetEventTypeFor(signin::ConsentLevel::kSignin) ==
+      signin::PrimaryAccountChangeEvent::Type::kCleared) {
+    MaybeClearAccountKeyedPreferences(
+        identity_manager_, identity_manager_->GetAccountsInCookieJar(),
+        *user_settings_);
+  }
 }
 
 void SyncServiceImpl::OnAccountsInCookieUpdatedWithCallback(
@@ -1824,10 +1852,11 @@ void SyncServiceImpl::OnAccountsInCookieUpdatedWithCallback(
     return;
   }
 
-  bool cookie_jar_mismatch =
-      HasCookieJarMismatch(accounts_in_cookie_jar_info.signed_in_accounts);
+  bool cookie_jar_mismatch = HasCookieJarMismatch(
+      accounts_in_cookie_jar_info.GetPotentiallyInvalidSignedInAccounts());
   bool cookie_jar_empty =
-      accounts_in_cookie_jar_info.signed_in_accounts.empty();
+      accounts_in_cookie_jar_info.GetPotentiallyInvalidSignedInAccounts()
+          .empty();
 
   DVLOG(1) << "Cookie jar mismatch: " << cookie_jar_mismatch;
   DVLOG(1) << "Cookie jar empty: " << cookie_jar_empty;
@@ -2090,11 +2119,13 @@ void SyncServiceImpl::ReconfigureDatatypeManager(
 
 bool SyncServiceImpl::IsRetryingAccessTokenFetchForTest() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return auth_manager_->IsRetryingAccessTokenFetchForTest();
+  CHECK_IS_TEST();
+  return auth_manager_->IsRetryingAccessTokenFetchForTest();  // IN-TEST
 }
 
 std::string SyncServiceImpl::GetAccessTokenForTest() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK_IS_TEST();
   return auth_manager_->access_token();
 }
 
@@ -2137,7 +2168,7 @@ void SyncServiceImpl::OverrideNetworkForTest(
 
   // If a previous request (with the wrong callback) already failed, the next
   // one would be backed off, which breaks tests. So reset the backoff.
-  auth_manager_->ResetRequestAccessTokenBackoffForTest();
+  auth_manager_->ResetRequestAccessTokenBackoffForTest();  // IN-TEST
 
   create_http_post_provider_factory_cb_ = create_http_post_provider_factory_cb;
 
@@ -2154,6 +2185,7 @@ void SyncServiceImpl::OverrideNetworkForTest(
 
 SyncEncryptionHandler::Observer*
 SyncServiceImpl::GetEncryptionObserverForTest() {
+  CHECK_IS_TEST();
   return &crypto_;
 }
 
@@ -2171,6 +2203,14 @@ void SyncServiceImpl::RemoveClientFromServer() const {
     sync_stopped_reporter_->ReportSyncStopped(access_token, cache_guid,
                                               birthday);
   }
+}
+
+void SyncServiceImpl::RecordHistoryOptInStateOnSigninHistograms(
+    signin_metrics::AccessPoint access_point,
+    signin::ConsentLevel consent_level) {
+  signin_metrics::RecordHistoryOptInStateOnSignin(
+      access_point, consent_level,
+      user_settings_->GetSelectedTypes().Has(UserSelectableType::kHistory));
 }
 
 const GURL& SyncServiceImpl::GetSyncServiceUrlForDebugging() const {
@@ -2220,6 +2260,7 @@ void SyncServiceImpl::GetLocalDataDescriptions(
     DataTypeSet types,
     base::OnceCallback<void(std::map<DataType, LocalDataDescription>)>
         callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Some code paths in GetLocalDataDescriptionsImpl() are synchronous, e.g.
   // if `types` have synchronous DataTypeLocalDataBatchUploader implementations.
   // Having an API that is sometime sync and sometimes async can be unexpected
@@ -2242,26 +2283,13 @@ void SyncServiceImpl::GetLocalDataDescriptionsImpl(
     return;
   }
 
-  if (!base::FeatureList::IsEnabled(
-          syncer::kSyncEnableModelTypeLocalDataBatchUploaders)) {
-    // Only retain types that are not only preferred but also active, that is,
-    // those which are configured and have not encountered any error.
-    types.RetainAll(GetActiveDataTypes());
-
-    sync_client_->GetLocalDataDescriptions(types, std::move(callback));
-    return;
-  }
-
   data_type_manager_->GetLocalDataDescriptions(types, std::move(callback));
 }
 
 void SyncServiceImpl::TriggerLocalDataMigration(DataTypeSet types) {
-  if (base::FeatureList::IsEnabled(
-          syncer::kSyncEnableModelTypeLocalDataBatchUploaders)) {
-    for (DataType type : types) {
-      base::UmaHistogramEnumeration("Sync.BatchUpload.Requests3",
-                                    syncer::DataTypeHistogramValue(type));
-    }
+  for (DataType type : types) {
+    base::UmaHistogramEnumeration("Sync.BatchUpload.Requests3",
+                                  syncer::DataTypeHistogramValue(type));
   }
 
   // Syncing users do not use separate local and account storages. Thus, there's
@@ -2270,17 +2298,25 @@ void SyncServiceImpl::TriggerLocalDataMigration(DataTypeSet types) {
     return;
   }
 
-  if (!base::FeatureList::IsEnabled(
-          syncer::kSyncEnableModelTypeLocalDataBatchUploaders)) {
-    // Only retain types that are not only preferred but also active, that is,
-    // those which are configured and have not encountered any error.
-    types.RetainAll(GetActiveDataTypes());
+  return data_type_manager_->TriggerLocalDataMigration(types);
+}
 
-    sync_client_->TriggerLocalDataMigration(types);
+void SyncServiceImpl::TriggerLocalDataMigration(
+    std::map<DataType, std::vector<syncer::LocalDataItemModel::DataId>> items) {
+  CHECK(switches::IsBatchUploadDesktopEnabled());
+
+  for (const auto& [type, _] : items) {
+    base::UmaHistogramEnumeration("Sync.BatchUpload.Requests3",
+                                  syncer::DataTypeHistogramValue(type));
+  }
+
+  // Syncing users do not use separate local and account storages. Thus, there's
+  // no local-only data to migrate.
+  if (HasSyncConsent()) {
     return;
   }
 
-  return data_type_manager_->TriggerLocalDataMigration(types);
+  return data_type_manager_->TriggerLocalDataMigration(std::move(items));
 }
 
 }  // namespace syncer

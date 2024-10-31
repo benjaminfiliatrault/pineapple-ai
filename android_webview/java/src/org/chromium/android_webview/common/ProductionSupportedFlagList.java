@@ -206,8 +206,6 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 NetFeatures.OPTIMIZE_PARSING_DATA_URLS, "Enables optimizing parsing data: URLs."),
         Flag.baseFeature(
-                AwFeatures.WEBVIEW_EXIT_REASON_METRIC, "Records various system exit reasons"),
-        Flag.baseFeature(
                 AwFeatures.WEBVIEW_EXTRA_HEADERS_SAME_ORIGIN_ONLY,
                 "Only allow extra headers added via loadUrl() to be sent to the same origin "
                         + "as the original request."),
@@ -225,6 +223,7 @@ public final class ProductionSupportedFlagList {
                 BlinkFeatures.GMS_CORE_EMOJI,
                 "Enables retrieval of the emoji font through GMS Core "
                         + "improving emoji glyph coverage."),
+        Flag.baseFeature("AffiliationsGroupInfoEnabled", "Enables group affiliations on Android."),
         Flag.baseFeature(
                 AndroidAutofillFeatures.ANDROID_AUTOFILL_BOTTOM_SHEET_WORKAROUND_NAME,
                 "Enable the workaround for autofill bottom sheet platform bug."),
@@ -242,6 +241,10 @@ public final class ProductionSupportedFlagList {
                 AutofillFeatures.AUTOFILL_ENABLE_EXPIRATION_DATE_IMPROVEMENTS,
                 "Enables various improvements to handling expiration dates."),
         Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_ENABLE_SUPPORT_FOR_PARSING_WITH_SHARED_LABELS,
+                "Splits Autofill labels among consecutive fields for better heuristic"
+                        + " predictions."),
+        Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_ENABLE_SUPPORT_FOR_PHONE_NUMBER_TRUNK_TYPES,
                 "Rationalizes city-and-number and city-code fields to the "
                         + "correct trunk-prefix types."),
@@ -255,18 +258,27 @@ public final class ProductionSupportedFlagList {
                 AutofillFeatures.AUTOFILL_FIX_VALUE_SEMANTICS,
                 "Fixes the overloaded meaning of FormFieldData::value"),
         Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_FIX_VALUE_SEMANTICS,
+                "Fixes the overloaded meaning of FormFieldData::value"),
+        Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_FIX_INITIAL_VALUE_OF_SELECT,
                 "Sets the AutofillField's initial value for select elements"),
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_FIX_CURRENT_VALUE_IN_IMPORT,
                 "Prevents the AutofillField's current value from being reset for import"),
         Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_GIVE_PRECEDENCE_TO_EMAIL_OVER_USERNAME,
-                "When enabled, Autofill will give precedence to heuristics results that predict an"
-                        + " email field over server predictions for a username field"),
+                AutofillFeatures.AUTOFILL_INFER_COUNTRY_CALLING_CODE,
+                "Infers the country calling code from the profile's country, if available."),
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_INFER_COUNTRY_CALLING_CODE,
                 "Infers the country calling code from the profile's country, if available."),
+        Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_INFER_LABEL_FROM_DEFAULT_SELECT_TEXT,
+                "Considers the text of a <select> element's first <option> as a potential label"),
+        Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_DECOUPLE_AUTOFILL_COUNT_FROM_CACHE,
+                "Makes AutofillManager::GetCachedFormAndField return a form even if"
+                        + " form->autofill_count() == 0"),
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_DETECT_REMOVED_FORM_CONTROLS,
                 "Enables Autofill to detect if form controls are removed from the DOM"),
@@ -282,6 +294,10 @@ public final class ProductionSupportedFlagList {
                 "When enabled, Autofill will always prefer the phone number parsed using "
                         + "libphonenumber over the format provided by the field during imports."),
         Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_PREFER_SAVED_FORM_AS_SUBMITTED_FORM,
+                "When enabled, Autofill will start preferring the saved form over performing form "
+                        + "extraction at submission time, and only use the latter as a fallback."),
+        Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_REPLACE_CACHED_WEB_ELEMENTS_BY_RENDERER_IDS,
                 "When enabled, AutofillAgent will store its cached form and fields as renderer ids "
                         + "instead of holding strong references to blink::WebElement objects."),
@@ -289,9 +305,6 @@ public final class ProductionSupportedFlagList {
                 AutofillFeatures.AUTOFILL_ALWAYS_PARSE_PLACEHOLDERS,
                 "When enabled, Autofill local heuristics consider the placeholder attribute "
                         + "for determining field types."),
-        Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_UNIFY_AND_FIX_FORM_TRACKING,
-                "When enabled, AutofillAgent and FormTracker track the same elements."),
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_USE_AU_ADDRESS_MODEL,
                 "When enabled, Autofill uses a custom address model for Australia."),
@@ -311,8 +324,15 @@ public final class ProductionSupportedFlagList {
                 AutofillFeatures.AUTOFILL_USE_IT_ADDRESS_MODEL,
                 "When enabled, Autofill uses a custom address model for Italy."),
         Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_USE_NL_ADDRESS_MODEL,
+                "When enabled, Autofill uses a custom address model for the Netherlands."),
+        Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_USE_PL_ADDRESS_MODEL,
                 "When enabled, Autofill uses a custom address model for Poland."),
+        Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_USE_SUBMITTED_FORM_IN_HTML_SUBMISSION,
+                "When enabled, Autofill will start falling back to the saved form when HTML"
+                        + " submission happens and form extraction fails."),
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_GREEK_REGEXES,
                 "When enabled, Greek regexes are used for parsing in branded builds."),
@@ -386,9 +406,6 @@ public final class ProductionSupportedFlagList {
                 BlinkFeatures.SET_TIMEOUT_WITHOUT_CLAMP,
                 "Enables faster setTimeout(,0) by removing the 1 ms clamping."),
         Flag.baseFeature(
-                BlinkFeatures.PAINT_HOLDING_CROSS_ORIGIN,
-                "Defers the first commit until FCP or timeout for cross-origin navigations."),
-        Flag.baseFeature(
                 BlinkFeatures.PAINT_HOLDING_FOR_IFRAMES,
                 "Show stale paint from old Document until new Document is ready for subframe"
                         + " navigations."),
@@ -460,14 +477,11 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 BlinkFeatures.DETAILS_STYLING,
                 "Enables support for improved styling of HTML details element."),
-        Flag.baseFeature(
-                AwFeatures.WEBVIEW_HIT_TEST_IN_BLINK_ON_TOUCH_START,
-                "Hit test on touch start in blink"),
         Flag.baseFeature(BaseFeatures.ALIGN_WAKE_UPS, "Align delayed wake ups at 125 Hz"),
         Flag.baseFeature(
-                BlinkSchedulerFeatures.THREADED_SCROLL_PREVENT_RENDERING_STARVATION,
+                BlinkFeatures.THREADED_SCROLL_PREVENT_RENDERING_STARVATION,
                 "Enable rendering starvation-prevention during threaded scrolling."
-                        + " See https://crbug.com/1315279."),
+                        + " See https://crbug.com/40833407."),
         Flag.baseFeature(
                 BlinkSchedulerFeatures.PRIORITIZE_COMPOSITING_AFTER_DELAY_TRIALS,
                 "Controls the delay after which main thread compositing tasks "
@@ -502,19 +516,14 @@ public final class ProductionSupportedFlagList {
                 BlinkFeatures.THREADED_BODY_LOADER,
                 "If enabled, reads and decodes navigation body data off the main thread."),
         Flag.baseFeature(BlinkFeatures.HIT_TEST_OPAQUENESS),
-        Flag.baseFeature(BlinkFeatures.DYNAMIC_SCROLL_CULL_RECT_EXPANSION),
-        Flag.baseFeature(BlinkFeatures.INTERSECTION_OPTIMIZATION),
         Flag.baseFeature(BlinkFeatures.EXPAND_COMPOSITED_CULL_RECT),
         Flag.baseFeature(BlinkFeatures.RASTER_INDUCING_SCROLL),
+        Flag.baseFeature(CcFeatures.NEW_CONTENT_FOR_CHECKERBOARDED_SCROLLS),
         Flag.baseFeature(BlinkFeatures.SCROLLBAR_COLOR),
-        Flag.baseFeature(BlinkFeatures.UNBLOCK_TOUCH_MOVE_EARLIER),
         Flag.baseFeature(
                 ContentFeatures.PERSISTENT_ORIGIN_TRIALS,
                 "If enabled, servers will be able to use persistent origin trials "
                         + "on this device."),
-        Flag.baseFeature(
-                AwFeatures.WEBVIEW_IMAGE_DRAG,
-                "If enabled, images can be dragged out from Webview"),
         Flag.baseFeature(
                 AwFeatures.WEBVIEW_DRAG_DROP_FILES,
                 "If enabled, files can be dropped into WebView"),
@@ -597,9 +606,6 @@ public final class ProductionSupportedFlagList {
                 "When enabled, stylus input can be used to draw rich gestures which "
                         + "affect text in editable web content."),
         Flag.baseFeature(
-                AwFeatures.WEBVIEW_ZOOM_KEYBOARD_SHORTCUTS,
-                "Enables WebView to use zoom keyboard shortcuts on hardware keyboards."),
-        Flag.baseFeature(
                 ContentFeatures.PRIVACY_SANDBOX_ADS_AP_IS_OVERRIDE,
                 "When enabled, the following ads APIs will be available: Attribution Reporting,"
                         + "FLEDGE, Topics."),
@@ -658,10 +664,6 @@ public final class ProductionSupportedFlagList {
                         + "the WebView use OS-level attribution."),
         Flag.baseFeature(BaseFeatures.THREAD_POOL_CAP2, "Sets a fixed thread pool cap"),
         Flag.baseFeature("ThreadGroupSemaphore"),
-        Flag.baseFeature(
-                BlinkFeatures.BEFOREUNLOAD_EVENT_CANCEL_BY_PREVENT_DEFAULT,
-                "Enables showing the cancel dialog by calling preventDefault() "
-                        + "on beforeunload event."),
         Flag.baseFeature(
                 BlinkFeatures.CSS_LAZY_PARSING_FAST_PATH,
                 "Enables a fast-path for skipping lazily-parsed CSS declaration blocks"),
@@ -723,9 +725,6 @@ public final class ProductionSupportedFlagList {
                 "PartitionAllocUseSmallSingleSlotSpans",
                 "Uses a more nuanced heuristic to classify small single-slot spans."),
         Flag.baseFeature(
-                AwFeatures.WEBVIEW_CHECK_PAK_FILE_DESCRIPTORS,
-                "Crash on failing to load pak file fds."),
-        Flag.baseFeature(
                 BlinkFeatures.LOADING_PHASE_BUFFER_TIME_AFTER_FIRST_MEANINGFUL_PAINT,
                 "Enables extending the loading phase by some buffer time after "
                         + "First Meaningful Paint is signaled."),
@@ -783,6 +782,7 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature("V8UpdateLimitAfterLoading"),
         Flag.baseFeature("V8IncrementalMarkingStartUserVisible"),
         Flag.baseFeature("V8ExternalMemoryAccountedInGlobalLimit"),
+        Flag.baseFeature("V8GCSpeedUsesCounters"),
         Flag.baseFeature("WebAssemblyMoreAggressiveCodeCaching"),
         Flag.baseFeature("WebAssemblyTurboshaft"),
         Flag.baseFeature("WebAssemblyTurboshaftInstructionSelection"),
@@ -908,10 +908,6 @@ public final class ProductionSupportedFlagList {
                 BlinkFeatures.ALLOW_JAVA_SCRIPT_TO_RESET_AUTOFILL_STATE,
                 "When enabled, Autofill will reset the autofill state of fields modified by JS"),
         Flag.baseFeature("StandardCompliantNonSpecialSchemeURLParsing"),
-        Flag.baseFeature(
-                BlinkFeatures.BLINK_SCHEDULER_DISCRETE_INPUT_MATCHES_RESPONSIVENESS_METRICS,
-                "If enabled, the scheduler filters discrete input based on responsivness metrics"
-                        + " definitions"),
         Flag.baseFeature(
                 BlinkFeatures.CURSOR_ANCHOR_INFO_MOJO_PIPE,
                 "If enabled, CursorAnchorInfo is sent from Blink to the browser using a single"
@@ -1073,6 +1069,31 @@ public final class ProductionSupportedFlagList {
                 ContentFeatures.USE_BROWSER_CALCULATED_ORIGIN,
                 "Use origin calculated in the browser process rather than renderer process for"
                         + " navigations."),
+        Flag.baseFeature(
+                AwFeatures.WEBVIEW_AUTO_GRANT_SANITIZED_CLIPBOARD_WRITE,
+                "Auto-grant clipboard sanitized text write permission with user gesture. "
+                        + "Enabled by default."),
+        Flag.baseFeature(
+                "AllowSensorsToEnterBfcache",
+                "Allow pages with sensors to enter back/forward cache."),
+        Flag.baseFeature(
+                BlinkFeatures.FONTATIONS_FONT_BACKEND,
+                "Enables the Fontations font backend for web fonts."),
+        Flag.baseFeature("OverrideAPIKey"),
+        Flag.baseFeature(
+                "RustyPng", "When enabled, uses Rust `png` crate to decode and encode PNG images."),
+        Flag.baseFeature(
+                BlinkFeatures.ESCAPE_LT_GT_IN_ATTRIBUTES,
+                "When enabled, less-than and greater-than characters in attributes are escaped."),
+        Flag.baseFeature("CacheStylusSettings", "Cache stylus related settings."),
+        Flag.baseFeature(
+                "AsyncFastCheckout", "When enabled, run FastCheckoutTabHelper asynchronously."),
+        Flag.baseFeature("Prerender2FallbackPrefetchSpecRules"),
+        Flag.baseFeature("PrefetchReusable"),
+        Flag.baseFeature(
+                "LCPTimingPredictorPrerender2",
+                "When enabled, Prerender2 by Speculation Rules API is delayed until LCP is"
+                        + " finished."),
         // Add new commandline switches and features above. The final entry should have a
         // trailing comma for cleaner diffs.
     };

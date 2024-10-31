@@ -623,6 +623,7 @@ public class TabsTest {
     @MediumTest
     @Restriction({DeviceFormFactor.PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"Android-TabSwitcher"})
+    @DisabledTest(message = "https://crbug.com/373446108")
     public void testRequestFocusOnCloseTab() throws Exception {
         final View urlBar = sActivityTestRule.getActivity().findViewById(R.id.url_bar);
         final TabModel model =
@@ -864,8 +865,10 @@ public class TabsTest {
     @Test
     @MediumTest
     @Feature({"Android-TabSwitcher"})
-    @DisableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER)
-    @DisabledTest(message = "https://crbug.com/361535551")
+    @DisableFeatures({
+        ChromeFeatureList.ANDROID_TAB_DECLUTTER,
+        ChromeFeatureList.ANDROID_TAB_DECLUTTER_RESCUE_KILLSWITCH
+    })
     public void testIncognitoTabsNotRestoredAfterSwipe() throws Exception {
         sActivityTestRule.loadUrl(getUrl(TEST_PAGE_FILE_PATH));
 

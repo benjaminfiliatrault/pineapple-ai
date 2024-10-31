@@ -8,7 +8,7 @@ import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.FeatureMap;
-import org.chromium.base.cached_flags.CachedFlag;
+import org.chromium.components.cached_flags.CachedFlag;
 
 import java.util.List;
 
@@ -17,16 +17,6 @@ import java.util.List;
 public final class SigninFeatureMap extends FeatureMap {
     private static final SigninFeatureMap sInstance = new SigninFeatureMap();
 
-    public static final CachedFlag sDontFallbackToDefaultImplementationInAccountManagerFacade =
-            new CachedFlag(
-                    sInstance,
-                    SigninFeatures
-                            .DONT_FALLBACK_TO_DEFAULT_IMPLEMENTATION_IN_ACCOUNT_MANAGER_FACADE,
-                    true);
-
-    public static final List<CachedFlag> sCachedFlags =
-            List.of(sDontFallbackToDefaultImplementationInAccountManagerFacade);
-
     // Do not instantiate this class.
     private SigninFeatureMap() {}
 
@@ -34,6 +24,11 @@ public final class SigninFeatureMap extends FeatureMap {
     public static SigninFeatureMap getInstance() {
         return sInstance;
     }
+
+    public static final CachedFlag sCctSignInPrompt =
+            new CachedFlag(sInstance, SigninFeatures.CCT_SIGN_IN_PROMPT, false);
+
+    public static final List<CachedFlag> sCachedFlags = List.of(sCctSignInPrompt);
 
     /** Convenience method to call {@link #isEnabledInNative(String)} statically. */
     public static boolean isEnabled(String featureName) {

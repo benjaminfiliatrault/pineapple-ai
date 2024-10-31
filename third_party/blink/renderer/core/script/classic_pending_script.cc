@@ -45,8 +45,9 @@ InlineScriptStreamer* GetInlineScriptStreamer(const String& source,
                                               Document& document) {
   ScriptableDocumentParser* scriptable_parser =
       document.GetScriptableDocumentParser();
-  if (!scriptable_parser)
+  if (!scriptable_parser) {
     return nullptr;
+  }
 
   // The inline script streamers are keyed by the full source text to make sure
   // the script that was parsed in the background scanner exactly matches the
@@ -185,12 +186,12 @@ NOINLINE void ClassicPendingScript::CheckState() const {
   }
 }
 
-
 void ClassicPendingScript::RecordThirdPartyRequestWithCookieIfNeeded(
     const ResourceResponse& response) const {
   // Can be null in some cases where loading failed.
-  if (response.IsNull())
+  if (response.IsNull()) {
     return;
+  }
 
   // Ignore cookie-less requests.
   if (!response.WasCookieInRequest()) {
@@ -250,20 +251,23 @@ bool ClassicPendingScript::IsEligibleForLowPriorityAsyncScriptExecution()
 
   static const bool feature_enabled =
       base::FeatureList::IsEnabled(features::kLowPriorityAsyncScriptExecution);
-  if (!feature_enabled)
+  if (!feature_enabled) {
     return false;
+  }
 
   Document* element_document = OriginalElementDocument();
 
-  if (!IsA<HTMLDocument>(element_document))
+  if (!IsA<HTMLDocument>(element_document)) {
     return false;
+  }
 
   // Most LCP elements are provided by the main frame, and delaying subframe's
   // resources seems not to improve LCP.
   const bool main_frame_only =
       features::kLowPriorityAsyncScriptExecutionMainFrameOnlyParam.Get();
-  if (main_frame_only && !element_document->IsInOutermostMainFrame())
+  if (main_frame_only && !element_document->IsInOutermostMainFrame()) {
     return false;
+  }
 
   const base::TimeDelta feature_limit =
       features::kLowPriorityAsyncScriptExecutionFeatureLimitParam.Get();
@@ -314,21 +318,21 @@ bool ClassicPendingScript::IsEligibleForLowPriorityAsyncScriptExecution()
     }
   }
 
-  if (GetElement() && GetElement()->IsPotentiallyRenderBlocking())
+  if (GetElement() && GetElement()->IsPotentiallyRenderBlocking()) {
     return false;
+  }
 
   // We don't delay async scripts that have matched a resource in the preload
   // cache, because we're using <link rel=preload> as a signal that the script
   // is higher-than-usual priority, and therefore should be executed earlier
   // rather than later.
-  if (GetResource() && GetResource()->IsLinkPreload())
+  if (GetResource() && GetResource()->IsLinkPreload()) {
     return false;
+  }
 
   bool is_ad_resource =
       GetResource() && GetResource()->GetResourceRequest().IsAdResource();
-  static const features::AsyncScriptExperimentalSchedulingTarget target =
-      features::kLowPriorityAsyncScriptExecutionTargetParam.Get();
-  switch (target) {
+  switch (features::kLowPriorityAsyncScriptExecutionTargetParam.Get()) {
     case features::AsyncScriptExperimentalSchedulingTarget::kAds:
       if (!is_ad_resource) {
         return false;
@@ -429,17 +433,10 @@ void ClassicPendingScript::NotifyFinished(Resource* resource) {
   SubresourceIntegrityHelper::DoReport(*execution_context,
                                        resource->IntegrityReportInfo());
 
-  // It is possible to get back a script resource with integrity metadata
-  // for a request with an empty integrity attribute. In that case, the
-  // integrity check should be skipped, as the integrity may not have been
-  // "meant" for this specific request. If the resource is being served from
-  // the preload cache however, we know any associated integrity metadata and
-  // checks were destined for this request, so we cannot skip the integrity
-  // check.
   bool integrity_failure = false;
-  if (!options_.GetIntegrityMetadata().empty() || resource->IsLinkPreload()) {
-    integrity_failure = resource->IntegrityDisposition() !=
-                        ResourceIntegrityDisposition::kPassed;
+  if (!options_.GetIntegrityMetadata().empty() ||
+      resource->ForceIntegrityChecks()) {
+    integrity_failure = !resource->PassedIntegrityChecks();
   }
 
   if (intervened_) {
@@ -520,8 +517,9 @@ ClassicScript* ClassicPendingScript::GetSource() const {
   CheckState();
   DCHECK(IsReady());
 
-  if (ready_state_ == kErrorOccurred)
+  if (ready_state_ == kErrorOccurred) {
     return nullptr;
+  }
 
   TRACE_EVENT0("blink", "ClassicPendingScript::GetSource");
   if (!is_external_) {
@@ -613,19 +611,22 @@ void ClassicPendingScript::AdvanceReadyState(ReadyState new_ready_state) {
   ready_state_ = new_ready_state;
 
   // Did we transition into a 'ready' state?
-  if (IsReady() && IsWatchingForLoad())
+  if (IsReady() && IsWatchingForLoad()) {
     PendingScriptFinished();
+  }
 }
 
 bool ClassicPendingScript::WasCanceled() const {
-  if (!is_external_)
+  if (!is_external_) {
     return false;
+  }
   return GetResource()->WasCanceled();
 }
 
 KURL ClassicPendingScript::UrlForTracing() const {
-  if (!is_external_ || !GetResource())
+  if (!is_external_ || !GetResource()) {
     return NullURL();
+  }
 
   return GetResource()->Url();
 }

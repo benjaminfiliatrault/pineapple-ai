@@ -19,6 +19,7 @@
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Katalan</translation>
 <translation id="1168100932582989117">Google ad serverləri</translation>
+<translation id="1170788066030116158">Çəkilmə tarixi</translation>
 <translation id="1172970565351728681">Təxminən <ph name="REMAINING_TIME" /> qalıb</translation>
 <translation id="1173894706177603556">Adını dəyişin</translation>
 <translation id="1173916544412572294"><ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" /> şəbəkə, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, Siqnal Gücü<ph name="SIGNAL_STRENGTH" />%, Telefonun Batareyası <ph name="BATTERY_STATUS" />%, Detallar</translation>
@@ -581,6 +582,7 @@
 <translation id="5447680084201416734">Kifayət qədər yer yoxdur.</translation>
 <translation id="5449551289610225147">Yanlış parol</translation>
 <translation id="5459064203055649751">"<ph name="FILENAME" />" adlı fayl hazırda mövcuddur. Onu köçürdüyünüzlə əvəz etmək istəyirsiniz?</translation>
+<translation id="5462378611565326489">OneDrive oflayn olarkən əlçatan deyil.</translation>
 <translation id="5463231940765244860">Daxil edin</translation>
 <translation id="5469868506864199649">İtalyan</translation>
 <translation id="5473333559083690127">Yeni PIN kodu yenidən daxil edin</translation>

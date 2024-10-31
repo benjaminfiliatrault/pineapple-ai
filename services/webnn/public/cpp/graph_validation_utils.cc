@@ -20,6 +20,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/types/expected.h"
 #include "base/types/expected_macros.h"
+#include "base/types/fixed_array.h"
 #include "services/webnn/public/cpp/context_properties.h"
 #include "services/webnn/public/cpp/operand_descriptor.h"
 #include "services/webnn/public/cpp/supported_data_types.h"
@@ -317,38 +318,32 @@ base::expected<void, std::string> ValidateRecurrentNetworkOperand(
 
 std::string DataTypeConstraintToString(
     const SupportedDataTypes& constraint_set) {
-  std::vector<std::string> data_types;
-  data_types.reserve(constraint_set.size());
-  for (auto data_type : constraint_set) {
-    std::string data_type_as_string;
-    switch (data_type) {
-      case OperandDataType::kFloat32:
-        data_type_as_string = "float32";
-        break;
-      case OperandDataType::kFloat16:
-        data_type_as_string = "float16";
-        break;
-      case OperandDataType::kInt32:
-        data_type_as_string = "int32";
-        break;
-      case OperandDataType::kUint32:
-        data_type_as_string = "uint32";
-        break;
-      case OperandDataType::kInt64:
-        data_type_as_string = "int64";
-        break;
-      case OperandDataType::kUint64:
-        data_type_as_string = "uint64";
-        break;
-      case OperandDataType::kInt8:
-        data_type_as_string = "int8";
-        break;
-      case OperandDataType::kUint8:
-        data_type_as_string = "uint8";
-        break;
-    }
-    data_types.push_back(std::move(data_type_as_string));
-  }
+  base::FixedArray<std::string_view> data_types(constraint_set.size());
+  base::ranges::transform(constraint_set, data_types.begin(),
+                          [](OperandDataType data_type) {
+                            switch (data_type) {
+                              case OperandDataType::kFloat32:
+                                return "float32";
+                              case OperandDataType::kFloat16:
+                                return "float16";
+                              case OperandDataType::kInt32:
+                                return "int32";
+                              case OperandDataType::kUint32:
+                                return "uint32";
+                              case OperandDataType::kInt64:
+                                return "int64";
+                              case OperandDataType::kUint64:
+                                return "uint64";
+                              case OperandDataType::kInt8:
+                                return "int8";
+                              case OperandDataType::kUint8:
+                                return "uint8";
+                              case OperandDataType::kInt4:
+                                return "int4";
+                              case OperandDataType::kUint4:
+                                return "uint4";
+                            }
+                          });
   return base::JoinString(data_types, /*separator=*/",");
 }
 
@@ -2501,6 +2496,78 @@ base::expected<OperandDescriptor, std::string> ValidateReduceAndInferOutput(
                                                     keep_dimensions, label));
 
   return OperandDescriptor::Create(input.data_type(), output_shape);
+}
+
+base::expected<OperandDescriptor, std::string>
+ValidateScatterElementsAndInferOutput(
+    const ContextProperties& context_properties,
+    const OperandDescriptor& input,
+    const OperandDescriptor& indices,
+    const OperandDescriptor& updates,
+    const uint32_t axis,
+    std::string_view label) {
+  if (!context_properties.data_type_limits.scatter_elements_input.Has(
+          input.data_type())) {
+    return base::unexpected(ErrorWithLabel(
+        label,
+        NotSupportedInputArgumentTypeError(
+            input.data_type(),
+            context_properties.data_type_limits.scatter_elements_input)));
+  }
+
+  static constexpr char kIndicesParam[] = "indices";
+  if (!context_properties.data_type_limits.scatter_elements_indices.Has(
+          indices.data_type())) {
+    return base::unexpected(ErrorWithLabel(
+        label,
+        NotSupportedArgumentTypeError(
+            kIndicesParam, indices.data_type(),
+            context_properties.data_type_limits.scatter_elements_indices)));
+  }
+
+  if (input.data_type() != updates.data_type()) {
+    return base::unexpected(
+        ErrorWithLabel(label,
+                       "The updates tensor data type should be the same as "
+                       "input data type."));
+  }
+
+  if (input.Rank() == 0) {
+    return base::unexpected(
+        ErrorWithLabel(label, "The input should not be a scalar."));
+  }
+
+  if (input.Rank() <= axis) {
+    return base::unexpected(ErrorWithLabel(
+        label,
+        "The axis must be in the range [0, N-1] where N is the rank of input "
+        "tensor."));
+  }
+
+  if (indices.Rank() != input.Rank()) {
+    return base::unexpected(ErrorWithLabel(
+        label, "The indices and input tensors should have the same rank."));
+  }
+
+  for (uint32_t i = 0; i < input.Rank(); ++i) {
+    if (i == axis) {
+      continue;
+    }
+    if (input.shape()[i] != indices.shape()[i]) {
+      return base::unexpected(
+          ErrorWithLabel(label,
+                         "Except on the axis dimension, the input and indices "
+                         "tensor must have the same dimension size."));
+    }
+  }
+
+  if (indices.shape() != updates.shape()) {
+    return base::unexpected(ErrorWithLabel(
+        label, "The updates and indices tensors should have the same shape."));
+  }
+
+  // The output tensor has the same data type and shape as input's.
+  return input;
 }
 
 base::expected<OperandDescriptor, std::string> ValidateScatterNDAndInferOutput(

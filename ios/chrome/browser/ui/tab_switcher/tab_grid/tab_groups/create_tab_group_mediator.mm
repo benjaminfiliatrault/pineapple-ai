@@ -79,9 +79,8 @@
     [_consumer setDefaultGroupColor:TabGroup::DefaultColorForNewTabGroup(
                                         _webStateList)];
 
-    ChromeBrowserState* browserState = browser->GetBrowserState();
-    BrowserList* browserList =
-        BrowserListFactory::GetForBrowserState(browserState);
+    ProfileIOS* profile = browser->GetProfile();
+    BrowserList* browserList = BrowserListFactory::GetForProfile(profile);
 
     _tabGroupInfos = [[NSMutableArray alloc] init];
 
@@ -100,8 +99,9 @@
         // search can display all tabs from the same profile at the same time.
         // The selected tab is currently in a different web state list (inactive
         // tab, or tab from another window).
-        Browser* selectedTabBrowser = GetBrowserForTabWithId(
-            browserList, identifier, browserState->IsOffTheRecord());
+        Browser* selectedTabBrowser = GetBrowserForTabWithCriteria(
+            browserList, WebStateSearchCriteria{.identifier = identifier},
+            profile->IsOffTheRecord());
         CHECK(browser);
         currentWebStateList = selectedTabBrowser->GetWebStateList();
         index =

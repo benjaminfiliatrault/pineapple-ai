@@ -214,6 +214,11 @@ class ShellVariationsServiceClient
   bool OverridesRestrictParameter(std::string* parameter) override {
     return false;
   }
+  base::FilePath GetVariationsSeedFileDir() override {
+    base::FilePath seed_file_dir;
+    base::PathService::Get(SHELL_DIR_USER_DATA, &seed_file_dir);
+    return seed_file_dir;
+  }
   bool IsEnterprise() override { return false; }
   // Profiles aren't supported, so nothing to do here.
   void RemoveGoogleGroupsFromPrefsForDeletedProfiles(
@@ -519,6 +524,15 @@ bool ShellContentBrowserClient::IsSharedStorageSelectURLAllowed(
   return true;
 }
 
+bool ShellContentBrowserClient::
+    IsFencedFramesLocalUnpartitionedDataAccessAllowed(
+        content::BrowserContext* browser_context,
+        content::RenderFrameHost* rfh,
+        const url::Origin& top_frame_origin,
+        const url::Origin& accessing_origin) {
+  return true;
+}
+
 bool ShellContentBrowserClient::IsCookieDeprecationLabelAllowed(
     content::BrowserContext* browser_context) {
   return true;
@@ -649,13 +663,16 @@ std::unique_ptr<LoginDelegate> ShellContentBrowserClient::CreateLoginDelegate(
     content::WebContents* web_contents,
     content::BrowserContext* browser_context,
     const content::GlobalRequestID& request_id,
-    bool is_request_for_primary_main_frame,
+    bool is_request_for_primary_main_frame_navigation,
+    bool is_request_for_navigation,
     const GURL& url,
     scoped_refptr<net::HttpResponseHeaders> response_headers,
     bool first_auth_attempt,
     LoginAuthRequiredCallback auth_required_callback) {
   if (!login_request_callback_.is_null()) {
-    std::move(login_request_callback_).Run(is_request_for_primary_main_frame);
+    std::move(login_request_callback_)
+        .Run(is_request_for_primary_main_frame_navigation,
+             is_request_for_navigation);
   }
   return nullptr;
 }
@@ -854,16 +871,16 @@ void ShellContentBrowserClient::CreateFeatureListAndFieldTrials() {
 void ShellContentBrowserClient::SetUpFieldTrials() {
   metrics::TestEnabledStateProvider enabled_state_provider(/*consent=*/false,
                                                            /*enabled=*/false);
-  base::FilePath path;
-  base::PathService::Get(SHELL_DIR_USER_DATA, &path);
+  base::FilePath user_data_dir;
+  base::PathService::Get(SHELL_DIR_USER_DATA, &user_data_dir);
   std::unique_ptr<metrics::MetricsStateManager> metrics_state_manager =
       metrics::MetricsStateManager::Create(
           GetSharedState().local_state.get(), &enabled_state_provider,
-          std::wstring(), path, metrics::StartupVisibility::kUnknown,
+          std::wstring(), user_data_dir, metrics::StartupVisibility::kUnknown,
           {
               .force_benchmarking_mode =
                   base::CommandLine::ForCurrentProcess()->HasSwitch(
-                      cc::switches::kEnableGpuBenchmarking),
+                      switches::kEnableGpuBenchmarking),
           });
   metrics_state_manager->InstantiateFieldTrialList();
 
@@ -886,7 +903,11 @@ void ShellContentBrowserClient::SetUpFieldTrials() {
           GetSharedState().local_state.get(), std::move(initial_seed),
           /*signature_verification_enabled=*/true,
           std::make_unique<variations::VariationsSafeSeedStoreLocalState>(
-              GetSharedState().local_state.get())),
+              GetSharedState().local_state.get(),
+              variations_service_client.GetChannelForVariations(),
+              variations_service_client.GetVariationsSeedFileDir()),
+          variations_service_client.GetChannelForVariations(),
+          variations_service_client.GetVariationsSeedFileDir()),
       variations::UIStringOverrider(),
       // The limited entropy synthetic trial will not be registered for this
       // purpose.

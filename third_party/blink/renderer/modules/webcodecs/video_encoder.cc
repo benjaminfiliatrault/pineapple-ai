@@ -303,16 +303,15 @@ VideoEncoderTraits::ParsedConfig* ParseConfigStatic(
     }
   }
 
-  if (config->hasBitrateMode() && config->bitrateMode() == "quantizer") {
+  if (config->bitrateMode() == V8VideoEncoderBitrateMode::Enum::kQuantizer) {
     result->options.bitrate = media::Bitrate::ExternalRateControl();
   } else if (config->hasBitrate()) {
     uint32_t bps = base::saturated_cast<uint32_t>(config->bitrate());
     if (bps == 0) {
-      result->not_supported_error_message =
-          String::Format("Unsupported bitrate: %u", bps);
-      return result;
+      exception_state.ThrowTypeError("Bitrate must be greater than zero.");
+      return nullptr;
     }
-    if (config->hasBitrateMode() && config->bitrateMode() == "constant") {
+    if (config->bitrateMode() == V8VideoEncoderBitrateMode::Enum::kConstant) {
       result->options.bitrate = media::Bitrate::ConstantBitrate(bps);
     } else {
       // VBR in media:Bitrate supports both target and peak bitrate.
@@ -601,13 +600,23 @@ bool MayHaveOSSoftwareEncoder(media::VideoCodecProfile profile) {
   //
   // TODO(crbug.com/1383643): Add IS_WIN here once we can force
   // selection of a software encoder there.
-#if (BUILDFLAG(IS_MAC) || BUILDFLAG(IS_ANDROID)) && !BUILDFLAG(ENABLE_OPENH264)
-  return media::VideoCodecProfileToVideoCodec(profile) ==
-         media::VideoCodec::kH264;
-#else
-  return false;
-#endif  // (BUILDFLAG(IS_MAC) || BUILDFLAG(IS_ANDROID)) &&
-        // !BUILDFLAG(ENABLE_OPENH264)
+  constexpr bool kHasBundledH264Encoder = BUILDFLAG(ENABLE_OPENH264);
+  constexpr bool kHasOSSoftwareH264Encoder =
+      BUILDFLAG(IS_MAC) || BUILDFLAG(IS_ANDROID);
+  constexpr bool kHasOSSoftwareHEVCEncoder =
+      BUILDFLAG(IS_MAC) && BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER);
+
+  switch (media::VideoCodecProfileToVideoCodec(profile)) {
+    case media::VideoCodec::kH264:
+      // Prefer the bundled encoder, if present.
+      return kHasOSSoftwareH264Encoder && !kHasBundledH264Encoder;
+
+    case media::VideoCodec::kHEVC:
+      return kHasOSSoftwareHEVCEncoder;
+
+    default:
+      return false;
+  }
 }
 
 EncoderType GetRequiredEncoderType(media::VideoCodecProfile profile,
@@ -1021,7 +1030,7 @@ bool VideoEncoder::StartReadback(scoped_refptr<media::VideoFrame> frame,
                                       this, "timestamp", frame->timestamp());
     if (accelerated_frame_pool_->CopyRGBATextureToVideoFrame(
             format, frame->coded_size(), frame->ColorSpace(), origin,
-            frame->mailbox_holder(0), kDstColorSpace,
+            frame->shared_image(), frame->acquire_sync_token(), kDstColorSpace,
             std::move(callback_chain))) {
       return true;
     }
@@ -1054,7 +1063,6 @@ void VideoEncoder::ProcessEncode(Request* request) {
   DCHECK_EQ(request->type, Request::Type::kEncode);
   DCHECK_GT(requested_encodes_, 0u);
 
-  String js_error_message;
   if (request->encodeOpts->hasUpdateBuffer()) {
     auto* buffer = request->encodeOpts->updateBuffer();
     if (buffer->owner() != this) {
@@ -1110,7 +1118,7 @@ void VideoEncoder::ProcessEncode(Request* request) {
   // so let's readback pixel data to CPU memory.
   // TODO(crbug.com/1229845): We shouldn't be reading back frames here.
   if (!mappable) {
-    DCHECK(frame->HasTextures());
+    DCHECK(frame->HasSharedImage());
     // Stall request processing while we wait for the copy to complete. It'd
     // be nice to not have to do this, but currently the request processing
     // loop must execute synchronously or flush() will miss frames.

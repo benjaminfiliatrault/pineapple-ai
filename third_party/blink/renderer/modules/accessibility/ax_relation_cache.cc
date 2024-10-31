@@ -5,9 +5,9 @@
 #include "third_party/blink/renderer/modules/accessibility/ax_relation_cache.h"
 
 #include "base/memory/ptr_util.h"
-#include "third_party/blink/renderer/core/aom/accessible_node.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/shadow_including_tree_order_traversal.h"
+#include "third_party/blink/renderer/core/html/custom/element_internals.h"
 #include "third_party/blink/renderer/core/html/forms/html_label_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_opt_group_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_option_element.h"
@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/html/html_br_element.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
+#include "third_party/blink/renderer/modules/accessibility/ax_node_object.h"
 #include "ui/accessibility/ax_common.h"
 
 namespace blink {
@@ -23,7 +24,7 @@ namespace {
 void IdsFromAttribute(Element& element,
                       Vector<AtomicString>& ids,
                       const QualifiedName& attr_name) {
-  SpaceSplitString split_ids(element.FastGetAttribute(attr_name));
+  SpaceSplitString split_ids(AXObject::AriaAttribute(element, attr_name));
   ids.AppendRange(split_ids.begin(), split_ids.end());
 }
 }  // namespace
@@ -65,7 +66,7 @@ void AXRelationCache::DoInitialDocumentScan(Document& document) {
       CacheRelationIds(*element);
 
       // Caching aria-owns requires creating target AXObjects.
-      if (element->FastHasAttribute(html_names::kAriaOwnsAttr)) {
+      if (AXObject::HasAriaAttribute(*element, html_names::kAriaOwnsAttr)) {
         owner_ids_to_update_.insert(element->GetDomNodeId());
       }
     }
@@ -110,6 +111,9 @@ void AXRelationCache::CheckRelationsCached(Element& element) {
   }
   CheckElementWasProcessed(element);
 
+  // TODO(crbug.com/41469336): Track reverse relations set via explicitly
+  // set attr-elements on element or element internals.
+
   // Check aria-owns.
   Vector<AtomicString> owns_ids;
   IdsFromAttribute(element, owns_ids, html_names::kAriaOwnsAttr);
@@ -141,9 +145,8 @@ void AXRelationCache::CheckRelationsCached(Element& element) {
   }
 
   // Check aria-activedescendant.
-  if (auto activedescendant_id =
-          AccessibleNode::GetPropertyOrARIAAttributeValue(
-              &element, AOMRelationProperty::kActiveDescendant)) {
+  if (auto& activedescendant_id = AXObject::AriaAttribute(
+          element, html_names::kAriaActivedescendantAttr)) {
     DCHECK(id_attr_to_active_descendant_mapping_.Contains(activedescendant_id))
         << element << " with aria-activedescendant=" << activedescendant_id
         << " and DOMNodeId=" << DOMNodeIds::ExistingIdForNode(&element)
@@ -288,7 +291,8 @@ Vector<AtomicString> AXRelationCache::GetTextRelationIds(
 }
 
 // Update reverse relation map, where relation_source is related to target_ids.
-// TODO Support when HasExplicitlySetAttrAssociatedElement() == true.
+// TODO(crbug.com/41469336): Track reverse relations set via explicitly set
+// attr-elements on element or element internals.
 void AXRelationCache::UpdateReverseRelations(
     HashMap<AtomicString, HashSet<DOMNodeId>>& id_attr_to_node_map,
     Node* relation_source,
@@ -306,6 +310,8 @@ void AXRelationCache::UpdateReverseTextRelations(Element& relation_source) {
                              GetTextRelationIds(relation_source));
 }
 
+// TODO(crbug.com/41469336): Track reverse relations set via explicitly set
+// attr-elements on element or element internals.
 void AXRelationCache::UpdateReverseTextRelations(
     Element& relation_source,
     const QualifiedName& attr_name) {
@@ -318,21 +324,35 @@ void AXRelationCache::UpdateReverseTextRelations(
       relation_source.GetDocument().GetExplicitlySetAttrElementsMap(
           &relation_source);
   auto it = element_attribute_map->find(attr_name);
-  if (it == element_attribute_map->end()) {
-    return;
+  if (it != element_attribute_map->end()) {
+    HeapLinkedHashSet<WeakMember<Element>>* explicitly_set_target_elements =
+        it->value;
+    for (Element* target : *explicitly_set_target_elements) {
+      explicitly_set_text_relations_.insert(target->GetDomNodeId());
+      // Mark root of label dirty so that we can change inclusion states as
+      // necessary (label subtrees are included in the tree even if hidden).
+      object_cache_->MarkElementDirty(target);
+    }
   }
 
-  HeapLinkedHashSet<WeakMember<Element>>* explicitly_set_target_elements =
-      it->value;
-  for (Element* target : *explicitly_set_target_elements) {
-    explicitly_set_text_relations_from_element_attributes_.insert(
-        target->GetDomNodeId());
-    // Mark root of label dirty so that we can change inclusion states as
-    // necessary (label subtrees are included in the tree even if hidden).
-    object_cache_->MarkElementDirty(target);
+  // Also check ElementInternals relations
+  if (const ElementInternals* element_internals =
+          relation_source.GetElementInternals()) {
+    const FrozenArray<Element>* element_internals_target_elements =
+        element_internals->GetElementArrayAttribute(attr_name);
+    if (element_internals_target_elements) {
+      for (Element* target : *element_internals_target_elements) {
+        explicitly_set_text_relations_.insert(target->GetDomNodeId());
+        // Mark root of label dirty so that we can change inclusion states as
+        // necessary (label subtrees are included in the tree even if hidden).
+        object_cache_->MarkElementDirty(target);
+      }
+    }
   }
 }
 
+// TODO(crbug.com/41469336): Track reverse relations set via explicitly set
+// attr-elements on element or element internals.
 void AXRelationCache::UpdateReverseTextRelations(
     Element& relation_source,
     const Vector<AtomicString>& target_ids) {
@@ -373,8 +393,8 @@ void AXRelationCache::UpdateReverseTextRelations(
 
 void AXRelationCache::UpdateReverseActiveDescendantRelations(
     Element& relation_source) {
-  const AtomicString& id = AccessibleNode::GetPropertyOrARIAAttributeValue(
-      &relation_source, AOMRelationProperty::kActiveDescendant);
+  const AtomicString& id = AXObject::AriaAttribute(
+      relation_source, html_names::kAriaActivedescendantAttr);
   if (!id) {
     return;
   }
@@ -545,9 +565,8 @@ bool AXRelationCache::IsValidOwnedChild(Node& child_node) {
 
   // aria-hidden is problematic for cycles, and does not solve a known use case.
   // Easiest to omit the possibility.
-  bool is_null;
-  if (AccessibleNode::GetPropertyOrARIAAttribute(
-          child_element, AOMBooleanProperty::kHidden, is_null)) {
+  if (AXObject::IsAriaAttributeTrue(*child_element,
+                                    html_names::kAriaHiddenAttr)) {
     return false;
   }
 
@@ -621,16 +640,22 @@ void AXRelationCache::MapOwnedChildrenWithCleanLayout(
         object_cache_->MarkAXObjectDirtyWithCleanLayout(
             original_parent->ParentObject());
       }
-      // Now that we're replacing the parent, we need to update cached values
-      // for the added child's subtree, because some cached values are inherited
-      // from the parent. Invalidating the cached values at the root of the
-      // subtree is enough, as changed inherited values will propagate down.
-      // Example: the cached_is_used_for_label_or_description_ flag.
-      added_child->InvalidateCachedValues();
     }
     // Now that the child is owned, it's "included in tree" state must be
     // recomputed because owned children are always included in the tree.
     added_child->UpdateCachedAttributeValuesIfNeeded(false);
+
+    // If the added child had a change in an inherited state because of the new
+    // owner, that state needs to propagate into the subtree. Remove its
+    // descendants so they are re-added with the correct cached states.
+    // The new states would also be propagted in FinalizeTree(), but this is
+    // safer for certain situations such as the aria-owns + aria-hidden state,
+    // where the aria-hidden state could be invalidated late in the cycle due
+    // to focus changes.
+    if (added_child->ChildrenNeedToUpdateCachedValues()) {
+      object_cache_->RemoveSubtree(added_child->GetNode(),
+                                   /*remove_root*/ false);
+    }
   }
 }
 
@@ -721,6 +746,7 @@ void AXRelationCache::UpdateAriaOwnsWithCleanLayout(AXObject* owner,
                   << owner;
   } else if (element && element->HasExplicitlySetAttrAssociatedElements(
                             html_names::kAriaOwnsAttr)) {
+    // TODO (crbug.com/41469336): Also check ElementInternals here.
     UpdateAriaOwnsFromAttrAssociatedElementsWithCleanLayout(
         owner,
         // TODO (crbug.com/353750122): Set resolve_reference_target to false.
@@ -736,7 +762,7 @@ void AXRelationCache::UpdateAriaOwnsWithCleanLayout(AXObject* owner,
     // tree.
     TreeScope& scope = element->GetTreeScope();
     SpaceSplitString owned_id_vector(
-        element->FastGetAttribute(html_names::kAriaOwnsAttr));
+        AXObject::AriaAttribute(*element, html_names::kAriaOwnsAttr));
     HeapVector<Member<Element>> valid_owned_child_elements;
     for (AtomicString id_name : owned_id_vector) {
       Element* child_element = scope.getElementById(id_name);
@@ -881,9 +907,8 @@ bool AXRelationCache::MayHaveHTMLLabelViaForAttribute(
 bool AXRelationCache::IsARIALabelOrDescription(Element& element) {
   // Labels and descriptions set by ariaLabelledByElements,
   // ariaDescribedByElements.
-  if (explicitly_set_text_relations_from_element_attributes_.find(
-          element.GetDomNodeId()) !=
-      explicitly_set_text_relations_from_element_attributes_.end()) {
+  if (explicitly_set_text_relations_.find(element.GetDomNodeId()) !=
+      explicitly_set_text_relations_.end()) {
     return true;
   }
 
@@ -1002,9 +1027,11 @@ void AXRelationCache::UpdateRelatedTreeForIdChange(Element& element) {
   // has its own initial active descendant handling.
   MarkOldAndNewRelationSourcesDirty(element,
                                     id_attr_to_active_descendant_mapping_);
-  if (AXObject* ax_focus = Get(element.GetDocument().FocusedElement())) {
-    if (ax_focus->GetAOMPropertyOrARIAAttribute(
-            AOMRelationProperty::kActiveDescendant) == &element) {
+  Element* focused_element = element.GetDocument().FocusedElement();
+  if (AXObject* ax_focus = Get(focused_element)) {
+    if (AXObject::ElementFromAttributeOrInternals(
+            focused_element, html_names::kAriaActivedescendantAttr) ==
+        &element) {
       ax_focus->HandleActiveDescendantChanged();
     }
   }

@@ -45,8 +45,6 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
-import org.chromium.base.test.util.Features.DisableFeatures;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.ChromeActivity;
@@ -65,6 +63,7 @@ import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.common.ContentSwitches;
@@ -337,6 +336,25 @@ public class LocationBarTest {
     @Test
     @MediumTest
     public void testEditingText() {
+        testEditingText(
+                /* expectRetainOmniboxOnFocus= */ OmniboxFeatures.shouldRetainOmniboxOnFocus());
+    }
+
+    @Test
+    @MediumTest
+    public void testEditingText_withRetainOmniboxOnFocusDisabled() {
+        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(Boolean.FALSE);
+        testEditingText(/* expectRetainOmniboxOnFocus= */ false);
+    }
+
+    @Test
+    @MediumTest
+    public void testEditingText_withRetainOmniboxOnFocusEnabled() {
+        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(Boolean.TRUE);
+        testEditingText(/* expectRetainOmniboxOnFocus= */ true);
+    }
+
+    private void testEditingText(boolean expectRetainOmniboxOnFocus) {
         startActivityNormally();
         String url =
                 mActivityTestRule
@@ -349,7 +367,11 @@ public class LocationBarTest {
                 () -> {
                     Assert.assertTrue(mUrlBar.getText().toString().startsWith(HOSTNAME));
                     mUrlBar.requestFocus();
-                    Assert.assertEquals("", mUrlBar.getText().toString());
+                    if (expectRetainOmniboxOnFocus) {
+                        Assert.assertTrue(mUrlBar.getText().toString().startsWith(HOSTNAME));
+                    } else {
+                        Assert.assertEquals("", mUrlBar.getText().toString());
+                    }
                     mLocationBarCoordinator.setOmniboxEditingText(url);
                     Assert.assertEquals(url, mUrlBar.getText().toString());
                     Assert.assertEquals(url.length(), mUrlBar.getSelectionStart());
@@ -612,6 +634,33 @@ public class LocationBarTest {
     })
     @Restriction(DeviceFormFactor.TABLET)
     public void testFocusLogic_buttonVisibilityTablet() {
+        testFocusLogic_buttonVisibilityTablet(
+                /* expectRetainOmniboxOnFocus= */ OmniboxFeatures.shouldRetainOmniboxOnFocus());
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({
+        "disable-features=" + ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2
+    })
+    @Restriction(DeviceFormFactor.TABLET)
+    public void testFocusLogic_buttonVisibilityTabletWithRetainOmniboxOnFocusDisabled() {
+        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(Boolean.FALSE);
+        testFocusLogic_buttonVisibilityTablet(/* expectRetainOmniboxOnFocus= */ false);
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({
+        "disable-features=" + ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2
+    })
+    @Restriction(DeviceFormFactor.TABLET)
+    public void testFocusLogic_buttonVisibilityTabletWithRetainOmniboxOnFocusEnabled() {
+        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(Boolean.TRUE);
+        testFocusLogic_buttonVisibilityTablet(/* expectRetainOmniboxOnFocus= */ true);
+    }
+
+    private void testFocusLogic_buttonVisibilityTablet(boolean expectRetainOmniboxOnFocus) {
         startActivityNormally();
         doReturn(true).when(mVoiceRecognitionHandler).isVoiceSearchEnabled();
         String url =
@@ -637,10 +686,17 @@ public class LocationBarTest {
                     mUrlBar.requestFocus();
                 });
 
-        onView(withId(R.id.mic_button))
-                .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.VISIBLE)));
-        onView(withId(R.id.delete_button))
-                .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
+        if (expectRetainOmniboxOnFocus) {
+            onView(withId(R.id.mic_button))
+                    .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
+            onView(withId(R.id.delete_button))
+                    .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.VISIBLE)));
+        } else {
+            onView(withId(R.id.mic_button))
+                    .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.VISIBLE)));
+            onView(withId(R.id.delete_button))
+                    .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
+        }
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -679,23 +735,8 @@ public class LocationBarTest {
     /** Test that back press should make the omnibox unfocused. */
     @Test
     @MediumTest
-    @DisableFeatures(ChromeFeatureList.BACK_GESTURE_REFACTOR)
     @Restriction(DeviceFormFactor.PHONE)
     public void testFocusLogic_backPress() {
-        startActivityNormally();
-
-        mOmnibox.requestFocus();
-        mOmnibox.checkFocus(true);
-        ThreadUtils.runOnUiThreadBlocking(() -> mLocationBarMediator.backKeyPressed());
-        mOmnibox.checkFocus(false);
-    }
-
-    /** Same with {@link #testFocusLogic_backPress()}, but with predictive back gesture enabled. */
-    @Test
-    @MediumTest
-    @EnableFeatures(ChromeFeatureList.BACK_GESTURE_REFACTOR)
-    @Restriction(DeviceFormFactor.PHONE)
-    public void testFocusLogic_backPress_Refactored() {
         startActivityNormally();
 
         mOmnibox.requestFocus();

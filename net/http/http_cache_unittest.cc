@@ -693,14 +693,12 @@ class FakeWebSocketHandshakeStreamCreateHelper
   std::unique_ptr<WebSocketHandshakeStreamBase> CreateHttp2Stream(
       base::WeakPtr<SpdySession> session,
       std::set<std::string> dns_aliases) override {
-    NOTREACHED_IN_MIGRATION();
-    return nullptr;
+    NOTREACHED();
   }
   std::unique_ptr<WebSocketHandshakeStreamBase> CreateHttp3Stream(
       std::unique_ptr<QuicChromiumClientSession::Handle> session,
       std::set<std::string> dns_aliases) override {
-    NOTREACHED_IN_MIGRATION();
-    return nullptr;
+    NOTREACHED();
   }
 };
 
@@ -14093,12 +14091,11 @@ TEST_F(HttpCacheTest, SecurityHeadersAreCopiedToConditionalizedResponse) {
                                      &response);
 
   // Verify that the CORP header was carried over to the response.
-  std::string response_corp_header;
-  response.headers->GetNormalizedHeader("Cross-Origin-Resource-Policy",
-                                        &response_corp_header);
+  EXPECT_EQ(
+      response.headers->GetNormalizedHeader("Cross-Origin-Resource-Policy"),
+      "cross-origin");
 
   EXPECT_EQ(304, response.headers->response_code());
-  EXPECT_EQ("cross-origin", response_corp_header);
 }
 
 }  // namespace net

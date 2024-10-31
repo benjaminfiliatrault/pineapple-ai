@@ -6,9 +6,12 @@
 #define COMPONENTS_AUTOFILL_PREDICTION_IMPROVEMENTS_CORE_BROWSER_AUTOFILL_PREDICTION_IMPROVEMENTS_MANAGER_TEST_API_H_
 
 #include "base/check_deref.h"
+#include "components/autofill/core/common/unique_ids.h"
 #include "components/autofill_prediction_improvements/core/browser/autofill_prediction_improvements_manager.h"
 
 namespace autofill_prediction_improvements {
+
+class AutofillPredictionImprovementsLogger;
 
 class AutofillPredictionImprovementsManagerTestApi {
  public:
@@ -23,24 +26,49 @@ class AutofillPredictionImprovementsManagerTestApi {
     manager_->cache_ = cache;
   }
 
-  void SetAddressSuggestions(
-      std::vector<autofill::Suggestion> address_suggestions) {
-    manager_->address_suggestions_ = address_suggestions;
+  std::optional<
+      AutofillPredictionImprovementsFillingEngine::PredictionsByGlobalId>
+  GetCache() {
+    return manager_->cache_;
   }
 
-  void SetFeedbackId(std::optional<std::string> feedback_id) {
-    manager_->feedback_id_ = feedback_id;
+  void SetLastQueriedFormGlobalId(
+      std::optional<autofill::FormGlobalId> last_queried_form_global_id) {
+    manager_->last_queried_form_global_id_ = last_queried_form_global_id;
+  }
+
+  void SetAutofillSuggestions(
+      std::vector<autofill::Suggestion> autofill_suggestions) {
+    manager_->autofill_suggestions_ = autofill_suggestions;
+  }
+
+  void SetFormFillingPredictionsModelExecutionId(
+      std::optional<std::string> model_execution_id) {
+    manager_->form_filling_predictions_model_execution_id_ = model_execution_id;
   }
 
   const base::OneShotTimer& loading_suggestion_timer() {
     return manager_->loading_suggestion_timer_;
   }
 
+  void SetPredictionRetrievalState(
+      AutofillPredictionImprovementsManager::PredictionRetrievalState
+          prediction_retrieval_state) {
+    manager_->prediction_retrieval_state_ = prediction_retrieval_state;
+  }
+
+  void SetErrorOrNoInfoSuggestionShown(bool error_or_no_info_suggestion_shown) {
+    manager_->error_or_no_info_suggestion_shown_ =
+        error_or_no_info_suggestion_shown;
+  }
+
+  AutofillPredictionImprovementsLogger& logger() { return manager_->logger_; }
+
  private:
   raw_ref<AutofillPredictionImprovementsManager> manager_;
 };
 
-AutofillPredictionImprovementsManagerTestApi test_api(
+inline AutofillPredictionImprovementsManagerTestApi test_api(
     AutofillPredictionImprovementsManager& manager) {
   return AutofillPredictionImprovementsManagerTestApi(&manager);
 }

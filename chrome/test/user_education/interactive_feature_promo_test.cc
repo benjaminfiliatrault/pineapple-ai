@@ -21,10 +21,10 @@
 #include "chrome/test/interaction/interaction_test_util_browser.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "chrome/test/user_education/interactive_feature_promo_test_internal.h"
-#include "components/user_education/common/feature_promo_controller.h"
-#include "components/user_education/common/feature_promo_registry.h"
-#include "components/user_education/common/feature_promo_result.h"
-#include "components/user_education/common/feature_promo_specification.h"
+#include "components/user_education/common/feature_promo/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_registry.h"
+#include "components/user_education/common/feature_promo/feature_promo_result.h"
+#include "components/user_education/common/feature_promo/feature_promo_specification.h"
 #include "components/user_education/views/help_bubble_view.h"
 #include "ui/base/interaction/element_tracker.h"
 #include "ui/views/interaction/element_tracker_views.h"
@@ -223,8 +223,7 @@ InteractiveFeaturePromoTestApi::AbortPromo(const base::Feature& iph_feature,
   auto steps = Steps(CheckView(
       kBrowserViewElementId,
       [&iph_feature](BrowserView* browser_view) {
-        return browser_view->EndFeaturePromo(
-            iph_feature, user_education::EndFeaturePromoReason::kAbortPromo);
+        return browser_view->AbortFeaturePromo(iph_feature);
       },
       expected_result));
   if (expected_result) {

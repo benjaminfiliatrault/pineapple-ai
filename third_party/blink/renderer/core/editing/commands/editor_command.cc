@@ -25,13 +25,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/editing/commands/editor_command.h"
 
+#include <array>
 #include <iterator>
 
 #include "base/metrics/histogram_functions.h"
@@ -153,9 +149,7 @@ InputEvent::InputType InputTypeFromCommandType(EditingCommandType command_type,
     case CommandType::kInsertUnorderedList:
       return InputType::kInsertUnorderedList;
     case CommandType::kCreateLink:
-      return RuntimeEnabledFeatures::InputTypeSupportInsertLinkEnabled()
-                 ? InputType::kInsertLink
-                 : InputType::kNone;
+      return InputType::kInsertLink;
 
     // Deletion.
     case CommandType::kDelete:
@@ -1398,7 +1392,7 @@ static bool CanNotExecuteWhenDisabled(LocalFrame&, EditorCommandSource) {
 
 static const EditorInternalCommand* InternalCommand(
     const String& command_name) {
-  static const EditorInternalCommand kEditorCommands[] = {
+  static const auto kEditorCommands = std::to_array<EditorInternalCommand>({
       // Lists all commands in blink::EditingCommandType.
       // Must be ordered by |commandType| for index lookup.
       // Covered by unit tests in editing_command_test.cc
@@ -1905,7 +1899,7 @@ static const EditorInternalCommand* InternalCommand(
        ClipboardCommands::ExecutePasteFromImageURL,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-  };
+  });
   // Handles all commands except EditingCommandType::Invalid.
   static_assert(
       std::size(kEditorCommands) + 1 ==

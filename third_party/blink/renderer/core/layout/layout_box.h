@@ -846,9 +846,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   bool HasUnsplittableScrollingOverflow() const;
 
-  PhysicalRect LocalCaretRect(
-      int caret_offset,
-      LayoutUnit* extra_width_to_end_of_line = nullptr) const override;
+  PhysicalRect LocalCaretRect(int caret_offset) const override;
 
   // Returns the intersection of all overflow clips which apply.
   virtual PhysicalRect OverflowClipRect(
@@ -1302,8 +1300,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   static bool SkipContainingBlockForPercentHeightCalculation(
       const LayoutBox* containing_block);
-
-  PhysicalRect LocalVisualRectIgnoringVisibility() const override;
 
   virtual LayoutPoint LocationInternal() const {
     NOT_DESTROYED();

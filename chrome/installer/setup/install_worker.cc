@@ -927,6 +927,11 @@ void AddInstallWorkItems(const InstallParams& install_params,
       installer_state.root_key(),
       GetNotificationHelperPath(target_path, new_version), install_list);
 
+  if (installer_state.system_install()) {
+    AddElevationServiceWorkItems(
+        GetElevationServicePath(target_path, new_version), install_list);
+  }
+
   AddUpdateDowngradeVersionItem(installer_state.root_key(), current_version,
                                 new_version, install_list);
 
@@ -1142,8 +1147,14 @@ void AddOsUpgradeWorkItems(const InstallerState& installer_state,
       cmd_line.AppendSwitch(installer::switches::kSystemLevel);
     // Log everything for now.
     cmd_line.AppendSwitch(installer::switches::kVerboseLogging);
+    // This will make the updater append
+    // <prev_windows_version>-<new_windows_version> to the upgrade commandline.
+    cmd_line.AppendArg("%1");
 
-    AppCommand cmd(kCmdOnOsUpgrade, cmd_line.GetCommandLineString());
+    // `GetCommandLineStringWithUnsafeInsertSequences` should be safe to use
+    // because the updater will do the substitution, not the Windows shell.
+    AppCommand cmd(kCmdOnOsUpgrade,
+                   cmd_line.GetCommandLineStringWithUnsafeInsertSequences());
     cmd.set_is_auto_run_on_os_upgrade(true);
     cmd.AddCreateAppCommandWorkItems(root_key, install_list);
   }
@@ -1192,16 +1203,11 @@ void AddFinalizeUpdateWorkItems(const base::Version& new_version,
   // overwriting any of the following post-install tasks.
   AddDowngradeCleanupItems(new_version, list);
 
-  const base::FilePath target_path = installer_state.target_path();
   AddOldWerHelperRegistrationCleanupItems(installer_state.root_key(),
-                                          target_path, list);
-  AddWerHelperRegistration(installer_state.root_key(),
-                           GetWerHelperPath(target_path, new_version), list);
-
-  if (installer_state.system_install()) {
-    AddElevationServiceWorkItems(
-        GetElevationServicePath(target_path, new_version), list);
-  }
+                                          installer_state.target_path(), list);
+  AddWerHelperRegistration(
+      installer_state.root_key(),
+      GetWerHelperPath(installer_state.target_path(), new_version), list);
 
   const std::wstring client_state_key = install_static::GetClientStateKeyPath();
 

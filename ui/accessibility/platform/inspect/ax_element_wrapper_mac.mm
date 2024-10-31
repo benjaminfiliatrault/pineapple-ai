@@ -17,6 +17,7 @@
 #include "base/logging.h"
 #include "base/strings/pattern.h"
 #include "base/strings/sys_string_conversions.h"
+#include "ui/accessibility/platform/ax_platform_node_cocoa.h"
 #include "ui/accessibility/platform/ax_private_attributes_mac.h"
 
 // error: 'accessibilityAttributeNames' is deprecated: first deprecated in
@@ -105,9 +106,8 @@ NSArray* AXElementWrapper::Children() const {
     return nil;
   }
 
-  NOTREACHED_IN_MIGRATION()
+  NOTREACHED()
       << "Only AXUIElementRef and BrowserAccessibilityCocoa are supported.";
-  return nil;
 }
 
 NSSize AXElementWrapper::Size() const {
@@ -116,9 +116,8 @@ NSSize AXElementWrapper::Size() const {
   }
 
   if (!IsAXUIElement()) {
-    NOTREACHED_IN_MIGRATION()
+    NOTREACHED()
         << "Only AXUIElementRef and BrowserAccessibilityCocoa are supported.";
-    return NSMakeSize(0, 0);
   }
 
   id value = *GetAttributeValue(NSAccessibilitySizeAttribute);
@@ -153,13 +152,19 @@ NSPoint AXElementWrapper::Position() const {
     return NSMakePoint(0, 0);
   }
 
-  NOTREACHED_IN_MIGRATION()
+  NOTREACHED()
       << "Only AXUIElementRef and BrowserAccessibilityCocoa are supported.";
-  return NSMakePoint(0, 0);
 }
 
 NSArray* AXElementWrapper::AttributeNames() const {
   if (IsNSAccessibilityElement()) {
+    // The NSAccessibility protocol implementation in AXPlatformNodeCocoa no
+    // longer exposes old-style attributes. Instead, it provides the
+    // internalAccessibilityAttributeNames method for backward compatibility in
+    // testing.
+    if ([node_ isKindOfClass:[AXPlatformNodeCocoa class]]) {
+      return [node_ internalAccessibilityAttributeNames];
+    }
     return [node_ accessibilityAttributeNames];
   }
 
@@ -173,9 +178,8 @@ NSArray* AXElementWrapper::AttributeNames() const {
     return nil;
   }
 
-  NOTREACHED_IN_MIGRATION()
+  NOTREACHED()
       << "Only AXUIElementRef and BrowserAccessibilityCocoa are supported.";
-  return nil;
 }
 
 NSArray* AXElementWrapper::ParameterizedAttributeNames() const {
@@ -193,9 +197,8 @@ NSArray* AXElementWrapper::ParameterizedAttributeNames() const {
     return nil;
   }
 
-  NOTREACHED_IN_MIGRATION()
+  NOTREACHED()
       << "Only AXUIElementRef and BrowserAccessibilityCocoa are supported.";
-  return nil;
 }
 
 AXOptionalNSObject AXElementWrapper::GetAttributeValue(
@@ -291,7 +294,7 @@ void AXElementWrapper::SetAttributeValue(NSString* attribute, id value) const {
     return;
   }
 
-  NOTREACHED_IN_MIGRATION()
+  NOTREACHED()
       << "Only AXUIElementRef and BrowserAccessibilityCocoa are supported.";
 }
 
@@ -309,9 +312,8 @@ NSArray* AXElementWrapper::ActionNames() const {
     return nil;
   }
 
-  NOTREACHED_IN_MIGRATION()
+  NOTREACHED()
       << "Only AXUIElementRef and BrowserAccessibilityCocoa are supported.";
-  return nil;
 }
 
 void AXElementWrapper::PerformAction(NSString* action) const {
@@ -326,7 +328,7 @@ void AXElementWrapper::PerformAction(NSString* action) const {
     return;
   }
 
-  NOTREACHED_IN_MIGRATION()
+  NOTREACHED()
       << "Only AXUIElementRef and BrowserAccessibilityCocoa are supported.";
 }
 

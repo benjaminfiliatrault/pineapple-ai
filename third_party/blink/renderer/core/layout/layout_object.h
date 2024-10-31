@@ -448,12 +448,6 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // LayoutObject.
   LayoutBox* EnclosingBox() const;
 
-  // This is deprecated because it doesn't meet the requirement of its only
-  // caller IntersectionObservation::CanUseCachedRects() because this doesn't
-  // handle programmatically-only scrollable scrollers. Another problem is
-  // that it may return wrong results for out-of-flow positioned objects.
-  LayoutBox* DeprecatedEnclosingScrollableBox() const;
-
   // Return the NG |LayoutBlockFlow| that will have any |FragmentItems| for
   // |this|, or nullptr if the containing block isn't an NG inline formatting
   // context root. |this| is required to be an object that participates in an
@@ -638,7 +632,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   inline bool IsEligibleForPaintOrLayoutContainment() const {
     NOT_DESTROYED();
-    return (!IsInline() || IsAtomicInlineLevel()) && !IsRubyText() &&
+    return (!IsInline() || IsAtomicInlineLevel()) &&
            (!IsTablePart() || IsLayoutBlockFlow());
   }
 
@@ -664,7 +658,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   inline bool IsEligibleForSizeContainment() const {
     NOT_DESTROYED();
-    return (!IsInline() || IsAtomicInlineLevel()) && !IsRubyText() &&
+    return (!IsInline() || IsAtomicInlineLevel()) &&
            (!IsTablePart() || IsTableCaption()) && !IsTable();
   }
   inline bool ShouldApplySizeContainment() const {
@@ -721,7 +715,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     // common logic, which is extracted here to avoid repeated computation.
     return style.IsStackingContextWithoutContainment() ||
            ((style.ContainsLayout() || style.ContainsPaint()) &&
-            (!IsInline() || IsAtomicInlineLevel()) && !IsRubyText() &&
+            (!IsInline() || IsAtomicInlineLevel()) &&
             (!IsTablePart() || IsLayoutBlockFlow()));
   }
 
@@ -978,23 +972,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     NOT_DESTROYED();
     return false;
   }
-  virtual bool IsRubyBase() const {
-    NOT_DESTROYED();
-    return false;
-  }
-  virtual bool IsRubyColumn() const {
-    NOT_DESTROYED();
-    return false;
-  }
-  virtual bool IsRubyText() const {
-    NOT_DESTROYED();
-    return false;
-  }
-  // For line-breakable ruby. This returns true only if RubyLineBreakable
-  // flag is enabled.
   bool IsInlineRuby() const;
-  // For line-breakable ruby. This returns true only if RubyLineBreakable
-  // flag is enabled.
   bool IsInlineRubyText() const;
   virtual bool IsTable() const {
     NOT_DESTROYED();
@@ -1941,8 +1919,6 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // and preferred width recalc. Also invalidates shaping on all text nodes.
   virtual void InvalidateSubtreeLayoutForFontUpdates();
 
-  void DeprecatedInvalidateIntersectionObserverCachedRects();
-
   // Mark elements with a principal box and a computed position-try-fallbacks
   // different from 'none' for layout when @position-try rules are removed or
   // added. mark_style_dirty is true if the element should be marked dirty as
@@ -2529,26 +2505,6 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   virtual CursorDirective GetCursor(const PhysicalOffset&, ui::Cursor&) const;
 
-  // Returns the rect that should have raster invalidated whenever this object
-  // changes. The rect is in the coordinate space of the document's scrolling
-  // contents. This method deals with outlines and overflow.
-  virtual PhysicalRect VisualRectInDocument(
-      VisualRectFlags = kDefaultVisualRectFlags) const;
-
-  // Returns the rect that should have raster invalidated whenever this object
-  // changes. The rect is in the object's local physical coordinate space.
-  // This is for non-SVG objects and LayoutSVGRoot only. SVG objects (except
-  // LayoutSVGRoot) should use VisualRectInLocalSVGCoordinates() and map with
-  // SVG transforms instead.
-  PhysicalRect LocalVisualRect() const {
-    NOT_DESTROYED();
-    if (StyleRef().UsedVisibility() != EVisibility::kVisible &&
-        VisualRectRespectsVisibility()) {
-      return PhysicalRect();
-    }
-    return LocalVisualRectIgnoringVisibility();
-  }
-
   // Given a rect in the object's physical coordinate space, mutates the rect
   // into one representing the size of its visual painted output as if
   // |ancestor| was the root of the page: the rect is modified by any
@@ -2600,7 +2556,6 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   // Do a rect-based hit test with this object as the stop node.
   HitTestResult HitTestForOcclusion(const PhysicalRect&) const;
-  HitTestResult HitTestForOcclusion() const;
 
   // Return the offset to the column in which the specified point (in
   // flow-thread coordinates) lives. This is used to convert a flow-thread point
@@ -2671,12 +2626,8 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
    * Returns the local coordinates of the caret within this layout object.
    * @param caret_offset zero-based offset determining position within the
    * layout object.
-   * @param extra_width_to_end_of_line optional out arg to give extra width to
-   * end of line - useful for character range rect computations
    */
-  virtual PhysicalRect LocalCaretRect(
-      int caret_offset,
-      LayoutUnit* extra_width_to_end_of_line = nullptr) const;
+  virtual PhysicalRect LocalCaretRect(int caret_offset) const;
 
   // When performing a global document tear-down, the layoutObject of the
   // document is cleared. We use this as a hook to detect the case of document
@@ -3131,10 +3082,6 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
       layout_object_.UpdateInsideBlockingWheelEventHandler(inside);
     }
 
-    void InvalidateIntersectionObserverCachedRects() {
-      layout_object_.InvalidateIntersectionObserverCachedRects();
-    }
-
 #if DCHECK_IS_ON()
     void ClearNeedsPaintPropertyUpdateForTesting() {
       layout_object_.bitfields_.SetNeedsPaintPropertyUpdate(false);
@@ -3198,7 +3145,6 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // updated, SetNeedsPaintPropertyUpdate marks all ancestors as having a
   // descendant needing a paint property update too.
   void SetNeedsPaintPropertyUpdate();
-  void SetNeedsPaintPropertyUpdatePreservingCachedRects();
   void SetDescendantNeedsPaintPropertyUpdate();
   bool NeedsPaintPropertyUpdate() const {
     NOT_DESTROYED();
@@ -3530,9 +3476,6 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     bitfields_.SetEverHadLayout(true);
   }
 
-  // See LocalVisualRect().
-  virtual PhysicalRect LocalVisualRectIgnoringVisibility() const;
-
   virtual bool CanBeSelectionLeafInternal() const {
     NOT_DESTROYED();
     return false;
@@ -3622,8 +3565,6 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   }
 
  private:
-  void InvalidateIntersectionObserverCachedRects();
-
   gfx::QuadF LocalToAncestorQuadInternal(const gfx::QuadF&,
                                          const LayoutBoxModelObject* ancestor,
                                          MapCoordinatesFlags = 0) const;
@@ -4199,6 +4140,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   static bool affects_parent_block_;
 
 #if DCHECK_IS_ON()
+  friend class CachedTextInputInfo;
   bool is_destroyed_ = false;
 #endif
 };

@@ -9,6 +9,7 @@
 
 #include "content/browser/interest_group/ad_auction_service_impl.h"
 
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <optional>
@@ -174,6 +175,29 @@ void RecordBaDataConstructionResultMetric(size_t data_size,
 
   base::UmaHistogramTimes(/*name=*/"Ads.InterestGroup.BaDataConstructionTime2",
                           /*sample=*/base::TimeTicks::Now() - start_time);
+}
+
+// Used to get a possible override to the user-agent string.
+std::optional<std::string> MaybeGetUserAgentOverride(
+    FrameTreeNode* frame_tree_node) {
+  if (base::FeatureList::IsEnabled(features::kFledgeEnableUserAgentOverrides)) {
+    if (frame_tree_node != nullptr) {
+      const bool override_user_agent =
+          frame_tree_node->navigator()
+              .GetDelegate()
+              ->ShouldOverrideUserAgentForRendererInitiatedNavigation();
+      if (override_user_agent) {
+        std::string maybe_user_agent = frame_tree_node->navigator()
+                                           .GetDelegate()
+                                           ->GetUserAgentOverride()
+                                           .ua_string_override;
+        if (!maybe_user_agent.empty()) {
+          return std::move(maybe_user_agent);
+        }
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 }  // namespace
@@ -377,10 +401,13 @@ void AdAuctionServiceImpl::UpdateAdInterestGroups() {
     return;
   }
 
+  std::optional<std::string> user_agent_override =
+      MaybeGetUserAgentOverride(GetFrame()->frame_tree_node());
+
   // `base::Unretained` is safe here since the `BrowserContext` owns the
   // `StoragePartition` that owns the interest group manager.
   GetInterestGroupManager().UpdateInterestGroupsOfOwner(
-      origin(), GetClientSecurityState(),
+      origin(), GetClientSecurityState(), user_agent_override,
       base::BindRepeating(
           &AreAllowedReportingOriginsAttested,
           base::Unretained(render_frame_host().GetBrowserContext())));
@@ -448,13 +475,16 @@ void AdAuctionServiceImpl::RunAdAuction(
   // on-device auction.
   if (base::FeatureList::IsEnabled(features::kFledgeUsePreconnectCache) &&
       !config.server_response.has_value()) {
-    PreconnectToBuyerOrigins(config);
+    size_t n_owners_cached = PreconnectToBuyerOrigins(config);
     for (const blink::AuctionConfig& component_config :
          config.non_shared_params.component_auctions) {
       if (!component_config.server_response.has_value()) {
-        PreconnectToBuyerOrigins(component_config);
+        n_owners_cached += PreconnectToBuyerOrigins(component_config);
       }
     }
+    base::UmaHistogramCounts100(
+        "Ads.InterestGroup.Auction.NumOwnerOriginsCachedForPreconnect",
+        n_owners_cached);
   }
 
   std::unique_ptr<AuctionRunner> auction = AuctionRunner::CreateAndStart(
@@ -467,8 +497,9 @@ void AdAuctionServiceImpl::RunAdAuction(
       base::BindRepeating(
           &AdAuctionServiceImpl::MaybeLogPrivateAggregationFeatures,
           weak_ptr_factory_.GetWeakPtr()),
-      config, main_frame_origin_, origin(), GetClientSecurityState(),
-      GetRefCountedTrustedURLLoaderFactory(),
+      config, main_frame_origin_, origin(),
+      MaybeGetUserAgentOverride(GetFrame()->frame_tree_node()),
+      GetClientSecurityState(), GetRefCountedTrustedURLLoaderFactory(),
       base::BindRepeating(&AdAuctionServiceImpl::IsInterestGroupAPIAllowed,
                           base::Unretained(this)),
       base::BindRepeating(
@@ -739,6 +770,14 @@ std::optional<std::string> AdAuctionServiceImpl::GetCookieDeprecationLabel() {
   }
 }
 
+void AdAuctionServiceImpl::GetBiddingAndAuctionServerKey(
+    const std::optional<url::Origin>& coordinator,
+    base::OnceCallback<void(
+        base::expected<BiddingAndAuctionServerKey, std::string>)> callback) {
+  GetInterestGroupManager().GetBiddingAndAuctionServerKey(
+      std::move(coordinator), std::move(callback));
+}
+
 AdAuctionServiceImpl::AdAuctionServiceImpl(
     RenderFrameHost& render_frame_host,
     mojo::PendingReceiver<blink::mojom::AdAuctionService> receiver)
@@ -861,8 +900,8 @@ bool AdAuctionServiceImpl::IsInterestGroupAPIAllowed(
         interest_group_api_operation,
     const url::Origin& origin) const {
   return GetContentClient()->browser()->IsInterestGroupAPIAllowed(
-      &render_frame_host(), interest_group_api_operation, main_frame_origin_,
-      origin);
+      render_frame_host().GetBrowserContext(), &render_frame_host(),
+      interest_group_api_operation, main_frame_origin_, origin);
 }
 
 void AdAuctionServiceImpl::OnAuctionComplete(
@@ -1061,7 +1100,7 @@ void AdAuctionServiceImpl::MaybeLogPrivateAggregationFeatures(
 }
 
 void AdAuctionServiceImpl::ReturnEmptyGetInterestGroupAdAuctionDataCallback(
-    const std::string msg) {
+    const std::string& msg) {
   if (!ba_data_callbacks_.empty()) {
     BiddingAndAuctionDataConstructionState& state = ba_data_callbacks_.front();
 
@@ -1248,11 +1287,12 @@ AdAuctionPageData* AdAuctionServiceImpl::GetAdAuctionPageData() {
       render_frame_host().GetPage());
 }
 
-void AdAuctionServiceImpl::PreconnectToBuyerOrigins(
+size_t AdAuctionServiceImpl::PreconnectToBuyerOrigins(
     const blink::AuctionConfig& config) {
   if (!config.non_shared_params.interest_group_buyers) {
-    return;
+    return 0;
   }
+  size_t n_owners_cached = 0;
   for (const auto& buyer : *config.non_shared_params.interest_group_buyers) {
     std::optional<url::Origin> signals_origin;
     if (GetInterestGroupManager().GetCachedOwnerAndSignalsOrigins(
@@ -1261,6 +1301,7 @@ void AdAuctionServiceImpl::PreconnectToBuyerOrigins(
           net::NetworkAnonymizationKey::CreateSameSite(
               net::SchemefulSite(buyer));
       PreconnectSocket(buyer.GetURL(), network_anonymization_key);
+      n_owners_cached += 1;
       if (signals_origin) {
         // We preconnect to the signals origin and not the full signals URL so
         // that we do not need to store the full URL in memory. Preconnecting
@@ -1270,6 +1311,7 @@ void AdAuctionServiceImpl::PreconnectToBuyerOrigins(
       }
     }
   }
+  return n_owners_cached;
 }
 
 }  // namespace content

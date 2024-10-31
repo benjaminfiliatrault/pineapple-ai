@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "ash/constants/ash_features.h"
+#include "ash/constants/web_app_id_constants.h"
 #include "ash/public/cpp/app_list/app_list_notifier.h"
 #include "ash/public/cpp/test/app_list_test_api.h"
 #include "ash/public/cpp/test/shell_test_api.h"
@@ -24,7 +25,6 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
@@ -38,9 +38,7 @@ class HelpAppSearchBrowserTestBase : public AppListSearchBrowserTest {
   HelpAppSearchBrowserTestBase() {
     // TODO: Remove parameterization on kProductivityLauncher.
     scoped_feature_list_.InitWithFeaturesAndParameters(
-        {{ash::features::kProductivityLauncher, {{"enable_continue", "true"}}},
-         {{ash::features::kHelpAppLauncherSearch}, {}}},
-        {});
+        {{}, {{ash::features::kHelpAppLauncherSearch}, {}}}, {});
   }
 
   ~HelpAppSearchBrowserTestBase() override = default;
@@ -348,7 +346,7 @@ IN_PROC_BROWSER_TEST_F(HelpAppSwaSearchBrowserTest, AppListSearchHasApp) {
       {ash::AppListSearchResultType::kZeroStateHelpApp,
        ash::AppListSearchResultType::kZeroStateApp});
 
-  auto* result = FindResult(web_app::kHelpAppId);
+  auto* result = FindResult(ash::kHelpAppId);
   ASSERT_TRUE(result);
   // Has regular app name as title.
   EXPECT_EQ(base::UTF16ToASCII(result->title()), "Explore");
@@ -357,13 +355,13 @@ IN_PROC_BROWSER_TEST_F(HelpAppSwaSearchBrowserTest, AppListSearchHasApp) {
 IN_PROC_BROWSER_TEST_F(HelpAppSwaSearchBrowserTest, Launch) {
   Profile* profile = browser()->profile();
   ash::SystemWebAppManager::GetForTest(profile)->InstallSystemAppsForTesting();
-  const webapps::AppId app_id = web_app::kHelpAppId;
+  const webapps::AppId app_id = ash::kHelpAppId;
 
   ShowAppListAndWaitForZeroStateResults(
       {ash::AppListSearchResultType::kZeroStateHelpApp,
        ash::AppListSearchResultType::kZeroStateApp});
 
-  auto* result = FindResult(web_app::kHelpAppId);
+  auto* result = FindResult(ash::kHelpAppId);
   ASSERT_TRUE(result);
   result->Open(ui::EF_NONE);
 }

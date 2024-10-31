@@ -35,9 +35,9 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/buildflags.h"
-#include "components/saved_tab_groups/features.h"
-#include "components/saved_tab_groups/saved_tab_group.h"
-#include "components/saved_tab_groups/types.h"
+#include "components/saved_tab_groups/public/features.h"
+#include "components/saved_tab_groups/public/saved_tab_group.h"
+#include "components/saved_tab_groups/public/types.h"
 #include "components/sessions/content/content_live_tab.h"
 #include "components/sessions/content/content_platform_specific_tab_data.h"
 #include "components/sessions/core/live_tab_context.h"
@@ -55,10 +55,6 @@
 #include "chrome/browser/sessions/tab_loader.h"
 #endif
 
-#if defined(TOOLKIT_VIEWS)
-#include "chrome/browser/ui/side_search/side_search_utils.h"
-#endif  // defined(TOOLKIT_VIEWS)
-
 using content::NavigationController;
 using content::SessionStorageNamespace;
 using content::WebContents;
@@ -71,14 +67,16 @@ namespace {
 // app window in those cases.
 bool ShouldCreateAppWindowForAppName(Profile* profile,
                                      const std::string& app_name) {
-  if (app_name.empty())
+  if (app_name.empty()) {
     return false;
+  }
 
   // Only need to check that the app is installed if |app_name| is for a
   // platform app or web app. (|app_name| could also be for a devtools window.)
   const std::string app_id = web_app::GetAppIdFromApplicationName(app_name);
-  if (app_id.empty())
+  if (app_id.empty()) {
     return true;
+  }
 
   return apps::IsInstalledApp(profile, app_id);
 }
@@ -126,19 +124,7 @@ sessions::LiveTab* BrowserLiveTabContext::GetActiveLiveTab() const {
 
 std::map<std::string, std::string> BrowserLiveTabContext::GetExtraDataForTab(
     int index) const {
-  std::map<std::string, std::string> extra_data;
-
-#if defined(TOOLKIT_VIEWS)
-  if (IsSideSearchEnabled(browser_->profile())) {
-    std::optional<std::pair<std::string, std::string>> side_search_data =
-        side_search::MaybeGetSideSearchTabRestoreData(
-            browser_->tab_strip_model()->GetWebContentsAt(index));
-    if (side_search_data.has_value())
-      extra_data.insert(side_search_data.value());
-  }
-#endif  // defined(TOOLKIT_VIEWS)
-
-  return extra_data;
+  return std::map<std::string, std::string>();
 }
 
 std::map<std::string, std::string>
@@ -256,19 +242,9 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
       // Save the group if it was not saved.
       if (!tab_group_service->GetGroup(group_id.value()).has_value() &&
           tab_groups::IsTabGroupsSaveV2Enabled()) {
-        tab_group_service->AddGroup(
+        tab_group_service->SaveGroup(
             tab_groups::SavedTabGroupUtils::CreateSavedTabGroupFromLocalId(
                 tab.group.value()));
-
-        if (tab_groups::IsTabGroupSyncServiceDesktopMigrationEnabled()) {
-          // Ensure we listen for changes to the newly created group.
-          // This is done automatically for the old service, not the new one.
-          std::optional<tab_groups::SavedTabGroup> s =
-              tab_group_service->GetGroup(group_id.value());
-          tab_group_service->ConnectLocalTabGroup(
-              s->saved_guid(), group_id.value(),
-              tab_groups::OpeningSource::kOpenedFromTabRestore);
-        }
       }
     }
   } else {

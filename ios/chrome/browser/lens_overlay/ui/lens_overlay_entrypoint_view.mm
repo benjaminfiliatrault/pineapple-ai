@@ -9,10 +9,13 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 
 namespace {
 
 const CGFloat kLensCameraSymbolPointSize = 18.0;
+const CGFloat kMinimumWidth = 44;
 
 }  // namespace
 
@@ -23,8 +26,11 @@ const CGFloat kLensCameraSymbolPointSize = 18.0;
 
   if (self) {
     self.pointerInteractionEnabled = YES;
+    self.minimumDiameter = kMinimumWidth;
     self.pointerStyleProvider = CreateDefaultEffectCirclePointerStyleProvider();
     self.tintColor = [UIColor colorNamed:kToolbarButtonColor];
+    self.accessibilityLabel = l10n_util::GetNSString(
+        IDS_IOS_LENS_OVERLAY_ENTRYPOINT_BUTTON_ACCESSIBILITY_LABEL);
 
     UIImageSymbolConfiguration* symbolConfig = [UIImageSymbolConfiguration
         configurationWithPointSize:kLensCameraSymbolPointSize
@@ -38,9 +44,9 @@ const CGFloat kLensCameraSymbolPointSize = 18.0;
           forState:UIControlStateNormal];
     self.imageView.contentMode = UIViewContentModeScaleAspectFit;
 
-    [NSLayoutConstraint
-        activateConstraints:@[ [self.widthAnchor
-                                constraintEqualToAnchor:self.heightAnchor] ]];
+    [NSLayoutConstraint activateConstraints:@[
+      [self.widthAnchor constraintGreaterThanOrEqualToConstant:kMinimumWidth]
+    ]];
 
     if (@available(iOS 17, *)) {
       __weak __typeof(self) weakSelf = self;

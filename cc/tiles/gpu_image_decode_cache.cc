@@ -585,13 +585,15 @@ class GpuImageDecodeTaskImpl : public TileTask {
   GpuImageDecodeTaskImpl(GpuImageDecodeCache* cache,
                          const DrawImage& draw_image,
                          const ImageDecodeCache::TracingInfo& tracing_info,
-                         ImageDecodeCache::TaskType task_type)
+                         ImageDecodeCache::TaskType task_type,
+                         ImageDecodeCache::ClientId client_id)
       : TileTask(TileTask::SupportsConcurrentExecution::kYes,
                  TileTask::SupportsBackgroundThreadPriority::kNo),
         cache_(cache),
         image_(draw_image),
         tracing_info_(tracing_info),
-        task_type_(task_type) {
+        task_type_(task_type),
+        client_id_(client_id) {
     DCHECK(!SkipImage(draw_image));
   }
   GpuImageDecodeTaskImpl(const GpuImageDecodeTaskImpl&) = delete;
@@ -616,8 +618,11 @@ class GpuImageDecodeTaskImpl : public TileTask {
   }
 
   // Overridden from TileTask:
+  bool IsRasterTask() const override {
+    return task_type_ == ImageDecodeCache::TaskType::kInRaster;
+  }
   void OnTaskCompleted() override {
-    cache_->OnImageDecodeTaskCompleted(image_, task_type_);
+    cache_->OnImageDecodeTaskCompleted(image_, task_type_, client_id_);
   }
 
   // Overridden from TileTask:
@@ -635,6 +640,7 @@ class GpuImageDecodeTaskImpl : public TileTask {
   DrawImage image_;
   const ImageDecodeCache::TracingInfo tracing_info_;
   const ImageDecodeCache::TaskType task_type_;
+  const ImageDecodeCache::ClientId client_id_;
 };
 
 // Task which creates an image from decoded data. Typically this involves
@@ -645,12 +651,14 @@ class ImageUploadTaskImpl : public TileTask {
   ImageUploadTaskImpl(GpuImageDecodeCache* cache,
                       const DrawImage& draw_image,
                       scoped_refptr<TileTask> decode_dependency,
-                      const ImageDecodeCache::TracingInfo& tracing_info)
+                      const ImageDecodeCache::TracingInfo& tracing_info,
+                      ImageDecodeCache::ClientId client_id)
       : TileTask(TileTask::SupportsConcurrentExecution::kNo,
                  TileTask::SupportsBackgroundThreadPriority::kYes),
         cache_(cache),
         image_(draw_image),
-        tracing_info_(tracing_info) {
+        tracing_info_(tracing_info),
+        client_id_(client_id) {
     DCHECK(!SkipImage(draw_image));
     // If an image is already decoded and locked, we will not generate a
     // decode task.
@@ -675,7 +683,7 @@ class ImageUploadTaskImpl : public TileTask {
 
   // Overridden from TileTask:
   void OnTaskCompleted() override {
-    cache_->OnImageUploadTaskCompleted(image_);
+    cache_->OnImageUploadTaskCompleted(image_, client_id_);
   }
 
  protected:
@@ -685,6 +693,7 @@ class ImageUploadTaskImpl : public TileTask {
   raw_ptr<GpuImageDecodeCache, DanglingUntriaged> cache_;
   DrawImage image_;
   const ImageDecodeCache::TracingInfo tracing_info_;
+  const ImageDecodeCache::ClientId client_id_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1339,7 +1348,7 @@ ImageDecodeCache::TaskResult GpuImageDecodeCache::GetTaskForImageAndRefInternal(
           this, draw_image,
           GetImageDecodeTaskAndRef(client_id, draw_image, tracing_info,
                                    task_type),
-          tracing_info);
+          tracing_info, client_id);
       image_data->upload.task_map[client_id] = task;
     }
     DCHECK(task);
@@ -1417,7 +1426,7 @@ ImageDecodeCache::TaskResult GpuImageDecodeCache::GetTaskForImageAndRefInternal(
         this, draw_image,
         GetImageDecodeTaskAndRef(client_id, draw_image, tracing_info,
                                  task_type),
-        tracing_info);
+        tracing_info, client_id);
     image_data->upload.task_map[client_id] = task;
   } else {
     task = GetImageDecodeTaskAndRef(client_id, draw_image, tracing_info,
@@ -1964,7 +1973,8 @@ void GpuImageDecodeCache::UploadImageInTask(const DrawImage& draw_image) {
 
 void GpuImageDecodeCache::OnImageDecodeTaskCompleted(
     const DrawImage& draw_image,
-    TaskType task_type) {
+    TaskType task_type,
+    ClientId client_id) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "GpuImageDecodeCache::OnImageDecodeTaskCompleted");
   base::AutoLock lock(lock_);
@@ -1975,9 +1985,9 @@ void GpuImageDecodeCache::OnImageDecodeTaskCompleted(
   UMA_HISTOGRAM_BOOLEAN("Compositing.DecodeLCPCandidateImage.Hardware",
                         draw_image.paint_image().may_be_lcp_candidate());
   if (task_type == TaskType::kInRaster) {
-    image_data->decode.task_map.clear();
+    image_data->decode.task_map.erase(client_id);
   } else {
-    image_data->decode.stand_alone_task_map.clear();
+    image_data->decode.stand_alone_task_map.erase(client_id);
   }
 
   // While the decode task is active, we keep a ref on the decoded data.
@@ -1986,7 +1996,8 @@ void GpuImageDecodeCache::OnImageDecodeTaskCompleted(
 }
 
 void GpuImageDecodeCache::OnImageUploadTaskCompleted(
-    const DrawImage& draw_image) {
+    const DrawImage& draw_image,
+    ClientId client_id) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "GpuImageDecodeCache::OnImageUploadTaskCompleted");
   base::AutoLock lock(lock_);
@@ -1994,7 +2005,7 @@ void GpuImageDecodeCache::OnImageUploadTaskCompleted(
   InUseCacheKey cache_key = InUseCacheKeyFromDrawImage(draw_image);
   ImageData* image_data = GetImageDataForDrawImage(draw_image, cache_key);
   DCHECK(image_data);
-  image_data->upload.task_map.clear();
+  image_data->upload.task_map.erase(client_id);
 
   // While the upload task is active, we keep a ref on both the image it will be
   // populating, as well as the decode it needs to populate it. Release these
@@ -2044,10 +2055,11 @@ scoped_refptr<TileTask> GpuImageDecodeCache::GetImageDecodeTaskAndRef(
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "GpuImageDecodeCache::GetImageDecodeTaskAndRef");
   auto cache_key = InUseCacheKeyFromDrawImage(draw_image);
+  bool for_raster = (task_type == TaskType::kInRaster);
 
   // This ref is kept alive while an upload task may need this decode. We
   // release this ref in UploadTaskCompleted.
-  if (task_type == TaskType::kInRaster) {
+  if (for_raster) {
     RefImageDecode(draw_image, cache_key);
   }
 
@@ -2066,22 +2078,46 @@ scoped_refptr<TileTask> GpuImageDecodeCache::GetImageDecodeTaskAndRef(
   }
 
   // We didn't have an existing locked image, create a task to lock or decode.
-  ImageTaskMap* task_map = &image_data->decode.stand_alone_task_map;
-  if (task_type == TaskType::kInRaster) {
-    task_map = &image_data->decode.task_map;
-  }
+  scoped_refptr<TileTask> result;
 
-  scoped_refptr<TileTask> existing_task =
-      GetTaskFromMapForClientId(client_id, *task_map);
-  if (!existing_task) {
+  ImageTaskMap& raster_task_map = image_data->decode.task_map;
+  scoped_refptr<TileTask> raster_task =
+      GetTaskFromMapForClientId(client_id, raster_task_map);
+  ImageTaskMap& stand_alone_task_map = image_data->decode.stand_alone_task_map;
+  scoped_refptr<TileTask> stand_alone_task =
+      GetTaskFromMapForClientId(client_id, stand_alone_task_map);
+
+  if (for_raster && raster_task) {
+    result = std::move(raster_task);
+  } else if (!for_raster && stand_alone_task) {
+    result = std::move(stand_alone_task);
+  } else {
     // Ref image decode and create a decode task. This ref will be released in
     // DecodeTaskCompleted.
     RefImageDecode(draw_image, cache_key);
-    existing_task = base::MakeRefCounted<GpuImageDecodeTaskImpl>(
-        this, draw_image, tracing_info, task_type);
-    (*task_map)[client_id] = existing_task;
+    result = base::MakeRefCounted<GpuImageDecodeTaskImpl>(
+        this, draw_image, tracing_info, task_type, client_id);
+    if (for_raster) {
+      raster_task_map[client_id] = result;
+      if (stand_alone_task) {
+        // If the existing stand-alone task hasn't started yet, make the new
+        // raster task primary.
+        if (stand_alone_task->state().IsNew()) {
+          result->SetExternalDependent(stand_alone_task);
+        } else {
+          stand_alone_task->SetExternalDependent(result);
+        }
+      }
+    } else {
+      stand_alone_task_map[client_id] = result;
+      if (raster_task && !raster_task->HasCompleted()) {
+        raster_task->SetExternalDependent(result);
+      }
+    }
   }
-  return existing_task;
+
+  CHECK(result);
+  return result;
 }
 
 void GpuImageDecodeCache::RefImageDecode(const DrawImage& draw_image,

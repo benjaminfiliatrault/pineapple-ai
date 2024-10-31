@@ -334,11 +334,10 @@ void FrameLoader::SaveScrollAnchor() {
     const SerializedAnchor& serialized_anchor =
         scroll_anchor->GetSerializedAnchor();
     if (serialized_anchor.IsValid()) {
-      history_item->SetScrollAnchorData(
-          {serialized_anchor.selector,
-           gfx::PointF(serialized_anchor.relative_offset.X(),
-                       serialized_anchor.relative_offset.Y()),
-           serialized_anchor.simhash});
+      auto offset = serialized_anchor.GetScrollOffset(*layout_scrollable_area);
+      history_item->SetScrollAnchorData({serialized_anchor.selector,
+                                         gfx::PointF(offset.x(), offset.y()),
+                                         serialized_anchor.simhash});
     }
   }
 }
@@ -373,6 +372,13 @@ void FrameLoader::SaveScrollState() {
 
 void FrameLoader::DispatchUnloadEventAndFillOldDocumentInfoIfNeeded(
     bool will_commit_new_document_in_this_frame) {
+  TRACE_EVENT0("navigation",
+               "FrameLoader::DispatchUnloadEventAndFillOldDocInfo");
+  const std::string_view histogram_suffix =
+      will_commit_new_document_in_this_frame ? "CommitInFrame" : "Other";
+  base::ScopedUmaHistogramTimer histogram_timer(base::StrCat(
+      {"Navigation.FrameLoader.DispatchUnloadEventAndFillOldDocInfo.",
+       histogram_suffix}));
   FrameNavigationDisabler navigation_disabler(*frame_);
   SaveScrollState();
 
@@ -868,7 +874,7 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
       argv.push_back("Main resource");
       argv.push_back(url.GetString());
       activity_logger->LogEvent(frame_->DomWindow(), "blinkRequestResource",
-                                argv.size(), argv.data());
+                                argv);
     }
   }
 
@@ -1047,6 +1053,9 @@ void FrameLoader::CommitNavigation(
     std::unique_ptr<WebNavigationParams> navigation_params,
     std::unique_ptr<WebDocumentLoader::ExtraData> extra_data,
     CommitReason commit_reason) {
+  TRACE_EVENT0("navigation", "FrameLoader::CommitNavigation");
+  base::ScopedUmaHistogramTimer histogram_timer(
+      "Navigation.FrameLoader.CommitNavigation");
   DCHECK(document_loader_);
   DCHECK(frame_->GetDocument());
   DCHECK(Client()->HasWebView());
@@ -1286,6 +1295,9 @@ void FrameLoader::DidAccessInitialDocument() {
 }
 
 bool FrameLoader::DetachDocument() {
+  TRACE_EVENT0("navigation", "FrameLoader::DetachDocument");
+  base::ScopedUmaHistogramTimer histogram_timer(
+      "Navigation.FrameLoader.DetachDocument");
   DCHECK(frame_->GetDocument());
   DCHECK(document_loader_);
 
@@ -1343,7 +1355,9 @@ bool FrameLoader::DetachDocument() {
 void FrameLoader::CommitDocumentLoader(DocumentLoader* document_loader,
                                        HistoryItem* previous_history_item,
                                        CommitReason commit_reason) {
-  TRACE_EVENT("blink", "FrameLoader::CommitDocumentLoader");
+  TRACE_EVENT0("navigation", "FrameLoader::CommitDocumentLoader");
+  base::ScopedUmaHistogramTimer histogram_timer(
+      "Navigation.FrameLoader.CommitDocumentLoader");
   base::ElapsedTimer timer;
   document_loader_ = document_loader;
   CHECK(document_loader_);

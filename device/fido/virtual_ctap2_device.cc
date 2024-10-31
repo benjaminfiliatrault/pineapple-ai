@@ -1387,7 +1387,9 @@ std::optional<CtapDeviceResponseCode> VirtualCtap2Device::OnMakeCredential(
       if (reg.second.is_resident &&
           rp_id_hash == reg.second.application_parameter &&
           reg.second.user->id == request.user.id) {
+        std::vector<uint8_t> cred_id = reg.first;
         mutable_state()->registrations.erase(reg.first);
+        mutable_state()->NotifyCredentialDeleted(cred_id);
         break;
       }
     }
@@ -2163,7 +2165,7 @@ CtapDeviceResponseCode VirtualCtap2Device::OnCredentialManagement(
               static_cast<int>(CredentialManagementRequestKey::kPinProtocol)),
           cbor::Value(
               static_cast<int>(CredentialManagementRequestKey::kPinAuth)),
-          {{static_cast<uint8_t>(subcommand)}});
+          base::span_from_ref(static_cast<uint8_t>(subcommand)));
       if (pin_status != CtapDeviceResponseCode::kSuccess) {
         return pin_status;
       }
@@ -2196,7 +2198,7 @@ CtapDeviceResponseCode VirtualCtap2Device::OnCredentialManagement(
               static_cast<int>(CredentialManagementRequestKey::kPinProtocol)),
           cbor::Value(
               static_cast<int>(CredentialManagementRequestKey::kPinAuth)),
-          {{static_cast<uint8_t>(subcommand)}});
+          base::span_from_ref(static_cast<uint8_t>(subcommand)));
       if (pin_status != CtapDeviceResponseCode::kSuccess) {
         return pin_status;
       }

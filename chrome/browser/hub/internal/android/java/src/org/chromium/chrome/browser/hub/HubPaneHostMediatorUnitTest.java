@@ -20,7 +20,6 @@ import android.view.ViewGroup;
 
 import androidx.test.filters.SmallTest;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -32,14 +31,13 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.shadows.ShadowLooper;
 
-import org.chromium.base.cached_flags.CachedFlagUtils;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
-import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgePadAdjuster;
+import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.ui.modelutil.PropertyModel;
 
 /** Tests for {@link HubPaneHostMediator}. */
@@ -68,11 +66,6 @@ public class HubPaneHostMediatorUnitTest {
 
         when(mPane.getRootView()).thenReturn(mRootView);
         when(mPane.getActionButtonDataSupplier()).thenReturn(mActionButtonSupplier);
-    }
-
-    @After
-    public void tearDown() {
-        CachedFlagUtils.resetFlagsForTesting();
     }
 
     @Test

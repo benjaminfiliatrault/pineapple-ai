@@ -126,6 +126,10 @@ typedef FILE* FileHandle;
 #include "base/fuchsia/scoped_fx_logger.h"
 #endif
 
+#if !BUILDFLAG(IS_NACL)
+#include "base/logging/rust_logger.rs.h"
+#endif
+
 namespace logging {
 
 namespace {
@@ -522,6 +526,11 @@ bool BaseInitLoggingImpl(const LoggingSettings& settings) {
   }
 #endif
 
+#if !BUILDFLAG(IS_NACL)
+  // Connects Rust logging with the //base logging functionality.
+  internal::init_rust_log_crate();
+#endif
+
   // Ignore file options unless logging to file is set.
   if ((g_logging_destination & LOG_TO_FILE) == 0)
     return true;
@@ -781,7 +790,7 @@ void LogMessage::Flush() {
     // CF-635.21/CFUtilities.c also_do_stderr(). This would result in logging to
     // both stderr and os_log even in tests, where it's undesirable to log to
     // the system log at all.
-    const bool log_to_system = []() {
+    const bool log_to_system = [] {
       struct stat stderr_stat;
       if (fstat(fileno(stderr), &stderr_stat) == -1) {
         return true;

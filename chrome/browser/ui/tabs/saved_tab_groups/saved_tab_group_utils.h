@@ -11,8 +11,8 @@
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_deletion_dialog_controller.h"
-#include "components/saved_tab_groups/saved_tab_group.h"
-#include "components/saved_tab_groups/types.h"
+#include "components/saved_tab_groups/public/saved_tab_group.h"
+#include "components/saved_tab_groups/public/types.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/interaction/element_tracker.h"
 #include "ui/base/models/dialog_model.h"
@@ -43,6 +43,9 @@ class SavedTabGroupUtils {
   SavedTabGroupUtils() = delete;
   SavedTabGroupUtils(const SavedTabGroupUtils&) = delete;
   SavedTabGroupUtils& operator=(const SavedTabGroupUtils&) = delete;
+
+  // Helper method for checking whether the feature can be used.
+  static bool IsEnabledForProfile(Profile* profile);
 
   // TODO(crbug.com/350514491): Default to using the TabGroupSyncService when
   // crbug.com/350514491 is complete.

@@ -71,6 +71,10 @@ void CredentialManagerImpl::Store(const CredentialInfo& credential,
   // only available on HTTPS origins.
   auto form_fetcher = std::make_unique<FormFetcherImpl>(
       observed_digest, client_, /*should_migrate_http_passwords=*/false);
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordFormGroupedAffiliations)) {
+    form_fetcher->set_filter_grouped_credentials(false);
+  }
   form_manager_ = std::make_unique<CredentialManagerPasswordFormManager>(
       client_, std::move(form), this, nullptr, std::move(form_fetcher));
 }
@@ -235,6 +239,7 @@ void CredentialManagerImpl::OnProvisionalSaveComplete() {
     // exactly matching origin and username. In order to avoid showing a save
     // bubble to the user Save() is called directly. Save prompt is still
     // offered for grouped credentials.
+    // TODO: crbug.com/372635361 - Handle grouped credentials.
     GetLoginMatchType match_type = GetMatchType(form);
     if (match_type == GetLoginMatchType::kPSL ||
         (match_type == GetLoginMatchType::kAffiliated &&

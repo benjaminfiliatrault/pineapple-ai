@@ -19,6 +19,7 @@
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalan</translation>
 <translation id="1168100932582989117">Google name servers</translation>
+<translation id="1170788066030116158">Date taken</translation>
 <translation id="1172970565351728681">About <ph name="REMAINING_TIME" /> remaining</translation>
 <translation id="1173894706177603556">Rename</translation>
 <translation id="1173916544412572294">Network <ph name="NETWORK_INDEX" /> of <ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, signal strength <ph name="SIGNAL_STRENGTH" />%, phone battery <ph name="BATTERY_STATUS" />%, details</translation>
@@ -581,6 +582,7 @@
 <translation id="5447680084201416734">Not enough storage.</translation>
 <translation id="5449551289610225147">Invalid password</translation>
 <translation id="5459064203055649751">A file named ‘<ph name="FILENAME" />’ already exists. Do you want to replace it with the one that you're moving?</translation>
+<translation id="5462378611565326489">OneDrive isn't available while offline.</translation>
 <translation id="5463231940765244860">Enter</translation>
 <translation id="5469868506864199649">Italian</translation>
 <translation id="5473333559083690127">Re-enter new PIN</translation>

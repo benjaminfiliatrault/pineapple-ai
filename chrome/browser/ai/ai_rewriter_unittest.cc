@@ -12,6 +12,7 @@
 #include "chrome/browser/ai/ai_test_utils.h"
 #include "chrome/browser/optimization_guide/mock_optimization_guide_keyed_service.h"
 #include "components/optimization_guide/core/mock_optimization_guide_model_executor.h"
+#include "components/optimization_guide/core/optimization_guide_proto_util.h"
 #include "components/optimization_guide/core/optimization_guide_switches.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -52,17 +53,12 @@ class MockCreateRewriterClient
 };
 
 optimization_guide::OptimizationGuideModelStreamingExecutionResult
-CreateExecutionResult(const std::string_view output, bool is_complete) {
+CreateExecutionResult(std::string_view output, bool is_complete) {
   optimization_guide::proto::ComposeResponse response;
   *response.mutable_output() = output;
-  std::string serialized_metadata;
-  response.SerializeToString(&serialized_metadata);
-  optimization_guide::proto::Any any;
-  any.set_value(serialized_metadata);
-  any.set_type_url(AITestUtils::GetTypeURLForProto(response.GetTypeName()));
   return optimization_guide::OptimizationGuideModelStreamingExecutionResult(
       optimization_guide::StreamingResponse{
-          .response = any,
+          .response = optimization_guide::AnyWrapProto(response),
           .is_complete = is_complete,
       },
       /*provided_by_on_device=*/true);

@@ -9,9 +9,9 @@
 
 #include "ash/ash_export.h"
 #include "ash/scanner/scanner_session.h"
-#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 
 namespace ash {
 
@@ -49,11 +49,15 @@ class ASH_EXPORT ScannerController {
 
   bool HasActiveSessionForTesting() const;
 
+  ScannerDelegate* delegate_for_testing() { return delegate_.get(); }
+
  private:
   std::unique_ptr<ScannerDelegate> delegate_;
 
   // May hold an active Scanner session, to allow access to the Scanner feature.
   std::unique_ptr<ScannerSession> scanner_session_;
+
+  base::WeakPtrFactory<ScannerController> weak_ptr_factory_{this};
 };
 
 }  // namespace ash

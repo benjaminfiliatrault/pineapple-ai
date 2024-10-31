@@ -266,13 +266,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   scoped_refptr<MainThreadTaskQueue> NewTaskQueue(
       const MainThreadTaskQueue::QueueCreationParams& params);
 
-  // Returns a new loading task queue. This queue is intended for tasks related
-  // to resource dispatch, foreground HTML parsing, etc...
-  // Note: Tasks posted to kFrameLoadingControl queues must execute quickly.
-  scoped_refptr<MainThreadTaskQueue> NewLoadingTaskQueue(
-      MainThreadTaskQueue::QueueType queue_type,
-      FrameSchedulerImpl* frame_scheduler);
-
   // Returns a new throttleable task queue to be used for tests.
   scoped_refptr<MainThreadTaskQueue> NewThrottleableTaskQueueForTest(
       FrameSchedulerImpl* frame_scheduler);
@@ -390,8 +383,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     main_thread_only().current_use_case = use_case;
   }
 
-  void SetHaveSeenABlockingGestureForTesting(bool status);
-
   virtual void PerformMicrotaskCheckpoint();
 
  private:
@@ -462,7 +453,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     DISALLOW_NEW();
 
    public:
-    RAILMode rail_mode = RAILMode::kAnimation;
+    RAILMode rail_mode = RAILMode::kDefault;
     bool should_freeze_compositor_task_queue = false;
     bool should_pause_task_queues = false;
     bool should_pause_task_queues_for_android_webview = false;

@@ -7,8 +7,8 @@
 
 #import <Foundation/Foundation.h>
 
-#include "base/feature_list.h"
-#include "base/metrics/field_trial_params.h"
+#import "base/feature_list.h"
+#import "base/metrics/field_trial_params.h"
 #import "ios/chrome/browser/ntp/ui_bundled/feed_top_section/notifications_promo_view_constants.h"
 
 namespace base {
@@ -19,17 +19,46 @@ class TimeDelta;
 // Set Up List, and video promos.
 BASE_DECLARE_FEATURE(kSegmentedDefaultBrowserPromo);
 
+// Name of the parameter that controls the experiment type for the Segmented
+// Default Browser promo, determining whether or not the Default Browser promo
+// is animated.
+extern const char kSegmentedDefaultBrowserExperimentType[];
+
+// Defines the different experiment arms for the Segmented Default Browser
+// promo, which determine if the Default Browser promo is animated.
+enum class SegmentedDefaultBrowserExperimentType {
+  // The experiment arm that shows the static Default Browser promo.
+  kStaticPromo = 0,
+  // The experiment arm that show the animated Default Browser promo.
+  kAnimatedPromo = 1,
+};
+
 // Whether personalized messaging for Default Browser First Run, Set Up List,
 // and video promos is enabled.
 bool IsSegmentedDefaultBrowserPromoEnabled();
 
+// Returns the experiment type for the Segmented Default Browser promo, which
+// determines whether or not the promo is animated.
+SegmentedDefaultBrowserExperimentType
+SegmentedDefaultBrowserExperimentTypeEnabled();
+
 // Feature flag to enable the Keyboard Accessory Upgrade.
 BASE_DECLARE_FEATURE(kIOSKeyboardAccessoryUpgrade);
+
+// Feature flag to enable the Keyboard Accessory Upgrade with a shorter manual
+// fill menu.
+BASE_DECLARE_FEATURE(kIOSKeyboardAccessoryUpgradeShortManualFillMenu);
 
 // Test-only: Feature flag used to verify that EG2 can trigger flags. Must be
 // always disabled by default, because it is used to verify that enabling
 // features in tests works.
 BASE_DECLARE_FEATURE(kTestFeature);
+
+// Killswitch to control how Safety Checks are automatically triggered.
+// If enabled, the Safety Check Manager can independently initiate Safety
+// Checks. If disabled, automatic Safety Check runs must be triggered through
+// the Safety Check module in the Magic Stack.
+BASE_DECLARE_FEATURE(kSafetyCheckAutorunByManagerKillswitch);
 
 // Feature to add the Safety Check module to the Magic Stack.
 BASE_DECLARE_FEATURE(kSafetyCheckMagicStack);
@@ -84,6 +113,18 @@ extern const char kSafetyCheckNotificationsImpressionTrigger[];
 // allowed for the Safety Check notifications opt-in button.
 extern const char kSafetyCheckNotificationsImpressionLimit[];
 
+// Name of the parameter that controls whether Passwords notifications
+// are permitted to be sent to the user for Safety Check.
+extern const char kSafetyCheckAllowPasswordsNotifications[];
+
+// Name of the parameter that controls whether Safe Browsing notifications
+// are permitted to be sent to the user for Safety Check.
+extern const char kSafetyCheckAllowSafeBrowsingNotifications[];
+
+// Name of the parameter that controls whether Update Chrome notifications
+// are permitted to be sent to the user for Safety Check.
+extern const char kSafetyCheckAllowUpdateChromeNotifications[];
+
 // Defines param values for the Safety Check Notifications feature,
 // controlling how notifications are presented to the user.
 enum class SafetyCheckNotificationsExperimentalArm {
@@ -104,8 +145,33 @@ enum class SafetyCheckNotificationsImpressionTrigger {
   kAlways = 1,
 };
 
-// Feature flag to add the Tips module to the Magic Stack.
-BASE_DECLARE_FEATURE(kTipsMagicStack);
+// Name of the parameter that controls the experiment type for the Lens Shop
+// tip, determining whether or not a product image is displayed.
+extern const char kTipsLensShopExperimentType[];
+
+// Defines the different experiment arms for the Lens Shop tip, which
+// determine whether or not a product image is displayed (if available).
+enum class TipsLensShopExperimentType {
+  // The experiment arm that shows the product image (if available) in the
+  // Lens Shop tip.
+  kWithProductImage = 0,
+  // The experiment arm that does not show the product image in the Lens shop
+  // tip.
+  kWithoutProductImage = 1,
+};
+
+// Name of the parameter that controls the experiment type for the Enhanced Safe
+// Browsing tip, determining whether to show the animated, instructional promo
+// or the Safe Browsing settings page.
+extern const char kTipsSafeBrowsingExperimentType[];
+
+// Defines the different experiment arms for the Enhanced Safe Browsing tip.
+enum class TipsSafeBrowsingExperimentType {
+  // Shows the animated, instructional Enhanced Safe Browsing promo.
+  kShowEnhancedSafeBrowsingPromo = 0,
+  // Shows the Safe Browsing settings page.
+  kShowSafeBrowsingSettingsPage = 1,
+};
 
 // Feature flag to enable Shared Highlighting (Link to Text).
 BASE_DECLARE_FEATURE(kSharedHighlightingIOS);
@@ -122,19 +188,19 @@ extern const char kModernTabStripParameterName[];
 extern const char kModernTabStripNTBDynamicParam[];
 extern const char kModernTabStripNTBStaticParam[];
 
-// Feature parameter for V2 of Modern Tab Strip and its params.
-extern const char kModernTabStripV2ParameterName[];
-extern const char kModernTabStripCloserNTBParam[];
-extern const char kModernTabStripDarkerBackgroundParam[];
-extern const char kModernTabStripCloserNTBDarkerBackgroundParam[];
-extern const char kModernTabStripNTBNoBackgroundParam[];
-extern const char kModernTabStripBlackBackgroundParam[];
+// Feature parameters for V2 of Modern Tab Strip.
+extern const char kModernTabStripCloserNTB[];
+extern const char kModernTabStripDarkerBackground[];
+extern const char kModernTabStripNTBNoBackground[];
+extern const char kModernTabStripBlackBackground[];
+extern const char kModernTabStripBiggerNTB[];
 
-// Feature parameter (bool) for the bigger close target.
-extern const char kModernTabStripBiggerCloseTargetName[];
-
-// Whether the close button should have a bigger close target.
-bool TabStripBiggerCloseTargetEnabled();
+// Feature parameters for V3 of Modern Tab Strip.
+extern const char kModernTabStripDarkerBackgroundV3[];
+extern const char kModernTabStripCloseButtonsVisible[];
+extern const char kModernTabStripInactiveTabsHighContrast[];
+extern const char kModernTabStripHighContrastNTB[];
+extern const char kModernTabStripDetachedTabs[];
 
 // Feature flag that allows external apps to show default browser settings.
 BASE_DECLARE_FEATURE(kDefaultBrowserIntentsShowSettings);
@@ -216,16 +282,6 @@ const base::TimeDelta InactiveThresholdForNewUsersUntilDockingPromoShown();
 // Promo to old users.
 const base::TimeDelta InactiveThresholdForOldUsersUntilDockingPromoShown();
 
-// Feature flag to enable the non-modal DB promo cooldown refactor separating
-// the cooldown periods for full screen and non-modal promos, as well as
-// Finchable cooldown period for non-modal promos.
-BASE_DECLARE_FEATURE(kNonModalDefaultBrowserPromoCooldownRefactor);
-
-// The default param value for the non-modal promo cooldown period, in days,
-// overridable through Finch.
-extern const base::FeatureParam<int>
-    kNonModalDefaultBrowserPromoCooldownRefactorParam;
-
 // Feature flag to hide search web in the edit menu.
 BASE_DECLARE_FEATURE(kIOSEditMenuHideSearchWeb);
 
@@ -251,6 +307,12 @@ BASE_DECLARE_FEATURE(kEnableLensInOmniboxCopiedImage);
 // Feature flag to enable the Lens "Search copied image" omnibox entrypoint.
 BASE_DECLARE_FEATURE(kEnableLensOverlay);
 extern const base::NotFatalUntil kLensOverlayNotFatalUntil;
+
+// Feature to force allow iPad support of lens overlay.
+BASE_DECLARE_FEATURE(kLensOverlayEnableIPadCompatibility);
+
+// Feature to open lens overlay navigation in the same tab.
+BASE_DECLARE_FEATURE(kLensOverlayEnableSameTabNavigation);
 
 // Feature to enable force showing the lens overlay onboarding screen.
 BASE_DECLARE_FEATURE(kLensOverlayForceShowOnboardingScreen);
@@ -341,6 +403,9 @@ BASE_DECLARE_FEATURE(kOnlyAccessClipboardAsync);
 // Feature flag to try using the page theme color in the top toolbar
 BASE_DECLARE_FEATURE(kThemeColorInTopToolbar);
 
+// Whether the Safety Check Manager can automatically trigger Safety Checks.
+bool IsSafetyCheckAutorunByManagerEnabled();
+
 // Whether the Safety Check module should be shown in the Magic Stack.
 bool IsSafetyCheckMagicStackEnabled();
 
@@ -350,8 +415,32 @@ bool ShouldHideSafetyCheckModuleIfNoIssues();
 // Whether Safety Check Push Notifications should be sent to the user.
 bool IsSafetyCheckNotificationsEnabled();
 
+// Checks if Passwords notifications are permitted to be sent to the user
+// for Safety Check, based on the Finch parameter
+// `kSafetyCheckAllowPasswordsNotifications`.
+bool AreSafetyCheckPasswordsNotificationsAllowed();
+
+// Checks if Safe Browsing notifications are permitted to be sent to the user
+// for Safety Check, based on the Finch parameter
+// `kSafetyCheckAllowSafeBrowsingNotifications`.
+bool AreSafetyCheckSafeBrowsingNotificationsAllowed();
+
+// Checks if Update Chrome notifications are permitted to be sent to the user
+// for Safety Check, based on the Finch parameter
+// `kSafetyCheckAllowUpdateChromeNotifications`.
+bool AreSafetyCheckUpdateChromeNotificationsAllowed();
+
 // Whether the Tips module should be shown in the Magic Stack.
 bool IsTipsMagicStackEnabled();
+
+// Returns the experiment type for the Lens Shop tip, which determines
+// whether or not a product image is displayed (if available).
+TipsLensShopExperimentType TipsLensShopExperimentTypeEnabled();
+
+// Returns the experiment type for the Enhanced Safe Browsing tip, which
+// determines whether to show the animated, instructional promo or the Safe
+// Browsing settings page.
+TipsSafeBrowsingExperimentType TipsSafeBrowsingExperimentTypeEnabled();
 
 // Whether the refactored implementation of the `OmahaService` is enabled.
 bool IsOmahaServiceRefactorEnabled();
@@ -588,6 +677,10 @@ bool IsIOSLargeFakeboxEnabled();
 // Whether or not the kIOSKeyboardAccessoryUpgrade feature is enabled.
 bool IsKeyboardAccessoryUpgradeEnabled();
 
+// Whether or not the kIOSKeyboardAccessoryUpgradeShortManualFillMenu feature is
+// enabled.
+bool IsKeyboardAccessoryUpgradeWithShortManualFillMenuEnabled();
+
 // Feature for the Magic Stack.
 BASE_DECLARE_FEATURE(kMagicStack);
 
@@ -597,23 +690,30 @@ BASE_DECLARE_FEATURE(kTabResumption);
 // Feature that enables enhancements for Tab Resumption.
 BASE_DECLARE_FEATURE(kTabResumption1_5);
 
-// A parameter to indicate whether the Tab resumption tile should use salient
-// images.
-extern const char kTR15SalientImageParam[];
-
-// A value for `kTR15SalientImageParam` to enable thumbnails images for local
-// tabs and not salient images.
-extern const char kTR15SalientImageThumbnailsOnly[];
-
 // A parameter to indicate whether the Tab resumption tile should have a see
 // more button.
 extern const char kTR15SeeMoreButtonParam[];
 
+// Feature that enables images for Tab Resumption.
+BASE_DECLARE_FEATURE(kTabResumptionImages);
+
+// A parameter to choose what type of images are enabled in
+// `kTabResumptionImages` experiment (default to all).
+extern const char kTabResumptionImagesTypes[];
+
+// A parameter value for `kTabResumptionImagesTypes` to only enable salient
+// images images for tab resumption.
+extern const char kTabResumptionImagesTypesSalient[];
+
+// A parameter value for `kTabResumptionImagesTypes` to only enable thumbnails
+// images images for tab resumption.
+extern const char kTabResumptionImagesTypesThumbnails[];
+
 // Feature that enables tab resumption 2.0.
 BASE_DECLARE_FEATURE(kTabResumption2);
 
-// The parameter to enable Tab resumption 2 bubble.
-extern const char kTabResumption2BubbleParam[];
+// Feature that enables tab resumption 2.0 reason bubble.
+BASE_DECLARE_FEATURE(kTabResumption2Reason);
 
 // A parameter to indicate whether the Most Visited Tiles should be in the Magic
 // Stack.
@@ -654,7 +754,7 @@ bool IsTabResumptionEnabled();
 bool IsTabResumption2_0Enabled();
 
 // Whether to show the reason bubble for Tab resumption.
-bool IsTabResumption2BubbleEnabled();
+bool IsTabResumption2ReasonEnabled();
 
 // Whether the tab resumption feature is enabled for most recent tab only.
 bool IsTabResumptionEnabledForMostRecentTabOnly();
@@ -662,15 +762,15 @@ bool IsTabResumptionEnabledForMostRecentTabOnly();
 // Whether the tab resumption enhancements feature is enabled.
 bool IsTabResumption1_5Enabled();
 
-// Whether the tab resumption with salient images for distant tabs (or fallback
-// for local tabs) is enabled.
-bool IsTabResumption1_5SalientImageEnabled();
-
-// Whether the tab resumption with salient images for local tabs is enabled.
-bool IsTabResumption1_5ThumbnailsImageEnabled();
-
 // Whether the tab resumption with see more button is enabled.
 bool IsTabResumption1_5SeeMoreEnabled();
+
+// Whether the tab resumption with salient images for distant tabs (or fallback
+// for local tabs) is enabled.
+bool IsTabResumptionImagesSalientEnabled();
+
+// Whether the tab resumption with salient images for local tabs is enabled.
+bool IsTabResumptionImagesThumbnailsEnabled();
 
 // Convenience method for determining the tab resumption time threshold for
 // X-Devices tabs only.
@@ -724,9 +824,6 @@ extern const char kIOSTipsNotificationsDismissLimitParam[];
 // Helper for whether Tips Notifications are enabled.
 bool IsIOSTipsNotificationsEnabled();
 
-// Feature flag to disable fullscreen scrolling logic.
-BASE_DECLARE_FEATURE(kDisableFullscreenScrolling);
-
 // Convenience method for determining if Pinned Tabs is enabled.
 // The Pinned Tabs feature is fully enabled on iPhone and disabled on iPad.
 bool IsPinnedTabsEnabled();
@@ -734,17 +831,8 @@ bool IsPinnedTabsEnabled();
 // Feature flag for caching the ios module ranker.
 BASE_DECLARE_FEATURE(kSegmentationPlatformIosModuleRankerCaching);
 
-// Feature to enable the Segmentation Tips Manager for Chrome iOS.
-BASE_DECLARE_FEATURE(kSegmentationTipsManager);
-
 // Whether the Segmentation Tips Manager is enabled for Chrome iOS.
 bool IsSegmentationTipsManagerEnabled();
-
-// Feature flag for default browser promo experimental string for iPad.
-BASE_DECLARE_FEATURE(kDefaultBrowserPromoIPadExperimentalString);
-
-// Returns `YES` if the title and subtitle should be tailored for iPad.
-BOOL UseIPadTailoredStringForDefaultBrowserPromo();
 
 // Flag to not keep a strong reference to the spotlight index, as a tentative
 // memory improvement measure.
@@ -815,5 +903,23 @@ BASE_DECLARE_FEATURE(kBlueDotOnToolsMenuButton);
 
 // Returns whether `kBlueDotOnToolsMenuButton` is enabled.
 bool IsBlueDotOnToolsMenuButtoneEnabled();
+
+// Feature flag to assign each managed account to its own separate profile.
+BASE_DECLARE_FEATURE(kSeparateProfilesForManagedAccounts);
+
+// Feature to control resyncing the omaha ping timer on foregrounding.
+BASE_DECLARE_FEATURE(kOmahaResyncTimerOnForeground);
+
+// Feature to support post-profile switch actions support.
+BASE_DECLARE_FEATURE(kPostProfileSwitchActions);
+
+// Feature flag to use the async version of the chrome startup method.
+BASE_DECLARE_FEATURE(kChromeStartupParametersAsync);
+
+// Feature flag to enable Reactivation Notifications.
+BASE_DECLARE_FEATURE(kIOSReactivationNotifications);
+
+// Returns whether `kIOSReactivationNotifications` is enabled.
+bool IsIOSReactivationNotificationsEnabled();
 
 #endif  // IOS_CHROME_BROWSER_SHARED_PUBLIC_FEATURES_FEATURES_H_

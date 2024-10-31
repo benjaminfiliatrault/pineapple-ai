@@ -83,9 +83,7 @@ ProductSpecificationsEntryPointController::
     ProductSpecificationsEntryPointController(BrowserWindowInterface* browser)
     : browser_(browser) {
   CHECK(browser_);
-  if (browser_->GetProfile()->IsRegularProfile()) {
-    browser_->GetTabStripModel()->AddObserver(this);
-  }
+  browser_->GetTabStripModel()->AddObserver(this);
   shopping_service_ =
       ShoppingServiceFactory::GetForBrowserContext(browser_->GetProfile());
   if (shopping_service_) {
@@ -164,6 +162,7 @@ void ProductSpecificationsEntryPointController::OnEntryPointExecuted() {
       static_cast<int>(shopping_service::mojom::
                            ProductSpecificationsDisclosureVersion::kV1)) {
     DialogArgs dialog_args(urls_in_set, current_entry_point_info_->title,
+                           /*set_id=*/"",
                            /*in_new_tab=*/true);
     ProductSpecificationsDisclosureDialog::ShowDialog(
         browser_->GetProfile(),
@@ -231,12 +230,8 @@ bool ProductSpecificationsEntryPointController::ShouldExecuteEntryPointShow() {
 
 void ProductSpecificationsEntryPointController::OnClusterFinishedForNavigation(
     const GURL& url) {
-  // Cluster finished for a navigation that didn't happen in this window, or the
-  // clustering took so long to finish that the user has navigated away.
-  GURL current_url = browser_->GetTabStripModel()
-                         ->GetActiveWebContents()
-                         ->GetLastCommittedURL();
-  if (current_url != url || !cluster_manager_) {
+  // Cluster finished for a navigation that didn't happen in this window.
+  if (!browser_->IsActive()) {
     return;
   }
 
@@ -363,11 +358,6 @@ void ProductSpecificationsEntryPointController::ShowEntryPointWithTitle(
   // offer the entry point.
   if (!CanFetchProductSpecificationsData(
           shopping_service_->GetAccountChecker())) {
-    return;
-  }
-
-  // Entry point should never show for windows with non-regular profile.
-  if (!browser_->GetProfile()->IsRegularProfile()) {
     return;
   }
 

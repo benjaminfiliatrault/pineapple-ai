@@ -10,12 +10,14 @@ import {RectUtil} from '/common/rect_util.js';
 import {TestImportManager} from '/common/testing/test_import_manager.js';
 import type {FaceLandmarkerResult} from '/third_party/mediapipe/vision.js';
 
+import {BubbleController} from './bubble_controller.js';
 import {ScrollModeController} from './scroll_mode_controller.js';
 
 import AutomationNode = chrome.automation.AutomationNode;
 import RoleType = chrome.automation.RoleType;
 import ScreenRect = chrome.accessibilityPrivate.ScreenRect;
 import ScreenPoint = chrome.accessibilityPrivate.ScreenPoint;
+import SyntheticMouseEventButton = chrome.accessibilityPrivate.SyntheticMouseEventButton;
 
 type PrefObject = chrome.settingsPrivate.PrefObject;
 
@@ -86,8 +88,11 @@ export class MouseController {
   private desktop_: AutomationNode|undefined;
 
   private scrollModeController_: ScrollModeController;
+  private bubbleController_: BubbleController;
+  private longClickActive_ = false;
 
-  constructor() {
+  constructor(bubbleController: BubbleController) {
+    this.bubbleController_ = bubbleController;
     this.onMouseMovedHandler_ = new EventHandler(
         [], chrome.automation.EventType.MOUSE_MOVED,
         event => this.onMouseMovedOrDragged_(event));
@@ -125,6 +130,10 @@ export class MouseController {
 
   isScrollModeActive(): boolean {
     return this.scrollModeController_.active();
+  }
+
+  isLongClickActive(): boolean {
+    return this.longClickActive_;
   }
 
   async start(): Promise<void> {
@@ -168,10 +177,6 @@ export class MouseController {
     // Start the logic to move the mouse.
     this.mouseInterval_ = setInterval(
         () => this.updateMouseLocation_(), MouseController.MOUSE_INTERVAL_MS);
-  }
-
-  updateLandmarkWeights(weights: Map<string, number>): void {
-    this.landmarkWeights_ = weights;
   }
 
   /** Update the current location of the tracked face landmark. */
@@ -269,11 +274,13 @@ export class MouseController {
       scaledVel.y *= this.applySigmoidAcceleration_(scaledVel.y);
     }
 
-    if (!this.exceedsVelocityThreshold_(scaledVel.x) &&
+    if (!this.scrollModeController_.active() &&
+        !this.exceedsVelocityThreshold_(scaledVel.x) &&
         !this.exceedsVelocityThreshold_(scaledVel.y)) {
       // The velocity threshold wasn't exceeded, so we shouldn't update the
       // mouse location. We do this to avoid unintended jitteriness of the
-      // mouse.
+      // mouse. When we're in scroll mode, we don't want to apply the velocity
+      // threshold because we're not visibly moving the mouse.
       return;
     }
 
@@ -311,7 +318,8 @@ export class MouseController {
         // If gravity is enabled, adjust the cursor position.
         mappedLocation = this.mapPoint_(mappedLocation);
       }
-      EventGenerator.sendMouseMove(mappedLocation.x, mappedLocation.y);
+      EventGenerator.sendMouseMove(
+          mappedLocation.x, mappedLocation.y, {useRewriters: true});
       chrome.accessibilityPrivate.setCursorPosition(mappedLocation);
     }
   }
@@ -504,6 +512,12 @@ export class MouseController {
   }
 
   stop(): void {
+    if (this.longClickActive_ && this.mouseLocation_) {
+      // Release the existing long click action when the mouse controller is
+      // stopped to ensure we do not leave the user in a permanent "drag" state.
+      EventGenerator.sendMouseRelease(
+          this.mouseLocation_.x, this.mouseLocation_.y);
+    }
     if (this.mouseInterval_ !== -1) {
       clearInterval(this.mouseInterval_);
       this.mouseInterval_ = -1;
@@ -534,6 +548,34 @@ export class MouseController {
 
   toggleScrollMode(): void {
     this.scrollModeController_.toggle(this.mouseLocation_, this.screenBounds_);
+    if (!this.isScrollModeActive()) {
+      this.bubbleController_.resetBubble();
+    }
+  }
+
+  toggleLongClick(): void {
+    if (!this.mouseLocation_) {
+      return;
+    }
+
+    this.longClickActive_ = !this.longClickActive_;
+
+    if (this.longClickActive_) {
+      EventGenerator.sendMousePress(
+          this.mouseLocation_.x, this.mouseLocation_.y,
+          SyntheticMouseEventButton.LEFT);
+      // Enable the DragEventRewriter so that mouse moved events get rewritten
+      // into mouse dragged events.
+      chrome.accessibilityPrivate.enableDragEventRewriter(true);
+    } else {
+      EventGenerator.sendMouseRelease(
+          this.mouseLocation_.x, this.mouseLocation_.y);
+      chrome.accessibilityPrivate.enableDragEventRewriter(false);
+    }
+
+    if (!this.isLongClickActive()) {
+      this.bubbleController_.resetBubble();
+    }
   }
 
   /** Listener for when the mouse position changes. */
@@ -544,6 +586,19 @@ export class MouseController {
       // Assume all synthesized mouse movements come from within FaceGaze.
       this.mouseLocation_ = {x: event.mouseX, y: event.mouseY};
       this.lastMouseMovedTime_ = new Date().getTime();
+
+      if (this.scrollModeController_.active()) {
+        // Scroll mode honors physical mouse movements.
+        this.scrollModeController_.updateScrollLocation(this.mouseLocation_);
+      }
+
+      if (this.longClickActive_) {
+        // Send a synthetic drag event from the user's mouse move event.
+        // FaceGaze cursor control should already have sent a synthetic drag
+        // event, so this only needs to occur on user mouse movements.
+        EventGenerator.sendMouseMove(
+            event.mouseX, event.mouseY, {useRewriters: true});
+      }
     }
   }
 
@@ -648,15 +703,6 @@ export class MouseController {
             this.calcVelocityThreshold_();
           }
           break;
-        case MouseController.PREF_CURSOR_SMOOTHING:
-          if (pref.value) {
-            this.targetBufferSize_ = pref.value;
-            this.calcSmoothKernel_();
-            while (this.buffer_.length > this.targetBufferSize_) {
-              this.buffer_.shift();
-            }
-          }
-          break;
         case MouseController.PREF_CURSOR_USE_ACCELERATION:
           if (pref.value !== undefined) {
             this.useMouseAcceleration_ = pref.value;
@@ -718,6 +764,14 @@ export class MouseController {
   setVelocityThresholdForTesting(useThreshold: boolean): void {
     this.useVelocityThreshold_ = useThreshold;
   }
+
+  setBufferSizeForTesting(size: number): void {
+    this.targetBufferSize_ = size;
+    this.calcSmoothKernel_();
+    while (this.buffer_.length > this.targetBufferSize_) {
+      this.buffer_.shift();
+    }
+  }
 }
 
 export namespace MouseController {
@@ -757,8 +811,6 @@ export namespace MouseController {
   export const PREF_SPD_DOWN = 'settings.a11y.face_gaze.cursor_speed_down';
   export const PREF_SPD_LEFT = 'settings.a11y.face_gaze.cursor_speed_left';
   export const PREF_SPD_RIGHT = 'settings.a11y.face_gaze.cursor_speed_right';
-  export const PREF_CURSOR_SMOOTHING =
-      'settings.a11y.face_gaze.cursor_smoothing';
   export const PREF_CURSOR_USE_ACCELERATION =
       'settings.a11y.face_gaze.cursor_use_acceleration';
   export const PREF_VELOCITY_THRESHOLD =

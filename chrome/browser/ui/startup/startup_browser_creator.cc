@@ -41,7 +41,6 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/platform_apps/app_load_service.h"
 #include "chrome/browser/apps/platform_apps/platform_app_launch.h"
-#include "chrome/browser/ash/crosapi/browser_data_migrator.h"
 #include "chrome/browser/ash/floating_workspace/floating_workspace_service_factory.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
@@ -594,14 +593,25 @@ std::optional<ash::KioskAppId> GetAppId(const base::CommandLine& command_line,
                                         Profile* profile) {
   const user_manager::User* user =
       ash::ProfileHelper::Get()->GetUserByProfile(profile);
-  if (user && user->GetType() == user_manager::UserType::kKioskApp) {
-    return ash::KioskAppId::ForChromeApp(
-        command_line.GetSwitchValueASCII(::switches::kAppId),
-        user->GetAccountId());
-  } else if (user && user->GetType() == user_manager::UserType::kWebKioskApp) {
-    return ash::KioskAppId::ForWebApp(user->GetAccountId());
-  } else {
+
+  if (!user) {
     return std::nullopt;
+  }
+
+  switch (user->GetType()) {
+    case user_manager::UserType::kKioskApp:
+      return ash::KioskAppId::ForChromeApp(
+          command_line.GetSwitchValueASCII(::switches::kAppId),
+          user->GetAccountId());
+    case user_manager::UserType::kWebKioskApp:
+      return ash::KioskAppId::ForWebApp(user->GetAccountId());
+    case user_manager::UserType::kKioskIWA:
+      return ash::KioskAppId::ForIsolatedWebApp(user->GetAccountId());
+    case user_manager::UserType::kRegular:
+    case user_manager::UserType::kChild:
+    case user_manager::UserType::kGuest:
+    case user_manager::UserType::kPublicAccount:
+      return std::nullopt;
   }
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -944,13 +954,6 @@ bool StartupBrowserCreator::ShouldLoadProfileWithoutWindow(
   if (command_line.HasSwitch(switches::kNoStartupWindow))
     return true;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // If Lacros is enabled, do not open an Ash browser window.
-  if (crosapi::browser_util::IsLacrosEnabled()) {
-    return true;
-  }
-#endif
-
   return false;
 }
 
@@ -1039,24 +1042,8 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
     silent_launch = true;
 
     if (auto app_id = GetAppId(command_line, profile); app_id.has_value()) {
-      if (ash::BrowserDataMigratorImpl::IsFirstLaunchAfterMigration(
-              g_browser_process->local_state())) {
-        // After a lacros migration the kiosk app should not go through the
-        // crash recovery flow but instead use the full launch process, since
-        // the crash recovery flow does not wait for the force installed
-        // extensions to be installed.
-        // Force the full launch by going back to the login screen and remember
-        // the app to be launched in the local state.
-        LOG(INFO) << "Forcing the kiosk user to log out since it's the first "
-                     "launch after a migration";
-        ash::SetOneTimeAutoLaunchKioskAppId(*g_browser_process->local_state(),
-                                            app_id.value());
-        chrome::AttemptUserExit();
-        return false;
-      } else {
-        ash::KioskController::Get().StartSessionAfterCrash(app_id.value(),
-                                                           profile);
-      }
+      ash::KioskController::Get().StartSessionAfterCrash(app_id.value(),
+                                                         profile);
     } else {
       // If we are here, the user is invalid.
       // We should terminate the session in such cases.

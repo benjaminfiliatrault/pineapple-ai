@@ -10,10 +10,10 @@
 #include "base/containers/queue.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/input/events_helper.h"
 #include "components/input/render_widget_host_view_input.h"
 #include "components/input/web_touch_event_traits.h"
 #include "content/browser/renderer_host/input/motion_event_web.h"
-#include "content/common/input/events_helper.h"
 #include "content/grit/content_resources.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
@@ -21,7 +21,7 @@
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
-#include "ui/base/ui_base_types.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
@@ -194,7 +194,7 @@ bool TouchEmulatorImpl::HandleMouseEvent(
     client_->ShowContextMenuAtPoint(
         gfx::Point(mouse_event.PositionInWidget().x(),
                    mouse_event.PositionInWidget().y()),
-        ui::MENU_SOURCE_MOUSE, target_view);
+        ui::mojom::MenuSourceType::kMouse, target_view);
   }
 
   if (mouse_event.button != WebMouseEvent::Button::kLeft)
@@ -335,7 +335,7 @@ bool TouchEmulatorImpl::HandleTouchEventAck(
     if (gesture_provider_) {
       gesture_provider_->OnTouchEventAck(
           event.unique_touch_event_id, event_consumed,
-          InputEventResultStateIsSetBlocking(ack_result));
+          input::InputEventResultStateIsSetBlocking(ack_result));
     }
     if (pending_taps_count_ == taps_count_before)
       OnInjectedTouchCompleted();

@@ -43,6 +43,7 @@
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/test/permissions_manager_waiter.h"
 #include "extensions/test/test_extension_dir.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -58,6 +59,16 @@ using ::testing::ElementsAre;
 
 class ExtensionsMenuViewInteractiveUITest : public ExtensionsToolbarUITest {
  public:
+  ExtensionsMenuViewInteractiveUITest() {
+    // kExtensionsMenuAccessControl uses a different menu. Thus, disable the
+    // feature while it's being rolled out so we make sure existent behaver is
+    // still being tested.
+    // TODO(crbug.com/40857680): Remove all these tests once
+    // kExtensionsMenuAccessControl is fully enabled.
+    scoped_feature_list_.InitAndDisableFeature(
+        extensions_features::kExtensionsMenuAccessControl);
+  }
+
   static base::flat_set<raw_ptr<ExtensionMenuItemView, CtnExperimental>>
   GetExtensionMenuItemViews() {
     return ExtensionsMenuView::GetExtensionsMenuViewForTesting()
@@ -235,14 +246,15 @@ class ExtensionsMenuViewInteractiveUITest : public ExtensionsToolbarUITest {
   }
 
   void ClickExtensionsMenuButton(Browser* browser) {
-    ClickButton(BrowserView::GetBrowserViewForBrowser(browser)
-                    ->toolbar()
-                    ->GetExtensionsButton());
+    ClickButton(browser->GetBrowserView().toolbar()->GetExtensionsButton());
   }
 
   void ClickExtensionsMenuButton() { ClickExtensionsMenuButton(browser()); }
 
+ private:
   std::string ui_test_name_;
+
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(ExtensionsMenuViewInteractiveUITest, InvokeUi_default) {
@@ -307,9 +319,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionsMenuViewInteractiveUITest,
                        ExtensionsMenuButtonHighlight) {
   LoadTestExtension("extensions/uitest/window_open");
   ClickExtensionsMenuButton();
-  EXPECT_EQ(views::InkDrop::Get(BrowserView::GetBrowserViewForBrowser(browser())
-                                    ->toolbar()
-                                    ->GetExtensionsButton())
+  EXPECT_EQ(views::InkDrop::Get(
+                browser()->GetBrowserView().toolbar()->GetExtensionsButton())
                 ->GetInkDrop()
                 ->GetTargetInkDropState(),
             views::InkDropState::ACTIVATED);
@@ -394,9 +405,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionsMenuViewInteractiveUITest,
   TriggerSingleExtensionButton();
 
   ExtensionsContainer* const extensions_container =
-      BrowserView::GetBrowserViewForBrowser(browser())
-          ->toolbar()
-          ->extensions_container();
+      browser()->GetBrowserView().toolbar()->extensions_container();
   std::optional<extensions::ExtensionId> action_id =
       extensions_container->GetPoppedOutActionId();
   ASSERT_NE(std::nullopt, action_id);
@@ -421,9 +430,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionsMenuViewInteractiveUITest,
   TriggerExtensionButton(id1);
 
   ExtensionsContainer* const extensions_container =
-      BrowserView::GetBrowserViewForBrowser(browser())
-          ->toolbar()
-          ->extensions_container();
+      browser()->GetBrowserView().toolbar()->extensions_container();
   ASSERT_NE(std::nullopt, extensions_container->GetPoppedOutActionId());
 
   auto* extension_service =
@@ -453,9 +460,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionsMenuViewInteractiveUITest,
   destroyed_waiter.Wait();
 
   ExtensionsContainer* const extensions_container =
-      BrowserView::GetBrowserViewForBrowser(browser())
-          ->toolbar()
-          ->extensions_container();
+      browser()->GetBrowserView().toolbar()->extensions_container();
 
   // This test should not use a popped-out action, as we want to make sure that
   // the menu closes on its own and not because a popup dialog replaces it.
@@ -702,8 +707,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionsMenuViewInteractiveUITest,
       kHistogramName, ToolbarActionViewController::InvocationSource::kMenuEntry,
       1);
 
-  // TODO(devlin): Add a test for command invocation once
-  // https://crbug.com/1070305 is fixed.
+  // TODO(crbug.com/40684492): Add a test for command invocation once triggering
+  // an action via command with extensions menu opened is fixed.
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionsMenuViewInteractiveUITest,
@@ -838,8 +843,9 @@ IN_PROC_BROWSER_TEST_P(ActivateWithReloadExtensionsMenuInteractiveUITest,
   TriggerSingleExtensionButton();
 
   auto* const action_bubble =
-      BrowserView::GetBrowserViewForBrowser(browser())
-          ->toolbar()
+      browser()
+          ->GetBrowserView()
+          .toolbar()
           ->extensions_container()
           ->GetAnchoredWidgetForExtensionForTesting(extensions()[0]->id())
           ->widget_delegate()

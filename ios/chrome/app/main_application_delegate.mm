@@ -165,8 +165,9 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
   if (!self.didFinishLaunching)
     return;
 
-  if (_appState.initStage <= InitStageSafeMode)
+  if (_appState.initStage <= AppInitStage::kSafeMode) {
     return;
+  }
 
   // Instead of adding code here, consider if it could be handled by listening
   // for  UIApplicationWillterminate.
@@ -174,8 +175,9 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
 }
 
 - (void)applicationDidReceiveMemoryWarning:(UIApplication*)application {
-  if (_appState.initStage <= InitStageSafeMode)
+  if (_appState.initStage <= AppInitStage::kSafeMode) {
     return;
+  }
 
   [_memoryHelper handleMemoryPressure];
 }
@@ -193,7 +195,8 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
   // that it can happen before Chrome has properly initialized. In that case,
   // record the list of sessions to discard and clean them once Chrome is
   // initialized.
-  if (_appState.initStage <= InitStageBrowserObjectsForBackgroundHandlers) {
+  if (_appState.initStage <=
+      AppInitStage::kBrowserObjectsForBackgroundHandlers) {
     _sceneSessionsToDiscard = [sceneSessions copy];
     [_appState addObserver:self];
     return;
@@ -299,10 +302,9 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
     return;
   }
   // TODO(crbug.com/325613461): Associate downloads with a specific file path to
-  // determine which browser state / download service to use here.
+  // determine which profile / download service to use here.
   download::BackgroundDownloadService* download_service =
-      BackgroundDownloadServiceFactory::GetForProfile(
-          browser->GetBrowserState());
+      BackgroundDownloadServiceFactory::GetForProfile(browser->GetProfile());
   if (download_service) {
     download_service->HandleEventsForBackgroundURLSession(
         base::BindOnce(completionHandler));
@@ -346,8 +348,9 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
 }
 
 - (void)lastSceneWillEnterBackground:(NSNotification*)notification {
-  if (_appState.initStage <= InitStageSafeMode)
+  if (_appState.initStage <= AppInitStage::kSafeMode) {
     return;
+  }
 
   [_appState willResignActive];
 }
@@ -392,12 +395,13 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
 #pragma mark - AppStateObserver methods
 
 - (void)appState:(AppState*)appState
-    didTransitionFromInitStage:(InitStage)previousInitStage {
+    didTransitionFromInitStage:(AppInitStage)previousInitStage {
   DCHECK_EQ(_appState, appState);
 
-  // The app transitioned to InitStageBrowserObjectsForBackgroundHandlers
+  // The app transitioned to AppInitStage::kBrowserObjectsForBackgroundHandlers
   // or past that stage.
-  if (_appState.initStage >= InitStageBrowserObjectsForBackgroundHandlers) {
+  if (_appState.initStage >=
+      AppInitStage::kBrowserObjectsForBackgroundHandlers) {
     DCHECK(_sceneSessionsToDiscard);
     [_appState removeObserver:self];
     [_appState application:[UIApplication sharedApplication]
@@ -472,10 +476,10 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
     return NO;
   }
 
-  ChromeBrowserState* browserState = browser->GetBrowserState();
+  ProfileIOS* profile = browser->GetProfile();
 
-  return IsContentNotificationEnabled(browserState) ||
-         IsContentNotificationRegistered(browserState) ||
+  return IsContentNotificationEnabled(profile) ||
+         IsContentNotificationRegistered(profile) ||
          base::FeatureList::IsEnabled(
              send_tab_to_self::kSendTabToSelfIOSPushNotifications);
 }

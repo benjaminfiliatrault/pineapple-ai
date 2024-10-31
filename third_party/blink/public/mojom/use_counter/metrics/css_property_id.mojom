@@ -840,7 +840,7 @@ enum CSSSampleId {
     kInsetArea = 781,
     kViewTransitionClass = 782,
     kPositionTryOrder = 783,
-    kPositionTryOptions = 784,
+    // kPositionTryOptions = 784,
     kPositionTry = 785,
     kTextBoxEdge = 786,
     kReadingFlow = 787,
@@ -865,6 +865,8 @@ enum CSSSampleId {
     kTextWrapStyle = 806,
     kMasonryTrack = 807,
     kMasonrySlack = 808,
+    kCaretAnimation = 809,
+    kViewTransitionCaptureMode = 810,
 
     // 1. Add new features above this line (don't change the assigned numbers of
     //    the existing items).

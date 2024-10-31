@@ -7,13 +7,14 @@
 #include "ash/birch/birch_coral_grouped_icon_image.h"
 #include "ash/birch/birch_coral_provider.h"
 #include "ash/birch/birch_model.h"
+#include "ash/birch/coral_util.h"
 #include "ash/public/cpp/coral_delegate.h"
 #include "ash/public/cpp/saved_desk_delegate.h"
 #include "ash/shell.h"
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desks_controller.h"
+#include "ash/wm/overview/overview_controller.h"
 #include "base/barrier_callback.h"
-#include "base/json/json_writer.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 
@@ -23,6 +24,7 @@ namespace {
 
 constexpr int kCoralIconSize = 14;
 constexpr int kCoralAppIconDesiredSize = 64;
+constexpr int kCoralMaxSubIconsNum = 4;
 
 // Callback for the favicon load request in `GetFaviconImageCoral()`. If the
 // load fails, passes an empty `ui::ImageModel` to the `barrier_callback`.
@@ -48,6 +50,7 @@ void OnGotAppIconCoral(
     std::move(barrier_callback)
         .Run(std::move(ui::ImageModel::FromImageSkia(image)));
   } else {
+    // TODO(zxdan): Define a backup icon for apps.
     std::move(barrier_callback).Run(ui::ImageModel());
   }
 }
@@ -55,12 +58,13 @@ void OnGotAppIconCoral(
 // Draws the Coral grouped icon image with the loaded icons, and passes the
 // final result to `BirchChipButton`.
 void OnAllFaviconsRetrievedCoral(
-    base::OnceCallback<void(const ui::ImageModel&, SecondaryIconType)>
-        final_callback,
+    base::OnceCallback<void(const ui::ImageModel&)> final_callback,
+    int extra_number,
     const std::vector<ui::ImageModel>& loaded_icons) {
   std::vector<gfx::ImageSkia> resized_icons;
 
   for (const auto& loaded_icon : loaded_icons) {
+    // TODO(zxdan): Once all favicons have backup icons, change this to CHECK.
     if (!loaded_icon.IsEmpty()) {
       // Only a `ui::ImageModel` constructed from a `gfx::ImageSkia` produces a
       // valid result from `GetImage()`. Vector icons will not work.
@@ -71,28 +75,22 @@ void OnAllFaviconsRetrievedCoral(
     }
   }
 
-  // TODO(owenzhang): Hook up correct extra_number calculation.
   ui::ImageModel composed_image =
       CoralGroupedIconImage::DrawCoralGroupedIconImage(
-          /*icons_images=*/resized_icons, /*extra_tabs_number=*/7);
+          /*icons_images=*/resized_icons, extra_number);
 
-  std::move(final_callback)
-      .Run(std::move(composed_image), SecondaryIconType::kNoIcon);
+  std::move(final_callback).Run(std::move(composed_image));
 }
 
 }  // namespace
 
 BirchCoralItem::BirchCoralItem(const std::u16string& coral_title,
                                const std::u16string& coral_text,
-                               const std::vector<GURL>& page_urls,
-                               const std::vector<std::string>& app_ids,
-                               int cluster_id)
+                               CoralSource source,
+                               const base::Token& group_id)
     : BirchItem(coral_title, coral_text),
-      page_urls_(page_urls),
-      app_ids_(app_ids),
-      cluster_id_(cluster_id) {
-  set_addon_label(u"Show");
-}
+      source_(source),
+      group_id_(group_id) {}
 
 BirchCoralItem::BirchCoralItem(BirchCoralItem&&) = default;
 
@@ -112,64 +110,93 @@ std::string BirchCoralItem::ToString() const {
   auto root = base::Value::Dict().Set(
       "Coral item",
       base::Value::Dict().Set("Title", title()).Set("Subtitle", subtitle()));
-  return base::WriteJson(root).value_or(std::string());
+  return root.DebugString();
 }
 
-void BirchCoralItem::PerformAction(bool is_post_login) {
-  // TODO(sammiequon): Remove hardcoded group.
-  coral::mojom::GroupPtr temp_group = coral::mojom::Group::New();
-  temp_group->title = "Coral desk";
-  temp_group->entities.push_back(
-      coral::mojom::EntityKey::NewTabUrl(GURL("https://www.ikea.com/")));
-  temp_group->entities.push_back(
-      coral::mojom::EntityKey::NewTabUrl(GURL("https://www.nhl.com/")));
-
-  // Pick first half of the tabs from request for testing.
-  const auto& request_items =
-      BirchCoralProvider::Get()->GetCoralRequestForTest().content();
-  std::vector<coral::mojom::TabPtr> tabs;
-  for (const auto& item : request_items) {
-    if (item->is_tab()) {
-      tabs.push_back(std::move(item->get_tab()));
+base::Value::Dict BirchCoralItem::ToCoralItemDetails() const {
+  const coral::mojom::GroupPtr& group =
+      BirchCoralProvider::Get()->GetGroupById(group_id_);
+  base::Value::List items;
+  for (const auto& entity : group->entities) {
+    if (entity->is_tab()) {
+      items.Append(base::Value::Dict()
+                       .Set("type", "tab")
+                       .Set("title", entity->get_tab()->title)
+                       .Set("url", entity->get_tab()->url.spec()));
+    } else {
+      items.Append(base::Value::Dict()
+                       .Set("type", "app")
+                       .Set("title", entity->get_app()->title)
+                       .Set("id", entity->get_app()->id));
     }
   }
+  return std::move(
+      base::Value::Dict().Set("title", title()).Set("items", std::move(items)));
+}
 
-  for (size_t i = 0; i < tabs.size() / 2; i++) {
-    temp_group->entities.push_back(
-        coral::mojom::EntityKey::NewTabUrl(tabs[i]->url));
+void BirchCoralItem::PerformAction() {
+  coral::mojom::GroupPtr group =
+      BirchCoralProvider::Get()->ExtractGroupById(group_id_);
+
+  switch (source_) {
+    case CoralSource::kPostLogin:
+      Shell::Get()->coral_delegate()->LaunchPostLoginGroup(std::move(group));
+      BirchCoralProvider::Get()->OnPostLoginClusterRestored();
+      // End the Overview after restore.
+      // TODO(zxdan|sammie): Consider the restoring failed cases.
+      OverviewController::Get()->EndOverview(OverviewEndAction::kCoral,
+                                             OverviewEnterExitType::kNormal);
+      break;
+    case CoralSource::kInSession:
+      Shell::Get()->coral_controller()->OpenNewDeskWithGroup(std::move(group));
+      break;
+    case CoralSource::kUnknown:
+      NOTREACHED() << "Invalid response with unknown source.";
   }
-
-  // TODO(http://b/365839564): Handle save for later case.
-
-  // TODO(http://b/365839465): Handle post-login case.
-  if (is_post_login) {
-    Shell::Get()->coral_delegate()->LaunchPostLoginGroup(std::move(temp_group));
-    return;
-  }
-
-  Shell::Get()->coral_controller()->OpenNewDeskWithGroup(std::move(temp_group));
 }
 
 // TODO(b/362530155): Consider refactoring icon loading logic into
 // `CoralGroupedIconImage`.
 void BirchCoralItem::LoadIcon(LoadIconCallback original_callback) const {
-  // Barrier callback that collects the results of multiple favicon loads and
-  // runs the original load_icon callback.
-  const auto barrier_callback = base::BarrierCallback<const ui::ImageModel&>(
-      /*num_callbacks=*/page_urls_.size() + app_ids_.size(),
-      /*done_callback=*/base::BindOnce(OnAllFaviconsRetrievedCoral,
-                                       std::move(original_callback)));
+  const coral::mojom::GroupPtr& group =
+      BirchCoralProvider::Get()->GetGroupById(group_id_);
 
-  for (const auto& url : page_urls_) {
-    // For each `url`, retrieve the icon using favicon_service, and run the
+  const coral_util::TabsAndApps tabs_apps =
+      coral_util::SplitContentData(group->entities);
+
+  const int page_num = tabs_apps.tabs.size();
+  const int app_num = tabs_apps.apps.size();
+  const int total_count = page_num + app_num;
+
+  // If the total number of pages and apps exceeds the limit of number of sub
+  // icons, only show 3 icons and one extra number label. Otherwise, show all
+  // the icons.
+  const int icon_requests =
+      total_count > kCoralMaxSubIconsNum ? 3 : total_count;
+
+  // Barrier callback that collects the results of multiple favicon loads and
+  // runs the original load icon callback.
+  const auto barrier_callback = base::BarrierCallback<const ui::ImageModel&>(
+      /*num_callbacks=*/icon_requests,
+      /*done_callback=*/base::BindOnce(
+          OnAllFaviconsRetrievedCoral,
+          base::BindOnce(std::move(original_callback),
+                         PrimaryIconType::kCoralGroupIcon,
+                         SecondaryIconType::kNoIcon),
+          /*extra_number=*/total_count > icon_requests
+              ? total_count - icon_requests
+              : 0));
+
+  for (int i = 0; i < std::min(icon_requests, page_num); i++) {
+    // For each `url`, retrieve the icon using favicon service, and run the
     // `barrier_callback` with the image result.
-    GetFaviconImageCoral(url, barrier_callback);
+    GetFaviconImageCoral(tabs_apps.tabs[i].url, barrier_callback);
   }
 
-  for (const auto& id : app_ids_) {
+  for (int i = 0; i < icon_requests - page_num; i++) {
     // For each `id`, retrieve the icon using `saved_desk_delegate`, and run the
     // `barrier_callback` with the image result.
-    GetAppIconCoral(id, barrier_callback);
+    GetAppIconCoral(tabs_apps.apps[i].id, barrier_callback);
   }
 }
 
@@ -178,7 +205,9 @@ BirchAddonType BirchCoralItem::GetAddonType() const {
 }
 
 std::u16string BirchCoralItem::GetAddonAccessibleName() const {
-  return u"Show";
+  // The add on tooltip and a11y name is determined by the presence of the
+  // selection UI. It will be handled in `BirchChipButton`.
+  return u"Placeholder";
 }
 
 void BirchCoralItem::GetFaviconImageCoral(

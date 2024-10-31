@@ -55,6 +55,7 @@
 #include "components/password_manager/core/browser/webauthn_credentials_delegate.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/plus_addresses/features.h"
+#include "components/plus_addresses/grit/plus_addresses_strings.h"
 #include "components/plus_addresses/plus_address_service.h"
 #include "components/plus_addresses/plus_address_types.h"
 #include "components/resources/android/theme_resources.h"
@@ -94,14 +95,19 @@ autofill::UserInfo TranslateCredentials(const UiCredential& credential,
                    password_manager_util::GetLoginMatchType::kExact));
 
   std::u16string username = GetDisplayUsername(credential);
-  user_info.add_field(AccessorySheetField::Builder()
-                          .SetDisplayText(username)
-                          .SetSelectable(!credential.username().empty())
-                          .SetIconId(username_icon_id)
-                          .Build());
+  user_info.add_field(
+      AccessorySheetField::Builder()
+          .SetSuggestionType(
+              autofill::AccessorySuggestionType::kCredentialUsername)
+          .SetDisplayText(username)
+          .SetSelectable(!credential.username().empty())
+          .SetIconId(username_icon_id)
+          .Build());
 
   user_info.add_field(
       AccessorySheetField::Builder()
+          .SetSuggestionType(
+              autofill::AccessorySuggestionType::kCredentialPassword)
           .SetDisplayText(credential.password())
           .SetA11yDescription(l10n_util::GetStringFUTF16(
               IDS_PASSWORD_MANAGER_ACCESSORY_PASSWORD_DESCRIPTION, username))
@@ -654,50 +660,39 @@ PasswordAccessoryControllerImpl::CreateManagePasswordsFooter() const {
   footer_commands_to_add.emplace_back(
       manage_passwords_title, autofill::AccessoryAction::MANAGE_PASSWORDS);
 
-  if (base::FeatureList::IsEnabled(
-          plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled)) {
-    // Both `ContentAutofillClient and this controller are instances of the
-    // `WebContentsUserData`. There's no well-defined destruction order between
-    // two different `WebContentsUserData` objects. That's why
-    // `ContentAutofillClient` cannot be stored in a `raw_ptr` member variable
-    // like `PlusAddressService`.
-    auto* autofill_client =
-        autofill::ContentAutofillClient::FromWebContents(&GetWebContents());
-    if (autofill_client && plus_address_service_) {
-      // Offer plus address creation if it's supported for the current user
-      // session and if the user doesn't have any plus addresses created for the
-      // current domain.
-      if (plus_address_service_->IsPlusAddressCreationEnabled(
-              autofill_client->GetLastCommittedPrimaryMainFrameOrigin(),
-              autofill_client->IsOffTheRecord()) &&
-          plus_profiles_provider_ &&
-          plus_profiles_provider_->GetAffiliatedPlusProfiles().empty()) {
-        footer_commands_to_add.emplace_back(
-            l10n_util::GetStringUTF16(
-                IDS_PLUS_ADDRESS_CREATE_NEW_PLUS_ADDRESSES_LINK_ANDROID),
-            autofill::AccessoryAction::CREATE_PLUS_ADDRESS_FROM_PASSWORD_SHEET);
-      }
-      // Offer the user to select the plus address manually if plus address
-      // filling is supported for the last committed origin and the user has at
-      // least 1 plus address.
-      if (plus_address_service_->IsPlusAddressFillingEnabled(
-              autofill_client->GetLastCommittedPrimaryMainFrameOrigin()) &&
-          !plus_address_service_->GetPlusProfiles().empty()) {
-        footer_commands_to_add.emplace_back(
-            l10n_util::GetStringUTF16(
-                IDS_PLUS_ADDRESS_SELECT_PLUS_ADDRESS_LINK_ANDROID),
-            autofill::AccessoryAction::SELECT_PLUS_ADDRESS_FROM_PASSWORD_SHEET);
-      }
-      // Show "Manage plus addresses" action only if the user has at least 1
-      // affiliated plus addresses already saved for the current domain.
-      if (plus_profiles_provider_ &&
-          !plus_profiles_provider_->GetAffiliatedPlusProfiles().empty()) {
-        footer_commands_to_add.emplace_back(FooterCommand(
-            l10n_util::GetStringUTF16(
-                IDS_PLUS_ADDRESS_MANAGE_PLUS_ADDRESSES_LINK_ANDROID),
-            autofill::AccessoryAction::
-                MANAGE_PLUS_ADDRESS_FROM_PASSWORD_SHEET));
-      }
+  if (plus_address_service_) {
+    // Offer plus address creation if it's supported for the current user
+    // session and if the user doesn't have any plus addresses created for the
+    // current domain.
+    if (plus_address_service_->IsPlusAddressCreationEnabled(
+            password_client_->GetLastCommittedOrigin(),
+            password_client_->IsOffTheRecord()) &&
+        plus_profiles_provider_ &&
+        plus_profiles_provider_->GetAffiliatedPlusProfiles().empty()) {
+      footer_commands_to_add.emplace_back(
+          l10n_util::GetStringUTF16(
+              IDS_PLUS_ADDRESS_CREATE_NEW_PLUS_ADDRESSES_LINK_ANDROID),
+          autofill::AccessoryAction::CREATE_PLUS_ADDRESS_FROM_PASSWORD_SHEET);
+    }
+    // Offer the user to select the plus address manually if plus address
+    // filling is supported for the last committed origin and the user has at
+    // least 1 plus address.
+    if (plus_address_service_->IsPlusAddressFillingEnabled(
+            password_client_->GetLastCommittedOrigin()) &&
+        !plus_address_service_->GetPlusProfiles().empty()) {
+      footer_commands_to_add.emplace_back(
+          l10n_util::GetStringUTF16(
+              IDS_PLUS_ADDRESS_SELECT_PLUS_ADDRESS_LINK_ANDROID),
+          autofill::AccessoryAction::SELECT_PLUS_ADDRESS_FROM_PASSWORD_SHEET);
+    }
+    // Show "Manage plus addresses" action only if the user has at least 1
+    // affiliated plus addresses already saved for the current domain.
+    if (plus_profiles_provider_ &&
+        !plus_profiles_provider_->GetAffiliatedPlusProfiles().empty()) {
+      footer_commands_to_add.emplace_back(FooterCommand(
+          l10n_util::GetStringUTF16(
+              IDS_PLUS_ADDRESS_MANAGE_PLUS_ADDRESSES_LINK_ANDROID),
+          autofill::AccessoryAction::MANAGE_PLUS_ADDRESS_FROM_PASSWORD_SHEET));
     }
   }
 
@@ -846,7 +841,7 @@ void PasswordAccessoryControllerImpl::FillSelection(
     const AccessorySheetField& selection) {
   if (!AppearsInSuggestions(selection.display_text(), selection.is_obfuscated(),
                             GetFocusedFrameOrigin())) {
-    NOTREACHED_IN_MIGRATION() << "Tried to fill '" << selection.display_text()
+    DUMP_WILL_BE_NOTREACHED() << "Tried to fill '" << selection.display_text()
                               << "' into " << GetFocusedFrameOrigin();
     return;  // Never fill across different origins!
   }

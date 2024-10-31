@@ -36,6 +36,7 @@ import androidx.preference.PreferenceFragmentCompat;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
+import org.chromium.base.CallbackUtils;
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -50,7 +51,7 @@ import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.quick_delete.QuickDeleteController;
 import org.chromium.chrome.browser.settings.ProfileDependentSetting;
-import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
+import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
@@ -199,10 +200,6 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
 
     /** The tag used for logging. */
     public static final String TAG = "ClearBrowsingDataFragment";
-
-    /** The histogram for the dialog about other forms of browsing history. */
-    private static final String DIALOG_HISTOGRAM =
-            "History.ClearBrowsingData.ShownHistoryNoticeAfterClearing";
 
     /**
      * Used for the onActivityResult pattern. The value is arbitrary, just to distinguish from other
@@ -494,11 +491,9 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
             FragmentActivity fragmentActivity = (FragmentActivity) getActivity();
             mDialogAboutOtherFormsOfBrowsingHistory.show(fragmentActivity);
             dismissProgressDialog();
-            RecordHistogram.recordBooleanHistogram(DIALOG_HISTOGRAM, true);
         } else {
             dismissProgressDialog();
-            SettingsLauncherFactory.createSettingsLauncher().finishCurrentFragment(this);
-            RecordHistogram.recordBooleanHistogram(DIALOG_HISTOGRAM, false);
+            SettingsNavigationFactory.createSettingsNavigation().finishCurrentSettings(this);
         }
     }
 
@@ -796,12 +791,12 @@ public abstract class ClearBrowsingDataFragment extends PreferenceFragmentCompat
                 SignOutCoordinator.startSignOutFlow(
                         requireContext(),
                         mProfile,
-                        getFragmentManager(),
+                        getActivity().getSupportFragmentManager(),
                         ((ModalDialogManagerHolder) getActivity()).getModalDialogManager(),
                         ((SnackbarManager.SnackbarManageable) getActivity()).getSnackbarManager(),
                         SignoutReason.USER_CLICKED_SIGNOUT_FROM_CLEAR_BROWSING_DATA_PAGE,
                         /* showConfirmDialog= */ true,
-                        () -> {});
+                        CallbackUtils.emptyRunnable());
     }
 
     /**

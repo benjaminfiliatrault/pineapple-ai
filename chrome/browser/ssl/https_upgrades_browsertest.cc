@@ -17,6 +17,7 @@
 #include "chrome/browser/extensions/api/settings_private/generated_prefs.h"
 #include "chrome/browser/interstitials/security_interstitial_page_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ssl/chrome_security_blocking_page_factory.h"
 #include "chrome/browser/ssl/generated_https_first_mode_pref.h"
 #include "chrome/browser/ssl/https_first_mode_settings_tracker.h"
 #include "chrome/browser/ssl/https_upgrades_interceptor.h"
@@ -138,6 +139,13 @@ enum class HttpsUpgradesTestType {
   // Disables HFM pref, HFM with Site Engagement heuristic, the HFM for
   // typically secure users feature, and the HFM in Incognito feature.
   kNone,
+
+  // HttpsUpgradesBrowserTest tests don't run in these modes. They are used to
+  // instantiate individual tests instead:
+
+  // Enables HFM with Site Engagement heuristic without Balanced Mode. This
+  // should be a no-op.
+  kHttpsFirstModeWithSiteEngagementWithoutBalancedMode,
 };
 
 // Stores the number of times the HTTPS-First Mode interstitial is shown for the
@@ -168,6 +176,13 @@ class HttpsUpgradesBrowserTest
   ~HttpsUpgradesBrowserTest() override = default;
 
   void SetUp() override {
+    // HFM heuristics are disabled on enterprise managed machines, so some of
+    // the tests may fail on bots. Explicitly set management status to false.
+    // Some of the tests check enterprise policies, so this configuration is
+    // unusual because non-enterprise machines are unlikely to have an
+    // enterprise allowlist, but it's good for test coverage.
+    ChromeSecurityBlockingPageFactory::SetEnterpriseManagedForTesting(false);
+
     // HFM is controlled by a pref (configured in SetUpOnMainThread).
     switch (https_upgrades_test_type()) {
       case HttpsUpgradesTestType::kHttpsFirstModeOnly:
@@ -183,16 +198,28 @@ class HttpsUpgradesBrowserTest
       case HttpsUpgradesTestType::kHttpsFirstModeWithSiteEngagement:
         // HFM pref is disabled in SetUpOnMainThread.
         feature_list_.InitWithFeatures(
-            /*enabled_features=*/{features::kHttpsFirstModeV2ForEngagedSites},
+            /*enabled_features=*/{features::kHttpsFirstModeV2ForEngagedSites,
+                                  features::kHttpsFirstBalancedMode},
             /*disabled_features=*/{
                 features::kHttpsFirstModeV2ForTypicallySecureUsers});
+        break;
+
+      case HttpsUpgradesTestType::
+          kHttpsFirstModeWithSiteEngagementWithoutBalancedMode:
+        // HFM pref is disabled in SetUpOnMainThread.
+        feature_list_.InitWithFeatures(
+            /*enabled_features=*/{features::kHttpsFirstModeV2ForEngagedSites},
+            /*disabled_features=*/{
+                features::kHttpsFirstModeV2ForTypicallySecureUsers,
+                features::kHttpsFirstBalancedMode});
         break;
 
       case HttpsUpgradesTestType::kHttpsFirstModeForTypicallySecureUsers:
         // HFM pref is disabled in SetUpOnMainThread.
         feature_list_.InitWithFeatures(
             /*enabled_features=*/{features::
-                                      kHttpsFirstModeV2ForTypicallySecureUsers},
+                                      kHttpsFirstModeV2ForTypicallySecureUsers,
+                                  features::kHttpsFirstBalancedMode},
             /*disabled_features=*/{features::kHttpsFirstModeV2ForEngagedSites});
         break;
 
@@ -201,8 +228,9 @@ class HttpsUpgradesBrowserTest
         feature_list_.InitWithFeatures(
             /*enabled_features=*/{features::
                                       kHttpsFirstModeV2ForTypicallySecureUsers,
-                                  features::kHttpsFirstModeV2ForEngagedSites},
-            /*disabled_features=*/{features::kHttpsFirstBalancedMode});
+                                  features::kHttpsFirstModeV2ForEngagedSites,
+                                  features::kHttpsFirstBalancedMode},
+            /*disabled_features=*/{});
         break;
 
       case HttpsUpgradesTestType::kHttpsFirstModeIncognito:
@@ -486,6 +514,7 @@ class HttpsUpgradesBrowserTest
   net::EmbeddedTestServer* http_server() { return &http_server_; }
   net::EmbeddedTestServer* https_server() { return &https_server_; }
   base::HistogramTester* histograms() { return &histograms_; }
+  base::test::ScopedFeatureList* feature_list() { return &feature_list_; }
 
   void EnableCaptivePortalDetection(Browser* browser);
 
@@ -498,6 +527,8 @@ class HttpsUpgradesBrowserTest
   raw_ptr<Browser, AcrossTasksDanglingUntriaged> incognito_browser_ = nullptr;
 };
 
+// HttpsUpgradesBrowserTest is NOT instantiated for unusual configurations like
+// kHttpsFirstModeWithSiteEngagementWithoutBalancedMode.
 INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     HttpsUpgradesBrowserTest,
@@ -530,6 +561,9 @@ INSTANTIATE_TEST_SUITE_P(
           return "AllFeatures";
         case HttpsUpgradesTestType::kNone:
           return "None";
+        case HttpsUpgradesTestType::
+            kHttpsFirstModeWithSiteEngagementWithoutBalancedMode:
+          return "kHttpsFirstModeWithSiteEngagementWithoutBalancedMode";
       }
     });
 
@@ -638,31 +672,33 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
     histograms()->ExpectBucketCount(
         kEventHistogram,
         security_interstitials::https_only_mode::Event::kUpgradeTimedOut, 1);
+    histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
+                                    NavigationRequestSecurityLevel::kUpgraded,
+                                    1);
   } else {
-    // If HFM is not enabled, HTTPS-Upgrades should not attempt to upgrade the
+    // If HFM strict mode is not enabled, we should not attempt to upgrade the
     // navigation.
     EXPECT_TRUE(content::NavigateToURL(contents, local_ip_url));
     histograms()->ExpectTotalCount(kEventHistogram, 0);
+    histograms()->ExpectBucketCount(
+        kNavigationRequestSecurityLevelHistogram,
+        NavigationRequestSecurityLevel::kNonUniqueHostname, 1);
   }
-
-  histograms()->ExpectBucketCount(
-      kNavigationRequestSecurityLevelHistogram,
-      NavigationRequestSecurityLevel::kNonUniqueHostname, 1);
 }
 
-// Test that unique single-label hostnames (e.g. gTLDs) are upgraded in all
-// modes, but warnings are only shown in strict and incognito modes.
+// Test that unique single-label hostnames (e.g. gTLDs) are only upgraded and
+// warned on in strict mode.
 IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
                        UniqueSingleLabel_NoWarnInBalancedMode) {
-  // Disable the testing port configuration, as this test doesn't use the
-  // EmbeddedTestServer.
+  // Set an HTTPS testing port that does not match the test server to have all
+  // attempted upgrades fail.
   HttpsUpgradesInterceptor::SetHttpsPortForTesting(0);
-  HttpsUpgradesInterceptor::SetHttpPortForTesting(0);
+
   GURL singlelabel_url = http_server()->GetURL("cl", "/simple.html");
 
   auto* contents = GetBrowser()->tab_strip_model()->GetActiveWebContents();
 
-  if (IsHttpsFirstModePrefEnabled() || IsIncognito()) {
+  if (IsHttpsFirstModePrefEnabled()) {
     // HFM should attempt the upgrade, fail, and fallback to the interstitial.
     EXPECT_FALSE(content::NavigateToURL(contents, singlelabel_url));
     EXPECT_TRUE(
@@ -670,40 +706,43 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
             contents));
     histograms()->ExpectTotalCount(kNavigationRequestSecurityLevelHistogram, 2);
   } else {
-    // Otherwise, the request should attempt the upgrade, fail, and fallback to
-    // HTTP _without_ an interstitial.
-    NavigateAndWaitForFallback(contents, singlelabel_url);
+    // Otherwise, the request should not be upgraded and just navigate to HTTP.
+    EXPECT_TRUE(content::NavigateToURL(contents, singlelabel_url));
     EXPECT_EQ(singlelabel_url, contents->GetLastCommittedURL());
     EXPECT_FALSE(
         chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
             contents));
-    histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
-                                    NavigationRequestSecurityLevel::kInsecure,
-                                    1);
-    histograms()->ExpectTotalCount(kNavigationRequestSecurityLevelHistogram, 3);
+    histograms()->ExpectBucketCount(
+        kNavigationRequestSecurityLevelHistogram,
+        NavigationRequestSecurityLevel::kSingleLabelHostname, 1);
+    histograms()->ExpectTotalCount(kNavigationRequestSecurityLevelHistogram, 1);
   }
 
-  // Verify that upgrade events were recorded because an upgrade was attempted
-  // and failed no matter what.
-  histograms()->ExpectTotalCount(kEventHistogram, 3);
-  histograms()->ExpectBucketCount(
-      kEventHistogram,
-      security_interstitials::https_only_mode::Event::kUpgradeAttempted, 1);
-  histograms()->ExpectBucketCount(
-      kEventHistogram,
-      security_interstitials::https_only_mode::Event::kUpgradeFailed, 1);
-  histograms()->ExpectBucketCount(
-      kEventHistogram,
-      security_interstitials::https_only_mode::Event::kUpgradeTimedOut, 1);
+  // If in Strict Mode, verify that upgrade events were recorded because an
+  // upgrade was attempted and failed.
+  if (IsHttpsFirstModePrefEnabled()) {
+    histograms()->ExpectTotalCount(kEventHistogram, 3);
+    histograms()->ExpectBucketCount(
+        kEventHistogram,
+        security_interstitials::https_only_mode::Event::kUpgradeAttempted, 1);
+    histograms()->ExpectBucketCount(
+        kEventHistogram,
+        security_interstitials::https_only_mode::Event::kUpgradeFailed, 1);
+    histograms()->ExpectBucketCount(
+        kEventHistogram,
+        security_interstitials::https_only_mode::Event::kUpgradeTimedOut, 1);
 
-  histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
-                                  NavigationRequestSecurityLevel::kUpgraded, 1);
-  histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
-                                  NavigationRequestSecurityLevel::kSecure, 1);
+    histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
+                                    NavigationRequestSecurityLevel::kUpgraded,
+                                    1);
+    histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
+                                    NavigationRequestSecurityLevel::kSecure, 1);
+  }
 }
 
 // If the user navigates to a non-unique hostname, the navigation should be
-// upgraded, but record insecure metrics.
+// upgraded only if strict mode is enabled. If we skip upgrading we should
+// record that the reason was the non-unique hostname.
 IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest, NonUniqueHost_RecordsMetrics) {
   GURL nonunique_url1 = http_server()->GetURL("test.local", "/simple.html");
   GURL nonunique_url2 = http_server()->GetURL("test", "/simple.html");
@@ -721,20 +760,18 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest, NonUniqueHost_RecordsMetrics) {
     histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
                                     NavigationRequestSecurityLevel::kSecure, 2);
   } else {
-    // When HFM is not enabled but upgrading is, Chrome does NOT upgrade, so
-    // other histograms are not recorded.
+    // When HFM strict mode is not enabled, Chrome does NOT upgrade, so other
+    // histograms are not recorded.
     EXPECT_TRUE(content::NavigateToURL(contents, nonunique_url1));
     EXPECT_TRUE(content::NavigateToURL(contents, nonunique_url2));
-    histograms()->ExpectTotalCount(kNavigationRequestSecurityLevelHistogram, 2);
+    histograms()->ExpectUniqueSample(
+        kNavigationRequestSecurityLevelHistogram,
+        NavigationRequestSecurityLevel::kNonUniqueHostname, 2);
   }
-
-  histograms()->ExpectBucketCount(
-      kNavigationRequestSecurityLevelHistogram,
-      NavigationRequestSecurityLevel::kNonUniqueHostname, 2);
 }
 
-// Test that non-default ports (e.g. not HTTP80) are upgraded in all
-// modes, but warnings are only shown in strict and incognito modes.
+// Test that non-default ports (e.g. not HTTP80) are only upgraded and warned on
+// in strict mode and Incognito.
 IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
                        NonDefaultPorts_NoWarnInBalancedMode) {
   // Disable the testing port configuration, as this test doesn't use the
@@ -759,36 +796,38 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
             contents));
     histograms()->ExpectTotalCount(kNavigationRequestSecurityLevelHistogram, 2);
   } else {
-    // Otherwise, the request should attempt the upgrade, fail, and fallback to
-    // HTTP _without_ an interstitial.
-    NavigateAndWaitForFallback(contents, non_default_http_url);
+    // Otherwise, the request should not be upgraded and just navigate to HTTP.
+    EXPECT_TRUE(content::NavigateToURL(contents, non_default_http_url));
     EXPECT_EQ(non_default_http_url, contents->GetLastCommittedURL());
     EXPECT_FALSE(
         chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
             contents));
-    histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
-                                    NavigationRequestSecurityLevel::kInsecure,
-                                    1);
-    histograms()->ExpectTotalCount(kNavigationRequestSecurityLevelHistogram, 3);
+    histograms()->ExpectBucketCount(
+        kNavigationRequestSecurityLevelHistogram,
+        NavigationRequestSecurityLevel::kNonDefaultPorts, 1);
+    histograms()->ExpectTotalCount(kNavigationRequestSecurityLevelHistogram, 1);
   }
 
-  // Verify that upgrade events were recorded because an upgrade was attempted
-  // and failed no matter what.
-  histograms()->ExpectTotalCount(kEventHistogram, 3);
-  histograms()->ExpectBucketCount(
-      kEventHistogram,
-      security_interstitials::https_only_mode::Event::kUpgradeAttempted, 1);
-  histograms()->ExpectBucketCount(
-      kEventHistogram,
-      security_interstitials::https_only_mode::Event::kUpgradeFailed, 1);
-  histograms()->ExpectBucketCount(
-      kEventHistogram,
-      security_interstitials::https_only_mode::Event::kUpgradeNetError, 1);
+  // If in Strict Mode or Incognito, verify that upgrade events were recorded
+  // because an upgrade was attempted and failed.
+  if (IsHttpsFirstModePrefEnabled() || IsIncognito()) {
+    histograms()->ExpectTotalCount(kEventHistogram, 3);
+    histograms()->ExpectBucketCount(
+        kEventHistogram,
+        security_interstitials::https_only_mode::Event::kUpgradeAttempted, 1);
+    histograms()->ExpectBucketCount(
+        kEventHistogram,
+        security_interstitials::https_only_mode::Event::kUpgradeFailed, 1);
+    histograms()->ExpectBucketCount(
+        kEventHistogram,
+        security_interstitials::https_only_mode::Event::kUpgradeNetError, 1);
 
-  histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
-                                  NavigationRequestSecurityLevel::kUpgraded, 1);
-  histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
-                                  NavigationRequestSecurityLevel::kSecure, 1);
+    histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
+                                    NavigationRequestSecurityLevel::kUpgraded,
+                                    1);
+    histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
+                                    NavigationRequestSecurityLevel::kSecure, 1);
+  }
 }
 
 // If the user navigates to an HTTPS URL, the navigation should end up on that
@@ -943,6 +982,9 @@ IN_PROC_BROWSER_TEST_P(
   HttpsFirstModeService* hfm_service =
       HttpsFirstModeServiceFactory::GetForProfile(profile);
   MaybeEnableHttpsFirstModeForEngagedSitesAndWait(hfm_service);
+  const bool is_interstitial_due_to_se_heuristic =
+      IsSiteEngagementHeuristicEnabled() && !IsHttpsFirstModePrefEnabled() &&
+      !InBalancedMode();
 
   NavigateAndWaitForFallback(contents, http_url);
   EXPECT_EQ(http_url, contents->GetLastCommittedURL());
@@ -952,9 +994,6 @@ IN_PROC_BROWSER_TEST_P(
     EXPECT_TRUE(
         chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
             contents));
-    bool is_interstitial_due_to_se_heuristic =
-        IsSiteEngagementHeuristicEnabled() && !IsHttpsFirstModePrefEnabled() &&
-        !InBalancedMode();
     EXPECT_EQ(is_interstitial_due_to_se_heuristic
                   ? HFMInterstitialType::kSiteEngagement
                   : HFMInterstitialType::kStandard,
@@ -971,9 +1010,9 @@ IN_PROC_BROWSER_TEST_P(
   histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeCertError, 1);
 
   // Check engagement heuristic metrics. These are only recorded when the
-  // interstitial isn't enabled by the user pref.
-  if (IsSiteEngagementHeuristicEnabled() &&
-      !IsHttpsFirstModeInterstitialEnabledAcrossSites()) {
+  // site engagement heuristic is enabled and the interstitial is due to this
+  // heuristic and not because of prefs.
+  if (is_interstitial_due_to_se_heuristic) {
     histograms()->ExpectTotalCount(kEventHistogramWithEngagementHeuristic, 3);
     histograms()->ExpectBucketCount(kEventHistogramWithEngagementHeuristic,
                                     Event::kUpgradeAttempted, 1);
@@ -1066,9 +1105,13 @@ IN_PROC_BROWSER_TEST_P(
     }
   }
 
+  // Check engagement heuristic metrics. These are only recorded when the
+  // site engagement heuristic is enabled and the interstitial is due to this
+  // heuristic and not because of prefs.
   if (IsSiteEngagementHeuristicEnabled() &&
       !IsHttpsFirstModeInterstitialEnabledAcrossSites()) {
-    // Shouldn't change because the interstitial wasn't due to the heuristic:
+    // Event histogram shouldn't change because Site Engagement heuristic didn't
+    // kick in.
     histograms()->ExpectTotalCount(kEventHistogramWithEngagementHeuristic, 3);
 
     // Check host count.
@@ -1097,7 +1140,8 @@ IN_PROC_BROWSER_TEST_P(
         kSiteEngagementHeuristicEnforcementDurationHistogram, base::Hours(1),
         1);
   } else {
-    // Shouldn't change:
+    // Event histogram shouldn't change because Site Engagement heuristic didn't
+    // kick in.
     histograms()->ExpectTotalCount(kEventHistogramWithEngagementHeuristic, 0);
 
     // If HFM pref was enabled, no SE metrics should be recorded because HFM
@@ -1145,19 +1189,20 @@ IN_PROC_BROWSER_TEST_P(
   GURL https_url("https://bad-https.com");
   GURL navigated_url("http://bad-https.com:8080");
 
+  // Set engagement for the HTTP and HTTPS origins with default ports.
   SetSiteEngagementScore(http_url, kLowSiteEngagementScore);
   SetSiteEngagementScore(https_url, kHighSiteEnagementScore);
   HttpsFirstModeService* hfm_service =
       HttpsFirstModeServiceFactory::GetForProfile(profile);
   MaybeEnableHttpsFirstModeForEngagedSitesAndWait(hfm_service);
 
-  // This URL should be upgraded by HTTPS-Upgrades, but not have HFM
-  // auto-enabled on it because it has a non-default port.
+  // Navigate to a non-default port version of the URL.
   NavigateAndWaitForFallback(contents, navigated_url);
   EXPECT_EQ(navigated_url, contents->GetLastCommittedURL());
 
-  // Balanced Mode also exempts non-default ports.
-  if (IsHttpsFirstModePrefEnabled() || IsIncognito()) {
+  // Non-strict modes should not upgrade because `navigated_url` has a
+  // non-default port, regardless of whether the hostname is on the enforcelist.
+  if (IsHttpsFirstModePrefEnabled()) {
     EXPECT_EQ(HFMInterstitialType::kStandard,
               chrome_browser_interstitials::GetHFMInterstitialType(contents));
   } else {
@@ -1165,18 +1210,25 @@ IN_PROC_BROWSER_TEST_P(
               chrome_browser_interstitials::GetHFMInterstitialType(contents));
   }
 
-  // Verify that navigation event metrics were correctly recorded.
-  histograms()->ExpectTotalCount(kEventHistogram, 3);
-  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeAttempted, 1);
-  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeFailed, 1);
-  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeCertError, 1);
+  // Strict mode should have upgraded and fallen back to HTTP.
+  if (IsHttpsFirstModePrefEnabled()) {
+    // Verify that navigation event metrics were correctly recorded.
+    histograms()->ExpectTotalCount(kEventHistogram, 3);
+    histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeAttempted,
+                                    1);
+    histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeFailed, 1);
+    histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeCertError,
+                                    1);
+  } else {
+    histograms()->ExpectTotalCount(kEventHistogram, 0);
+  }
 
   // Engagement heuristic shouldn't handle any navigation events because we
-  // didn't navigate to example.com.
+  // didn't navigate to bad-https.com:80.
   histograms()->ExpectTotalCount(kEventHistogramWithEngagementHeuristic, 0);
 
   // Check engagement heuristic metrics. These are only recorded when the
-  // interstitial isn't enabled across all sites.
+  // site engagement interstitial is enabled.
   if (IsSiteEngagementHeuristicEnabled() &&
       !IsHttpsFirstModeInterstitialEnabledAcrossSites()) {
     // Check the heuristic state. The heuristic should enable HFM for
@@ -1336,7 +1388,7 @@ IN_PROC_BROWSER_TEST_P(
   // HFM service runs this on startup, but we can't set the test clock before it
   // runs, and we need to move the clock forward for this to work. So call it
   // explicitly again here.
-  hfm_service->CheckUserIsTypicallySecureAndMaybeEnableHttpsFirstMode();
+  hfm_service->CheckUserIsTypicallySecureAndMaybeEnableHttpsFirstBalancedMode();
   size_t initial_navigation_count = hfm_service->GetRecentNavigationCount();
 
   // Use a different hostname than the PRE_ test so that we don't hit the
@@ -1504,7 +1556,7 @@ IN_PROC_BROWSER_TEST_P(
 
   // Advance the clock and try auto-enabling HFM.
   clock.Advance(base::Days(1));
-  hfm_service->CheckUserIsTypicallySecureAndMaybeEnableHttpsFirstMode();
+  hfm_service->CheckUserIsTypicallySecureAndMaybeEnableHttpsFirstBalancedMode();
 
   // The interstitial should only be displayed if HFM is enabled by the pref
   // and not by the Typically Secure User heuristic.
@@ -1801,8 +1853,9 @@ IN_PROC_BROWSER_TEST_P(
 IN_PROC_BROWSER_TEST_P(
     HttpsUpgradesBrowserTest,
     ExemptNetErrorOnUpgrade_UniqueSingleLabelHostname_ShouldFallback) {
-  // This test is only interesting when HTTPS-First Mode is enabled.
-  if (!IsHttpsFirstModeInterstitialEnabledAcrossSites()) {
+  // This test is only interesting when HTTPS-First Strict Mode is enabled.
+  // Balanced Mode won't try to upgrade these requests at all.
+  if (!IsHttpsFirstModePrefEnabled() || IsIncognito()) {
     return;
   }
 
@@ -1821,16 +1874,10 @@ IN_PROC_BROWSER_TEST_P(
             return true;
           }));
   EXPECT_FALSE(content::NavigateToURL(contents, http_url));
+  EXPECT_TRUE(chrome_browser_interstitials::IsShowingInterstitial(contents));
+  ProceedThroughInterstitial(contents);
 
-  // Balanced mode doesn't show the interstitial on any single-label hosts.
-  if (OnlyInBalancedMode()) {
-    EXPECT_FALSE(chrome_browser_interstitials::IsShowingInterstitial(contents));
-  } else {
-    EXPECT_TRUE(chrome_browser_interstitials::IsShowingInterstitial(contents));
-    ProceedThroughInterstitial(contents);
-  }
-
-  // Should now be on the HTTP URL and it should be allowlisted.
+  // Should now be on the HTTP URL and the hostname should be allowlisted.
   EXPECT_EQ(http_url, contents->GetLastCommittedURL());
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
   content::SSLHostStateDelegate* state = profile->GetSSLHostStateDelegate();
@@ -2007,13 +2054,16 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
                        CancelTimeoutForFallbackNavigations) {
   net::EmbeddedTestServer http_server;
   net::EmbeddedTestServer https_server{net::EmbeddedTestServer::TYPE_HTTPS};
+
   // Make the HTTP server return a slow response.
   http_server.RegisterRequestHandler(base::BindRepeating(
       [](const net::test_server::HttpRequest& request)
           -> std::unique_ptr<net::test_server::HttpResponse> {
+        // The HTTP load needs to be slower than the 1 second timeout configured
+        // by the the test.
         auto slow_http_response =
             std::make_unique<net::test_server::DelayedHttpResponse>(
-                base::Seconds(1));
+                base::Seconds(2));
         slow_http_response->set_content_type("text/html");
         slow_http_response->set_content("hello from http");
         return std::move(slow_http_response);
@@ -2021,10 +2071,9 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
   ASSERT_TRUE(http_server.Start());
   ASSERT_TRUE(https_server.Start());
 
-  // Set the timeout short enough, but not zero. We need to wait for the loads
-  // to finish for this test to work.
-  HttpsUpgradesNavigationThrottle::set_timeout_for_testing(
-      base::Milliseconds(250));
+  // Set the timeout short enough, but not zero. We can't set it to zero
+  // because it'll cancel the HTTPS load with timeout instead of an error.
+  HttpsUpgradesNavigationThrottle::set_timeout_for_testing(base::Seconds(1));
 
   HttpsUpgradesInterceptor::SetHttpPortForTesting(http_server.port());
   HttpsUpgradesInterceptor::SetHttpsPortForTesting(https_server.port());
@@ -2078,10 +2127,11 @@ std::unique_ptr<net::test_server::HttpResponse> RedirectLoopResponse(
       GURL url(base::StringPrintf("http://a.com:%d/redirect", http_port));
       return RedirectResponseHandler(url, request);
     }
-    // Over http, it prints a slow hello.
+    // Over http, it prints a slow hello. This should delay longer than the
+    // HTTPS upgrade timeout which is set to 1 second.
     auto slow_http_response =
         std::make_unique<net::test_server::DelayedHttpResponse>(
-            base::Seconds(1));
+            base::Seconds(2));
     slow_http_response->set_content_type("text/html");
     slow_http_response->set_content("hello from http");
     return std::move(slow_http_response);
@@ -2114,10 +2164,11 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
   net::EmbeddedTestServer redirect_server_https{
       net::EmbeddedTestServer::TYPE_HTTPS};
 
-  // Set the timeout short enough, but not zero. We need to wait for the loads
-  // to finish for this test to work.
-  HttpsUpgradesNavigationThrottle::set_timeout_for_testing(
-      base::Milliseconds(250));
+  // Set the timeout short enough, but not zero. We can't set it to zero
+  // because it'll cancel the HTTPS load with timeout instead of an error.
+  // The HTTP load in this test needs to be slower than this timeout for the
+  // test to be meaningful.
+  HttpsUpgradesNavigationThrottle::set_timeout_for_testing(base::Seconds(1));
 
   // We don't know the ports without starting the servers and we can't start
   // the servers without registering request handlers. Pass them as refs so
@@ -2669,6 +2720,9 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest, PreferHstsOverHttpsFirstMode) {
   GURL::Replacements downgrade_scheme_to_http;
   downgrade_scheme_to_http.SetSchemeStr(url::kHttpScheme);
   GURL http_url = https_url.ReplaceComponents(downgrade_scheme_to_http);
+
+  // Set HTTP testing port to match `http_url`.
+  HttpsUpgradesInterceptor::SetHttpPortForTesting(http_url.EffectiveIntPort());
 
   // Add hostname to the TransportSecurityState.
   base::Time expiry = base::Time::Now() + base::Days(100);
@@ -3751,4 +3805,73 @@ IN_PROC_BROWSER_TEST_F(TypicallySecureUserBrowserTest,
   HttpsFirstModeService* hfm_service =
       HttpsFirstModeServiceFactory::GetForProfile(browser()->profile());
   EXPECT_EQ(10u, hfm_service->GetRecentNavigationCount());
+}
+
+// Tests for HFM heuristics without Balanced Mode enabled. These are unusual
+// configurations and shouldn't appear in production.
+// TODO(crbug.com/349860796): Remove after balanced mode is fully launched.
+using HttpsUpgradesHeuristicsWithoutBalancedModeBrowserTest =
+    HttpsUpgradesBrowserTest;
+
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    HttpsUpgradesHeuristicsWithoutBalancedModeBrowserTest,
+    ::testing::Values(
+        HttpsUpgradesTestType::
+            kHttpsFirstModeWithSiteEngagementWithoutBalancedMode));
+
+// Test that Site Engagement Heuristic without Balanced Mode is a no-op.
+IN_PROC_BROWSER_TEST_P(
+    HttpsUpgradesHeuristicsWithoutBalancedModeBrowserTest,
+    UrlWithHttpScheme_BrokenSSL_SiteEngagementHeuristicWithoutBalancedMode_ShouldIgnore) {
+  ASSERT_FALSE(IsIncognito() || IsHttpsFirstModePrefEnabled());
+
+  // Disable the testing port configuration, as this test doesn't use the
+  // EmbeddedTestServer.
+  HttpsUpgradesInterceptor::SetHttpsPortForTesting(0);
+  HttpsUpgradesInterceptor::SetHttpPortForTesting(0);
+  auto url_loader_interceptor = MakeInterceptorForSiteEngagementHeuristic();
+
+  content::WebContents* contents =
+      GetBrowser()->tab_strip_model()->GetActiveWebContents();
+  Profile* profile = GetBrowser()->profile();
+  content::SSLHostStateDelegate* state = profile->GetSSLHostStateDelegate();
+
+  // Set test clock.
+  auto clock = std::make_unique<base::SimpleTestClock>();
+  auto* clock_ptr = clock.get();
+  StatefulSSLHostStateDelegate* chrome_state =
+      static_cast<StatefulSSLHostStateDelegate*>(state);
+  chrome_state->SetClockForTesting(std::move(clock));
+
+  // Start the clock at standard system time.
+  clock_ptr->SetNow(base::Time::NowFromSystemTime());
+
+  // Set site engagement scores so that this site would have HFM enabled if
+  // HFM+SE kicked in.
+  GURL http_url("http://example.com");
+  GURL https_url("https://example.com");
+
+  SetSiteEngagementScore(http_url, kLowSiteEngagementScore);
+  SetSiteEngagementScore(https_url, kHighSiteEnagementScore);
+  HttpsFirstModeService* hfm_service =
+      HttpsFirstModeServiceFactory::GetForProfile(profile);
+  MaybeEnableHttpsFirstModeForEngagedSitesAndWait(hfm_service);
+
+  // This URL should be upgraded by HTTPS-Upgrades and should fall back to HTTP,
+  // but not have HFM auto-enabled on it because balanced mode isn't enabled.
+  NavigateAndWaitForFallback(contents, http_url);
+  EXPECT_EQ(http_url, contents->GetLastCommittedURL());
+
+  EXPECT_EQ(HFMInterstitialType::kNone,
+            chrome_browser_interstitials::GetHFMInterstitialType(contents));
+
+  // Verify that navigation event metrics were correctly recorded.
+  histograms()->ExpectTotalCount(kEventHistogram, 3);
+  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeAttempted, 1);
+  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeFailed, 1);
+  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeCertError, 1);
+
+  // Engagement heuristic shouldn't handle any navigation events.
+  histograms()->ExpectTotalCount(kEventHistogramWithEngagementHeuristic, 0);
 }

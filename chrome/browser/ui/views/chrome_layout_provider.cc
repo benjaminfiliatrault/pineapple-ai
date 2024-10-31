@@ -162,6 +162,10 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 8;
     case DISTANCE_RICH_HOVER_BUTTON_ICON_HORIZONTAL:
       return 8;
+    case DISTANCE_TASK_MANAGER_HEADER_HORIZONTAL_SPACING:
+      return 12;
+    case DISTANCE_TASK_MANAGER_HEADER_VERTICAL_SPACING:
+      return 4;
     case DISTANCE_TOAST_BUBBLE_BETWEEN_CHILD_SPACING:
       return 4;
     case DISTANCE_TOAST_BUBBLE_BETWEEN_LABEL_ACTION_BUTTON_SPACING:
@@ -172,7 +176,7 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 36;
     case DISTANCE_TOAST_BUBBLE_HEIGHT_CONTENT:
       return 24;
-    case DISTANCE_TOAST_BUBBLE_LEADING_ICON_SIZE:
+    case DISTANCE_TOAST_BUBBLE_ICON_SIZE:
       return 20;
     case DISTANCE_TOAST_BUBBLE_LEADING_ICON_SIDE_MARGINS:
       return 2;

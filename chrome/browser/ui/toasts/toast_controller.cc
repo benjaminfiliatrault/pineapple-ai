@@ -36,6 +36,10 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/ui/fullscreen_util_mac.h"
+#endif
+
 ToastParams::ToastParams(ToastId id) : toast_id_(id) {}
 ToastParams::ToastParams(ToastParams&& other) noexcept = default;
 ToastParams& ToastParams::operator=(ToastParams&& other) noexcept = default;
@@ -45,8 +49,7 @@ ToastController::ToastController(
     BrowserWindowInterface* browser_window_interface,
     const ToastRegistry* toast_registry)
     : browser_window_interface_(browser_window_interface),
-      toast_registry_(toast_registry) {
-}
+      toast_registry_(toast_registry) {}
 
 ToastController::~ToastController() = default;
 
@@ -232,6 +235,18 @@ void ToastController::UpdateToastWidgetVisibility(bool show_toast_widget) {
   }
 }
 
+bool ToastController::ShouldRenderToastOverWebContents() {
+  bool render_in_contents =
+      browser_window_interface_->ShouldHideUIForFullscreen();
+
+#if BUILDFLAG(IS_MAC)
+  render_in_contents |=
+      fullscreen_utils::IsInContentFullscreen(browser_window_interface_);
+#endif
+
+  return render_in_contents;
+}
+
 void ToastController::WebContentsDestroyed() {
   omnibox_helper_observer_.Reset();
   Observe(nullptr);
@@ -274,13 +289,25 @@ void ToastController::CloseToast(toasts::ToastCloseReason reason) {
 
 void ToastController::CreateToast(const ToastParams& params,
                                   const ToastSpecification* spec) {
-  views::View* anchor_view = browser_window_interface_->TopContainer();
+  // TODO(crbug.com/364730656): Replace this logic when improving
+  // ToastController testability.
+  if (browser_window_interface_ == nullptr ||
+      !browser_window_interface_->TopContainer()) {
+    // Don't actually create the toast in unit tests
+    CHECK_IS_TEST();
+    return;
+  }
+
+  views::View* const anchor_view = browser_window_interface_->TopContainer();
   CHECK(anchor_view);
+  const ui::ImageModel* image_override = params.image_override_.has_value()
+                                             ? &params.image_override_.value()
+                                             : nullptr;
   auto toast_view = std::make_unique<toasts::ToastView>(
       anchor_view,
       FormatString(spec->body_string_id(),
                    params.body_string_replacement_params_),
-      spec->icon(), browser_window_interface_->ShouldHideUIForFullscreen(),
+      spec->icon(), image_override, ShouldRenderToastOverWebContents(),
       base::BindRepeating(&RecordToastDismissReason, params.toast_id_));
 
   if (spec->has_close_button()) {
@@ -335,20 +362,19 @@ std::u16string ToastController::FormatString(
 
 void ToastController::OnFullscreenStateChanged() {
   toast_view_->UpdateRenderToastOverWebContentsAndPaint(
-      browser_window_interface_->ShouldHideUIForFullscreen());
+      ShouldRenderToastOverWebContents());
 }
 
 void ToastController::ClearTabScopedToasts() {
   toast_close_timer_.Stop();
   if (next_ephemeral_params_.has_value()) {
+    const ToastId toast_id = next_ephemeral_params_.value().toast_id_;
     const ToastSpecification* const specification =
-        toast_registry_->GetToastSpecification(
-            next_ephemeral_params_.value().toast_id_);
+        toast_registry_->GetToastSpecification(toast_id);
+    RecordToastDismissReason(toast_id, toasts::ToastCloseReason::kAbort);
     if (!specification->is_global_scope()) {
       next_ephemeral_params_ = std::nullopt;
     }
-    RecordToastDismissReason(next_ephemeral_params_.value().toast_id_,
-                             toasts::ToastCloseReason::kAbort);
   }
 
   if (current_ephemeral_params_.has_value()) {

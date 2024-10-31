@@ -150,7 +150,11 @@ void MessageView::UpdateWithNotification(const Notification& notification) {
   } else {
     GetViewAccessibility().SetName(name);
   }
-
+  if (updated_name_callback_) {
+    updated_name_callback_.Run(
+        notification.rich_notification_data()
+            .should_make_spoken_feedback_for_popup_updates);
+  }
   slide_out_controller_.set_slide_mode(CalculateSlideMode());
 }
 
@@ -433,8 +437,7 @@ views::SlideOutController::SlideMode MessageView::CalculateSlideMode() const {
       return views::SlideOutController::SlideMode::kFull;
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return views::SlideOutController::SlideMode::kFull;
+  NOTREACHED();
 }
 
 MessageView::Mode MessageView::GetMode() const {
@@ -589,6 +592,11 @@ void MessageView::UpdateControlButtonsVisibilityWithNotification(
     control_buttons_view->ShowCloseButton(GetMode() != Mode::PINNED);
   }
   UpdateControlButtonsVisibility();
+}
+
+void MessageView::SetUpdatedNameCallback(UpdatedNameCallback callback) {
+  CHECK(callback);
+  updated_name_callback_ = std::move(callback);
 }
 
 BEGIN_METADATA(MessageView)

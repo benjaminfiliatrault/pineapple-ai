@@ -9,10 +9,10 @@
 
 #include "base/feature_list.h"
 #include "base/types/pass_key.h"
-#include "components/user_education/common/feature_promo_controller.h"
-#include "components/user_education/common/feature_promo_handle.h"
-#include "components/user_education/common/feature_promo_result.h"
-#include "components/user_education/common/new_badge_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_handle.h"
+#include "components/user_education/common/feature_promo/feature_promo_result.h"
+#include "components/user_education/common/new_badge/new_badge_controller.h"
 
 class AppMenuButton;
 class BrowserFeaturePromoController;
@@ -25,6 +25,18 @@ class WebContents;
 namespace web_app {
 class WebAppUiManagerImpl;
 }
+
+// Describes what to do when the feature associated with an IPH is used.
+enum class FeaturePromoFeatureUsedAction {
+  // If the promo is showing, it is dismissed. If it is queued, it will be
+  // canceled. In most cases, the promo will not be shown again.
+  kClosePromoIfPresent,
+  // If the promo is showing or queued, it continues to be showing or queued.
+  // However, marking the feature as used may prevent the promo from showing
+  // in the future. If you intend to use e.g. CloseFeaturePromoAndContinue(),
+  // this option will avoid terminating the promo prematurely.
+  kIgnorePromoIfPresent,
+};
 
 // Provides the interface for common User Education actions.
 class BrowserUserEducationInterface {
@@ -97,12 +109,11 @@ class BrowserUserEducationInterface {
   virtual bool MaybeShowStartupFeaturePromo(
       user_education::FeaturePromoParams params) = 0;
 
-  // Closes the in-product help promo for `iph_feature` if it is showing or
-  // cancels a pending startup promo; returns true if a promo bubble was
-  // actually closed.
-  virtual bool EndFeaturePromo(
-      const base::Feature& iph_feature,
-      user_education::EndFeaturePromoReason end_promo_reason) = 0;
+  // Aborts the in-product help promo for `iph_feature` if it is showing or
+  // cancels a pending startup promo. Aborting a promo means it was not fully
+  // shown or interacted with, and may allow the promo to show again. Returns
+  // whether a showing or pending promo was canceled.
+  virtual bool AbortFeaturePromo(const base::Feature& iph_feature) = 0;
 
   // Closes the bubble for a feature promo but continues the promo; returns a
   // handle that can be used to end the promo when it is destructed. The handle
@@ -111,25 +122,21 @@ class BrowserUserEducationInterface {
   virtual user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
       const base::Feature& iph_feature) = 0;
 
-  // Records that the user has performed an action that is relevant to a feature
-  // promo, but is not the "feature used" event. (For those, use
-  // `NotifyPromoFeatureUsed()` instead.)
-  //
-  // If you have access to a profile but not a browser window,
-  // `UserEducationService::MaybeNotifyPromoFeatureUsed()` does the same thing.
-  //
-  // Use this for events specified in
-  // `FeaturePromoSpecification::SetAdditionalConditions()`.
-  virtual void NotifyFeatureEngagementEvent(const char* event_name) = 0;
-
   // Records that the user has engaged the specific `feature` associated with an
-  // IPH promo or "New" Badge; this information is used to determine whether to
-  // show the promo or badge in the future.
+  // IPH promo; this information is used to determine whether to show the promo
+  // in the future. Also specifies which `action` should be taken regarding
+  // existing queued or showing promos associated with `feature`.
   //
-  // Prefer this to `NotifyFeatureEngagementEvent()` whenever possible; that
-  // method should only be used for additional events specified when calling
-  // `FeaturePromoSpecification::SetAdditionalConditions()`.
-  virtual void NotifyPromoFeatureUsed(const base::Feature& feature) = 0;
+  // Returns whether a promo was closed as a result.
+  virtual bool NotifyFeaturePromoFeatureUsed(
+      const base::Feature& feature,
+      FeaturePromoFeatureUsedAction action) = 0;
+
+  // Records that the user has performed an action that is specified in in a
+  // FeaturePromoSpecification by calling the `SetAdditionalConditions()`
+  // method; this information may be used to determine whether and when to show
+  // the promo in the future.
+  virtual void NotifyAdditionalConditionEvent(const char* event_name) = 0;
 
   // Returns whether a "New" Badge should be shown on the entry point for
   // `feature`; the badge must be registered for the feature in
@@ -137,6 +144,14 @@ class BrowserUserEducationInterface {
   // containing the badge will be shown to the user.
   virtual user_education::DisplayNewBadge MaybeShowNewBadgeFor(
       const base::Feature& feature) = 0;
+
+  // Records that the user has engaged the specific `feature` associated with a
+  // "New" Badge; this information is used to determine whether to show the
+  // badge in the future.
+  //
+  // You can also call `UserEducationService::MaybeNotifyNewBadgeFeatureUsed()`
+  // if you only have access ot a `BrowserContext` or `Profile`.
+  virtual void NotifyNewBadgeFeatureUsed(const base::Feature& feature) = 0;
 
   // Returns the interface associated with the browser containing `contents` in
   // its tabstrip, or null if `contents` is not a tab in any known browser.

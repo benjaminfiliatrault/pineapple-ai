@@ -12,6 +12,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/strcat.h"
 #include "base/test/task_environment.h"
+#include "base/test/test_future.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -53,9 +54,10 @@ class LobsterImageActuatorTest : public testing::Test {
 
 TEST_F(LobsterImageActuatorTest, CanInsertImageIntoEligibleTextInputField) {
   ui::FakeTextInputClient text_input_client(&ime(), {.can_insert_image = true});
+  base::test::TestFuture<bool> future;
 
-  InsertImageOrCopyToClipboard(&text_input_client,
-                               /*image_bytes=*/"a1b2c3");
+  EXPECT_TRUE(InsertImageOrCopyToClipboard(&text_input_client,
+                                           /*image_bytes=*/"a1b2c3"));
 
   EXPECT_EQ(text_input_client.last_inserted_image_url(),
             GURL(base::StrCat(
@@ -67,8 +69,8 @@ TEST_F(LobsterImageActuatorTest,
   ui::FakeTextInputClient text_input_client(&ime(),
                                             {.can_insert_image = false});
 
-  InsertImageOrCopyToClipboard(&text_input_client,
-                               /*image_bytes=*/"a1b2c3");
+  EXPECT_FALSE(InsertImageOrCopyToClipboard(&text_input_client,
+                                            /*image_bytes=*/"a1b2c3"));
 
   EXPECT_EQ(text_input_client.last_inserted_image_url(), std::nullopt);
   EXPECT_EQ(
@@ -79,13 +81,15 @@ TEST_F(LobsterImageActuatorTest,
 
 TEST_F(LobsterImageActuatorTest, WriteImageToPathCreatesNewFile) {
   std::string data;
+  base::test::TestFuture<bool> future;
 
-  WriteImageToPath(Path("./dummy_image.jpeg"), "a1b2c3");
+  WriteImageToPath(Path("./dummy_image.jpeg"), "a1b2c3", future.GetCallback());
   Wait();
 
   EXPECT_TRUE(base::PathExists(Path("./dummy_image.jpeg")));
   ASSERT_TRUE(base::ReadFileToString(Path("./dummy_image.jpeg"), &data));
   EXPECT_EQ(data, "a1b2c3");
+  EXPECT_TRUE(future.Get());
 }
 
 }  // namespace

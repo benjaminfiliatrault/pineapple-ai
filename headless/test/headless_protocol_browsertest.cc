@@ -342,6 +342,11 @@ HEADLESS_PROTOCOL_TEST(ScreencastViewport, "sanity/screencast-viewport.js")
 
 HEADLESS_PROTOCOL_TEST(RequestFullscreen, "sanity/request-fullscreen.js")
 
+HEADLESS_PROTOCOL_TEST(GrantPermissions, "sanity/grant_permissions.js")
+
+HEADLESS_PROTOCOL_TEST(ScreenOrientationLock,
+                       "sanity/screen_orientation_lock.js")
+
 #if !defined(HEADLESS_USE_EMBEDDED_RESOURCES)
 HEADLESS_PROTOCOL_TEST(AutoHyphenation, "sanity/auto-hyphenation.js")
 #endif

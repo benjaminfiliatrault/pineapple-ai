@@ -51,9 +51,9 @@
 #include "components/javascript_dialogs/app_modal_dialog_view.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
-#include "components/saved_tab_groups/features.h"
-#include "components/saved_tab_groups/saved_tab_group_tab.h"
-#include "components/saved_tab_groups/types.h"
+#include "components/saved_tab_groups/public/features.h"
+#include "components/saved_tab_groups/public/saved_tab_group_tab.h"
+#include "components/saved_tab_groups/public/types.h"
 #include "components/sessions/content/content_test_helper.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sessions/core/tab_restore_service_impl.h"
@@ -852,6 +852,73 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreGroupWithUnloadHandlerRejected) {
   browser()->tab_strip_model()->CloseAllTabs();
   dialog = ui_test_utils::WaitForAppModalDialog();
   dialog->view()->AcceptAppModalDialog();
+}
+
+// Simulates rejecting the unload handle on a single grouped tab when:
+// - The group is closing - in this case we should ungroup the tabs
+// - The group is not closing - in this case we should do nothinig
+// TODO(crbug.com/370559961): This is a regression test. See bug for more info.
+IN_PROC_BROWSER_TEST_F(TabRestoreTest, KeepTabWhenUnloadHandlerRejected) {
+  ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
+
+  // When TabGroupsSaveV2 is enabled, we must manually add non file:// tabs
+  // since we filter out urls which could expose user data on other devices when
+  // we add them to the saved group. We also protect from triggering automatic
+  // downloads this way.
+  AddHTTPSSchemeTabs(browser(), 2);
+
+  tab_groups::TabGroupId group =
+      browser()->tab_strip_model()->AddToNewGroup({1, 2});
+
+  TabGroupModel* group_model = browser()->tab_strip_model()->group_model();
+  TabGroup* tab_group = group_model->GetTabGroup(group);
+  ASSERT_EQ(browser()->tab_strip_model()->count(), 3);
+  ASSERT_EQ(tab_group->ListTabs(), gfx::Range(1, 3));
+  ASSERT_EQ(group_model->ListTabGroups().size(), 1u);
+
+  content::WebContents* contents_with_unload_handler =
+      browser()->tab_strip_model()->GetWebContentsAt(2);
+
+  TabRestoreService* trs =
+      TabRestoreServiceFactory::GetForProfile(browser()->profile());
+
+  {
+    // Simulates:
+    // - Closing a grouped tab in a group that is not in the process of closing.
+    // - Rejecting the unload dialog by calling
+    // UnloadController::BeforeUnloadFired.
+    tab_group->SetGroupIsClosing(false);
+
+    browser()->GetUnloadControllerForTesting()->BeforeUnloadFired(
+        contents_with_unload_handler, /*proceed=*/false);
+
+    // The group should be left in tact.
+    EXPECT_TRUE(group_model->ContainsTabGroup(group));
+    EXPECT_EQ(group_model->ListTabGroups().size(), 1u);
+    EXPECT_EQ(browser()->tab_strip_model()->count(), 3);
+
+    // Verify there are no entries in TabRestore.
+    EXPECT_TRUE(trs->entries().empty());
+  }
+
+  {
+    // Simulates:
+    // - Closing a grouped tab in a group that is in the process of closing.
+    // - Rejecting the unload dialog by calling
+    // UnloadController::BeforeUnloadFired.
+    tab_group->SetGroupIsClosing(true);
+
+    browser()->GetUnloadControllerForTesting()->BeforeUnloadFired(
+        contents_with_unload_handler, /*proceed=*/false);
+
+    // The group should be removed but tabs left in tact.
+    EXPECT_FALSE(group_model->ContainsTabGroup(group));
+    EXPECT_EQ(group_model->ListTabGroups().size(), 0u);
+    EXPECT_EQ(browser()->tab_strip_model()->count(), 3);
+
+    // Verify there are no entries in TabRestore.
+    EXPECT_TRUE(trs->entries().empty());
+  }
 }
 
 // Close a group that contains a tab with an unload handler. Accept the

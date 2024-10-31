@@ -29,6 +29,7 @@
 #include "content/browser/renderer_host/back_forward_cache_disable.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/webauth/authenticator_environment.h"
+#include "content/browser/webauth/authenticator_request_outcome_enums.h"
 #include "content/browser/webauth/client_data_json.h"
 #include "content/browser/webauth/virtual_authenticator.h"
 #include "content/browser/webauth/virtual_authenticator_manager_impl.h"
@@ -112,9 +113,6 @@ enum class AttestationErasureOption {
   kEraseAttestationAndAaguid,
 };
 
-using GetAssertionOutcome = AuthenticatorCommonImpl::GetAssertionOutcome;
-using MakeCredentialOutcome = AuthenticatorCommonImpl::MakeCredentialOutcome;
-using RequestMode = AuthenticatorCommonImpl::RequestMode;
 using MakeCredentialCallback =
     blink::mojom::Authenticator::MakeCredentialCallback;
 using GetAssertionCallback = blink::mojom::Authenticator::GetAssertionCallback;
@@ -284,21 +282,7 @@ base::flat_set<device::FidoTransportProtocol> GetWebAuthnTransports(
     // are not-user-verifying, i.e. IsUVPAA() returns false.
     transports.insert(device::FidoTransportProtocol::kInternal);
   }
-
   transports.insert(device::FidoTransportProtocol::kHybrid);
-
-  if (base::FeatureList::IsEnabled(device::kWebAuthnAndroidOpenAccessory)) {
-    // kAndroidAccessory doesn't work on Windows because of USB stack issues.
-    // Note: even if this value were inserted it wouldn't take effect on Windows
-    // versions with a native API because FidoRequestHandlerBase filters out
-    // non-kHybrid transports in that case.
-#if !BUILDFLAG(IS_WIN)
-    // In order for AOA to be active the |AuthenticatorRequestClientDelegate|
-    // must still configure a |UsbDeviceManager|.
-    transports.insert(device::FidoTransportProtocol::kAndroidAccessory);
-#endif
-  }
-
   return transports;
 }
 
@@ -448,8 +432,10 @@ std::optional<device::PRFInput> ParsePRFInputForMakeCredential(
   }
 
   device::PRFInput prf_input;
+  prf_input.input1 = prf_input_from_renderer->first;
   prf_input.salt1 = HashPRFValue(prf_input_from_renderer->first);
   if (prf_input_from_renderer->second) {
+    prf_input.input2 = prf_input_from_renderer->second;
     prf_input.salt2 = HashPRFValue(*prf_input_from_renderer->second);
   }
 
@@ -511,7 +497,7 @@ blink::mojom::PRFValuesPtr PRFResultsToValues(
 }
 
 void SetHints(AuthenticatorRequestClientDelegate* request_delegate,
-              const base::flat_set<blink::mojom::Hint> hints) {
+              const base::flat_set<blink::mojom::Hint>& hints) {
   // The first recognised transport takes priority.
   std::optional<device::FidoTransportProtocol> transport;
   for (const auto hint : hints) {
@@ -544,7 +530,6 @@ bool IsPlatformAuthenticatorForInvalidStateError(
     case device::AuthenticatorType::kChromeOS:
     case device::AuthenticatorType::kICloudKeychain:
     case device::AuthenticatorType::kEnclave:
-    case device::AuthenticatorType::kChromeOSPasskeys:
       return true;
     // kWinNative can be a platform authenticator but, in the context where this
     // function is used, Windows returns a specific error when InvalidStateError
@@ -561,7 +546,6 @@ AuthenticatorCommonImpl::CredentialRequestResult
 CredentialRequestResultFromCode(bool success, device::AuthenticatorType type) {
   switch (type) {
     case device::AuthenticatorType::kChromeOS:
-    case device::AuthenticatorType::kChromeOSPasskeys:
       return success ? AuthenticatorCommonImpl::CredentialRequestResult::
                            kChromeOSSuccess
                      : AuthenticatorCommonImpl::CredentialRequestResult::
@@ -599,18 +583,18 @@ CredentialRequestResultFromCode(bool success, device::AuthenticatorType type) {
   }
 }
 
-void RecordRegisterOutcomeMetric(std::optional<RequestMode> mode,
+void RecordRegisterOutcomeMetric(std::optional<AuthenticationRequestMode> mode,
                                  ukm::SourceId source_id,
                                  MakeCredentialOutcome outcome) {
   CHECK(mode.has_value());
-  CHECK(*mode != RequestMode::kConditional);
+  CHECK(*mode != AuthenticationRequestMode::kConditional);
   ukm::builders::WebAuthn_RegisterCompletion(source_id)
       .SetRegisterCompletionResult(static_cast<int>(outcome))
       .SetRequestMode(static_cast<int>(*mode))
       .Record(ukm::UkmRecorder::Get());
 }
 
-void RecordSignOutcomeMetric(std::optional<RequestMode> mode,
+void RecordSignOutcomeMetric(std::optional<AuthenticationRequestMode> mode,
                              ukm::SourceId source_id,
                              GetAssertionOutcome outcome) {
   CHECK(mode.has_value());
@@ -698,14 +682,8 @@ void UpdateVirtualAuthenticatorUserCreds(RenderFrameHost* render_frame_host,
   }
   for (VirtualAuthenticator* authenticator :
        virtual_authenticator_manager->GetAuthenticators()) {
-    for (auto& registration : authenticator->registrations()) {
-      if (registration.second.user && registration.second.rp &&
-          registration.second.rp->id == relying_party_id &&
-          registration.second.user->id == user_id) {
-        registration.second.user->name = name;
-        registration.second.user->display_name = display_name;
-      }
-    }
+    authenticator->UpdateUserDetails(relying_party_id, user_id, name,
+                                     display_name);
   }
 }
 
@@ -785,7 +763,7 @@ struct AuthenticatorCommonImpl::RequestState {
   bool discoverable_credential_request = false;
   // Indicates whether the current request is a modal WebAuthn call, a
   // conditional UI WebAuthn call, or a payment-related request.
-  std::optional<RequestMode> mode;
+  std::optional<AuthenticationRequestMode> mode;
   // The hints set by the request, if any.
   base::flat_set<blink::mojom::Hint> hints;
   std::optional<CredentialRequestResult> request_result;
@@ -1009,9 +987,9 @@ void AuthenticatorCommonImpl::MakeCredential(
   req_state_->hints.insert(options->hints.begin(), options->hints.end());
 
   if (options->is_payment_credential_creation) {
-    req_state_->mode = RequestMode::kPayment;
+    req_state_->mode = AuthenticationRequestMode::kPayment;
   } else {
-    req_state_->mode = RequestMode::kModalWebAuthn;
+    req_state_->mode = AuthenticationRequestMode::kModalWebAuthn;
   }
 
   BeginRequestTimeout(options->timeout);
@@ -1373,11 +1351,11 @@ void AuthenticatorCommonImpl::GetAssertion(
 
   req_state_->response_callback = std::move(callback);
   if (!payment_options.is_null()) {
-    req_state_->mode = RequestMode::kPayment;
+    req_state_->mode = AuthenticationRequestMode::kPayment;
   } else if (options->is_conditional) {
-    req_state_->mode = RequestMode::kConditional;
+    req_state_->mode = AuthenticationRequestMode::kConditional;
   } else {
-    req_state_->mode = RequestMode::kModalWebAuthn;
+    req_state_->mode = AuthenticationRequestMode::kModalWebAuthn;
   }
   req_state_->hints.insert(options->hints.begin(), options->hints.end());
 
@@ -1646,9 +1624,8 @@ void AuthenticatorCommonImpl::ContinueGetAssertionAfterRpIdCheck(
         ParsePRFInputsForGetAssertion(options->extensions->prf_inputs);
 
     // This should never happen for inputs from the renderer, which should sort
-    // the values itself. Additionally, `prf_inputs_hashed` is for hybrid
-    // authenticator support on Android.
-    if (!prf_inputs || options->extensions->prf_inputs_hashed) {
+    // the values itself.
+    if (!prf_inputs) {
       mojo::ReportBadMessage("invalid PRF inputs");
       req_state_->request_outcome = GetAssertionOutcome::kOtherFailure;
       CompleteGetAssertionRequest(
@@ -1717,9 +1694,8 @@ void AuthenticatorCommonImpl::GetClientCapabilities(
       base::BarrierCallback<blink::mojom::WebAuthnClientCapabilityPtr>(
           kNumberOfComputedCapabilities, std::move(completion_callback));
 
-  barrier_callback.Run(MakeCapability(
-      client_capabilities::kRelatedOrigins,
-      base::FeatureList::IsEnabled(device::kWebAuthnRelatedOrigin)));
+  barrier_callback.Run(
+      MakeCapability(client_capabilities::kRelatedOrigins, true));
 
   IsHybridTransportSupported(
       base::BindOnce(&MakeCapability, client_capabilities::kHybridTransport)
@@ -2026,6 +2002,8 @@ void AuthenticatorCommonImpl::OnRegisterResponse(
     device::MakeCredentialStatus status_code,
     std::optional<device::AuthenticatorMakeCredentialResponse> response_data,
     const device::FidoAuthenticator* authenticator) {
+  CHECK(authenticator);
+
   if (!req_state_->request_handler) {
     // Either the callback was called immediately and
     // |req_state_->request_handler| has not yet been assigned (this is a bug),
@@ -2247,7 +2225,9 @@ void AuthenticatorCommonImpl::OnSignResponse(
     std::optional<std::vector<device::AuthenticatorGetAssertionResponse>>
         response_data,
     device::FidoAuthenticator* authenticator) {
+  CHECK(authenticator);
   DCHECK(!response_data || !response_data->empty());  // empty vector is invalid
+
   if (!req_state_->request_handler) {
     // Either the callback was called immediately and
     // |req_state_->request_handler| has not yet been assigned (this is a bug),
@@ -2871,7 +2851,7 @@ AuthenticatorCommonImpl::RequestSource() const {
   if (serving_requests_for_ == ServingRequestsFor::kInternalUses) {
     return AuthenticatorRequestClientDelegate::RequestSource::kInternal;
   }
-  if (req_state_->mode == RequestMode::kPayment) {
+  if (req_state_->mode == AuthenticationRequestMode::kPayment) {
     return AuthenticatorRequestClientDelegate::RequestSource::
         kSecurePaymentConfirmation;
   }

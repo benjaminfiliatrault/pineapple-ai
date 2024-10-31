@@ -163,7 +163,7 @@
 #include "third_party/blink/public/mojom/mediastream/media_devices.mojom.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "third_party/blink/public/mojom/notifications/notification_service.mojom.h"
-#include "third_party/blink/public/mojom/origin_trial_state/origin_trial_state_host.mojom.h"
+#include "third_party/blink/public/mojom/origin_trials/origin_trial_state_host.mojom.h"
 #include "third_party/blink/public/mojom/payments/payment_app.mojom.h"
 #include "third_party/blink/public/mojom/payments/payment_credential.mojom.h"
 #include "third_party/blink/public/mojom/peerconnection/peer_connection_tracker.mojom.h"
@@ -184,7 +184,6 @@
 #include "third_party/blink/public/mojom/wake_lock/wake_lock.mojom.h"
 #include "third_party/blink/public/mojom/webaudio/audio_context_manager.mojom.h"
 #include "third_party/blink/public/mojom/webauthn/authenticator.mojom.h"
-#include "third_party/blink/public/mojom/webauthn/virtual_authenticator.mojom.h"
 #include "third_party/blink/public/mojom/webid/digital_identity_request.mojom.h"
 #include "third_party/blink/public/mojom/webid/federated_auth_request.mojom.h"
 #include "third_party/blink/public/mojom/websockets/websocket_connector.mojom.h"
@@ -939,10 +938,6 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<payments::mojom::PaymentCredential>(base::BindRepeating(
       &RenderFrameHostImpl::CreatePaymentCredential, base::Unretained(host)));
 
-  map->Add<blink::test::mojom::VirtualAuthenticatorManager>(
-      base::BindRepeating(&RenderFrameHostImpl::GetVirtualAuthenticatorManager,
-                          base::Unretained(host)));
-
   // BrowserMainLoop::GetInstance() may be null on unit tests.
   if (BrowserMainLoop::GetInstance()) {
     // BrowserMainLoop, which owns MediaStreamManager, is alive for the lifetime
@@ -1068,7 +1063,7 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
       base::BindRepeating(&BindTextDetection));
 
   auto* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(cc::switches::kEnableGpuBenchmarking)) {
+  if (command_line->HasSwitch(switches::kEnableGpuBenchmarking)) {
     map->Add<mojom::InputInjector>(
         base::BindRepeating(&RenderFrameHostImpl::BindInputInjectorReceiver,
                             base::Unretained(host)));
@@ -1521,9 +1516,17 @@ SharedStorageWorkletHost* GetContextForHost(SharedStorageWorkletHost* host) {
 
 void PopulateSharedStorageWorkletBinders(SharedStorageWorkletHost* host,
                                          mojo::BinderMap* map) {
-  // Ignore requests to bind UKM recorder, since there is no current plan to
-  // support it for worklets and the renderer always tries to bind it.
+  // Ignore requests to bind UkmRecorderFactory and FeatureObserver, since there
+  // is no current plan to support them for worklets and the renderer always
+  // tries to bind them. TODO(crbug.com/366293454).
   map->Add<ukm::mojom::UkmRecorderFactory>(base::DoNothing());
+  map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
+
+  // SharedStorageWorkletHost binders
+  // base::Unretained(host) is safe because the map is owned by
+  // |SharedStorageWorkletHost::broker_|.
+  map->Add<blink::mojom::LockManager>(base::BindRepeating(
+      &SharedStorageWorkletHost::GetLockManager, base::Unretained(host)));
 }
 
 void PopulateBinderMapWithContext(

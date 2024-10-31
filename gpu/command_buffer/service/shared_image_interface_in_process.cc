@@ -100,7 +100,7 @@ SharedImageInterfaceInProcess::SharedImageInterfaceInProcess(
         base::BindOnce(&SharedImageInterfaceInProcess::SetUpOnGpu,
                        base::Unretained(this), std::move(params)),
 
-        {});
+        /*sync_token_fences=*/{}, SyncToken());
   } else {
     CHECK_EQ(owner_thread_, OwnerThread::kGpu);
     SetUpOnGpu(std::move(params));
@@ -116,7 +116,7 @@ SharedImageInterfaceInProcess::~SharedImageInterfaceInProcess() {
     task_sequence_->ScheduleTask(
         base::BindOnce(&SharedImageInterfaceInProcess::DestroyOnGpu,
                        base::Unretained(this), &completion),
-        {});
+        /*sync_token_fences=*/{}, SyncToken());
   } else {
     CHECK_EQ(owner_thread_, OwnerThread::kGpu);
     DestroyOnGpu(&completion);
@@ -137,7 +137,7 @@ SharedImageInterfaceInProcess::GetCapabilities() {
         base::BindOnce(&SharedImageInterfaceInProcess::GetCapabilitiesOnGpu,
                        base::Unretained(this), &completion,
                        shared_image_capabilities_.get()),
-        {});
+        /*sync_token_fences=*/{}, SyncToken());
     completion.Wait();
   }
   return *shared_image_capabilities_;
@@ -162,11 +162,13 @@ void SharedImageInterfaceInProcess::SetUpOnGpu(
 
   create_factory_ = base::BindOnce(
       [](std::unique_ptr<SetUpOnGpuParams> params) {
+        auto* memory_tracker = params->context_state
+                                   ? params->context_state->memory_tracker()
+                                   : nullptr;
         auto shared_image_factory = std::make_unique<SharedImageFactory>(
             params->gpu_preferences, params->gpu_workarounds,
             params->gpu_feature_info, params->context_state,
-            params->shared_image_manager,
-            params->context_state->memory_tracker(),
+            params->shared_image_manager, memory_tracker,
             params->is_for_display_compositor);
         return shared_image_factory;
       },
@@ -413,7 +415,7 @@ SharedImageInterfaceInProcess::GetGpuMemoryBufferHandleInfo(
                          GetGpuMemoryBufferHandleInfoOnGpuThread,
                      base::Unretained(this), mailbox, &handle, &format, &size,
                      &buffer_usage, &completion),
-      {});
+      /*sync_token_fences=*/{}, SyncToken());
   completion.Wait();
   return GpuMemoryBufferHandleInfo(std::move(handle), format, size,
                                    buffer_usage);
@@ -598,14 +600,13 @@ SharedImageInterfaceInProcess::CreateSwapChain(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     gpu::SharedImageUsageSet usage) {
-  NOTREACHED_IN_MIGRATION();
-  return SharedImageInterface::SwapChainSharedImages(nullptr, nullptr);
+  NOTREACHED();
 }
 
 void SharedImageInterfaceInProcess::PresentSwapChain(
     const SyncToken& sync_token,
     const Mailbox& mailbox) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 #if BUILDFLAG(IS_FUCHSIA)
@@ -615,7 +616,7 @@ void SharedImageInterfaceInProcess::RegisterSysmemBufferCollection(
     const viz::SharedImageFormat& format,
     gfx::BufferUsage usage,
     bool register_with_image_pipe) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
@@ -737,7 +738,8 @@ scoped_refptr<gfx::NativePixmap> SharedImageInterfaceInProcess::GetNativePixmap(
 void SharedImageInterfaceInProcess::ScheduleGpuTask(
     base::OnceClosure task,
     std::vector<SyncToken> sync_token_fences) {
-  task_sequence_->ScheduleTask(std::move(task), std::move(sync_token_fences));
+  task_sequence_->ScheduleTask(std::move(task), std::move(sync_token_fences),
+                               SyncToken());
 }
 
 scoped_refptr<ClientSharedImage>
@@ -745,8 +747,7 @@ SharedImageInterfaceInProcess::ImportSharedImage(
     const ExportedSharedImage& exported_shared_image) {
   // Secondary references are required only by client processes, so it shouldn't
   // be reachable here.
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 }  // namespace gpu

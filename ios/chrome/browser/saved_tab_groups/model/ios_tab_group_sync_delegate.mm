@@ -9,12 +9,13 @@
 #import "base/check.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
+#import "base/notimplemented.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/uuid.h"
-#import "components/saved_tab_groups/saved_tab_group_tab.h"
-#import "components/saved_tab_groups/tab_group_sync_service.h"
-#import "components/saved_tab_groups/types.h"
-#import "components/saved_tab_groups/utils.h"
+#import "components/saved_tab_groups/public/saved_tab_group_tab.h"
+#import "components/saved_tab_groups/public/tab_group_sync_service.h"
+#import "components/saved_tab_groups/public/types.h"
+#import "components/saved_tab_groups/public/utils.h"
 #import "components/tab_groups/tab_group_id.h"
 #import "components/tab_groups/tab_group_visual_data.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
@@ -215,6 +216,11 @@ void IOSTabGroupSyncDelegate::CloseLocalTabGroup(
   CloseAllWebStatesInGroup(*tab_group_info.web_state_list,
                            tab_group_info.tab_group,
                            WebStateList::CLOSE_NO_FLAGS);
+}
+
+void IOSTabGroupSyncDelegate::DisconnectLocalTabGroup(
+    const LocalTabGroupID& local_id) {
+  NOTIMPLEMENTED();
 }
 
 void IOSTabGroupSyncDelegate::UpdateLocalTabGroup(

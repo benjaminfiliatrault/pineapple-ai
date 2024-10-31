@@ -19,6 +19,7 @@
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">katalánština</translation>
 <translation id="1168100932582989117">Názvové servery Google</translation>
+<translation id="1170788066030116158">Datum pořízení</translation>
 <translation id="1172970565351728681">Zbývá přibližně: <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Přejmenovat</translation>
 <translation id="1173916544412572294">Síť <ph name="NETWORK_INDEX" /> z <ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, síla signálu: <ph name="SIGNAL_STRENGTH" /> %, baterie telefonu:<ph name="BATTERY_STATUS" /> %, podrobnosti</translation>
@@ -580,6 +581,7 @@
 <translation id="5447680084201416734">Nedostatek místa v úložišti.</translation>
 <translation id="5449551289610225147">Neplatné heslo</translation>
 <translation id="5459064203055649751">Soubor s názvem <ph name="FILENAME" /> už existuje. Chcete ho nahradit tím, který právě přesouváte?</translation>
+<translation id="5462378611565326489">OneDrive není v režimu offline k dispozici.</translation>
 <translation id="5463231940765244860">Zadat</translation>
 <translation id="5469868506864199649">italština</translation>
 <translation id="5473333559083690127">Znovu zadejte nový PIN</translation>

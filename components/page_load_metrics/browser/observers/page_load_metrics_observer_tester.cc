@@ -73,11 +73,9 @@ class TestPageLoadMetricsEmbedderInterface
 
   bool IsExtensionUrl(const GURL& url) override { return false; }
 
-  bool IsSidePanel(content::WebContents* web_contents) override {
-    return false;
+  bool IsNonTabWebUI(const GURL& url) override {
+    return test_->is_non_tab_webui();
   }
-
-  bool IsNonTabWebUI() override { return test_->is_non_tab_webui(); }
 
   page_load_metrics::PageLoadMetricsMemoryTracker*
   GetMemoryTrackerForBrowserContext(
@@ -105,7 +103,7 @@ PageLoadMetricsObserverTester::PageLoadMetricsObserverTester(
               std::make_unique<TestPageLoadMetricsEmbedderInterface>(this))),
       is_non_tab_webui_(is_non_tab_webui) {}
 
-PageLoadMetricsObserverTester::~PageLoadMetricsObserverTester() {}
+PageLoadMetricsObserverTester::~PageLoadMetricsObserverTester() = default;
 
 void PageLoadMetricsObserverTester::StartNavigation(const GURL& gurl) {
   std::unique_ptr<content::NavigationSimulator> navigation =

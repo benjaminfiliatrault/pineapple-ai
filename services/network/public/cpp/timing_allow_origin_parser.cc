@@ -27,10 +27,10 @@ mojom::TimingAllowOriginPtr ParseTimingAllowOrigin(const std::string& value) {
   net::HttpUtil::ValuesIterator v(value, /*delimiter=*/',');
   std::vector<std::string> values;
   while (v.GetNext()) {
-    if (v.value_piece() == "*") {
+    if (v.value() == "*") {
       return mojom::TimingAllowOrigin::NewAll(/*ignored=*/0);
     }
-    values.push_back(v.value());
+    values.emplace_back(v.value());
   }
   return mojom::TimingAllowOrigin::NewSerializedOrigins(std::move(values));
 }

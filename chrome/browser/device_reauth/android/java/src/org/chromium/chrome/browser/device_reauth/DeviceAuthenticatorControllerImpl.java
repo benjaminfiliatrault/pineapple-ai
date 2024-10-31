@@ -39,9 +39,8 @@ class DeviceAuthenticatorControllerImpl implements DeviceAuthenticatorController
             BiometricPrompt.Builder promptBuilder =
                     new BiometricPrompt.Builder(mContext)
                             .setTitle(
-                                    mContext.getResources()
-                                            .getString(
-                                                    R.string.password_filling_reauth_prompt_title));
+                                    mContext.getString(
+                                            R.string.password_filling_reauth_prompt_title));
             promptBuilder.setDeviceCredentialAllowed(true);
             promptBuilder.setConfirmationRequired(false);
             mBiometricPrompt = promptBuilder.build();
@@ -54,6 +53,8 @@ class DeviceAuthenticatorControllerImpl implements DeviceAuthenticatorController
             return BiometricsAvailability.ANDROID_VERSION_NOT_SUPPORTED;
         }
         BiometricManager biometricManager = mContext.getSystemService(BiometricManager.class);
+        if (biometricManager == null) return BiometricsAvailability.OTHER_ERROR;
+
         switch (biometricManager.canAuthenticate()) {
             case BIOMETRIC_SUCCESS:
                 return hasScreenLockSetUp()

@@ -6,6 +6,7 @@
 
 #include <optional>
 
+#include "base/check_is_test.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/callback_helpers.h"
@@ -14,7 +15,9 @@
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/io_task_controller.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
+#include "chrome/browser/ash/policy/skyvault/histogram_helper.h"
 #include "chrome/browser/ash/policy/skyvault/migration_notification_manager.h"
+#include "chrome/browser/ash/policy/skyvault/policy_utils.h"
 #include "chrome/browser/ash/policy/skyvault/signin_notification_helper.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_util.h"
 #include "storage/browser/file_system/file_system_url.h"
@@ -23,24 +26,28 @@ namespace ash::cloud_upload {
 
 namespace {
 
+// A factory that can be injected in tests.
+static OdfsMigrationUploader::FactoryCallback g_testing_factory_ =
+    OdfsMigrationUploader::FactoryCallback();
+
 // Runs the upload callback provided to `OdfsSkyvaultUploader::Upload`.
 void OnUploadDone(
     scoped_refptr<OdfsSkyvaultUploader> odfs_skyvault_uploader,
     base::OnceCallback<void(bool, storage::FileSystemURL)> upload_callback,
     storage::FileSystemURL file_url,
-    std::optional<MigrationUploadError> error) {
+    std::optional<MigrationUploadError> error,
+    base::FilePath upload_root_path) {
   std::move(upload_callback).Run(!error.has_value(), std::move(file_url));
 }
 
 // Runs the upload callback provided to `OdfsSkyvaultUploader::Upload`.
 void OnUploadDoneWithError(
     scoped_refptr<OdfsSkyvaultUploader> odfs_skyvault_uploader,
-    base::OnceCallback<void(storage::FileSystemURL,
-                            std::optional<MigrationUploadError>)>
-        upload_callback,
+    OdfsMigrationUploader::UploadDoneCallback upload_callback,
     storage::FileSystemURL file_url,
-    std::optional<MigrationUploadError> error) {
-  std::move(upload_callback).Run(std::move(file_url), error);
+    std::optional<MigrationUploadError> error,
+    base::FilePath upload_root_path) {
+  std::move(upload_callback).Run(std::move(file_url), error, upload_root_path);
 }
 
 static int64_t g_id_counter = 0;
@@ -78,10 +85,11 @@ base::WeakPtr<OdfsSkyvaultUploader> OdfsSkyvaultUploader::Upload(
 base::WeakPtr<OdfsSkyvaultUploader> OdfsSkyvaultUploader::Upload(
     Profile* profile,
     const base::FilePath& path,
+    const base::FilePath& relative_source_path,
+    const std::string& upload_root,
     UploadTrigger trigger,
     base::RepeatingCallback<void(int64_t)> progress_callback,
-    UploadDoneCallback upload_callback_with_error,
-    const base::FilePath& target_path) {
+    UploadDoneCallback upload_callback_with_error) {
   auto* file_system_context =
       file_manager::util::GetFileManagerFileSystemContext(profile);
   DCHECK(file_system_context);
@@ -100,7 +108,8 @@ base::WeakPtr<OdfsSkyvaultUploader> OdfsSkyvaultUploader::Upload(
       break;
     case UploadTrigger::kMigration:
       odfs_skyvault_uploader = OdfsMigrationUploader::Create(
-          profile, ++g_id_counter, file_system_url, target_path);
+          profile, ++g_id_counter, file_system_url, relative_source_path,
+          upload_root);
       break;
   }
 
@@ -167,7 +176,7 @@ void OdfsSkyvaultUploader::Run(UploadDoneCallback upload_callback) {
 
   if (!profile_) {
     LOG(ERROR) << "No profile";
-    OnEndUpload(/*url=*/{}, MigrationUploadError::kOther);
+    OnEndUpload(/*url=*/{}, MigrationUploadError::kUnexpectedError);
     return;
   }
 
@@ -175,13 +184,13 @@ void OdfsSkyvaultUploader::Run(UploadDoneCallback upload_callback) {
       (file_manager::VolumeManager::Get(profile_));
   if (!volume_manager) {
     LOG(ERROR) << "No volume manager";
-    OnEndUpload(/*url=*/{}, MigrationUploadError::kOther);
+    OnEndUpload(/*url=*/{}, MigrationUploadError::kUnexpectedError);
     return;
   }
   io_task_controller_ = volume_manager->io_task_controller();
   if (!io_task_controller_) {
     LOG(ERROR) << "No task_controller";
-    OnEndUpload(/*url=*/{}, MigrationUploadError::kOther);
+    OnEndUpload(/*url=*/{}, MigrationUploadError::kUnexpectedError);
     return;
   }
 
@@ -194,8 +203,9 @@ void OdfsSkyvaultUploader::Run(UploadDoneCallback upload_callback) {
 void OdfsSkyvaultUploader::OnEndUpload(
     storage::FileSystemURL url,
     std::optional<MigrationUploadError> error) {
+  // TODO(b/343879839): Error UMA.
   if (upload_callback_) {
-    std::move(upload_callback_).Run(std::move(url), error);
+    std::move(upload_callback_).Run(std::move(url), error, upload_root_path_);
   }
 }
 
@@ -254,8 +264,10 @@ void OdfsSkyvaultUploader::OnIOTaskStatus(
       OnEndUpload(status.outputs[0].url);
       return;
     case file_manager::io_task::State::kCancelled:
+      OnEndUpload(/*url=*/{}, MigrationUploadError::kCancelled);
+      return;
     case file_manager::io_task::State::kError:
-      OnEndUpload(/*url=*/{}, MigrationUploadError::kCopyFailed);
+      ProcessError(status);
       return;
     case file_manager::io_task::State::kNeedPassword:
       NOTREACHED_IN_MIGRATION()
@@ -265,13 +277,49 @@ void OdfsSkyvaultUploader::OnIOTaskStatus(
   }
 }
 
+void OdfsSkyvaultUploader::ProcessError(
+    const ::file_manager::io_task::ProgressStatus& status) {
+  // It's always one file.
+  DCHECK_EQ(status.sources.size(), 1u);
+  DCHECK_EQ(status.outputs.size(), 1u);
+  DCHECK_EQ(status.state, file_manager::io_task::State::kError);
+
+  base::File::Error error =
+      status.outputs.front().error.value_or(base::File::FILE_ERROR_FAILED);
+  MigrationUploadError upload_error = MigrationUploadError::kMoveFailed;
+
+  switch (error) {
+    case base::File::FILE_ERROR_NOT_FOUND:
+      upload_error = MigrationUploadError::kFileNotFound;
+      break;
+    case base::File::FILE_ERROR_ACCESS_DENIED:
+      // TODO(aidazolic): Maybe ask for reauth again.
+      upload_error = MigrationUploadError::kAuthRequired;
+      break;
+    case base::File::FILE_ERROR_NO_SPACE:
+      upload_error = MigrationUploadError::kCloudQuotaFull;
+      break;
+    case base::File::FILE_ERROR_INVALID_URL:
+      upload_error = MigrationUploadError::kInvalidURL;
+      break;
+    default:
+      break;
+  }
+
+  OnEndUpload(/*url=*/{}, upload_error);
+}
+
 void OdfsSkyvaultUploader::OnMountResponse(base::File::Error result) {
   if (cancelled_) {
     OnEndUpload(/*url=*/{}, MigrationUploadError::kCancelled);
     return;
   }
 
-  if (result != base::File::Error::FILE_OK) {
+  const bool sign_in_error = result != base::File::Error::FILE_OK;
+  policy::local_user_files::SkyVaultOneDriveSignInErrorHistogram(trigger_,
+                                                                 sign_in_error);
+
+  if (sign_in_error) {
     LOG(ERROR) << "Failed to mount ODFS: " << result;
     OnEndUpload(/*url=*/{}, MigrationUploadError::kServiceUnavailable);
     return;
@@ -306,7 +354,7 @@ void OdfsSkyvaultUploader::StartIOTask() {
       profile_, file_system_context_, destination_folder_path);
   if (!destination_folder_url.is_valid()) {
     LOG(ERROR) << "Unable to generate destination folder ODFS URL";
-    OnEndUpload(/*url=*/{}, MigrationUploadError::kCopyFailed);
+    OnEndUpload(/*url=*/{}, MigrationUploadError::kServiceUnavailable);
     return;
   }
 
@@ -329,31 +377,46 @@ scoped_refptr<OdfsMigrationUploader> OdfsMigrationUploader::Create(
     Profile* profile,
     int64_t id,
     const storage::FileSystemURL& file_system_url,
-    const base::FilePath& target_path) {
-  return new OdfsMigrationUploader(profile, id, file_system_url, target_path);
+    const base::FilePath& relative_source_path,
+    const std::string& upload_root) {
+  if (g_testing_factory_) {
+    CHECK_IS_TEST();
+    return g_testing_factory_.Run(profile, id, file_system_url,
+                                  relative_source_path);
+  }
+  return new OdfsMigrationUploader(profile, id, file_system_url,
+                                   relative_source_path, upload_root);
+}
+
+// static
+void OdfsMigrationUploader::SetFactoryForTesting(FactoryCallback factory) {
+  CHECK_IS_TEST();
+  g_testing_factory_ = factory;
 }
 
 OdfsMigrationUploader::OdfsMigrationUploader(
     Profile* profile,
     int64_t id,
     const storage::FileSystemURL& file_system_url,
-    const base::FilePath& target_path)
+    const base::FilePath& relative_source_path,
+    const std::string& upload_root)
     : OdfsSkyvaultUploader(profile,
                            id,
                            file_system_url,
                            UploadTrigger::kMigration,
                            /*progress_callback=*/base::DoNothing(),
                            std::nullopt),
-      target_path_(target_path) {}
+      relative_source_path_(relative_source_path),
+      upload_root_(upload_root) {}
 
 OdfsMigrationUploader::~OdfsMigrationUploader() = default;
 
 base::FilePath OdfsMigrationUploader::GetDestinationFolderPath(
     file_system_provider::ProvidedFileSystemInterface* file_system) {
-  base::FilePath path =
+  upload_root_path_ =
       OdfsSkyvaultUploader::GetDestinationFolderPath(file_system)
-          .Append(target_path_);
-  return path;
+          .Append(upload_root_);
+  return upload_root_path_.Append(relative_source_path_);
 }
 
 void OdfsMigrationUploader::RequestSignIn(

@@ -22,6 +22,7 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_browser_util.h"
 #include "components/autofill/core/browser/autofill_client.h"
+#include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_optimization_guide.h"
 #include "components/autofill/core/browser/data_model/autofill_offer_data.h"
@@ -392,7 +393,7 @@ GetSuggestionMainTextAndMinorTextForCard(const CreditCard& credit_card,
         nickname, GetObfuscationLength()));
   }
 
-  if (trigger_field_type == CREDIT_CARD_VERIFICATION_CODE) {
+  if (kCvcFieldTypes.contains(trigger_field_type)) {
     CHECK(!credit_card.cvc().empty());
 #if BUILDFLAG(IS_ANDROID)
     return create_text(l10n_util::GetStringFUTF16(
@@ -493,11 +494,11 @@ void SetSuggestionLabelsForCard(
               ->payments_data_manager()
               .IsCardEligibleForBenefits(credit_card)) {
         labels.push_back({*benefit_label});
-      }
-      if (base::FeatureList::IsEnabled(
-              features::kAutofillEnableCardBenefitsIph)) {
-        suggestion.feature_for_iph =
-            &feature_engagement::kIPHAutofillCreditCardBenefitFeature;
+        if (base::FeatureList::IsEnabled(
+                features::kAutofillEnableCardBenefitsIph)) {
+          suggestion.feature_for_iph =
+              &feature_engagement::kIPHAutofillCreditCardBenefitFeature;
+        }
       }
     }
     labels.push_back({Suggestion::Text(
@@ -578,9 +579,12 @@ void AdjustVirtualCardSuggestionContent(Suggestion& suggestion,
   suggestion.type = SuggestionType::kVirtualCreditCardEntry;
   // If a virtual card is non-acceptable, it needs to be displayed in
   // grayed-out style.
-  suggestion.apply_deactivated_style = !suggestion.is_acceptable;
+  if (!suggestion.IsAcceptable()) {
+    suggestion.acceptability =
+        Suggestion::Acceptability::kUnacceptableWithDeactivatedStyle;
+  }
   suggestion.feature_for_iph =
-      suggestion.apply_deactivated_style &&
+      suggestion.HasDeactivatedStyle() &&
               base::FeatureList::IsEnabled(
                   features::kAutofillEnableVcnGrayOutForMerchantOptOut)
           ? &feature_engagement::
@@ -604,7 +608,7 @@ void AdjustVirtualCardSuggestionContent(Suggestion& suggestion,
   if (!base::FeatureList::IsEnabled(
           features::kAutofillEnableVirtualCardMetadata)) {
     suggestion.minor_text.value = suggestion.main_text.value;
-    if (suggestion.is_acceptable) {
+    if (suggestion.IsAcceptable()) {
       suggestion.main_text.value = virtual_card_label;
     } else {
       suggestion.main_text.value = virtual_card_disabled_label;
@@ -658,7 +662,7 @@ void AdjustVirtualCardSuggestionContent(Suggestion& suggestion,
         suggestion.labels.push_back({*benefit_label});
       }
     }
-    if (suggestion.is_acceptable) {
+    if (suggestion.IsAcceptable()) {
       suggestion.labels.push_back(
           std::vector<Suggestion::Text>{Suggestion::Text(virtual_card_label)});
     } else {
@@ -832,22 +836,6 @@ bool ShouldShowVirtualCardOption(const CreditCard* candidate_card,
                                                   client);
 }
 
-// Filter cards based on `last_four_set_for_cvc_suggestion_filtering`. Remove
-// cards that don't have last four in
-// `last_four_set_for_cvc_suggestion_filtering`.
-void MaybeFilterCardsToSuggest(std::vector<CreditCard>& cards_to_suggest,
-                               const base::flat_set<std::u16string>&
-                                   last_four_set_for_cvc_suggestion_filtering) {
-  if (last_four_set_for_cvc_suggestion_filtering.empty()) {
-    return;
-  }
-  std::erase_if(cards_to_suggest, [&last_four_set_for_cvc_suggestion_filtering](
-                                      const CreditCard& credit_card) {
-    return !last_four_set_for_cvc_suggestion_filtering.contains(
-        credit_card.LastFourDigits());
-  });
-}
-
 // Returns the local and server cards ordered by the Autofill ranking.
 // If `suppress_disused_cards`, local expired disused cards are removed.
 // If `prefix_match`, cards are matched with the contents of `trigger_field`.
@@ -935,8 +923,11 @@ Suggestion CreateCreditCardSuggestion(
   // First layer manual fallback entries can't fill forms and thus can't be
   // selected by the user.
   suggestion.type = SuggestionType::kCreditCardEntry;
-  suggestion.is_acceptable =
+  bool is_acceptable =
       IsCardSuggestionAcceptable(credit_card, client, is_manual_fallback);
+  suggestion.acceptability = is_acceptable
+                                 ? Suggestion::Acceptability::kAcceptable
+                                 : Suggestion::Acceptability::kUnacceptable;
   suggestion.payload = Suggestion::Guid(credit_card.guid());
 #if BUILDFLAG(IS_ANDROID)
   // The card art icon should always be shown at the start of the suggestion.
@@ -1009,8 +1000,9 @@ std::vector<Suggestion> GetSuggestionsForCreditCards(
     CreditCardSuggestionSummary& summary,
     bool should_show_scan_credit_card,
     bool should_show_cards_from_account,
-    std::vector<std::string>& four_digit_combinations_in_dom,
-    std::vector<std::u16string>& last_four_list_for_cvc_suggestion_filtering) {
+    const std::vector<std::string>& four_digit_combinations_in_dom,
+    const std::vector<std::u16string>&
+        autofilled_last_four_digits_in_form_for_suggestion_filtering) {
   // Only trigger GetVirtualCreditCardsForStandaloneCvcField if it's standalone
   // CVC field.
   base::flat_map<std::string, VirtualCardUsageData::VirtualCardLastFour>
@@ -1033,9 +1025,8 @@ std::vector<Suggestion> GetSuggestionsForCreditCards(
     // If no virtual cards available for standalone CVC field, fall back to
     // regular credit card suggestions.
     suggestions = GetCreditCardOrCvcFieldSuggestions(
-        client, trigger_field,
-        base::flat_set<std::u16string>(
-            std::move(last_four_list_for_cvc_suggestion_filtering)),
+        client, trigger_field, four_digit_combinations_in_dom,
+        autofilled_last_four_digits_in_form_for_suggestion_filtering,
         trigger_field_type, trigger_source, should_show_scan_credit_card,
         should_show_cards_from_account, summary);
   }
@@ -1046,8 +1037,9 @@ std::vector<Suggestion> GetSuggestionsForCreditCards(
 std::vector<Suggestion> GetCreditCardOrCvcFieldSuggestions(
     const AutofillClient& client,
     const FormFieldData& trigger_field,
-    const base::flat_set<std::u16string>&
-        last_four_set_for_cvc_suggestion_filtering,
+    const std::vector<std::string>& four_digit_combinations_in_dom,
+    const std::vector<std::u16string>&
+        autofilled_last_four_digits_in_form_for_suggestion_filtering,
     FieldType trigger_field_type,
     AutofillSuggestionTriggerSource trigger_source,
     bool should_show_scan_credit_card,
@@ -1055,7 +1047,8 @@ std::vector<Suggestion> GetCreditCardOrCvcFieldSuggestions(
     CreditCardSuggestionSummary& summary) {
   if (trigger_field_type == CREDIT_CARD_STANDALONE_VERIFICATION_CODE &&
       !base::FeatureList::IsEnabled(
-          features::kAutofillEnableCvcStorageAndFillingEnhancement)) {
+          features::
+              kAutofillEnableCvcStorageAndFillingStandaloneFormEnhancement)) {
     return {};
   }
   const bool is_trigger_field_a_credit_card_field =
@@ -1078,7 +1071,7 @@ std::vector<Suggestion> GetCreditCardOrCvcFieldSuggestions(
       is_trigger_field_a_credit_card_field && !allow_payment_swapping;
   bool require_non_empty_value_on_trigger_field =
       (is_trigger_field_a_credit_card_field && !allow_payment_swapping) ||
-      (trigger_field_type == CREDIT_CARD_VERIFICATION_CODE);
+      kCvcFieldTypes.contains(trigger_field_type);
   std::vector<CreditCard> cards_to_suggest =
       GetOrderedCardsToSuggest(client, trigger_field, trigger_field_type,
                                /*suppress_disused_cards=*/
@@ -1093,8 +1086,12 @@ std::vector<Suggestion> GetCreditCardOrCvcFieldSuggestions(
           AutofillSuggestionTriggerSource::kManualFallbackPayments &&
       base::FeatureList::IsEnabled(
           features::kAutofillEnableCvcStorageAndFillingEnhancement)) {
-    MaybeFilterCardsToSuggest(cards_to_suggest,
-                              last_four_set_for_cvc_suggestion_filtering);
+    FilterCardsToSuggestForCvcFields(
+        trigger_field_type,
+        base::flat_set<std::string>(std::move(four_digit_combinations_in_dom)),
+        base::flat_set<std::u16string>(std::move(
+            autofilled_last_four_digits_in_form_for_suggestion_filtering)),
+        cards_to_suggest);
   }
 
   // If autofill for cards is triggered from the context menu on a credit card
@@ -1114,7 +1111,8 @@ std::vector<Suggestion> GetCreditCardOrCvcFieldSuggestions(
       base::FeatureList::IsEnabled(
           features::kAutofillForUnclassifiedFieldsAvailable)) {
     return GetCreditCardOrCvcFieldSuggestions(
-        client, trigger_field, last_four_set_for_cvc_suggestion_filtering,
+        client, trigger_field, four_digit_combinations_in_dom,
+        autofilled_last_four_digits_in_form_for_suggestion_filtering,
         UNKNOWN_TYPE, trigger_source, should_show_scan_credit_card,
         should_show_cards_from_account, summary);
   }
@@ -1156,7 +1154,7 @@ std::vector<Suggestion> GetCreditCardOrCvcFieldSuggestions(
                                       current_card_index);
 
       summary.ranking_context.suggestion_rankings_difference_map.insert(
-          {suggestion.GetBackendId<Suggestion::Guid>(), ranking_difference});
+          {suggestion.GetPayload<Suggestion::Guid>(), ranking_difference});
     }
   }
   summary.with_cvc = !std::ranges::all_of(
@@ -1266,10 +1264,22 @@ std::vector<Suggestion> GetCreditCardSuggestionsForTouchToFill(
   suggestions.reserve(credit_cards.size());
   for (const CreditCard& credit_card : credit_cards) {
     Suggestion suggestion;
-    std::u16string nickname = GetDisplayNicknameForCreditCard(
+    bool should_display_terms_available = false;
+    std::u16string display_name = GetDisplayNicknameForCreditCard(
         credit_card, client.GetPersonalDataManager()->payments_data_manager());
-    suggestion.main_text.value =
-        credit_card.CardNameForAutofillDisplay(nickname);
+    std::u16string card_name =
+        credit_card.CardNameForAutofillDisplay(display_name);
+    std::u16string network = base::UTF8ToUTF16(
+        data_util::GetPaymentRequestData(credit_card.network())
+            .basic_card_issuer_network);
+    // If a card has a nickname, the network name should also be announced,
+    // otherwise the name of the card will be the network name and it will be
+    // announced.
+    std::u16string main_text_content_description =
+        base::i18n::ToLower(card_name) == base::i18n::ToLower(network)
+            ? card_name
+            : base::StrCat({card_name, u" ", network});
+    suggestion.main_text.value = card_name;
     suggestion.minor_text.value =
         credit_card.ObfuscatedNumberWithVisibleLastFourDigits();
     std::optional<Suggestion::Text> benefit_label =
@@ -1278,18 +1288,23 @@ std::vector<Suggestion> GetCreditCardSuggestionsForTouchToFill(
                              ->payments_data_manager()
                              .IsCardEligibleForBenefits(credit_card)) {
       suggestion.labels.push_back({*benefit_label});
-      suggestion.payload = Suggestion::PaymentsPayload(
-          /* should_display_terms_available= */ true);
+      should_display_terms_available = true;
     }
+    suggestion.payload = Suggestion::PaymentsPayload(
+        main_text_content_description, should_display_terms_available);
     if (credit_card.record_type() == CreditCard::RecordType::kVirtualCard) {
       suggestion.type = SuggestionType::kVirtualCreditCardEntry;
-      suggestion.apply_deactivated_style = !IsCardSuggestionAcceptable(
+      bool acceptable = IsCardSuggestionAcceptable(
           credit_card, client, /*is_manual_fallback= */ false);
+      suggestion.acceptability =
+          acceptable ? autofill::Suggestion::Acceptability::kAcceptable
+                     : autofill::Suggestion::Acceptability::
+                           kUnacceptableWithDeactivatedStyle;
       suggestion.labels.push_back(std::vector<Suggestion::Text>{
           Suggestion::Text(l10n_util::GetStringUTF16(
-              suggestion.apply_deactivated_style
-                  ? IDS_AUTOFILL_VIRTUAL_CARD_DISABLED_SUGGESTION_OPTION_VALUE
-                  : IDS_AUTOFILL_VIRTUAL_CARD_SUGGESTION_OPTION_VALUE))});
+              acceptable
+                  ? IDS_AUTOFILL_VIRTUAL_CARD_SUGGESTION_OPTION_VALUE
+                  : IDS_AUTOFILL_VIRTUAL_CARD_DISABLED_SUGGESTION_OPTION_VALUE))});
     } else {
       suggestion.type = SuggestionType::kCreditCardEntry;
       suggestion.labels.push_back(
@@ -1331,11 +1346,10 @@ std::vector<Suggestion> GetSuggestionsForIbans(const std::vector<Iban>& ibans) {
     suggestion.icon = Suggestion::Icon::kIban;
     suggestion.type = SuggestionType::kIbanEntry;
     if (iban.record_type() == Iban::kLocalIban) {
-      suggestion.payload = Suggestion::BackendId(Suggestion::Guid(iban.guid()));
+      suggestion.payload = Suggestion::Guid(iban.guid());
     } else {
       CHECK(iban.record_type() == Iban::kServerIban);
-      suggestion.payload =
-          Suggestion::BackendId(Suggestion::InstrumentId(iban.instrument_id()));
+      suggestion.payload = Suggestion::InstrumentId(iban.instrument_id());
     }
 
     std::u16string iban_identifier =
@@ -1382,8 +1396,8 @@ std::vector<Suggestion> GetPromoCodeSuggestionsFromPromoCodeOffers(
       suggestion.labels = {{Suggestion::Text(base::ASCIIToUTF16(
           promo_code_offer->GetDisplayStrings().value_prop_text))}};
     }
-    suggestion.payload = Suggestion::BackendId(
-        Suggestion::Guid(base::NumberToString(promo_code_offer->GetOfferId())));
+    suggestion.payload =
+        Suggestion::Guid(base::NumberToString(promo_code_offer->GetOfferId()));
     suggestion.type = SuggestionType::kMerchantPromoCodeEntry;
 
     // Every offer for a given merchant leads to the same GURL, so we grab the
@@ -1469,6 +1483,42 @@ Suggestion CreateCreditCardSuggestionForTest(
 bool ShouldShowVirtualCardOptionForTest(const CreditCard* candidate_card,
                                         const AutofillClient& client) {
   return ShouldShowVirtualCardOption(candidate_card, client);
+}
+
+void FilterCardsToSuggestForCvcFields(
+    FieldType trigger_field_type,
+    const base::flat_set<std::string>& four_digit_combinations_in_dom,
+    const base::flat_set<std::u16string>&
+        autofilled_last_four_digits_in_form_for_suggestion_filtering,
+    std::vector<CreditCard>& cards_to_suggest) {
+  if (trigger_field_type ==
+          FieldType::CREDIT_CARD_STANDALONE_VERIFICATION_CODE &&
+      base::FeatureList::IsEnabled(
+          features::
+              kAutofillEnableCvcStorageAndFillingStandaloneFormEnhancement)) {
+    // For standalone CVC fields, there is no form to fill and thus filter based
+    // on, so the filtering mechanism used to show the correct suggestion(s) is
+    // matching the last four digits in the DOM to the last four digits of the
+    // cards that can be displayed.
+    std::erase_if(cards_to_suggest, [&four_digit_combinations_in_dom](
+                                        const CreditCard& credit_card) {
+      return !four_digit_combinations_in_dom.contains(
+          base::UTF16ToUTF8(credit_card.LastFourDigits()));
+    });
+  } else {
+    // `autofilled_last_four_digits_in_form_for_suggestion_filtering` being
+    // empty implies no card was autofilled, show all suggestions.
+    if (autofilled_last_four_digits_in_form_for_suggestion_filtering.empty()) {
+      return;
+    }
+    std::erase_if(
+        cards_to_suggest,
+        [&autofilled_last_four_digits_in_form_for_suggestion_filtering](
+            const CreditCard& credit_card) {
+          return !autofilled_last_four_digits_in_form_for_suggestion_filtering
+                      .contains(credit_card.LastFourDigits());
+        });
+  }
 }
 
 }  // namespace autofill

@@ -38,7 +38,6 @@ import org.chromium.base.BuildInfo;
 import org.chromium.base.BundleUtils;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.cached_flags.BooleanCachedFieldTrialParameter;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
@@ -51,7 +50,10 @@ import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
 import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
+import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeStateProvider;
 import org.chromium.components.browser_ui.util.AutomotiveUtils;
+import org.chromium.ui.InsetObserver;
+import org.chromium.ui.base.ImmutableWeakReference;
 import org.chromium.ui.display.DisplaySwitches;
 import org.chromium.ui.display.DisplayUtil;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -73,7 +75,6 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
      * activity.
      *
      * Activities that use the <merge> tag or delay layout inflation cannot use WITH_TOOLBAR_VIEW.
-     * Activities that use their own action bar cannot use WITH_ACTION_BAR.
      * Activities that appear as Dialogs using themes do not have an automotive toolbar yet (NONE).
      *
      * Full screen alert dialogs display the automotive toolbar using FullscreenAlertDialog.
@@ -81,7 +82,6 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
      */
     @IntDef({
         AutomotiveToolbarImplementation.WITH_TOOLBAR_VIEW,
-        AutomotiveToolbarImplementation.WITH_ACTION_BAR,
         AutomotiveToolbarImplementation.NONE,
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -94,30 +94,17 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
          */
         int WITH_TOOLBAR_VIEW = 0;
 
-        /**
-         * Automotive toolbar is added using AppCompatActivity's ActionBar, provided with a
-         * ThemeOverlay, see R.style.ThemeOverlay_BrowserUI_Automotive_PersistentBackButtonToolbar.
-         *
-         * <p>This will be deprecated because it does not support a vertical toolbar.
-         */
-        @Deprecated int WITH_ACTION_BAR = 1;
-
         /** Automotive toolbar is not added. */
         int NONE = -1;
     }
-
-    public static final String DEFAULT_FONT_FAMILY_TESTING_PARAM = "dev_testing";
-    public static final BooleanCachedFieldTrialParameter DEFAULT_FONT_FAMILY_TESTING =
-            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.ANDROID_GOOGLE_SANS_TEXT,
-                    DEFAULT_FONT_FAMILY_TESTING_PARAM,
-                    false);
 
     private final ObservableSupplierImpl<ModalDialogManager> mModalDialogManagerSupplier =
             new ObservableSupplierImpl<>();
     private NightModeStateProvider mNightModeStateProvider;
     private LinkedHashSet<Integer> mThemeResIds = new LinkedHashSet<>();
     private ServiceTracingProxyProvider mServiceTracingProxyProvider;
+    private EdgeToEdgeStateProvider mEdgeToEdgeStateProvider;
+    private InsetObserver mInsetObserver;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -164,6 +151,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         BundleUtils.restoreLoadedSplits(savedInstanceState);
+        mEdgeToEdgeStateProvider = new EdgeToEdgeStateProvider(getWindow());
         mModalDialogManagerSupplier.set(createModalDialogManager());
 
         initializeNightModeStateProvider();
@@ -177,6 +165,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         GlobalAppLocaleController.getInstance().maybeOverrideContextConfig(this);
 
         setDefaultTaskDescription();
+        mInsetObserver = createInsetObserver();
     }
 
     @Override
@@ -271,11 +260,12 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
 
     /**
      * Called during {@link #attachBaseContext(Context)} to allow configuration overrides to be
-     * applied. If this methods return true, the overrides will be applied using
-     * {@link #applyOverrideConfiguration(Configuration)}.
+     * applied. If this methods return true, the overrides will be applied using {@link
+     * #applyOverrideConfiguration(Configuration)}.
+     *
      * @param baseContext The base {@link Context} attached to this class.
-     * @param overrideConfig The {@link Configuration} that will be passed to
-     *                       @link #applyOverrideConfiguration(Configuration)} if necessary.
+     * @param overrideConfig The {@link Configuration} that will be passed to {@link}
+     *     #applyOverrideConfiguration(Configuration)} if necessary.
      * @return True if any configuration overrides were applied, and false otherwise.
      */
     @CallSuper
@@ -339,27 +329,15 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
                                     isDynamicColorAvailable ? "Enabled" : "Disabled");
                         });
 
-        if (BuildInfo.getInstance().isAutomotive
-                && getAutomotiveToolbarImplementation()
-                        == AutomotiveToolbarImplementation.WITH_ACTION_BAR) {
-            int automotiveOverlay =
-                    R.style.ThemeOverlay_BrowserUI_Automotive_PersistentBackButtonToolbar;
-            getTheme().applyStyle(automotiveOverlay, /* force= */ true);
-            mThemeResIds.add(automotiveOverlay);
-        }
-
         if (ChromeFeatureList.sAndroidElegantTextHeight.isEnabled()) {
             int elegantTextHeightOverlay = R.style.ThemeOverlay_BrowserUI_ElegantTextHeight;
             getTheme().applyStyle(elegantTextHeightOverlay, true);
             mThemeResIds.add(elegantTextHeightOverlay);
         }
 
-        if (Build.VERSION.SDK_INT >= VERSION_CODES.TIRAMISU
-                && ChromeFeatureList.sAndroidGoogleSansText.isEnabled()) {
+        if (Build.VERSION.SDK_INT >= VERSION_CODES.TIRAMISU) {
             int defaultFontFamilyOverlay =
-                    DEFAULT_FONT_FAMILY_TESTING.getValue()
-                            ? R.style.ThemeOverlay_BrowserUI_DevTestingDefaultFontFamilyThemeOverlay
-                            : R.style.ThemeOverlay_BrowserUI_DefaultFontFamilyThemeOverlay;
+                    R.style.ThemeOverlay_BrowserUI_DefaultFontFamilyThemeOverlay;
             getTheme().applyStyle(defaultFontFamilyOverlay, true);
             mThemeResIds.add(defaultFontFamilyOverlay);
         }
@@ -476,17 +454,6 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         }
     }
 
-    @Override
-    protected void onResume() {
-        if (BuildInfo.getInstance().isAutomotive
-                && getAutomotiveToolbarImplementation()
-                        == AutomotiveToolbarImplementation.WITH_ACTION_BAR
-                && getSupportActionBar() != null) {
-            getSupportActionBar().setHomeActionContentDescription(R.string.back);
-        }
-        super.onResume();
-    }
-
     protected int getAutomotiveToolbarImplementation() {
         int activityStyle = -1;
         try {
@@ -500,6 +467,26 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         } else {
             return AutomotiveToolbarImplementation.WITH_TOOLBAR_VIEW;
         }
+    }
+
+    /**
+     * Returns the {@link EdgeToEdgeStateProvider} for checking and requesting changes to the
+     * edge-to-edge state.
+     */
+    protected EdgeToEdgeStateProvider getEdgeToEdgeStateProvider() {
+        return mEdgeToEdgeStateProvider;
+    }
+
+    /** Returns the {@link InsetObserver} for observing changes to the system insets. */
+    protected InsetObserver getInsetObserver() {
+        assert mInsetObserver != null
+                : "The inset observer should not be accessed before being initialized.";
+        return mInsetObserver;
+    }
+
+    private InsetObserver createInsetObserver() {
+        return new InsetObserver(
+                new ImmutableWeakReference<>(getWindow().getDecorView().getRootView()));
     }
 
     private void setAutomotiveToolbarBackButtonAction() {

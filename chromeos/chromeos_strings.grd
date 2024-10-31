@@ -294,6 +294,18 @@
       <message name="IDS_QUICK_ANSWERS_VIEW_A11Y_INFO_DESC_TEMPLATE_V2" desc="A11y description template for the Quick Answers view (V2 version).">
         <ph name="QUERY_TEXT">$1<ex>interested</ex></ph>; <ph name="RESULT_TEXT">$2<ex>showing curiosity or concern about something or someone; having a feeling of interest.</ex></ph>; Press Search plus Space to see result in Google Search.
       </message>
+      <message name="IDS_QUICK_ANSWERS_VIEW_A11Y_INFO_DESCRIPTION_WITH_INTENT_TEMPLATE" desc="A11y description template for the refreshed Quick Answers view. Note that this text is not rendered in UI but passed to a11y service.">
+        <ph name="INTENT">$1<ex>Unit Conversion</ex></ph>; <ph name="QUERY_TEXT">$2<ex>10 kg</ex></ph>; <ph name="RESULT_TEXT">$3<ex>22.04 pounds</ex></ph>
+      </message>
+      <message name="IDS_QUICK_ANSWERS_VIEW_A11Y_INFO_DESCRIPTION_WITH_INTENT_AND_SUBTEXT_TEMPLATE" desc="A11y description template for the refreshed Quick Answers view with sub text. Note that this text is not rendered in UI but passed to a11y service.">
+        <ph name="INTENT">$1<ex>Translate</ex></ph>; <ph name="QUERY_TEXT">$2<ex>信息</ex></ph>; <ph name="SUBTEXT">$3<ex>Chinese</ex></ph>; <ph name="RESULT_TEXT">$4<ex>information</ex></ph>
+      </message>
+      <message name="IDS_QUICK_ANSWERS_VIEW_A11Y_INFO_DESCRIPTION_TEMPLATE" desc="A11y description template for the Quick Answers view. Note that this text is not rendered in UI but passed to a11y service.">
+        <ph name="QUERY_TEXT">$1<ex>10 kg</ex></ph>; <ph name="RESULT_TEXT">$2<ex>22.04 pounds</ex></ph>
+      </message>
+      <message name="IDS_QUICK_ANSWERS_VIEW_A11Y_INFO_DESCRIPTION_WITH_SUBTEXT_TEMPLATE" desc="A11y description template for the Quick Answers view with sub text. Note that this text is not rendered in UI but passed to a11y service.">
+        <ph name="QUERY_TEXT">$1<ex>信息</ex></ph>; <ph name="SUBTEXT">$2<ex>Chinese</ex></ph>; <ph name="RESULT_TEXT">$3<ex>information</ex></ph>
+      </message>
       <!-- TODO(b/259440976): Remove navigation directions once the QA Rich Card feature launches. -->
       <message name="IDS_QUICK_ANSWERS_VIEW_A11Y_NAME_TEXT" desc="A11y name text for the Quick Answers view.">
         Info related to your selection
@@ -454,7 +466,7 @@
         Help me read
       </message>
       <message name="IDS_ASH_MAHI_CONDENSED_MENU_BUTTON_LABEL" desc="The label that appears on the condensed Mahi menu button">
-        Help me read this page
+        Summarize with Help me read
       </message>
 
       <!-- Multitask Menu -->
@@ -1640,7 +1652,7 @@
         <message name="IDS_KEYBOARD_DIAGRAM_ARIA_NAME_SHIFT_RIGHT" desc="Describes the right Shift key on a keyboard. Used as part of an ARIA label on a keyboard testing UI (one of 'Right shift key not pressed', 'Right shift key pressed', or 'Right shift key tested').">
           Right shift
         </message>
-        <message name="IDS_KEYBOARD_DIAGRAM_ARIA_NAME_TAB" desc="Describes the Tab key on a keyboard. Used as part of an ARIA label on a keyboard testing UI (one of 'Tab key not pressed', 'Tab key pressed', or 'Tab key tested').">
+        <message name="IDS_KEYBOARD_DIAGRAM_ARIA_NAME_TAB" desc="Describes the Tab key on a keyboard. Used as part of an ARIA label on a keyboard testing UI (one of 'Tab key not pressed', 'Tab key pressed', or 'Tab key tested')." meaning="Tab key on the keyboard">
           Tab
         </message>
 
@@ -5763,6 +5775,12 @@
         <message name="IDS_FIRMWARE_DEVICE_UP_TO_DATE_TEXT" desc="Label for when a device is up to date.">
           Your <ph name="DEVICE_NAME">$1<ex>Logitech keyboard</ex></ph> is now up to date
         </message>
+        <message name="IDS_FIRMWARE_DEVICE_READY_TO_INSTALL_UPDATE_TEXT" desc="Label for when a device needs a reboot to complete an update.">
+          <ph name="DEVICE_NAME">$1<ex>system firmware</ex></ph> is ready to be updated
+        </message>
+        <message name="IDS_FIRMWARE_DEVICE_NEEDS_REBOOT_TEXT" desc="Label for displaying which version the device will update to after the necessary reboot.">
+          A restart is required to complete the installation of firmware for <ph name="DEVICE_NAME">$1<ex>system</ex></ph> to version <ph name="VERSION">$2<ex>2.0.12</ex></ph>. Your computer may appear to reboot several times. This behavior is expected.
+        </message>
         <message name="IDS_FIRMWARE_HAS_BEEN_UPDATED_TEXT" desc="Label for displaying which version the device has been updated to.">
           Firmware <ph name="DEVICE_NAME">$1<ex>Logitech keyboard</ex></ph> has been updated to version <ph name="VERSION">$2<ex>2.0.12</ex></ph>
         </message>
@@ -6118,6 +6136,10 @@
             that includes right alt key." translateable="false">
           Press a new shortcut without right alt.
         </message>
+        <message name="IDS_SHORTCUT_CUSTOMIZATION_BLOCK_QUICK_INSERT_KEY_ERROR_MESSAGE" desc="The status message that displays when user press a key combination
+            that includes right alt key.">
+          Quick Insert can't be used for custom shortcuts.
+        </message>
         <message name="IDS_SHORTCUT_CUSTOMIZATION_SEACH_WITH_FUNCTION_KEY_NOT_ALLOWED_STATUS_MESSAGE"
             desc="The status message that displays when user press a key combination
             that includes the search/launcher key with a function key.">
@@ -6151,6 +6173,9 @@
             desc="The placeholder text that appears in the input box where the
             user is required to press a key combination for a shortcut.">
           key
+        </message>
+        <message name="IDS_KEYBOARD_QUICK_INSERT_LABEL" desc="In keyboard subpage, the item for the super insert key.">
+          quick insert
         </message>
         <message name="IDS_SHORTCUT_CUSTOMIZATION_ACCELERATOR_TEXT_DIVIDER" desc="The text shown between multiple shortcut keys.">
           or
@@ -6812,7 +6837,56 @@
       <message name="IDS_DEVICE_RESTRICTION_SCHEDULE_POST_LOGOUT_NOTIFICATION_BODY" desc="Body of the notification telling the user that they were logged out.">
         The <ph name="MANAGER">$1<ex>google.com</ex></ph> administrator has set when this <ph name="DEVICE_TYPE">$2<ex>Chromebook</ex></ph> can be used
       </message>
+      <message name="IDS_DEVICE_DISABLED_HEADING_RESTRICTION_SCHEDULE" desc="Heading of the message shown to the user when the device has been disabled because it is inside restriction schedule.">
+        Device can't be used
+      </message>
+      <message name="IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE" desc="Explanation shown to the user when the device has been disabled because it is inside restriction schedule.">
+        The <ph name="MANAGER">$1<ex>google.com</ex></ph> administrator has set when this <ph name="DEVICE_TYPE">$2<ex>Chromebook</ex></ph> can be used.
+      </message>
+      <message name="IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_TIME" desc="Time when the user will be able to use the device again.">
+        You'll be able to use this device again <ph name="DAY">$1<ex>tomorrow</ex></ph> at <ph name="TIME">$2<ex>8:00 AM</ex></ph>.
+      </message>
+      <message name="IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_MONDAY" desc="Message part DAY for IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_TIME.">
+        on Monday
+      </message>
+      <message name="IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_TUESDAY" desc="Message part DAY for IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_TIME.">
+        on Tuesday
+      </message>
+      <message name="IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_WEDNESDAY" desc="Message part DAY for IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_TIME.">
+        on Wednesday
+      </message>
+      <message name="IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_THURSDAY" desc="Message part DAY for IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_TIME.">
+        on Thursday
+      </message>
+      <message name="IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_FRIDAY" desc="Message part DAY for IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_TIME.">
+        on Friday
+      </message>
+      <message name="IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_SATURDAY" desc="Message part DAY for IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_TIME.">
+        on Saturday
+      </message>
+      <message name="IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_SUNDAY" desc="Message part DAY for IDS_DEVICE_DISABLED_EXPLANATION_RESTRICTION_SCHEDULE_TIME.">
+        on Sunday
+      </message>
 
+      <!-- Strings for OnTask notifications -->
+      <message name="IDS_ON_TASK_NOTIFICATION_TITLE" desc="School Tools title for OnTask notifications">
+        School Tools
+      </message>
+      <message name="IDS_ON_TASK_ENTER_LOCKED_MODE_NOTIFICATION_MESSAGE" desc="Notification message telling students that their teachers have locked their screen.">
+        Your teacher has locked your screen
+      </message>
+      <message name="IDS_ON_TASK_SESSION_END_NOTIFICATION_MESSAGE" desc="Notification message telling students that their class session ended.">
+        Your teacher has ended class
+      </message>
+      <message name="IDS_ON_TASK_URL_BLOCKED_NOTIFICATION_MESSAGE" desc="Toast message telling students that the url is blocked.">
+        Access isn’t allowed for this link. Check with your teacher if you need access.
+      </message>
+      <message name="IDS_ON_TASK_BUNDLE_CONTENT_ADDED_MESSAGE" desc="Notification message telling students that their teacher has added new content to the bundle.">
+        Your teacher has added new content in School Tools
+      </message>
+      <message name="IDS_ON_TASK_BUNDLE_CONTENT_REMOVED_MESSAGE" desc="Notification message telling students that their teacher has removed content from the bundle.">
+        Your teacher has removed content in School Tools
+      </message>
     </messages>
   </release>
 </grit>

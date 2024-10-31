@@ -14,11 +14,11 @@
 #include "base/files/file_path.h"
 #include "base/time/time.h"
 #include "pdf/pdf_ink_brush.h"
-#include "pdf/pdf_ink_conversions.h"
 #include "pdf/pdfium/pdfium_engine.h"
 #include "pdf/pdfium/pdfium_engine_exports.h"
 #include "pdf/pdfium/pdfium_page.h"
 #include "pdf/pdfium/pdfium_test_base.h"
+#include "pdf/test/pdf_ink_test_helpers.h"
 #include "pdf/test/test_client.h"
 #include "pdf/test/test_helpers.h"
 #include "printing/units.h"
@@ -27,7 +27,9 @@
 #include "third_party/ink/src/ink/strokes/stroke.h"
 #include "third_party/pdfium/public/fpdf_edit.h"
 #include "third_party/pdfium/public/fpdfview.h"
+#include "third_party/skia/include/core/SkAlphaType.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkColorType.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -38,14 +40,7 @@ namespace chrome_pdf {
 
 namespace {
 
-constexpr PdfInkBrush::Params kBasicBrushParams = {SK_ColorRED, 4.0f};
-
-struct InputData {
-  gfx::PointF position;
-  base::TimeDelta time;
-};
-
-constexpr auto kBasicInputs = std::to_array<InputData>({
+constexpr auto kBasicInputs = std::to_array<PdfInkInputData>({
     {{126.122f, 52.852f}, base::Seconds(0.0f)},
     {{127.102f, 52.2398f}, base::Seconds(0.031467f)},
     {{130.041f, 50.7704f}, base::Seconds(0.07934f)},
@@ -82,17 +77,9 @@ constexpr auto kBasicInputs = std::to_array<InputData>({
     {{125.878f, 53.2194f}, base::Seconds(0.985401f)},
 });
 
-std::optional<ink::StrokeInputBatch> CreateInputBatch(
-    base::span<const InputData> inputs) {
-  ink::StrokeInputBatch input_batch;
-  for (const auto& input : inputs) {
-    auto result = input_batch.Append(CreateInkStrokeInput(
-        ink::StrokeInput::ToolType::kMouse, input.position, input.time));
-    if (!result.ok()) {
-      return std::nullopt;
-    }
-  }
-  return input_batch;
+std::unique_ptr<PdfInkBrush> CreateTestBrush() {
+  return std::make_unique<PdfInkBrush>(PdfInkBrush::Type::kPen, SK_ColorRED,
+                                       /*size=*/4.0f);
 }
 
 base::FilePath GetReferenceFilePath(std::string_view test_filename) {
@@ -138,18 +125,17 @@ TEST_P(PDFiumInkWriterTest, Basic) {
       InitializeEngine(&client, FILE_PATH_LITERAL("blank.pdf"));
   ASSERT_TRUE(engine);
 
-  PDFiumPage* pdfium_page = engine->GetPage(0);
-  ASSERT_TRUE(pdfium_page);
-  FPDF_PAGE page = pdfium_page->GetPage();
+  PDFiumPage& pdfium_page = GetPDFiumPageForTest(*engine, 0);
+  FPDF_PAGE page = pdfium_page.GetPage();
   ASSERT_TRUE(page);
 
-  auto brush =
-      std::make_unique<PdfInkBrush>(PdfInkBrush::Type::kPen, kBasicBrushParams);
+  auto brush = CreateTestBrush();
 
-  std::optional<ink::StrokeInputBatch> inputs = CreateInputBatch(kBasicInputs);
+  std::optional<ink::StrokeInputBatch> inputs =
+      CreateInkInputBatch(kBasicInputs);
   ASSERT_TRUE(inputs.has_value());
-  ink::Stroke stroke(brush->GetInkBrush(), inputs.value());
-  ASSERT_TRUE(WriteStrokeToPage(page, stroke));
+  ink::Stroke stroke(brush->ink_brush(), inputs.value());
+  ASSERT_TRUE(WriteStrokeToPage(engine->doc(), page, stroke));
 
   ASSERT_TRUE(FPDFPage_GenerateContent(page));
 
@@ -167,22 +153,32 @@ TEST_P(PDFiumInkWriterTest, EmptyStroke) {
       InitializeEngine(&client, FILE_PATH_LITERAL("blank.pdf"));
   ASSERT_TRUE(engine);
 
-  PDFiumPage* pdfium_page = engine->GetPage(0);
-  ASSERT_TRUE(pdfium_page);
-  FPDF_PAGE page = pdfium_page->GetPage();
+  PDFiumPage& pdfium_page = GetPDFiumPageForTest(*engine, 0);
+  FPDF_PAGE page = pdfium_page.GetPage();
   ASSERT_TRUE(page);
 
-  auto brush =
-      std::make_unique<PdfInkBrush>(PdfInkBrush::Type::kPen, kBasicBrushParams);
-  ink::Stroke unused_stroke(brush->GetInkBrush());
-  ASSERT_FALSE(WriteStrokeToPage(page, unused_stroke));
+  auto brush = CreateTestBrush();
+  ink::Stroke unused_stroke(brush->ink_brush());
+  ASSERT_FALSE(WriteStrokeToPage(engine->doc(), page, unused_stroke));
 }
 
-TEST_P(PDFiumInkWriterTest, NoPage) {
-  auto brush =
-      std::make_unique<PdfInkBrush>(PdfInkBrush::Type::kPen, kBasicBrushParams);
-  ink::Stroke unused_stroke(brush->GetInkBrush());
-  ASSERT_FALSE(WriteStrokeToPage(/*page=*/nullptr, unused_stroke));
+TEST_P(PDFiumInkWriterTest, NoDocumentNoPage) {
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("blank.pdf"));
+  ASSERT_TRUE(engine);
+
+  PDFiumPage& pdfium_page = GetPDFiumPageForTest(*engine, 0);
+  FPDF_PAGE page = pdfium_page.GetPage();
+  ASSERT_TRUE(page);
+
+  auto brush = CreateTestBrush();
+  ink::Stroke unused_stroke(brush->ink_brush());
+  ASSERT_FALSE(
+      WriteStrokeToPage(/*document=*/nullptr, /*page=*/nullptr, unused_stroke));
+  ASSERT_FALSE(WriteStrokeToPage(/*document=*/nullptr, page, unused_stroke));
+  ASSERT_FALSE(
+      WriteStrokeToPage(engine->doc(), /*page=*/nullptr, unused_stroke));
 }
 
 // Don't be concerned about any slight rendering differences in AGG vs. Skia,

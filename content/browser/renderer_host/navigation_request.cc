@@ -70,7 +70,6 @@
 #include "content/browser/preloading/prerender/prerender_host_registry.h"
 #include "content/browser/preloading/prerender/prerender_navigation_utils.h"
 #include "content/browser/process_lock.h"
-#include "content/browser/reduce_accept_language/reduce_accept_language_utils.h"
 #include "content/browser/renderer_host/back_forward_cache_impl.h"
 #include "content/browser/renderer_host/concurrent_navigations_commit_deferring_condition.h"
 #include "content/browser/renderer_host/cookie_utils.h"
@@ -127,6 +126,7 @@
 #include "content/public/browser/origin_trials_controller_delegate.h"
 #include "content/public/browser/peak_gpu_memory_tracker_factory.h"
 #include "content/public/browser/reduce_accept_language_controller_delegate.h"
+#include "content/public/browser/reduce_accept_language_utils.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/runtime_feature_state/runtime_feature_state_document_data.h"
 #include "content/public/browser/site_isolation_policy.h"
@@ -471,8 +471,8 @@ bool ShouldPropagateUserActivation(const url::Origin& previous_origin,
 // for BackForward/Reload/NewNavigation variants.
 //
 // kMaxTime and kBuckets constants are consistent with
-// UMA_HISTOGRAM_MEDIUM_TIMES, but a custom kMinTime is used for high fidelity
-// near the low end of measured values.
+// UmaHistogramMediumTimes, but a custom kMinTime is used for high
+// fidelity near the low end of measured values.
 //
 // TODO(csharrison,nasko): This macro is incorrect for subframe navigations,
 // which will only have subframe-specific transition types. This means that all
@@ -4927,6 +4927,13 @@ void NavigationRequest::OnRequestFailedInternal(
            error_page_content.has_value()));
   ScopedCrashKeys crash_keys(*this);
 
+  if (MaybeEvictFromBackForwardCacheBySubframeNavigation(
+          frame_tree_node_->current_frame_host())) {
+    // DO NOT ADD CODE AFTER THIS, as the NavigationRequest might have been
+    // deleted by the previous calls.
+    return;
+  }
+
   // The request failed, the |loader_| must not call the NavigationRequest
   // anymore from now while the error page is being loaded.
   loader_.reset();
@@ -5204,10 +5211,18 @@ void NavigationRequest::OnStartChecksComplete(
     ServiceWorkerContextWrapper* service_worker_context =
         static_cast<ServiceWorkerContextWrapper*>(
             partition->GetServiceWorkerContext());
+    std::string fetch_event_client_id;
+    // TODO(crbug.com/368087661): According to the spec this should be fetch
+    // request's client but it is not here in the implementation.
+    if (auto client = frame_tree_node_->current_frame_host()
+                          ->GetLastCommittedServiceWorkerClient()) {
+      fetch_event_client_id = client->client_uuid();
+    }
     service_worker_handle_ = std::make_unique<ServiceWorkerMainResourceHandle>(
         service_worker_context,
         base::BindRepeating(&NavigationRequest::OnServiceWorkerAccessed,
-                            weak_factory_.GetWeakPtr()));
+                            weak_factory_.GetWeakPtr()),
+        std::move(fetch_event_client_id));
   }
 
   // Mark the fetch_start (Navigation Timing API).
@@ -8350,7 +8365,9 @@ NavigationRequest::GetOriginForURLLoaderFactoryAfterResponseWithDebugInfo() {
 
   // MHTML documents should commit as an opaque origin. They should not be able
   // to make network request on behalf of the real origin.
-  DCHECK(!IsMhtmlOrSubframe() || origin_with_debug_info.first.opaque());
+  // TODO(crbug.com/370979008): Migrate to CHECK.
+  DUMP_WILL_BE_CHECK(!IsMhtmlOrSubframe() ||
+                     origin_with_debug_info.first.opaque());
 
   // If the target of this navigation will be rendered in a RenderFrameHost,
   // then verify that the chosen origin is allowed to be accessed from that
@@ -8694,6 +8711,7 @@ bool NavigationRequest::IsInOutermostMainFrame() {
   switch (GetNavigatingFrameType()) {
     case FrameType::kPrimaryMainFrame:
     case FrameType::kPrerenderMainFrame:
+    case FrameType::kGuestMainFrame:
       return true;
     case FrameType::kSubframe:
     case FrameType::kFencedFrameRoot:
@@ -9155,6 +9173,9 @@ void NavigationRequest::SetSourceSiteInstanceToInitiatorIfNeeded() {
   if (source_site_instance_ || !RequiresInitiatorBasedSourceSiteInstance())
     return;
 
+  // TODO(crbug.com/349972037): Reconsider source SiteInstance usage. E.g. if
+  // the initiator is sandboxed, the source SiteInstance we get here isn't and
+  // they don't technically match.
   const auto tuple =
       common_params_->initiator_origin->GetTupleOrPrecursorTupleIfOpaque();
   source_site_instance_ = static_cast<SiteInstanceImpl*>(
@@ -9432,10 +9453,12 @@ NavigationRequest::BuildClientSecurityStateForNavigationFetch() {
     // [1] https://fetch.spec.whatwg.org/#concept-request-client
     //
     // The `kPrimaryMainFrame` case also covers guest views
-    // (https://crbug.com/1261928) since they do not use MPArch.
+    // (https://crbug.com/1261928) when the MPArch implementation is not being
+    // used.
     //
     // TODO(crbug.com/40258826): Determine how to treat guest views.
     case FrameType::kPrimaryMainFrame:
+    case FrameType::kGuestMainFrame:
     case FrameType::kSubframe: {
       if (!policy_container_builder_->InitiatorPolicies()) {
         return nullptr;
@@ -10209,29 +10232,24 @@ NavigationRequest::ComputeCrossOriginIsolationKey() {
     return std::nullopt;
   }
 
-  // If the Document-Isolation-Policy value is "isolate-and-credentialless",
-  // return an empty CrossOriginIsolationKey. Subresource checks have not been
-  // implemented in this mode yet, so it is not safe to make the document
-  // cross-origin isolated in this case.
-  // TODO(crbug.com/349792240): Support credentialless mode.
-  if (policy_container_builder_->FinalPolicies()
-          .document_isolation_policy.value ==
-      network::mojom::DocumentIsolationPolicyValue::kIsolateAndCredentialless) {
-    return std::nullopt;
-  }
-
   // The document we're navigating to has a DocumentIsolationPolicy of
-  // "isolate-and-require-corp". This means that the document requested
-  // crossOriginIsolation, so return a cross-origin isolation key with the
-  // current origin. Its cross-origin isolation mode depends on the capabilities
-  // of the platform.  Currently, we only support a cross-origin isolation mode
-  // of kConcrete and platforms with full Site Isolation.
+  // "isolate-and-require-corp" or "isolate-and-credentialless". This means that
+  // the document requested crossOriginIsolation, so return a cross-origin
+  // isolation key with the current origin. Its cross-origin isolation mode
+  // depends on the capabilities of the platform.  Currently, we only support a
+  // cross-origin isolation mode of kConcrete and platforms with full Site
+  // Isolation.
   // TODO(crbug.com/342364564): Support platforms that do not
   // support OOPIF and return an AgentClusterKey with a CrossOriginIsolationKey
   // that has a kLogical cross-origin isolation mode.
   CHECK(policy_container_builder_->FinalPolicies()
-            .document_isolation_policy.value ==
-        network::mojom::DocumentIsolationPolicyValue::kIsolateAndRequireCorp);
+                .document_isolation_policy.value ==
+            network::mojom::DocumentIsolationPolicyValue::
+                kIsolateAndRequireCorp ||
+        policy_container_builder_->FinalPolicies()
+                .document_isolation_policy.value ==
+            network::mojom::DocumentIsolationPolicyValue::
+                kIsolateAndCredentialless);
 
   // If the navigation doesn't have an origin, we cannot create a
   // CrossOriginIsolationKey for it, since it must be tied to an origin.
@@ -11007,21 +11025,6 @@ void NavigationRequest::SanitizeDocumentIsolationPolicyHeader() {
   // enabled.
   if (!base::FeatureList::IsEnabled(
           network::features::kDocumentIsolationPolicy)) {
-    response_head_->parsed_headers->document_isolation_policy =
-        network::DocumentIsolationPolicy();
-    return;
-  }
-
-  // Currently, we don't support Document-Isolation-Policy
-  // 'isolate-and-credentialless'. Set Document-Isolation-Policy to its default
-  // value if a credentialless header has been sent.
-  if (response_head_->parsed_headers->document_isolation_policy.value ==
-          network::mojom::DocumentIsolationPolicyValue::
-              kIsolateAndCredentialless ||
-      response_head_->parsed_headers->document_isolation_policy
-              .report_only_value ==
-          network::mojom::DocumentIsolationPolicyValue::
-              kIsolateAndCredentialless) {
     response_head_->parsed_headers->document_isolation_policy =
         network::DocumentIsolationPolicy();
     return;

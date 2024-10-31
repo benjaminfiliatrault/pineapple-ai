@@ -15,6 +15,7 @@
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_launcher.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_service.h"
+#include "chrome/browser/ash/bruschetta/bruschetta_service_factory.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_util.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
@@ -23,6 +24,7 @@
 #include "chrome/browser/ash/guest_os/guest_os_launcher.h"
 #include "chrome/browser/ash/guest_os/guest_os_registry_service.h"
 #include "chrome/browser/ash/guest_os/guest_os_session_tracker.h"
+#include "chrome/browser/ash/guest_os/guest_os_session_tracker_factory.h"
 #include "chrome/browser/ash/guest_os/guest_os_share_path.h"
 #include "chrome/browser/ash/guest_os/guest_os_share_path_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -103,7 +105,7 @@ void LaunchApplication(
   // Get vm_info because we need seneschal_server_handle.
   const std::string& vm_name = registration.VmName();
   auto vm_info =
-      guest_os::GuestOsSessionTracker::GetForProfile(profile)->GetVmInfo(
+      guest_os::GuestOsSessionTrackerFactory::GetForProfile(profile)->GetVmInfo(
           vm_name);
   if (!vm_info) {
     OnLaunchFailed(app_id, std::move(callback),
@@ -186,9 +188,8 @@ void BruschettaApps::LaunchAppWithIntent(const std::string& app_id,
 
   // Start the bruschetta VM if necessary.
   const std::string& vm_name = registration->VmName();
-  auto launcher =
-      bruschetta::BruschettaService::GetForProfile(profile())->GetLauncher(
-          vm_name);
+  auto launcher = bruschetta::BruschettaServiceFactory::GetForProfile(profile())
+                      ->GetLauncher(vm_name);
   if (!launcher) {
     OnLaunchFailed(app_id, std::move(callback),
                    "Unknown Bruschetta VM name: " + vm_name);

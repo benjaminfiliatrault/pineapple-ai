@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/drive_file_picker/coordinator/drive_file_picker_mediator_helper.h"
 
+#import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #import "base/apple/foundation_util.h"
@@ -11,6 +12,8 @@
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/drive/model/drive_list.h"
 #import "ios/chrome/browser/drive_file_picker/ui/drive_file_picker_item.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/web/model/choose_file/choose_file_file_utils.h"
 #import "ios/chrome/browser/web/model/choose_file/choose_file_tab_helper.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -21,6 +24,8 @@ namespace {
 constexpr NSInteger kFirstPageSize = 20;
 // Number of items to fetch for the next pages.
 constexpr NSInteger kNextPageSize = 50;
+// The size of the drive file picker item icon.
+constexpr CGFloat kDriveFilePickerItemIconSize = 18;
 
 // extra_term parameter for the Starred view.
 NSString* kStarredExtraTerm = @"starred=true";
@@ -50,8 +55,7 @@ const char kAnyVideoFileMimeType[] = "video/*";
 const char kAnyImageFileMimeType[] = "image/*";
 // extra_term parameter for the "Archives" filter.
 NSString* kOnlyShowArchivesExtraTerm =
-    @"(mimeType='application/vnd.google-apps.folder' or"
-     " mimeType='application/zip' or"
+    @"(mimeType='application/zip' or"
      " mimeType='application/x-7z-compressed' or"
      " mimeType='application/x-rar-compressed' or"
      " mimeType='application/vnd.rar' or"
@@ -62,21 +66,22 @@ NSString* kOnlyShowArchivesExtraTerm =
      " mimeType='application/java-archive' or"
      " mimeType='application/gzip')";
 // extra_term parameter for the "Audio" filter.
-NSString* kOnlyShowAudioExtraTerm =
-    @"(mimeType='application/vnd.google-apps.folder' or"
-     " mimeType contains 'audio/')";
+NSString* kOnlyShowAudioExtraTerm = @"mimeType contains 'audio/'";
 // extra_term parameter for the "Video" filter.
-NSString* kOnlyShowVideosExtraTerm =
-    @"(mimeType='application/vnd.google-apps.folder' or"
-     " mimeType contains 'video/')";
+NSString* kOnlyShowVideosExtraTerm = @"mimeType contains 'video/'";
 // extra_term parameter for the "Photos & Images" filter.
-NSString* kOnlyShowImagesExtraTerm =
-    @"(mimeType='application/vnd.google-apps.folder' or"
-     " mimeType contains 'image/')";
+NSString* kOnlyShowImagesExtraTerm = @"mimeType contains 'image/'";
 // extra_term parameter for the "PDFs" filter.
-NSString* kOnlyShowPDFsExtraTerm =
-    @"(mimeType='application/vnd.google-apps.folder' or"
-     " mimeType='application/pdf')";
+NSString* kOnlyShowPDFsExtraTerm = @"mimeType='application/pdf'";
+// extra_term parameter to add folders to a filter.
+NSString* kAlsoShowFoldersExtraTerm =
+    @"mimeType='application/vnd.google-apps.folder'";
+// Prefix of MIME types associated with Google apps.
+NSString* kGoogleAppsMIMETypePrefix = @"application/vnd.google-apps.";
+// MIME type for shortcut items.
+NSString* kShortcutMIMEType = @"application/vnd.google-apps.shortcut";
+// Prefix of MIME types associated with images.
+NSString* kImageMIMETypePrefix = @"image/";
 
 }  // namespace
 
@@ -151,6 +156,7 @@ void ApplySortToDriveListQuery(DriveItemsSortingType sorting_criteria,
 }
 
 void ApplyFilterToDriveListQuery(DriveFilePickerFilter filter,
+                                 bool include_folders,
                                  DriveListQuery& query) {
   NSString* filter_extra_term = nil;
   switch (filter) {
@@ -175,6 +181,11 @@ void ApplyFilterToDriveListQuery(DriveFilePickerFilter filter,
   }
   if (!filter_extra_term) {
     return;
+  }
+  if (include_folders) {
+    filter_extra_term =
+        [NSString stringWithFormat:@"(%@) or (%@)", filter_extra_term,
+                                   kAlsoShowFoldersExtraTerm];
   }
   if (query.extra_term) {
     query.extra_term = [NSString
@@ -209,8 +220,8 @@ DriveListQuery CreateDriveListQuery(
       query.filename_prefix = search_text;
       ApplySortToDriveListQuery(sorting_criteria, sorting_direction,
                                 /* folders_first= */ false, query);
+      ApplyFilterToDriveListQuery(filter, /* include_folders= */ false, query);
     }
-    ApplyFilterToDriveListQuery(filter, query);
     return query;
   }
 
@@ -225,23 +236,22 @@ DriveListQuery CreateDriveListQuery(
       query.folder_identifier = folder_identifier;
       ApplySortToDriveListQuery(sorting_criteria, sorting_direction,
                                 /* folders_first= */ true, query);
-      ApplyFilterToDriveListQuery(filter, query);
+      ApplyFilterToDriveListQuery(filter, /* include_folders= */ true, query);
       break;
     case DriveFilePickerCollectionType::kStarred:
       query.extra_term = kStarredExtraTerm;
       ApplySortToDriveListQuery(sorting_criteria, sorting_direction,
                                 /* folders_first= */ false, query);
-      ApplyFilterToDriveListQuery(filter, query);
+      ApplyFilterToDriveListQuery(filter, /* include_folders= */ false, query);
       break;
     case DriveFilePickerCollectionType::kRecent:
       query.extra_term = kRecentExtraTerm;
       query.order_by = kRecentOrderBy;
-      ApplyFilterToDriveListQuery(filter, query);
       break;
     case DriveFilePickerCollectionType::kSharedWithMe:
       query.extra_term = kSharedWithMeExtraTerm;
       query.order_by = kSharedWithMeOrderBy;
-      ApplyFilterToDriveListQuery(filter, query);
+      ApplyFilterToDriveListQuery(filter, /* include_folders= */ false, query);
       break;
   }
 
@@ -256,7 +266,8 @@ bool DriveFilePickerItemShouldBeEnabled(const DriveItem& item,
     return true;
   }
   // Non-downloadable files cannot be selected.
-  if (!item.can_download) {
+  if (!item.can_download ||
+      [item.mime_type hasPrefix:kGoogleAppsMIMETypePrefix]) {
     return false;
   }
   // If the list of accepted types is empty, or the user opted to ignore it,
@@ -287,6 +298,33 @@ NSString* DriveFilePickerItemSubtitleModified(const DriveItem& item) {
                                  base::SysNSStringToUTF16(modified_time_str));
 }
 
+NSString* DriveFilePickerItemSubtitleModifiedByMe(const DriveItem& item) {
+  if (!item.modified_by_me_time) {
+    return nil;
+  }
+  NSString* modified_by_me_time_str =
+      [NSDateFormatter localizedStringFromDate:item.modified_by_me_time
+                                     dateStyle:NSDateFormatterMediumStyle
+                                     timeStyle:NSDateFormatterNoStyle];
+  // TODO(crbug.com/375391461): Use a proper "Modified by me" string.
+  return l10n_util::GetNSStringF(
+      IDS_IOS_DRIVE_FILE_PICKER_SUBTITLE_MODIFIED,
+      base::SysNSStringToUTF16(modified_by_me_time_str));
+}
+
+NSString* DriveFilePickerItemSubtitleCreated(const DriveItem& item) {
+  if (!item.created_time) {
+    return nil;
+  }
+  NSString* created_time_str =
+      [NSDateFormatter localizedStringFromDate:item.created_time
+                                     dateStyle:NSDateFormatterMediumStyle
+                                     timeStyle:NSDateFormatterNoStyle];
+  // TODO(crbug.com/375391461): Use a proper "Created" or "Uploaded" string.
+  return l10n_util::GetNSStringF(IDS_IOS_DRIVE_FILE_PICKER_SUBTITLE_MODIFIED,
+                                 base::SysNSStringToUTF16(created_time_str));
+}
+
 NSString* DriveFilePickerItemSubtitleOpened(const DriveItem& item) {
   if (!item.viewed_by_me_time) {
     return nil;
@@ -314,12 +352,28 @@ NSString* DriveFilePickerItemSubtitleShareWithMe(const DriveItem& item) {
 }
 
 NSString* DriveFilePickerItemSubtitleRecent(const DriveItem& item) {
-  if (!item.viewed_by_me_time || !item.modified_time) {
-    return nil;
+  NSMutableArray<NSDate*>* times = [NSMutableArray array];
+  if (item.created_time) {
+    [times addObject:item.created_time];
   }
-  return [item.viewed_by_me_time compare:item.modified_time]
-             ? DriveFilePickerItemSubtitleOpened(item)
-             : DriveFilePickerItemSubtitleModified(item);
+  if (item.viewed_by_me_time) {
+    [times addObject:item.viewed_by_me_time];
+  }
+  if (item.modified_by_me_time) {
+    [times addObject:item.modified_by_me_time];
+  }
+  NSDate* most_recent_time =
+      [times sortedArrayUsingSelector:@selector(compare:)].lastObject;
+  if ([most_recent_time isEqualToDate:item.created_time]) {
+    return DriveFilePickerItemSubtitleCreated(item);
+  }
+  if ([most_recent_time isEqualToDate:item.modified_by_me_time]) {
+    return DriveFilePickerItemSubtitleModifiedByMe(item);
+  }
+  if ([most_recent_time isEqualToDate:item.viewed_by_me_time]) {
+    return DriveFilePickerItemSubtitleOpened(item);
+  }
+  return nil;
 }
 
 NSString* DriveFilePickerItemSubtitle(
@@ -375,23 +429,33 @@ DriveFilePickerItem* DriveItemToDriveFilePickerItem(
     DriveFilePickerCollectionType collection_type,
     DriveItemsSortingType sorting_criteria,
     BOOL should_show_search_items,
-    NSString* search_text) {
+    NSString* search_text,
+    UIImage* fetched_icon,
+    NSString* fetched_icon_link) {
   DriveItemType type;
   if (item.is_folder) {
     type = DriveItemType::kFolder;
   } else if (item.is_shared_drive) {
     type = DriveItemType::kSharedDrive;
+  } else if ([item.mime_type isEqualToString:kShortcutMIMEType]) {
+    type = DriveItemType::kShortcut;
   } else {
     type = DriveItemType::kFile;
   }
+  UIImage* icon =
+      fetched_icon ? fetched_icon : GetPlaceholderIconForDriveItem(item);
   DriveFilePickerItem* drive_file_picker_item = [[DriveFilePickerItem alloc]
       initWithIdentifier:item.identifier
                    title:item.name
                 subtitle:DriveFilePickerItemSubtitle(
                              item, collection_type, sorting_criteria,
                              should_show_search_items, search_text)
-                    icon:nil
+                    icon:icon
                     type:type];
+  drive_file_picker_item.shouldFetchIcon =
+      (fetched_icon == nil && fetched_icon_link != nil);
+  drive_file_picker_item.iconIsThumbnail =
+      [fetched_icon_link isEqualToString:item.thumbnail_link];
   return drive_file_picker_item;
 }
 
@@ -409,14 +473,67 @@ std::optional<DriveItem> FindDriveItemFromIdentifier(
   return std::nullopt;
 }
 
-NSURL* DriveFilePickerGenerateDownloadFileURL(NSString* download_file_name) {
-  base::FilePath download_dir;
-  if (!GetTempDir(&download_dir)) {
+NSURL* DriveFilePickerGenerateDownloadFileURL(web::WebStateID web_state_id,
+                                              NSString* download_file_name) {
+  std::optional<base::FilePath> web_state_dir =
+      GetTabChooseFileDirectory(web_state_id);
+  if (!web_state_dir) {
     return nil;
   }
-  download_dir =
-      download_dir.Append(base::SysNSStringToUTF8([[NSUUID UUID] UUIDString]));
+  base::FilePath download_dir =
+      (*web_state_dir)
+          .Append(base::SysNSStringToUTF8([[NSUUID UUID] UUIDString]));
+
+  // Remove the potential file separator.
+  download_file_name =
+      [download_file_name stringByReplacingOccurrencesOfString:@"/"
+                                                    withString:@"_"];
+  download_file_name =
+      [download_file_name stringByReplacingOccurrencesOfString:@"\\"
+                                                    withString:@"_"];
+  base::FilePath download_file_name_path(
+      base::SysNSStringToUTF8(download_file_name));
+  // Do not allow empty file names.
+  if (download_file_name_path.empty()) {
+    download_file_name_path =
+        base::FilePath(base::SysNSStringToUTF8([NSUUID UUID].UUIDString));
+  }
+
   base::FilePath download_file_path =
-      download_dir.Append(base::SysNSStringToUTF8(download_file_name));
+      download_dir.Append(download_file_name_path);
+  CHECK(download_dir.IsParent(download_file_path));
   return base::apple::FilePathToNSURL(download_file_path);
+}
+
+UIImage* GetPlaceholderIconForDriveItem(const DriveItem& item) {
+  if (item.is_shared_drive) {
+    return [DriveFilePickerItem sharedDrivesItem].icon;
+  } else if (item.is_folder) {
+    return DefaultSymbolWithPointSize(kFolderSymbol,
+                                      kDriveFilePickerItemIconSize);
+  } else if ([item.mime_type isEqualToString:kShortcutMIMEType]) {
+    return DefaultSymbolWithPointSize(kArrowUTurnForwardSymbol,
+                                      kDriveFilePickerItemIconSize);
+  } else {
+    return DefaultSymbolWithPointSize(kDocSymbol, kDriveFilePickerItemIconSize);
+  }
+}
+
+NSString* GetImageLinkForDriveItem(const DriveItem& item) {
+  NSString* imageLink = nil;
+  if (item.is_shared_drive) {
+    // If this is a shared drive, the background image link should be fetched.
+    imageLink = item.background_image_link;
+  } else if ([item.mime_type hasPrefix:kImageMIMETypePrefix] &&
+             item.thumbnail_link) {
+    imageLink = item.thumbnail_link;
+  } else if ([item.mime_type isEqualToString:kShortcutMIMEType]) {
+    // TODO(crbug.com/372214672): When target MIME type is known, use the asset
+    // which matches that MIME type.
+    imageLink = nil;
+  } else {
+    // Otherwise the icon link should be fetched.
+    imageLink = item.icon_link;
+  }
+  return imageLink;
 }

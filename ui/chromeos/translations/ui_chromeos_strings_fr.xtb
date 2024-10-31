@@ -19,6 +19,7 @@
 <translation id="115443833402798225">Hangûl ahnmatae</translation>
 <translation id="1155759005174418845">Catalan</translation>
 <translation id="1168100932582989117">Serveurs de noms Google</translation>
+<translation id="1170788066030116158">Date de prise de vue</translation>
 <translation id="1172970565351728681">Temps restant : environ <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Renommer</translation>
 <translation id="1173916544412572294">Réseau <ph name="NETWORK_INDEX" /> sur <ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, force du signal : <ph name="SIGNAL_STRENGTH" /> %, batterie du téléphone à <ph name="BATTERY_STATUS" /> %, détails</translation>
@@ -581,6 +582,7 @@
 <translation id="5447680084201416734">Espace de stockage insuffisant.</translation>
 <translation id="5449551289610225147">Mot de passe incorrect</translation>
 <translation id="5459064203055649751">Un fichier intitulé "<ph name="FILENAME" />" existe déjà. Voulez-vous le remplacer par celui que vous déplacez ?</translation>
+<translation id="5462378611565326489">OneDrive n'est pas disponible hors connexion.</translation>
 <translation id="5463231940765244860">Saisir</translation>
 <translation id="5469868506864199649">Italien</translation>
 <translation id="5473333559083690127">Confirmation du nouveau code</translation>

@@ -127,7 +127,6 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.TabsOpenedFromExternalAppTest;
 import org.chromium.chrome.browser.WarmupManager;
-import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.browserservices.SessionDataHolder;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.verification.ChromeOriginVerifier;
@@ -1273,7 +1272,8 @@ public class CustomTabActivityTest {
         connection.newSession(token);
 
         // Start prefetch and wait until the prefetch request is completed.
-        connection.prefetch(token, Uri.parse(mTestPage), new PrefetchOptions.Builder().build());
+        connection.prefetch(
+                token, List.of(Uri.parse(mTestPage)), new PrefetchOptions.Builder().build());
         PrefetchTestUtil.waitUntilPrefetchResponseCompleted(new GURL(mTestPage));
 
         // Open custom tabs, and check prefetch result is served as expected.
@@ -1624,7 +1624,9 @@ public class CustomTabActivityTest {
             CriteriaHelper.pollUiThread(
                     () ->
                             WarmupManager.getInstance()
-                                    .hasSpareTab(ProfileManager.getLastUsedRegularProfile()),
+                                    .hasSpareTab(
+                                            ProfileManager.getLastUsedRegularProfile(),
+                                            /* targetsNetwork= */ false),
                     "No new spare tab");
         } else {
             CriteriaHelper.pollUiThread(
@@ -2694,60 +2696,11 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
-    @EnableFeatures(ChromeFeatureList.BACK_GESTURE_REFACTOR)
-    public void testBackPressNavigationFailure_WithRecover() {
+    public void testBackPressNavigationFailure() {
         Context context = getInstrumentation().getTargetContext().getApplicationContext();
         Intent intent = CustomTabsIntentTestUtils.createMinimalCustomTabIntent(context, mTestPage);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
         final Tab tab = getActivity().getActivityTab();
-        BackPressManager.TAB_HISTORY_RECOVER.setForTesting(true);
-
-        ThreadUtils.runOnUiThreadBlocking(
-                (Runnable) () -> tab.loadUrl(new LoadUrlParams(mTestPage2)));
-        ChromeTabUtils.waitForTabPageLoaded(tab, mTestPage2);
-
-        BackPressHandler navigationHandler =
-                getActivity()
-                        .getBackPressManagerForTesting()
-                        .getHandlersForTesting()[BackPressHandler.Type.TAB_HISTORY];
-        ObservableSupplierImpl<Boolean> handleBackPressChangedSupplier =
-                (ObservableSupplierImpl<Boolean>)
-                        navigationHandler.getHandleBackPressChangedSupplier();
-        HistogramWatcher histogramWatcher =
-                HistogramWatcher.newSingleRecordWatcher(
-                        "Android.BackPress.Failure",
-                        BackPressManager.getHistogramValue(
-                                BackPressHandler.Type.MINIMIZE_APP_AND_CLOSE_TAB));
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    handleBackPressChangedSupplier.set(false);
-                    try {
-                        getActivity().getOnBackPressedDispatcher().onBackPressed();
-                    } catch (AssertionError ignored) {
-                        if (!ignored.getMessage().contains("-1")) throw ignored;
-                    }
-                });
-
-        histogramWatcher.assertExpected("Failure should be recorded");
-        CriteriaHelper.pollInstrumentationThread(
-                () -> {
-                    Criteria.checkThat(
-                            "Tab should be navigated when tab handler fails",
-                            ChromeTabUtils.getUrlStringOnUiThread(getActivity().getActivityTab()),
-                            is(mTestPage));
-                });
-        BackPressManager.TAB_HISTORY_RECOVER.setForTesting(false);
-    }
-
-    @Test
-    @SmallTest
-    @EnableFeatures(ChromeFeatureList.BACK_GESTURE_REFACTOR)
-    public void testBackPressNavigationFailure_WithoutRecover() {
-        Context context = getInstrumentation().getTargetContext().getApplicationContext();
-        Intent intent = CustomTabsIntentTestUtils.createMinimalCustomTabIntent(context, mTestPage);
-        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
-        final Tab tab = getActivity().getActivityTab();
-        BackPressManager.TAB_HISTORY_RECOVER.setForTesting(false);
 
         ThreadUtils.runOnUiThreadBlocking(
                 (Runnable) () -> tab.loadUrl(new LoadUrlParams(mTestPage2)));
@@ -2800,7 +2753,7 @@ public class CustomTabActivityTest {
 
     @Test
     @MediumTest
-    public void omniboxInCCT_testInteractiveOmniboxOnEligibleCCTs() throws Exception {
+    public void omniboxInCct_testInteractiveOmniboxOnEligibleCcts() throws Exception {
         // Permit Omnibox for any upcoming intent(s).
         var connection = Mockito.spy(CustomTabsConnection.getInstance());
         doReturn(true).when(connection).shouldEnableOmniboxForIntent(any());
@@ -2826,7 +2779,7 @@ public class CustomTabActivityTest {
 
     @Test
     @MediumTest
-    public void omniboxInCCT_testInteractiveOmniboxOnEligibleCCTsWithAlternateHandler()
+    public void omniboxInCct_testInteractiveOmniboxOnEligibleCctsWithAlternateHandler()
             throws Exception {
         var connection = Mockito.spy(CustomTabsConnection.getInstance());
         // Permit Omnibox for any upcoming intent(s).
@@ -2857,7 +2810,7 @@ public class CustomTabActivityTest {
 
     @Test
     @MediumTest
-    public void omniboxInCCT_testNonInteractiveOmniboxWhenIntentNotEligible() {
+    public void omniboxInCct_testNonInteractiveOmniboxWhenIntentNotEligible() {
         // By default, omnibox in CCT is not permitted and no stubbing is necessary.
         Intent intent = createMinimalCustomTabIntent();
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);

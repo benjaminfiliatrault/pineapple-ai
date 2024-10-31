@@ -4,8 +4,12 @@
 
 #include "chrome/browser/gesturenav/android/tab_on_back_gesture_handler.h"
 
+#include <iomanip>
+
 #include "content/public/browser/back_forward_transition_animation_manager.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
+#include "third_party/blink/public/common/features.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -16,6 +20,10 @@
 namespace gesturenav {
 
 namespace {
+
+const base::FeatureParam<bool> kDumpWithoutCrashTabOnBackGestureHandler{
+    &blink::features::kBackForwardTransitions,
+    "dump-without-crash-tab-on-back-gesture-handler", false};
 
 using NavDirection =
     content::BackForwardTransitionAnimationManager::NavigationDirection;
@@ -40,7 +48,9 @@ void TabOnBackGestureHandler::OnBackStarted(JNIEnv* env,
   // gesture but we see this pattern on multiple devices.
   // See crbug.com/41484247.
   if (is_in_progress_) {
-    base::debug::DumpWithoutCrashing();
+    if (kDumpWithoutCrashTabOnBackGestureHandler.Get()) {
+      base::debug::DumpWithoutCrashing();
+    }
     OnBackCancelled(env);
     CHECK(!is_in_progress_);
   }
@@ -60,13 +70,43 @@ void TabOnBackGestureHandler::OnBackStarted(JNIEnv* env,
 
 void TabOnBackGestureHandler::OnBackProgressed(JNIEnv* env,
                                                float progress,
-                                               int edge) {
-  CHECK(is_in_progress_);
+                                               int edge,
+                                               bool forward) {
+  if (
+      // http://crbug.com/373617224. Gracefully handle this case until the
+      // upstream is fixed.
+      !is_in_progress_ ||
+      // Ideally the edge value should not be changed during a navigation
+      // however, we see multiple instances with different edge values from
+      // start to progress. See crbug.com/370105609.
+      started_edge_ != static_cast<ui::BackGestureEventSwipeEdge>(edge)) {
+    if (kDumpWithoutCrashTabOnBackGestureHandler.Get()) {
+      std::ostringstream strs;
+      strs << std::fixed << std::setprecision(6) << progress;
+      SCOPED_CRASH_KEY_STRING64("OnBackProgressed", "progress", strs.str());
+      SCOPED_CRASH_KEY_STRING32(
+          "OnBackProgressed", "started edge",
+          started_edge_ == ui::BackGestureEventSwipeEdge::LEFT ? "left"
+                                                               : "right");
+      SCOPED_CRASH_KEY_STRING32("OnBackProgressed", "edge",
+                                edge == 0 ? "left" : "right");
+      SCOPED_CRASH_KEY_BOOL("OnBackProgressed", "forward", forward);
+      SCOPED_CRASH_KEY_BOOL("OnBackProgressed", "is in progress",
+                            is_in_progress_);
+      base::debug::DumpWithoutCrashing();
+    }
+
+    if (is_in_progress_) {
+      OnBackCancelled(env);
+    }
+
+    CHECK(!is_in_progress_);
+    OnBackStarted(env, progress, edge, forward);
+    return;
+  }
 
   content::WebContents* web_contents = tab_android_->web_contents();
   AssertHasWindowAndCompositor(web_contents);
-
-  CHECK_EQ(started_edge_, static_cast<ui::BackGestureEventSwipeEdge>(edge));
 
   if (progress > 1.f) {
     // TODO(crbug.com/41483519): Happens in fling. Should figure out why
@@ -80,7 +120,13 @@ void TabOnBackGestureHandler::OnBackProgressed(JNIEnv* env,
 }
 
 void TabOnBackGestureHandler::OnBackCancelled(JNIEnv* env) {
-  CHECK(is_in_progress_);
+  if (!is_in_progress_) {
+    if (kDumpWithoutCrashTabOnBackGestureHandler.Get()) {
+      base::debug::DumpWithoutCrashing();
+    }
+    return;
+  }
+
   is_in_progress_ = false;
 
   content::WebContents* web_contents = tab_android_->web_contents();
@@ -91,7 +137,13 @@ void TabOnBackGestureHandler::OnBackCancelled(JNIEnv* env) {
 }
 
 void TabOnBackGestureHandler::OnBackInvoked(JNIEnv* env) {
-  CHECK(is_in_progress_);
+  if (!is_in_progress_) {
+    if (kDumpWithoutCrashTabOnBackGestureHandler.Get()) {
+      base::debug::DumpWithoutCrashing();
+    }
+    return;
+  }
+
   is_in_progress_ = false;
 
   content::WebContents* web_contents = tab_android_->web_contents();

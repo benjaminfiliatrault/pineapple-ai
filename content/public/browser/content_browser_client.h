@@ -19,7 +19,6 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/callback_forward.h"
-#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/supports_user_data.h"
 #include "base/time/time.h"
@@ -251,7 +250,6 @@ class NavigationUIData;
 class PrefetchServiceDelegate;
 class PrerenderWebContentsDelegate;
 class PresentationObserver;
-class PrivacySandboxAttestationsObserver;
 class PrivateNetworkDeviceDelegate;
 class ReceiverPresentationServiceDelegate;
 class RenderFrameHost;
@@ -592,6 +590,9 @@ class CONTENT_EXPORT ContentBrowserClient {
   // TODO(crbug.com/40153317) Move custom protocol handler code to content.
   virtual bool HasCustomSchemeHandler(content::BrowserContext* browser_context,
                                       const std::string& scheme);
+
+  // Returns whether a browser context involves WebRequest API.
+  virtual bool HasWebRequestAPIProxy(BrowserContext* browser_context);
 
   // Returns whether the given process is allowed to commit |url|.  This is a
   // more conservative check than IsSuitableHost, since it is used after a
@@ -951,9 +952,15 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   using InterestGroupApiOperation = content::InterestGroupApiOperation;
 
-  // Returns whether |api_origin| on |top_frame_origin| can perform
-  // |operation| within the interest group API.
+  // Returns whether `api_origin` on `top_frame_origin` can perform `operation`
+  // within the interest group API.
+  //
+  // If `render_frame_host` is null (e.g., due to the initiator frame being
+  // destroyed for a keep-alive worklet), certain operations like console error
+  // will be skipped. However, the core permission check will still be
+  // performed.
   virtual bool IsInterestGroupAPIAllowed(
+      content::BrowserContext* browser_context,
       content::RenderFrameHost* render_frame_host,
       InterestGroupApiOperation operation,
       const url::Origin& top_frame_origin,
@@ -1119,6 +1126,14 @@ class CONTENT_EXPORT ContentBrowserClient {
       const url::Origin& accessing_origin,
       std::string* out_debug_message,
       bool* out_block_is_site_setting_specific);
+
+  // Allows the embedder to control if fenced frame gated Shared Storage API
+  // operations can happen in a given context.
+  virtual bool IsFencedFramesLocalUnpartitionedDataAccessAllowed(
+      content::BrowserContext* browser_context,
+      content::RenderFrameHost* rfh,
+      const url::Origin& top_frame_origin,
+      const url::Origin& accessing_origin);
 
   // Allows the embedder to control if Private Aggregation API operations can
   // happen in a given context.
@@ -1613,14 +1628,6 @@ class CONTENT_EXPORT ContentBrowserClient {
                                        WebContents* web_contents);
   virtual void RemovePresentationObserver(PresentationObserver* observer,
                                           WebContents* web_contents);
-
-  // Add or remove an observer for privacy sandbox attestations. Returns true if
-  // privacy sandbox attestations have ever been loaded, or if attestations are
-  // not enforced.
-  virtual bool AddPrivacySandboxAttestationsObserver(
-      PrivacySandboxAttestationsObserver* observer);
-  virtual void RemovePrivacySandboxAttestationsObserver(
-      PrivacySandboxAttestationsObserver* observer);
 
   // Allows programmatic opening of a new tab/window without going through
   // another WebContents. For example, from a Worker. |site_instance|
@@ -2331,6 +2338,9 @@ class CONTENT_EXPORT ContentBrowserClient {
   // worker. If |web_contents| is not null, it is guaranteed to be associated
   // with the same BrowserContext as |browser_context|.
   // |browser_context| is always set.
+  // |is_request_for_primary_main_frame_navigation| is whether the request is
+  // for a navigation of the primary main frame.
+  // |is_request_for_navigation| is whether the request is for a navigation.
   // |first_auth_attempt| is needed by AwHttpAuthHandler constructor.
   // |auth_required_callback| is used to transfer auth credentials to
   // URLRequest::SetAuth(). The credentials parameter of the callback
@@ -2365,7 +2375,8 @@ class CONTENT_EXPORT ContentBrowserClient {
       WebContents* web_contents,
       BrowserContext* browser_context,
       const GlobalRequestID& request_id,
-      bool is_request_for_primary_main_frame,
+      bool is_request_for_primary_main_frame_navigation,
+      bool is_request_for_navigation,
       const GURL& url,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
       bool first_auth_attempt,
@@ -2593,7 +2604,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // https://crsrc.org/c/components/enterprise/common/proto/legacy_tech_events.proto
   virtual void ReportLegacyTechEvent(
       content::RenderFrameHost* render_frame_host,
-      const std::string type,
+      const std::string& type,
       const GURL& url,
       const GURL& frame_url,
       const std::string& filename,
@@ -3066,20 +3077,17 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void OnUiaProviderRequested(bool uia_provider_enabled);
 #endif
 
-  // Returns a handle to a shared memory region to hold performance scenario
-  // state for the given process, or an invalid handle if there is none. The
-  // result can be transferred to the child process and passed to a
-  // ScopedReadOnlyScenarioMemory object with Scope::kCurrentProcess (see
-  // //third_party/blink/public/common/performance/performance_scenarios.h)
-  virtual base::ReadOnlySharedMemoryRegion
-  GetPerformanceScenarioRegionForProcess(RenderProcessHost* process_host);
+  // Indicates whether this client allows paint holding in cross-origin
+  // navigations even if there was no user activation.
+  virtual bool AllowNonActivatedCrossOriginPaintHolding();
 
-  // Returns a handle to a shared memory region to hold performance scenario
-  // state for all processes, or an invalid handle if there is none. The result
-  // can be transferred to a child process and passed to a
-  // ScopedReadOnlyScenarioMemory object with Scope::kGlobal
-  // (see//third_party/blink/public/common/performance/performance_scenarios.h)
-  virtual base::ReadOnlySharedMemoryRegion GetGlobalPerformanceScenarioRegion();
+  // Indicates whether this client requires dispatching the pagehide &
+  // visibilitychange events before the commit of a new document, when
+  // navigating same-site to `destination_url` and doing a BrowsingInstance
+  // swap, which used to fire those events at that timing.
+  virtual bool ShouldDispatchPagehideDuringCommit(
+      BrowserContext* browser_context,
+      const GURL& destination_url);
 };
 
 }  // namespace content

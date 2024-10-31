@@ -7,21 +7,26 @@ module ash.media_app_ui.mojom;
 import "skia/public/mojom/bitmap.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 
-// Factory interface to create an untrusted page handler (for the
+// Factory interface to create a new untrusted Mojo connection (for the
 // chrome-untrusted:// frame) communicating directly with the browser.
-interface UntrustedPageHandlerFactory {
-  // Create a page handler for the untrusted frame exposing OCR related APIs
-  // between it and the browser via |receiver| and |page|.
-  CreateOcrUntrustedPageHandler(
-  pending_receiver<OcrUntrustedPageHandler> receiver,
+interface UntrustedServiceFactory {
+  // Exposes OCR related APIs between the untrusted frame and the browser via
+  // `receiver` and `page`.
+  CreateOcrUntrustedService(
+      pending_receiver<OcrUntrustedService> receiver,
       pending_remote<OcrUntrustedPage> page);
 
-  // Create a page handler for the untrusted frame exposing Mahi related APIs
-  // between it and the browser via `receiver` and `page`.
-  CreateMahiUntrustedPageHandler(
-  pending_receiver<MahiUntrustedPageHandler> receiver,
+  // Exposes Mahi related APIs between the untrusted frame and the browser via
+  // `receiver` and `page`.
+  CreateMahiUntrustedService(
+  pending_receiver<MahiUntrustedService> receiver,
       pending_remote<MahiUntrustedPage> page,
       string file_name);
+
+  // Exposes Mantis related APIs betwen the untrusted frame and the browser via
+  // `receiver`.
+  CreateMantisUntrustedService(
+      pending_receiver<MantisMediaAppUntrustedService> receiver);
 };
 
 struct PageMetadata {
@@ -32,7 +37,7 @@ struct PageMetadata {
 
 // Interface implemented in the browser process and called by the
 // chrome-untrusted:// Media App page.
-interface OcrUntrustedPageHandler {
+interface OcrUntrustedService {
   // Provides metadata about the document. Page metadata is always provided for
   // all pages. Called in the following cases:
   //   a) A page is rotated (only the rotated page is dirty, but potentially all
@@ -88,12 +93,11 @@ interface OcrUntrustedPage {
   SetPdfOcrEnabled(bool enabled);
 };
 
-
 // Interfaces for Mahi support
 
 // Interface implemented in the browser process and called by the
 // chrome-untrusted:// Media App page.
-interface MahiUntrustedPageHandler {
+interface MahiUntrustedService {
   // Notifies when media app finishes loading a PDF file. This may be used for
   // Mahi refresh availability.
   OnPdfLoaded();
@@ -104,8 +108,9 @@ interface MahiUntrustedPageHandler {
   OnPdfFileNameUpdated(string new_name);
 
   // Notifies when the PDF context menu is shown. This may be used to show the
-  // Mahi widget card.
-  OnPdfContextMenuShow(gfx.mojom.RectF anchor);
+  // Mahi widget card. `selected_text` contains any currently highlighted /
+  // selected text, with it being an empty string if there is no selected text.
+  OnPdfContextMenuShow(gfx.mojom.RectF anchor, string selected_text);
 
   // Notifies when the PDF context menu is hidden. This may be used to hide the
   // Mahi widget card.
@@ -120,4 +125,10 @@ interface MahiUntrustedPage {
 
   // Requests the text content of the PDF file.
   GetPdfContent(int32 limit) => (string? content);
+};
+
+// Interface implemented in the browser process and called by the
+// chrome-untrusted:// Media App page.
+interface MantisMediaAppUntrustedService {
+  // TODO(crbug.com/368986974): Add Media App methods for Mantis.
 };

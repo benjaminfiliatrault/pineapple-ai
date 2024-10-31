@@ -727,6 +727,8 @@ export class OsSearchResultRowElement extends OsSearchResultRowElementBase {
         return 'os-settings:docked-magnifier';
       case SearchResultIcon.kEthernet:
         return 'os-settings:settings-ethernet';
+      case SearchResultIcon.kFaceGaze:
+        return 'os-settings:face-gaze';
       case SearchResultIcon.kFingerprint:
         return 'os-settings:fingerprint';
       case SearchResultIcon.kFirmwareUpdates:
@@ -745,6 +747,8 @@ export class OsSearchResultRowElement extends OsSearchResultRowElementBase {
       case SearchResultIcon.kGooglePlay:
         return isRevampEnabled ? 'os-settings:google-play-revamp' :
                                  'os-settings:google-play';
+      case SearchResultIcon.kGraduation:
+        return 'os-settings:graduation';
       case SearchResultIcon.kHearing:
         return 'os-settings:a11y-hearing';
       case SearchResultIcon.kHelp:

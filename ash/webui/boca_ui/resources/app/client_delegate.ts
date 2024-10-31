@@ -2,16 +2,86 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Config, ControlledTab as ControlledTabMojom, Course, Identity as IdentityMojom, PageHandlerRemote, TabInfo, Window} from '../mojom/boca.mojom-webui.js';
+import {Config, ControlledTab as ControlledTabMojom, Course, IdentifiedActivity as Activity, Identity as IdentityMojom, PageHandlerRemote, TabInfo, Window} from '../mojom/boca.mojom-webui.js';
 
-import {CaptionConfig, ClientApiDelegate, ControlledTab, Identity, OnTaskConfig, SessionConfig} from './boca_app.js';
+import {CaptionConfig, ClientApiDelegate, ControlledTab, IdentifiedActivity, Identity, OnTaskConfig, SessionConfig, SubmitAccessCodeResult} from './boca_app.js';
+
 
 const MICRO_SECS_IN_MINUTES: bigint = 60000000n;
+
+export function getStudentActivityMojomToUI(activities: Activity[]):
+    IdentifiedActivity[] {
+  return activities.map((item: Activity) => {
+    return {
+      id:
+        item.id, studentActivity: {
+          isActive: item.activity.isActive,
+          activeTab: item.activity.activeTab ? item.activity.activeTab :
+                                               undefined,
+          isCaptionEnabled: item.activity.isCaptionEnabled,
+          isHandRaised: item.activity.isHandRaised,
+          joinMethod: item.activity.joinMethod.valueOf()
+        }
+    }
+  })
+}
+export function getSessionConfigMojomToUI(session: Config|
+                                          undefined): SessionConfig|null {
+  if (!session) {
+    return null;
+  }
+  return {
+  sessionDurationInMinutes:
+    Number(session.sessionDuration.microseconds / MICRO_SECS_IN_MINUTES),
+        sessionStartTime: session.sessionStartTime?.msec ?
+        new Date(session.sessionStartTime.msec) :
+        undefined,
+        teacher: session.teacher ? {
+          id: session.teacher.id,
+          name: session.teacher.name,
+          email: session.teacher.email,
+          photoUrl: session.teacher.photoUrl ? session.teacher.photoUrl.url :
+                                               undefined,
+        } :
+                                   undefined,
+        students: session.students.map((item: IdentityMojom) => {
+          return {
+            id: item.id,
+            name: item.name,
+            email: item.email,
+            photoUrl: item.photoUrl ? item.photoUrl.url : undefined,
+          };
+        }),
+        studentsJoinViaCode:
+            session.studentsJoinViaCode.map((item: IdentityMojom) => {
+              return {
+                id: item.id,
+                name: item.name,
+                email: item.email,
+                photoUrl: item.photoUrl ? item.photoUrl.url : undefined,
+              };
+            }),
+        onTaskConfig: {
+          isLocked: session.onTaskConfig.isLocked,
+          tabs: session.onTaskConfig.tabs.map((item: ControlledTabMojom) => {
+            return {
+              tab: {
+                url: item.tab.url.url,
+                title: item.tab.title,
+                favicon: item.tab.favicon,
+              },
+              navigationType: item.navigationType.valueOf(),
+            };
+          }),
+        },
+        captionConfig: session.captionConfig,
+        accessCode: session.accessCode ? session.accessCode : ''
+  }
+};
 
 /**
  * A delegate implementation that provides API via privileged mojom API
  */
-
 export class ClientDelegateFactory {
   private clientDelegateImpl: ClientApiDelegate;
   constructor(pageHandler: PageHandlerRemote) {
@@ -59,6 +129,10 @@ export class ClientDelegateFactory {
             microseconds: BigInt(sessionConfig.sessionDurationInMinutes) *
                 MICRO_SECS_IN_MINUTES,
           },
+          studentsJoinViaCode: [],
+          teacher: null,
+          accessCode: null,
+          sessionStartTime: null,
           students: sessionConfig.students?.map((item: Identity) => {
             return {
               id: item.id,
@@ -90,50 +164,19 @@ export class ClientDelegateFactory {
         if (!result.config) {
           return null;
         }
-        const session = result.config;
         return {
-          sessionConfig: {
-            sessionDurationInMinutes: Number(
-                session.sessionDuration.microseconds / MICRO_SECS_IN_MINUTES),
-            teacher: session.teacher ? {
-              id: session.teacher.id,
-              name: session.teacher.name,
-              email: session.teacher.email,
-              photoUrl: session.teacher.photoUrl ?
-                  session.teacher.photoUrl.url :
-                  undefined,
-            } :
-                                       undefined,
-            students: session.students?.map((item: IdentityMojom) => {
-              return {
-                id: item.id,
-                name: item.name,
-                email: item.email,
-                photoUrl: item.photoUrl ? item.photoUrl.url : undefined,
-              };
-            }),
-            onTaskConfig: {
-              isLocked: session.onTaskConfig?.isLocked,
-              tabs:
-                  session.onTaskConfig?.tabs.map((item: ControlledTabMojom) => {
-                    return {
-                      tab: {
-                        url: item.tab.url.url,
-                        title: item.tab.title,
-                        favicon: item.tab.favicon,
-                      },
-                      navigationType: item.navigationType.valueOf(),
-                    };
-                  }),
-            },
-            captionConfig: session.captionConfig,
-            // TODO(b/365191878): Fill in user activity.
-          },
-          activity: [],
+          sessionConfig: getSessionConfigMojomToUI(result.config) as
+              SessionConfig,
+          // TODO(b/365191878): Fill in user activity.
+          activity: []
         };
       },
       endSession: async () => {
         const result = await pageHandler.endSession();
+        return !result.error;
+      },
+      removeStudent: async (id: string) => {
+        const result = await pageHandler.removeStudent(id);
         return !result.error;
       },
       updateOnTaskConfig: async (onTaskConfig: OnTaskConfig) => {
@@ -160,6 +203,16 @@ export class ClientDelegateFactory {
         );
         return !result.error;
       },
+      setFloatMode: async (isFloatMode: boolean) => {
+        return (await pageHandler.setFloatMode(isFloatMode)).success;
+      },
+      submitAccessCode: async (code: string) => {
+        const result = await pageHandler.submitAccessCode(code);
+        if (!result.error) {
+          return SubmitAccessCodeResult.SUCCESS;
+        }
+        return SubmitAccessCodeResult.INVALID_CODE;
+      }
     };
   }
 

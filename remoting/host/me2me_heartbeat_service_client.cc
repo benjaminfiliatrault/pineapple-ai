@@ -33,10 +33,6 @@ void Me2MeHeartbeatServiceClient::SendFullHeartbeat(
     HeartbeatResponseCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  std::string host_offline_reason =
-      offline_reason ? (" host_offline_reason: " + *offline_reason) : "";
-  HOST_LOG << "Sending outgoing legacy heartbeat." << host_offline_reason;
-
   std::string os_name = GetHostOperatingSystemName();
   std::string os_version = GetHostOperatingSystemVersion();
 
@@ -67,6 +63,11 @@ void Me2MeHeartbeatServiceClient::OnLegacyHeartbeatResponse(
     std::unique_ptr<apis::v1::HeartbeatResponse> response) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  if (!status.ok()) {
+    OnError(std::move(callback), status);
+    return;
+  }
+
   base::TimeDelta wait_interval =
       base::Seconds(response->set_interval_seconds());
   bool use_lite_heartbeat = false;
@@ -92,6 +93,11 @@ void Me2MeHeartbeatServiceClient::OnSendHeartbeatResponse(
     const ProtobufHttpStatus& status,
     std::unique_ptr<apis::v1::SendHeartbeatResponse> response) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (!status.ok()) {
+    OnError(std::move(callback), status);
+    return;
+  }
 
   base::TimeDelta wait_interval =
       base::Seconds(response->wait_interval_seconds());

@@ -6332,6 +6332,15 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="CardBenefits_LearnMoreLinkClicked">
+  <owner>viplavkadam@google.com</owner>
+  <owner>jsaul@google.com</owner>
+  <description>
+    Recorded when the user clicks on the card benefits learn more hyperlink on
+    the card benefits settings page.
+  </description>
+</action>
+
 <action name="CardBenefits_TermsLinkClicked">
   <owner>viplavkadam@google.com</owner>
   <owner>yishuil@google.com</owner>
@@ -6339,6 +6348,24 @@ should be able to be added at any place in this file.
   <description>
     Recorded when the user clicks on the card benefits terms hyperlink on the
     payment methods settings page.
+  </description>
+</action>
+
+<action name="CardBenefits_ToggledOff">
+  <owner>viplavkadam@google.com</owner>
+  <owner>jsaul@google.com</owner>
+  <description>
+    Recorded when the user clicks on the card benefits toggle on the card
+    benefits settings page, switching it from the on state to the off state.
+  </description>
+</action>
+
+<action name="CardBenefits_ToggledOn">
+  <owner>viplavkadam@google.com</owner>
+  <owner>jsaul@google.com</owner>
+  <description>
+    Recorded when the user clicks on the card benefits toggle on the card
+    benefits settings page, switching it from the off state to the on state.
   </description>
 </action>
 
@@ -7094,6 +7121,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Commerce.PriceAlertsMessageCard.Dismissed">
+  <obsolete>Deprecated due to removal in M131.</obsolete>
   <owner>zhiyuancai@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
   <description>
@@ -7103,6 +7131,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Commerce.PriceAlertsMessageCard.Reviewed">
+  <obsolete>Deprecated due to removal in M131.</obsolete>
   <owner>zhiyuancai@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
   <description>
@@ -7304,6 +7333,81 @@ should be able to be added at any place in this file.
   <description>
     Records when a users attempts to untrack an item through the UI, but is
     unsuccessful due to an error. (iOS only)
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.MagicStackPromo.Allow">
+  <owner>ayman@chromium.org</owner>
+  <owner>davidjm@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when the user taps 'Allow price tracking notifications' upon viewing
+    the price tracking promotion in the magic stack. The price tracking
+    promotion is for users who use price tracking on another platform (e.g.
+    Desktop) but haven't discovered the feature on mobile yet.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.MagicStackPromo.FirstTime.Allow">
+  <owner>ayman@chromium.org</owner>
+  <owner>davidjm@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when the user allows notifications for the app for the first time
+    when prompted to do so upon tapping 'Allow price tracking notifications' on
+    the price tracking promotion in the magic stack. The price tracking
+    promotion is for users who use price tracking on another platform (e.g.
+    Desktop) but haven't discovered the feature on mobile yet.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.MagicStackPromo.FirstTime.Deny">
+  <owner>ayman@chromium.org</owner>
+  <owner>davidjm@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when the user denies notifications for the app for the first time
+    when prompted to do so upon tapping 'Allow price tracking notifications' on
+    the price tracking promotion in the magic stack. The price tracking
+    promotion is for users who use price tracking on another platform (e.g.
+    Desktop) but haven't discovered the feature on mobile yet.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.MagicStackPromo.Hidden">
+  <owner>ayman@chromium.org</owner>
+  <owner>davidjm@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when the user hides the price tracking promotion in the magic stack.
+    The price tracking promotion is for users who use price tracking on another
+    platform (e.g. Desktop) but haven't discovered the feature on mobile yet.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.MagicStackPromo.Reenable.Allow">
+  <owner>ayman@chromium.org</owner>
+  <owner>davidjm@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when the user allows notifications for the app after they have been
+    previously turned off when prompted to do so upon tapping 'Allow price
+    tracking notifications' on the price tracking promotion in the magic stack.
+    The price tracking promotion is for users who use price tracking on another
+    platform (e.g. Desktop) but haven't discovered the feature on mobile yet.
+  </description>
+</action>
+
+<action name="Commerce.PriceTracking.MagicStackPromo.Reenable.Deny">
+  <owner>ayman@chromium.org</owner>
+  <owner>davidjm@chromium.org</owner>
+  <owner>chrome-shopping@google.com</owner>
+  <description>
+    Records when the user denies notifications for the app after they have been
+    previously turned off when prompted to do so upon tapping 'Allow price
+    tracking notifications' on the price tracking promotion in the magic stack.
+    The price tracking promotion is for users who use price tracking on another
+    platform (e.g. Desktop) but haven't discovered the feature on mobile yet.
   </description>
 </action>
 
@@ -9092,6 +9196,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="CustomTabs.ToolbarOpenInBrowserClicked">
+  <owner>ender@google.com</owner>
+  <description>
+    User tapped the Open in Browser button on the toolbar in custom tabs. Note
+    that taps on overflow menu item with same function are recorded under
+    CustomTabsMenuOpenInChrome.
+  </description>
+</action>
+
 <action name="CustomTabsCustomActionButtonClick">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>
@@ -10648,6 +10761,17 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action
+    name="Extensions.Mv2Deprecation.Disabled.ManageExtension.DisabledDialog">
+  <owner>emiliapaz@chomium.org</owner>
+  <owner>extensions-core@chromium.org</owner>
+  <description>
+    Emitted when the user clicked on the manage button in the dialog informing
+    the user that some extensions were disabled during the MV2 'disable with
+    re-enable' experiment stage.
+  </description>
+</action>
+
 <action name="Extensions.Mv2Deprecation.Disabled.RemoveExtension">
   <owner>emiliapaz@chomium.org</owner>
   <owner>extensions-core@chromium.org</owner>
@@ -10655,6 +10779,17 @@ should be able to be added at any place in this file.
     The user clicked on the remove button for an extension in
     chrome://extensions during the MV2 'disable with re-enable' experiment
     stage.
+  </description>
+</action>
+
+<action
+    name="Extensions.Mv2Deprecation.Disabled.RemoveExtension.DisabledDialog">
+  <owner>emiliapaz@chomium.org</owner>
+  <owner>extensions-core@chromium.org</owner>
+  <description>
+    Emitted when the user clicked on the remove button in the dialog informing
+    the user that some extensions were disabled during the MV2 'disable with
+    re-enable' experiment stage.
   </description>
 </action>
 
@@ -10697,6 +10832,17 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action
+    name="Extensions.Mv2Deprecation.Unsupported.ManageExtension.DisabledDialog">
+  <owner>emiliapaz@chomium.org</owner>
+  <owner>extensions-core@chromium.org</owner>
+  <description>
+    Emitted when the user clicked on the manage button in the dialog informing
+    the user that some extensions were disabled during the MV2 'unsupported'
+    experiment stage.
+  </description>
+</action>
+
 <action name="Extensions.Mv2Deprecation.Unsupported.RemoveExtension">
   <owner>emiliapaz@chomium.org</owner>
   <owner>extensions-core@chromium.org</owner>
@@ -10712,6 +10858,17 @@ should be able to be added at any place in this file.
   <description>
     The user clicked on the remove button in the extension's detailed page in
     chrome://extensions during the MV2 'unsupported' experiment stage.
+  </description>
+</action>
+
+<action
+    name="Extensions.Mv2Deprecation.Unsupported.RemoveExtension.DisabledDialog">
+  <owner>emiliapaz@chomium.org</owner>
+  <owner>extensions-core@chromium.org</owner>
+  <description>
+    Emitted when the user clicked on the remove button in the dialog informing
+    the user that some extensions were disabled during the MV2 'unsupported'
+    experiment stage.
   </description>
 </action>
 
@@ -14275,6 +14432,16 @@ should be able to be added at any place in this file.
   <description>
     Reported when the Tab Resumption cell is toggled from the Magic Stack page
     in the Home Customization menu.
+  </description>
+</action>
+
+<action name="IOS.HomeCustomization.MagicStackPage.Tips.Toggled">
+  <owner>bwwilliams@google.com</owner>
+  <owner>adamta@google.com</owner>
+  <owner>bling-get-set-up@google.com</owner>
+  <description>
+    Reported when the Tips cell is toggled from the Magic Stack page in the Home
+    Customization menu.
   </description>
 </action>
 
@@ -21002,6 +21169,14 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Mobile.LensOverlay.FocusOmnibox">
+  <owner>christianxu@google.com</owner>
+  <owner>stkhapugin@google.com</owner>
+  <description>
+    Recorded when the user focuses the omnibox in the Lens Overlay.
+  </description>
+</action>
+
 <action name="Mobile.LensOverlay.NewResult">
   <owner>christianxu@google.com</owner>
   <owner>stkhapugin@google.com</owner>
@@ -23731,7 +23906,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MobileNTPOpenedInNewTab">
-  <owner>fhorschig@chromium.org</owner>
+  <owner>friedrichh@chromium.org</owner>
   <description>
     The user manually created a New Tab Page (NTP) in a new tab that has not
     been shown before. This includes the initial tab (when starting Chrome).
@@ -30357,6 +30532,37 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="OsDefaultsChoiceDialogClosed">
+  <owner>dgn@google.com</owner>
+  <owner>triploblastic@google.com</owner>
+  <owner>chrome-waffle-eng@google.com</owner>
+  <description>
+    Recorded when a choice dialog to invite users to finish choosing their
+    default browser app and search engine choice from OS is closed. In rare
+    occassions this may be closed by the backend if the dialog is not required.
+  </description>
+</action>
+
+<action name="OsDefaultsChoiceDialogShown" not_user_triggered="true">
+  <owner>dgn@google.com</owner>
+  <owner>triploblastic@google.com</owner>
+  <owner>chrome-waffle-eng@google.com</owner>
+  <description>
+    Recorded when a choice dialog to invite users to finish choosing their
+    default browser app and search engine choice from OS is shown.
+  </description>
+</action>
+
+<action name="OsDefaultsChoiceDialogUnblocked" not_user_triggered="true">
+  <owner>dgn@google.com</owner>
+  <owner>triploblastic@google.com</owner>
+  <owner>chrome-waffle-eng@google.com</owner>
+  <description>
+    Recorded when a choice dialog to invite users to finish choosing their
+    default browser app and search engine choice from OS is unblocked.
+  </description>
+</action>
+
 <action name="OutdatedPluginInfobar.AllowThisTime">
   <obsolete>Removed in M107</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
@@ -30687,6 +30893,15 @@ should be able to be added at any place in this file.
   <description>History subpage opened in PageInfo.</description>
 </action>
 
+<action name="PageInfo.History.ShowFullHistoryClicked">
+  <owner>cristianciacu@google.com</owner>
+  <owner>fsenra@google.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Show full history button clicked from Last Visited page.
+  </description>
+</action>
+
 <action name="PageInfo.Opened">
   <owner>olesiamarukhno@google.com</owner>
   <owner>dullweber@chromium.org</owner>
@@ -30726,6 +30941,12 @@ should be able to be added at any place in this file.
   <owner>olesiamarukhno@google.com</owner>
   <owner>dullweber@chromium.org</owner>
   <description>Permissions reset from PageInfo.</description>
+</action>
+
+<action name="PageInfo.SafeBrowsing.HelpOpened">
+  <owner>olesiamarukhno@google.com</owner>
+  <owner>dullweber@chromium.org</owner>
+  <description>Help opened from Safe Browsing.</description>
 </action>
 
 <action name="PageInfo.SafetyTip.HelpOpened">
@@ -33796,6 +34017,156 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Settings.AiPage.Compare.FeatureLinkClicked">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when the user clicks on the feature linkout in the
+    chrome://settings/ai/compareProducts page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.Compare.LearnMoreClicked">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when the user clicks on the learn more link in the
+    chrome://settings/ai/compareProducts page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.CompareEntryPointClick">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when user clicks on the Compare row in the chrome://settings/ai
+    page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.Compose.LearnMoreClicked">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when the user clicks on the learn more link in the
+    chrome://settings/ai/helpMeWrite page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.Compose.ProactiveNudgeDisabled">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when the user disables Compose proactive nudge through the toggle
+    in the chrome://settings/ai/helpMeWrite page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.Compose.ProactiveNudgeEnabled">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when the user enables Compose proactive nudge through the toggle in
+    the chrome://settings/ai/helpMeWrite page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.ComposeEntryPointClick">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when user clicks on the Compose row in the chrome://settings/ai
+    page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.HistorySearch.Disabled">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when the user disables History Search through the toggle in the
+    chrome://settings/ai/historySearch page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.HistorySearch.Enabled">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when the user enables History Search through the toggle in the
+    chrome://settings/ai/historySearch page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.HistorySearch.FeatureLinkClicked">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when the user clicks on the feature linkout in the
+    chrome://settings/ai/historySearch page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.HistorySearch.LearnMoreClicked">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when the user clicks on the learn more link in the
+    chrome://settings/ai/historySearch page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.HistorySearchEntryPointClick">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when user clicks on the History Search row in the
+    chrome://settings/ai page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.TabOrganization.LearnMoreClicked">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when the user clicks on the learn more link in the
+    chrome://settings/ai/tabOrganizer page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.TabOrganizationEntryPointClick">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when user clicks on the Tab Organization row in the
+    chrome://settings/ai page.
+  </description>
+</action>
+
+<action name="Settings.AiPage.ThemesEntryPointClick">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when user clicks on the Themes row in the chrome://settings/ai
+    page.
+  </description>
+</action>
+
 <action name="Settings.ArticlesForYouToggled">
   <owner>gambard@chromium.org</owner>
   <owner>treib@chromium.org</owner>
@@ -35114,6 +35485,16 @@ should be able to be added at any place in this file.
   <owner>pmonette@chromium.org</owner>
   <description>
     The user clicked the &quot;Switch Anyway&quot; button in the Edge promo.
+  </description>
+</action>
+
+<action name="SettingsMenu_AiPageEntryPointClicked">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    The user clicked the &quot;AI Innovations&quot; external link in the
+    settings menu (drawer).
   </description>
 </action>
 
@@ -40976,22 +41357,6 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="SystemBackBeforeNativeInitialized">
-  <owner>lazzzis@google.com</owner>
-  <description>
-    The user triggered system back **before** Native is initialized. This action
-    is mutually exclusive with SystemBack. Android only.
-  </description>
-</action>
-
-<action name="SystemBackBeforeUINativeInitialized">
-  <owner>lazzzis@google.com</owner>
-  <description>
-    The user triggered system back **before UI** with Native is initialized.
-    Recorded on Android only.
-  </description>
-</action>
-
 <action name="SystemBackForNavigation">
   <obsolete>
     Deprecated as of 02/2016. Now recorded in the histogram
@@ -41001,14 +41366,6 @@ should be able to be added at any place in this file.
   <description>
     The user navigated backward in the tab's history using the system back
     button.
-  </description>
-</action>
-
-<action name="SystemBackOnActivityFinishingOrDestroyed">
-  <owner>lazzzis@google.com</owner>
-  <description>
-    The user triggered system back when activity is finishing or has been
-    destroyed. Android only.
   </description>
 </action>
 
@@ -42296,15 +42653,6 @@ should be able to be added at any place in this file.
   <owner>clank-tab-dev@google.com</owner>
   <description>
     Recorded when the select tabs menu item is clicked by a user.
-  </description>
-</action>
-
-<action name="Tabs.TabArchived">
-  <owner>wylieb@chromium.org</owner>
-  <owner>clank-tab-dev@google.com</owner>
-  <description>
-    Recorded when a tab is archived. This happens when a tab's last used time
-    exceeds the limit for archived tabs.
   </description>
 </action>
 
@@ -43659,6 +44007,30 @@ should be able to be added at any place in this file.
   <owner>frizzle-team@google.com</owner>
   <description>
     A module on the What's New page was visible to the user.
+  </description>
+</action>
+
+<action name="UserEducation.WhatsNew.PauseClicked">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <description>
+    The user clicked the pause button on a video in a What's New module.
+  </description>
+</action>
+
+<action name="UserEducation.WhatsNew.PlayClicked">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <description>
+    The user clicked the play button on a video in a What's New module.
+  </description>
+</action>
+
+<action name="UserEducation.WhatsNew.RestartClicked">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <description>
+    The user clicked the restart button on a video in a What's New module.
   </description>
 </action>
 
@@ -45666,13 +46038,18 @@ should be able to be added at any place in this file.
 </action>
 
 <action-suffix separator="." ordering="suffix">
+  <suffix name="EnhancedProtection" label="EnhancedProtection"/>
   <suffix name="FamilyLink" label="Family Link"/>
+  <suffix name="GANslate" label="GANslate"/>
+  <suffix name="GeminiShortcut" label="Gemini Shortcut"/>
   <suffix name="GeminiSiteSearchShortcut" label="Gemini Site Search Shortcut"/>
+  <suffix name="GenerativeThemes" label="Generative Themes"/>
   <suffix name="GenerativeTheming" label="Generative Theming"/>
   <suffix name="GoogleLens" label="Google Lens"/>
   <suffix name="Googlepayreauth" label="Google Pay Re-auth"/>
   <suffix name="HelpMeWrite" label="Help Me Write"/>
   <suffix name="HistoryEmbeddings" label="History Embeddings Search"/>
+  <suffix name="Passkeys" label="Passkeys"/>
   <suffix name="SafetyCheck" label="Safety Check"/>
   <suffix name="SaveTabGroups" label="Saved Tab Groups"/>
   <suffix name="SearchBoxSuggestions" label="Search Box Suggestions"/>
@@ -45687,6 +46064,7 @@ should be able to be added at any place in this file.
 
 <action-suffix separator="." ordering="suffix">
   <suffix name="SafetyAwareness" label="Safety Awareness edition."/>
+  <suffix name="Spark" label="Spark edition."/>
   <suffix name="TestEdition" label="Test edition."/>
   <affected-action name="UserEducation.WhatsNew.EditionShown"/>
 </action-suffix>
@@ -45750,6 +46128,10 @@ should be able to be added at any place in this file.
       label="For AutofillExternalAccountProfileSuggestion feature."/>
   <suffix name="AutofillManualFallback"
       label="For AutofillManualFallback feature."/>
+  <suffix name="AutofillPredictionImprovements"
+      label="For AutofillPredictionImprovements feature."/>
+  <suffix name="AutofillPredictionImprovementsBootstrapping"
+      label="For giving users information that data was imported to memories."/>
   <suffix name="AutofillVirtualCardCVCSuggestion"
       label="For autofill suggestion of virtual cards."/>
   <suffix name="AutofillVirtualCardSuggestion"
@@ -45942,8 +46324,6 @@ should be able to be added at any place in this file.
       label="For Enhanced Safe Browsing Promo feature"/>
   <suffix name="iOSLensOverlayEntrypointTip"
       label="For iOSLensOverlayEntrypoint IPH feature"/>
-  <suffix name="iOSNewTabToolbarItemFeature"
-      label="For iOSNewTabToolbarItemFeature feature"/>
   <suffix name="iOSOverflowMenuCustomization"
       label="For iOSOverflowMenuCustomization feature"/>
   <suffix name="iOSPageInfoRevamp"
@@ -45981,16 +46361,15 @@ should be able to be added at any place in this file.
       label="For iOSReplaceSyncPromosWithSignInPromos feature"/>
   <suffix name="iOSSavedTabGroupClosed"
       label="For Saved Tab Group closed for the first time."/>
-  <suffix name="iOSShareToolbarItemFeature"
-      label="For iOSShareToolbarItemFeature feature"/>
   <suffix name="iOSSwipeBackForwardFeature"
       label="For iOSSwipeBackForwardFeature feature"/>
   <suffix name="iOSSwipeToolbarToChangeTabFeature"
       label="For iOSSwipeToolbarToChangeTabFeature feature"/>
   <suffix name="iOSTabGridSwipeRightForIncognito"
       label="For iOSTabGridSwipeRightForIncognito feature"/>
-  <suffix name="iOSTabGridToolbarItemFeature"
-      label="For iOSTabGridToolbarItemFeature feature"/>
+  <suffix name="IPH_AutofillPredictionImprovements"
+      label="For giving users information on how to turn on prediction
+             improvements."/>
   <suffix name="IPH_DefaultBrowserPromoMagicStack"
       label="For Default browser promo in Magic Stack."/>
   <suffix name="IPH_DefaultBrowserPromoMessages"
@@ -46008,6 +46387,9 @@ should be able to be added at any place in this file.
   <suffix name="KeyboardAccessoryPaymentOffer"
       label="For KeyboardAccessoryPaymentOffer feature."/>
   <suffix name="LauncherSearchHelpUi" label="For launcher search IPH feature."/>
+  <suffix name="LensOverlay" label="For Lens Overlay IPH feature."/>
+  <suffix name="LensOverlayTranslateButton"
+      label="For LensOverlay translate button feature."/>
   <suffix name="LiveCaption" label="For LiveCaption feature."/>
   <suffix name="LongPressToolbarTip" label="For LongPressToolbar feature."/>
   <suffix name="LowUserEngagementDetector"
@@ -46039,6 +46421,8 @@ should be able to be added at any place in this file.
       label="For new badge next to Performance feature."/>
   <suffix name="PlusAddressCreateSuggestion"
       label="For creating plus addresses."/>
+  <suffix name="PlusAddressFirstSaveFeature"
+      label="For accessing settings after saving the first plus address."/>
   <suffix name="PowerBookmarksSidePanel"
       label="For power bookmarks side panel feature."/>
   <suffix name="PreviewsOmniboxUI"
@@ -46727,9 +47111,12 @@ should be able to be added at any place in this file.
   <suffix name="GoogleAppsButton" label="Google Apps details page button"/>
   <suffix name="GoogleToolsBuiltInButton"
       label="Google tools built in details page button"/>
-  <suffix name="HelpMeWriteButton" label="Help me write page button"/>
+  <suffix name="HelpMeReadButton" label="Help me read details page button"/>
+  <suffix name="HelpMeWriteButton" label="Help me write details page button"/>
   <suffix name="LauncherSearchButton"
       label="Launcher search details page button"/>
+  <suffix name="LiveTranslateButton"
+      label="Live translate details page button"/>
   <suffix name="LumaFusionButton" label="LumaFusion details page button"/>
   <suffix name="MessagingButton" label="Messaging details page button"/>
   <suffix name="MobileGamingButton" label="Mobile Gaming details page button"/>
@@ -46873,6 +47260,12 @@ should be able to be added at any place in this file.
 
 <action-suffix separator="." ordering="suffix">
   <suffix name="AddedToReadingList" label="Added to reading list"/>
+  <affected-action name="Toast.ActionButtonClicked"/>
+  <affected-action name="Toast.CloseButtonClicked"/>
+</action-suffix>
+
+<action-suffix separator="." ordering="suffix">
+  <suffix name="AddedToComparisonTable" label="Added to comparison table"/>
   <affected-action name="Toast.ActionButtonClicked"/>
   <affected-action name="Toast.CloseButtonClicked"/>
 </action-suffix>

@@ -60,11 +60,11 @@ import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.EmbeddableSettingsPage;
 import org.chromium.components.browser_ui.settings.ExpandablePreferenceGroup;
-import org.chromium.components.browser_ui.settings.FragmentSettingsLauncher;
+import org.chromium.components.browser_ui.settings.FragmentSettingsNavigation;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.ManagedPreferencesUtils;
 import org.chromium.components.browser_ui.settings.SearchUtils;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
+import org.chromium.components.browser_ui.settings.SettingsNavigation;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.AddExceptionPreference.SiteAddedCallback;
 import org.chromium.components.browser_ui.site_settings.AutoDarkMetrics.AutoDarkSettingsChangeSource;
@@ -116,7 +116,7 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
                 OnPreferenceClickListener,
                 SiteAddedCallback,
                 OnPreferenceTreeClickListener,
-                FragmentSettingsLauncher,
+                FragmentSettingsNavigation,
                 TriStateCookieSettingsPreference.OnCookiesDetailsRequested,
                 CustomDividerFragment,
                 WebsitePreference.OnStorageAccessWebsiteDetailsRequested {
@@ -138,11 +138,11 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
     public static final String EXTRA_TITLE = "title";
     public static final String POLICY = "policy";
 
-    private SettingsLauncher mSettingsLauncher;
+    private SettingsNavigation mSettingsNavigation;
 
     @Override
-    public void setSettingsLauncher(SettingsLauncher settingsLauncher) {
-        mSettingsLauncher = settingsLauncher;
+    public void setSettingsNavigation(SettingsNavigation settingsNavigation) {
+        mSettingsNavigation = settingsNavigation;
     }
 
     /**
@@ -171,8 +171,6 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
     private boolean mIsInitialRun = true;
     // The number of sites that are on the Allowed list.
     private int mAllowedSiteCount;
-    // The websites that are currently displayed to the user.
-    private List<WebsitePreference> mWebsites;
     // Whether tri-state ContentSetting is required.
     private @GlobalToggleLayout int mGlobalToggleLayout = GlobalToggleLayout.BINARY_TOGGLE;
     // The "notifications_quiet_ui" preference to allow hiding/showing it.
@@ -191,10 +189,9 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
     @Override
     public void onCookiesDetailsRequested(@CookieControlsMode int cookieSettingsState) {
         Bundle fragmentArgs = new Bundle();
-        fragmentArgs.putInt(RWSCookieSettings.EXTRA_COOKIE_PAGE_STATE, cookieSettingsState);
+        fragmentArgs.putInt(RwsCookieSettings.EXTRA_COOKIE_PAGE_STATE, cookieSettingsState);
 
-        mSettingsLauncher.launchSettingsActivity(
-                getActivity(), RWSCookieSettings.class, fragmentArgs);
+        mSettingsNavigation.startSettings(getActivity(), RwsCookieSettings.class, fragmentArgs);
     }
 
     @Override
@@ -205,7 +202,7 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
         fragmentArgs.putBoolean(
                 StorageAccessSubpageSettings.EXTRA_ALLOWED, !isOnBlockList(website));
 
-        mSettingsLauncher.launchSettingsActivity(
+        mSettingsNavigation.startSettings(
                 getActivity(), StorageAccessSubpageSettings.class, fragmentArgs);
     }
 
@@ -256,7 +253,6 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
             // This method may be called after the activity has been destroyed.
             // In that case, bail out.
             if (getActivity() == null) return;
-            mWebsites = null;
 
             resetList();
 
@@ -1040,7 +1036,6 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
             if (!mManagedListExpanded) managedGroup.removeAll();
         }
 
-        mWebsites = websites;
         updateBlockedHeader(blocked);
         updateAllowedHeader(mAllowedSiteCount, !isBlocked());
         updateManagedHeader(managed);
@@ -1357,7 +1352,7 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
         params.cookieControlsModeEnforced = mCategory.isManaged();
         params.isIncognitoModeEnabled = getSiteSettingsDelegate().isIncognitoModeEnabled();
         params.isPrivacySandboxFirstPartySetsUIEnabled =
-                getSiteSettingsDelegate().isPrivacySandboxFirstPartySetsUIFeatureEnabled();
+                getSiteSettingsDelegate().isPrivacySandboxFirstPartySetsUiFeatureEnabled();
         params.isRelatedWebsiteSetsDataAccessEnabled =
                 getSiteSettingsDelegate().isRelatedWebsiteSetsDataAccessEnabled();
         triStateCookieToggle.setState(params);
@@ -1641,7 +1636,7 @@ public class SingleCategorySettings extends BaseSiteSettingsFragment
         };
     }
 
-    private void onOffboardingCardCloseClick(View button) {
+    private void onOffboardingCardCloseClick() {
         mCardPreference.setVisible(false);
     }
 

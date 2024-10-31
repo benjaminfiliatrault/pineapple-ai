@@ -88,6 +88,7 @@
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_user_settings.h"
 #include "components/sync_user_events/user_event_service.h"
+#include "components/user_education/views/help_bubble_view.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -1457,9 +1458,9 @@ IN_PROC_BROWSER_TEST_F(DiceExplicitSigninRollbackBrowserTest,
       account_info.account_id));
   signin::AccountsInCookieJarInfo cookie_jar =
       GetIdentityManager()->GetAccountsInCookieJar();
-  ASSERT_TRUE(cookie_jar.accounts_are_fresh);
-  ASSERT_EQ(cookie_jar.signed_in_accounts.size(), 1u);
-  EXPECT_TRUE(gaia::AreEmailsSame(cookie_jar.signed_in_accounts[0].email,
+  ASSERT_TRUE(cookie_jar.AreAccountsFresh());
+  ASSERT_EQ(cookie_jar.GetSignedInAccounts().size(), 1u);
+  EXPECT_TRUE(gaia::AreEmailsSame(cookie_jar.GetSignedInAccounts()[0].email,
                                   kMainGmailEmail));
 }
 
@@ -1480,9 +1481,9 @@ IN_PROC_BROWSER_TEST_F(DiceExplicitSigninRollbackBrowserTest,
       primary_account.account_id));
   signin::AccountsInCookieJarInfo cookie_jar =
       GetIdentityManager()->GetAccountsInCookieJar();
-  ASSERT_TRUE(cookie_jar.accounts_are_fresh);
-  ASSERT_EQ(cookie_jar.signed_in_accounts.size(), 1u);
-  EXPECT_TRUE(gaia::AreEmailsSame(cookie_jar.signed_in_accounts[0].email,
+  ASSERT_TRUE(cookie_jar.AreAccountsFresh());
+  ASSERT_EQ(cookie_jar.GetSignedInAccounts().size(), 1u);
+  EXPECT_TRUE(gaia::AreEmailsSame(cookie_jar.GetSignedInAccounts()[0].email,
                                   kMainGmailEmail));
 }
 
@@ -1824,13 +1825,17 @@ class DiceBrowserTestWithChromeSigninIPH
   }
 
   void CloseIPH() {
-    EXPECT_TRUE(browser()->GetUserEducationInterface()->EndFeaturePromo(
-        feature_engagement::
-            kIPHExplicitBrowserSigninPreferenceRememberedFeature,
-        user_education::EndFeaturePromoReason::kFeatureEngaged));
-    EXPECT_FALSE(browser()->window()->IsFeaturePromoActive(
-        feature_engagement::
-            kIPHExplicitBrowserSigninPreferenceRememberedFeature));
+    RunTestSequence(
+        PressButton(user_education::HelpBubbleView::kCloseButtonIdForTesting),
+        WaitForHide(
+            user_education::HelpBubbleView::kHelpBubbleElementIdForTesting),
+        CheckResult(
+            [this]() {
+              return browser()->window()->IsFeaturePromoActive(
+                  feature_engagement::
+                      kIPHExplicitBrowserSigninPreferenceRememberedFeature);
+            },
+            false));
   }
 
   void SignoutAndResetState() {

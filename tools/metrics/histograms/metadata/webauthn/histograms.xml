@@ -33,7 +33,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebAuthentication.Android.CredManConditionalRequest"
-    enum="CredManGetRequestEnum" expires_after="2025-02-10">
+    enum="CredManGetRequestEnum" expires_after="2025-04-13">
   <owner>derinel@google.com</owner>
   <owner>kenrb@chromium.org</owner>
   <summary>
@@ -43,7 +43,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebAuthentication.Android.CredManCreateRequest"
-    enum="CredManCreateRequestEnum" expires_after="2025-02-10">
+    enum="CredManCreateRequestEnum" expires_after="2025-04-13">
   <owner>derinel@google.com</owner>
   <owner>kenrb@chromium.org</owner>
   <summary>
@@ -63,7 +63,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebAuthentication.Android.CredManPrepareRequest"
-    enum="CredManPrepareRequestEnum" expires_after="2025-01-26">
+    enum="CredManPrepareRequestEnum" expires_after="2025-03-30">
   <owner>derinel@google.com</owner>
   <owner>kenrb@chromium.org</owner>
   <summary>
@@ -72,7 +72,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebAuthentication.Android.CredManPrepareRequestDuration"
-    units="ms" expires_after="2025-01-26">
+    units="ms" expires_after="2025-03-30">
   <owner>derinel@google.com</owner>
   <owner>kenrb@chromium.org</owner>
   <summary>
@@ -81,39 +81,15 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="WebAuthentication.CableV2.AOADiscoveryEvent"
-    enum="WebAuthenticationAOADiscoveryEvent" expires_after="2025-03-01">
-  <owner>agl@chromium.org</owner>
-  <owner>martinkr@google.com</owner>
+<histogram name="WebAuthentication.Android.NonDiscoverableCredentialsFound"
+    enum="Boolean" expires_after="2025-03-30">
+  <owner>derinel@google.com</owner>
+  <owner>kenrb@chromium.org</owner>
   <summary>
-    Records events that happen during the discovery of USB-connected phones.
+    Records whether non-discoverable credentials are found before dispatching
+    the request to Android Credential Manager APIs. Recorded only on Android 14
+    and above.
   </summary>
-</histogram>
-
-<histogram name="WebAuthentication.CableV2.DiscoveryEvent"
-    enum="WebAuthenticationCableV2DiscoveryEvent" expires_after="2025-03-01">
-  <owner>agl@chromium.org</owner>
-  <owner>martinkr@google.com</owner>
-  <summary>
-    Records events that happen when listening for a caBLEv2 device.
-  </summary>
-</histogram>
-
-<histogram name="WebAuthentication.CableV2.MobileEvent"
-    enum="WebAuthenticationCableV2MobileEvent" expires_after="2024-03-01">
-  <owner>agl@chromium.org</owner>
-  <owner>martinkr@google.com</owner>
-  <summary>
-    Records events that occur during a caBLE v2 transaction from the mobile
-    side.
-  </summary>
-</histogram>
-
-<histogram name="WebAuthentication.CableV2.MobileResult"
-    enum="WebAuthenticationCableV2MobileResult" expires_after="2024-03-01">
-  <owner>agl@chromium.org</owner>
-  <owner>martinkr@google.com</owner>
-  <summary>Records the outcome of caBLEv2 transactions.</summary>
 </histogram>
 
 <histogram name="WebAuthentication.CableV2.PrelinkDataAgeDays" units="days"
@@ -124,17 +100,6 @@ chromium-metrics-reviews@google.com.
     The age, in days, of the caBLE prelink information published by Android
     devices at the time when they upload it to sync. This measurement saturates
     at 31 days and the value 32 indicates that the calculated age was negative.
-  </summary>
-</histogram>
-
-<histogram name="WebAuthentication.CableV2.RendezvousTime" units="ms"
-    expires_after="2024-03-01">
-  <owner>agl@chromium.org</owner>
-  <owner>martinkr@google.com</owner>
-  <summary>
-    The time between the phone connecting to the tunnel server (and thus
-    starting its BLE broadcast) to the point where it receives the handshake
-    message from the desktop.
   </summary>
 </histogram>
 
@@ -187,7 +152,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebAuthentication.ConditionalUiPasskeyCount" units="passkeys"
-    expires_after="2025-01-26">
+    expires_after="2025-03-30">
   <owner>kenrb@chromium.org</owner>
   <owner>nsatragno@chromium.org</owner>
   <owner>chrome-webauthn@google.com</owner>
@@ -241,15 +206,44 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="WebAuthentication.EnclaveRequestResult.{RequestType}"
+    enum="WebAuthenticationEnclaveRequestResult" expires_after="2025-06-30">
+  <owner>kenrb@chromium.org</owner>
+  <owner>chrome-webauthn@google.com</owner>
+  <summary>
+    Records the result when the Enclave Authenticator client receives a response
+    from the service for a {RequestType} request.
+  </summary>
+  <token key="RequestType">
+    <variant name="DeferredUvKeySubmission"
+        summary="deferred UV key submission"/>
+    <variant name="GetAssertion" summary="Get Assertion"/>
+    <variant name="MakeCredential" summary="Make Credential"/>
+  </token>
+</histogram>
+
+<histogram name="WebAuthentication.EnclaveTransactionResult"
+    enum="WebAuthenticationEnclaveTransactionResult" expires_after="2025-06-30">
+  <owner>kenrb@chromium.org</owner>
+  <owner>chrome-webauthn@google.com</owner>
+  <summary>
+    Records when a transaction with the enclave is completed. This records the
+    result of the overall transaction; the success or failure of individual
+    requests within the transaction are not recorded here. This does not record
+    failures due to client-side errors. It does record for errors received from
+    the service, invalid responses from the service, or success.
+  </summary>
+</histogram>
+
 <histogram name="WebAuthentication.GetAssertion.Result"
-    enum="WebAuthenticationCredentialRequestResult" expires_after="2025-02-10">
+    enum="WebAuthenticationCredentialRequestResult" expires_after="2025-04-13">
   <owner>nsatragno@chromium.org</owner>
   <owner>chrome-webauthn@google.com</owner>
   <summary>Records the result of a get assertion request.</summary>
 </histogram>
 
 <histogram name="WebAuthentication.GetAssertionRequestTransport"
-    enum="WebAuthenticationFidoTransport" expires_after="2025-02-10">
+    enum="WebAuthenticationFidoTransport" expires_after="2025-04-13">
   <owner>kenrb@chromium.org</owner>
   <owner>martinkr@google.com</owner>
   <summary>
@@ -260,7 +254,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebAuthentication.GetAssertionResponseTransport"
-    enum="WebAuthenticationFidoTransport" expires_after="2025-02-10">
+    enum="WebAuthenticationFidoTransport" expires_after="2025-04-13">
   <owner>kenrb@chromium.org</owner>
   <owner>martinkr@google.com</owner>
   <summary>
@@ -270,7 +264,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebAuthentication.IsUVPlatformAuthenticatorAvailable2"
-    enum="Boolean" expires_after="2025-01-26">
+    enum="Boolean" expires_after="2025-03-30">
   <owner>kenrb@chromium.org</owner>
   <owner>martinkr@google.com</owner>
   <summary>
@@ -281,7 +275,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebAuthentication.MacOS.PasskeyPermission"
-    enum="WebAuthenticationMacOSPasskeysPermission" expires_after="2025-02-23">
+    enum="WebAuthenticationMacOSPasskeysPermission" expires_after="2025-04-27">
   <owner>agl@chromium.org</owner>
   <owner>martinkr@google.com</owner>
   <summary>
@@ -310,7 +304,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebAuthentication.MakeCredentialResponseTransport"
-    enum="WebAuthenticationFidoTransport" expires_after="2025-02-10">
+    enum="WebAuthenticationFidoTransport" expires_after="2025-04-13">
   <owner>kenrb@chromium.org</owner>
   <owner>martinkr@google.com</owner>
   <summary>

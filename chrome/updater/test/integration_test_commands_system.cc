@@ -18,6 +18,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/test_switches.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "build/build_config.h"
@@ -109,14 +110,16 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
         {Param("switches", StringFromValue(base::Value(switches.Clone())))});
   }
 
-  void InstallUpdaterAndApp(const std::string& app_id,
-                            const bool is_silent_install,
-                            const std::string& tag,
-                            const std::string& child_window_text_to_find,
-                            const bool always_launch_cmd,
-                            const bool verify_app_logo_loaded,
-                            const bool expect_success,
-                            const bool wait_for_the_installer) const override {
+  void InstallUpdaterAndApp(
+      const std::string& app_id,
+      const bool is_silent_install,
+      const std::string& tag,
+      const std::string& child_window_text_to_find,
+      const bool always_launch_cmd,
+      const bool verify_app_logo_loaded,
+      const bool expect_success,
+      const bool wait_for_the_installer,
+      const base::Value::List& additional_switches) const override {
     RunCommand(
         "install_updater_and_app",
         {
@@ -130,6 +133,8 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
             Param("expect_success", BoolToString(expect_success)),
             Param("wait_for_the_installer",
                   BoolToString(wait_for_the_installer)),
+            Param("additional_switches",
+                  StringFromValue(base::Value(additional_switches.Clone()))),
         });
   }
 
@@ -145,14 +150,20 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
                      const GURL& crash_upload_url,
                      const GURL& device_management_url,
                      const GURL& app_logo_url,
-                     const base::TimeDelta& idle_timeout) const override {
-    RunCommand("enter_test_mode",
-               {Param("update_url", update_url.spec()),
-                Param("crash_upload_url", crash_upload_url.spec()),
-                Param("device_management_url", device_management_url.spec()),
-                Param("app_logo_url", app_logo_url.spec()),
-                Param("idle_timeout",
-                      base::NumberToString(idle_timeout.InSeconds()))});
+                     base::TimeDelta idle_timeout,
+                     base::TimeDelta server_keep_alive_time,
+                     base::TimeDelta ceca_connection_timeout) const override {
+    RunCommand(
+        "enter_test_mode",
+        {Param("update_url", update_url.spec()),
+         Param("crash_upload_url", crash_upload_url.spec()),
+         Param("device_management_url", device_management_url.spec()),
+         Param("app_logo_url", app_logo_url.spec()),
+         Param("idle_timeout", base::NumberToString(idle_timeout.InSeconds())),
+         Param("server_keep_alive_time",
+               base::NumberToString(server_keep_alive_time.InSeconds())),
+         Param("ceca_connection_timeout",
+               base::NumberToString(ceca_connection_timeout.InSeconds()))});
   }
 
   void ExitTestMode() const override { RunCommand("exit_test_mode"); }
@@ -204,22 +215,27 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
       const std::string& app_id,
       UpdateService::Priority priority,
       const base::Version& from_version,
-      const base::Version& to_version) const override {
+      const base::Version& to_version,
+      const base::Version& updater_version) const override {
     updater::test::ExpectUpdateCheckSequence(updater_scope_, test_server,
                                              app_id, priority, from_version,
-                                             to_version);
+                                             to_version, updater_version);
   }
 
-  void ExpectUpdateSequence(ScopedServer* test_server,
-                            const std::string& app_id,
-                            const std::string& install_data_index,
-                            UpdateService::Priority priority,
-                            const base::Version& from_version,
-                            const base::Version& to_version,
-                            bool do_fault_injection) const override {
+  void ExpectUpdateSequence(
+      ScopedServer* test_server,
+      const std::string& app_id,
+      const std::string& install_data_index,
+      UpdateService::Priority priority,
+      const base::Version& from_version,
+      const base::Version& to_version,
+      bool do_fault_injection,
+      bool skip_download,
+      const base::Version& updater_version) const override {
     updater::test::ExpectUpdateSequence(
         updater_scope_, test_server, app_id, install_data_index, priority,
-        from_version, to_version, do_fault_injection);
+        from_version, to_version, do_fault_injection, skip_download,
+        updater_version);
   }
 
   void ExpectUpdateSequenceBadHash(
@@ -234,16 +250,25 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
         from_version, to_version);
   }
 
-  void ExpectInstallSequence(ScopedServer* test_server,
-                             const std::string& app_id,
-                             const std::string& install_data_index,
-                             UpdateService::Priority priority,
-                             const base::Version& from_version,
-                             const base::Version& to_version,
-                             bool do_fault_injection) const override {
+  void ExpectInstallSequence(
+      ScopedServer* test_server,
+      const std::string& app_id,
+      const std::string& install_data_index,
+      UpdateService::Priority priority,
+      const base::Version& from_version,
+      const base::Version& to_version,
+      bool do_fault_injection,
+      bool skip_download,
+      const base::Version& updater_version) const override {
     updater::test::ExpectInstallSequence(
         updater_scope_, test_server, app_id, install_data_index, priority,
-        from_version, to_version, do_fault_injection);
+        from_version, to_version, do_fault_injection, skip_download,
+        updater_version);
+  }
+
+  void ExpectEnterpriseCompanionAppOTAInstallSequence(
+      ScopedServer* test_server) const override {
+    updater::test::ExpectEnterpriseCompanionAppOTAInstallSequence(test_server);
   }
 
   void ExpectVersionActive(const std::string& version) const override {
@@ -271,8 +296,9 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     RunCommand("setup_fake_updater_lower_version");
   }
 
-  void SetupRealUpdaterLowerVersion() const override {
-    RunCommand("setup_real_updater_lower_version");
+  void SetupRealUpdater(const base::FilePath& updater_path) const override {
+    RunCommand("setup_real_updater",
+               {Param("updater_path", updater_path.MaybeAsASCII())});
   }
 
   void SetExistenceCheckerPath(const std::string& app_id,
@@ -319,9 +345,11 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     updater::test::SetActive(updater_scope_, app_id);
   }
 
-  void RunWake(int expected_exit_code) const override {
+  void RunWake(int expected_exit_code,
+               const base::Version& version) const override {
     RunCommand("run_wake",
-               {Param("exit_code", base::NumberToString(expected_exit_code))});
+               {Param("exit_code", base::NumberToString(expected_exit_code)),
+                Param("version", version.GetString())});
   }
 
   void RunWakeAll() const override { RunCommand("run_wake_all", {}); }
@@ -522,7 +550,7 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
                 Param("browser_version", version.GetString())});
   }
 
-  void SetLastChecked(const base::Time& time) const override {
+  void SetLastChecked(base::Time time) const override {
     RunCommand(
         "set_last_checked",
         {Param("time", base::NumberToString(

@@ -25,6 +25,7 @@
 #import "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/bring_android_tabs/model/bring_android_tabs_to_ios_service_factory.h"
 #import "ios/chrome/browser/browsing_data/model/browsing_data_remover_factory.h"
+#import "ios/chrome/browser/collaboration/model/collaboration_service_factory.h"
 #import "ios/chrome/browser/commerce/model/session_proto_db_factory.h"
 #import "ios/chrome/browser/commerce/model/shopping_service_factory.h"
 #import "ios/chrome/browser/consent_auditor/model/consent_auditor_factory.h"
@@ -43,6 +44,7 @@
 #import "ios/chrome/browser/download/model/background_service/background_download_service_factory.h"
 #import "ios/chrome/browser/download/model/browser_download_service_factory.h"
 #import "ios/chrome/browser/drive/model/drive_service_factory.h"
+#import "ios/chrome/browser/enterprise/connectors/connectors_service_factory.h"
 #import "ios/chrome/browser/enterprise/model/idle/idle_service_factory.h"
 #import "ios/chrome/browser/external_files/model/external_file_remover_factory.h"
 #import "ios/chrome/browser/favicon/model/favicon_service_factory.h"
@@ -104,6 +106,7 @@
 #import "ios/chrome/browser/safe_browsing/model/tailored_security/tailored_security_service_factory.h"
 #import "ios/chrome/browser/safe_browsing/model/verdict_cache_manager_factory.h"
 #import "ios/chrome/browser/safety_check/model/ios_chrome_safety_check_manager_factory.h"
+#import "ios/chrome/browser/saved_tab_groups/model/messaging/messaging_backend_service_factory.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
 #import "ios/chrome/browser/screen_time/model/screen_time_buildflags.h"
 #import "ios/chrome/browser/search_engines/model/search_engine_choice_service_factory.h"
@@ -114,6 +117,7 @@
 #import "ios/chrome/browser/sessions/model/session_restoration_service_factory.h"
 #import "ios/chrome/browser/sessions/model/web_session_state_cache_factory.h"
 #import "ios/chrome/browser/share_extension/model/share_extension_service_factory.h"
+#import "ios/chrome/browser/share_kit/model/share_kit_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/sharing_message/model/ios_sharing_message_bridge_factory.h"
 #import "ios/chrome/browser/sharing_message/model/ios_sharing_service_factory.h"
@@ -176,10 +180,12 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   autofill::AutofillLogRouterFactory::GetInstance();
   autofill::PersonalDataManagerFactory::GetInstance();
   autofill::StrikeDatabaseFactory::GetInstance();
+  collaboration::CollaborationServiceFactory::GetInstance();
   commerce::ShoppingServiceFactory::GetInstance();
   data_sharing::DataSharingServiceFactory::GetInstance();
   dom_distiller::DomDistillerServiceFactory::GetInstance();
   drive::DriveServiceFactory::GetInstance();
+  enterprise_connectors::ConnectorsServiceFactory::GetInstance();
   enterprise_idle::IdleServiceFactory::GetInstance();
   feature_engagement::TrackerFactory::GetInstance();
   ios::AboutSigninInternalsFactory::GetInstance();
@@ -210,6 +216,7 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   ios::ZeroSuggestCacheServiceFactory::GetInstance();
   policy::UserPolicySigninServiceFactory::GetInstance();
   segmentation_platform::SegmentationPlatformServiceFactory::GetInstance();
+  tab_groups::messaging::MessagingBackendServiceFactory::GetInstance();
   tab_groups::TabGroupSyncServiceFactory::GetInstance();
   translate::TranslateRankerFactory::GetInstance();
 
@@ -296,6 +303,7 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   SessionRestorationServiceFactory::GetInstance();
   SessionSyncServiceFactory::GetInstance();
   ShareExtensionServiceFactory::GetInstance();
+  ShareKitServiceFactory::GetInstance();
   SigninClientFactory::GetInstance();
   SigninMetricsServiceFactory::GetInstance();
   SigninProfileInfoUpdaterFactory::GetInstance();

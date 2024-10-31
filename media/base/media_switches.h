@@ -211,15 +211,6 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kContextMenuSaveVideoFrameAs);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kContextMenuSearchForVideoFrame);
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kChromeWideEchoCancellation);
-MEDIA_EXPORT extern const base::FeatureParam<bool>
-    kChromeWideEchoCancellationMinimizeResampling;
-MEDIA_EXPORT extern const base::FeatureParam<double>
-    kChromeWideEchoCancellationDynamicMixingTimeout;
-MEDIA_EXPORT extern const base::FeatureParam<bool>
-    kChromeWideEchoCancellationAllowAllSampleRates;
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kDecreaseProcessingAudioFifoSize);
-MEDIA_EXPORT extern const base::FeatureParam<int>
-    kDecreaseProcessingAudioFifoSizeValue;
 #endif
 #if BUILDFLAG(IS_CHROMEOS)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kCrOSSystemAEC);
@@ -242,6 +233,9 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kAudioFlexibleLoopbackForSystemLoopback);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kD3D11VideoDecoderUseSharedHandle);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kDedicatedMediaServiceThread);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kDeferAudioFocusUntilAudible);
+#if !BUILDFLAG(IS_ANDROID)
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kDocumentPictureInPictureNavigation);
+#endif  // !BUILDFLAG(IS_ANDROID)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kDocumentPictureInPictureAnimateResize);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kDocumentPictureInPictureCapture);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kEnableTabMuting);
@@ -276,7 +270,6 @@ MEDIA_EXPORT extern const base::FeatureParam<int>
     kHardwareSecureDecryptionFallbackMaxDisablingDays;
 MEDIA_EXPORT extern const base::FeatureParam<bool>
     kHardwareSecureDecryptionFallbackOnHardwareContextReset;
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kHideIncognitoMediaMetadata);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kInternalMediaSession);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kKeyPressMonitoring);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kOnDeviceWebSpeech);
@@ -351,9 +344,9 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kUnifiedAutoplay);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kUseAndroidOverlayForSecureOnly);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kUseFakeDeviceForMediaStream);
 #if BUILDFLAG(IS_LINUX)
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiVideoDecodeLinux);
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiVideoDecodeLinuxGL);
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiVideoEncodeLinux);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kAcceleratedVideoDecodeLinux);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kAcceleratedVideoDecodeLinuxGL);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kAcceleratedVideoEncodeLinux);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiIgnoreDriverChecks);
 #endif  // BUILDFLAG(IS_LINUX)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiOnNvidiaGPUs);
@@ -372,7 +365,6 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiVp9SModeHWEncoding);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kVSyncMjpegDecoding);
 #endif  // defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS)
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kV4L2FlatStatefulVideoDecoder);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kV4L2H264TemporalLayerHWEncoding);
 #endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kVideoBlitColorAccuracy);
@@ -546,6 +538,10 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaFoundationAcceleratedEncodeOnArm64);
 
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaSharedBitmapToSharedImage);
 
+#if BUILDFLAG(IS_WIN)
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaFoundationD3DVideoProcessing);
+#endif
+
 // Based on a |command_line| and the current platform, returns the effective
 // autoplay policy. In other words, it will take into account the default policy
 // if none is specified via the command line and options passed for testing.
@@ -557,7 +553,6 @@ MEDIA_EXPORT std::string GetEffectiveAutoplayPolicy(
 MEDIA_EXPORT bool IsChromeWideEchoCancellationEnabled();
 MEDIA_EXPORT bool IsDedicatedMediaServiceThreadEnabled(
     gl::ANGLEImplementation impl);
-MEDIA_EXPORT int GetProcessingAudioFifoSize();
 MEDIA_EXPORT bool IsHardwareSecureDecryptionEnabled();
 MEDIA_EXPORT bool IsLiveTranslateEnabled();
 MEDIA_EXPORT bool IsVideoCaptureAcceleratedJpegDecodingEnabled();

@@ -157,13 +157,6 @@ DlpRulesManager::Level IsDataTransferAllowed(
       break;
     }
 
-    case ui::EndpointType::kLacros: {
-      // Return ALLOW for Lacros destinations, as Lacros itself will make DLP
-      // checks.
-      level = DlpRulesManager::Level::kAllow;
-      break;
-    }
-
     case ui::EndpointType::kUnknownVm:
     case ui::EndpointType::kBorealis:
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -257,7 +250,9 @@ bool DataTransferDlpController::IsClipboardReadAllowed(
                    dst_pattern, level,
                    /*is_clipboard_event=*/true, rule_metadata);
 
-  bool notify_on_paste = ShouldNotifyOnPaste(destination.as_ptr());
+  // Use original destination as OffTheRecord destinations might also have
+  // `notify_if_restricted` param to be checked in case of system tools access.
+  bool notify_on_paste = ShouldNotifyOnPaste(data_dst.as_ptr());
 
   bool is_read_allowed = true;
 

@@ -70,11 +70,10 @@ void SendCachedData(String response_url,
 
   CodeCacheHost* code_cache_host =
       ExecutionContext::GetCodeCacheHostFromContext(execution_context);
-  base::span<const uint8_t> serialized_data = cached_metadata->SerializedData();
   CachedMetadataSender::SendToCodeCacheHost(
       code_cache_host, mojom::blink::CodeCacheType::kWebAssembly, response_url,
-      response_time, cache_storage_cache_name, serialized_data.data(),
-      serialized_data.size());
+      response_time, cache_storage_cache_name,
+      cached_metadata->SerializedData());
 }
 
 class WasmCodeCachingCallback {
@@ -204,29 +203,26 @@ class FetchDataLoaderForWasmStreaming final : public FetchDataLoader,
     // available any more (handled below).
     while (streaming_) {
       // |buffer| is owned by |consumer_|.
-      const char* buffer = nullptr;
-      size_t available = 0;
-      BytesConsumer::Result result = consumer_->BeginRead(&buffer, &available);
+      base::span<const char> buffer;
+      BytesConsumer::Result result = consumer_->BeginRead(buffer);
 
       if (result == BytesConsumer::Result::kShouldWait)
         return;
       if (result == BytesConsumer::Result::kOk) {
         // Ignore more bytes after an abort (streaming == nullptr).
-        if (available > 0) {
+        if (!buffer.empty()) {
           if (code_cache_state_ == CodeCacheState::kBeforeFirstByte)
             code_cache_state_ = MaybeConsumeCodeCache();
 
-          DCHECK_NE(buffer, nullptr);
+          auto bytes = base::as_bytes(buffer);
           if (code_cache_state_ == CodeCacheState::kUseCodeCache) {
             TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                          "v8.wasm.compileDigestForConsume");
-            digestor_.Update(
-                base::as_bytes(base::make_span(buffer, available)));
+            digestor_.Update(bytes);
           }
-          streaming_->OnBytesReceived(reinterpret_cast<const uint8_t*>(buffer),
-                                      available);
+          streaming_->OnBytesReceived(bytes.data(), bytes.size());
         }
-        result = consumer_->EndRead(available);
+        result = consumer_->EndRead(buffer.size());
       }
       switch (result) {
         case BytesConsumer::Result::kShouldWait:
@@ -346,18 +342,19 @@ class FetchDataLoaderForWasmStreaming final : public FetchDataLoader,
                                     WasmCodeCaching::kMiss);
       return CodeCacheState::kNoCodeCache;
     }
+    base::span<const uint8_t> metadata_with_digest = cached_module->Data();
 
     TRACE_EVENT_INSTANT2(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                          "v8.wasm.moduleCacheHit", TRACE_EVENT_SCOPE_THREAD,
                          "url", url_.Utf8(), "consumedCacheSize",
-                         cached_module->size());
+                         metadata_with_digest.size());
 
-    bool is_valid =
-        cached_module->size() >= kWireBytesDigestSize &&
-        streaming_->SetCompiledModuleBytes(
-            reinterpret_cast<const uint8_t*>(cached_module->Data()) +
-                kWireBytesDigestSize,
-            cached_module->size() - kWireBytesDigestSize);
+    bool is_valid = false;
+    if (metadata_with_digest.size() >= kWireBytesDigestSize) {
+      auto metadata = metadata_with_digest.subspan(kWireBytesDigestSize);
+      is_valid =
+          streaming_->SetCompiledModuleBytes(metadata.data(), metadata.size());
+    }
 
     if (!is_valid) {
       TRACE_EVENT_INSTANT0(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
@@ -395,14 +392,15 @@ class FetchDataLoaderForWasmStreaming final : public FetchDataLoader,
         cache_handler_->GetCachedMetadata(kWasmModuleTag);
     if (!cached_module)
       return false;
-    if (cached_module->size() < kWireBytesDigestSize)
+    base::span<const uint8_t> metadata_with_digest = cached_module->Data();
+    if (metadata_with_digest.size() < kWireBytesDigestSize) {
       return false;
+    }
 
     DigestValue wire_bytes_digest;
     digestor_.Finish(wire_bytes_digest);
     if (digestor_.has_failed() ||
-        memcmp(wire_bytes_digest.data(), cached_module->Data(),
-               kWireBytesDigestSize) != 0) {
+        wire_bytes_digest != metadata_with_digest.first(kWireBytesDigestSize)) {
       TRACE_EVENT_INSTANT0(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                            "v8.wasm.moduleCacheInvalidDigest",
                            TRACE_EVENT_SCOPE_THREAD);

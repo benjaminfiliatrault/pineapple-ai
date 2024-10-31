@@ -7,7 +7,7 @@ import type {ExtensionsManagerElement} from 'chrome://extensions/extensions.js';
 import {navigation, Page, Service} from 'chrome://extensions/extensions.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {eventToPromise} from 'chrome://webui-test/test_util.js';
+import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 interface ChromeEventWithDispatch extends
     ChromeEvent<(data: chrome.developerPrivate.EventData) => void> {
@@ -43,7 +43,7 @@ suite('ExtensionManagerTest', function() {
     return manager.shadowRoot!.querySelector('extensions-item-list')!.apps;
   }
 
-  test('ItemListVisibility', function() {
+  test('ItemListVisibility', async () => {
     function getExtensionByName(name: string):
         chrome.developerPrivate.ExtensionInfo|null {
       return getExtensions().find(el => el.name === name) || null;
@@ -68,6 +68,7 @@ suite('ExtensionManagerTest', function() {
       item_id: extension.id,
     });
     flush();
+    await microtasksFinished();
     assertFalse(listHasItemWithName('My extension 1'));
 
     target.dispatch<chrome.developerPrivate.EventData>({
@@ -76,6 +77,7 @@ suite('ExtensionManagerTest', function() {
       extensionInfo: extension,
     });
     flush();
+    await microtasksFinished();
     assertTrue(listHasItemWithName('My extension 1'));
   });
 
@@ -135,7 +137,7 @@ suite('ExtensionManagerTest', function() {
   test('CloseDrawerOnNarrowModeExit', async function() {
     manager.$.toolbar.narrow = true;
     const toolbar = manager.$.toolbar.$.toolbar;
-    await toolbar.updateComplete;
+    await microtasksFinished();
     toolbar.shadowRoot!.querySelector<HTMLElement>('#menuButton')!.click();
 
     await eventToPromise('cr-drawer-opened', manager);
@@ -161,8 +163,11 @@ suite('ExtensionManagerTest', function() {
     assertEquals('Extensions', document.title);
   });
 
+  // Tests that navigating to site permissions pages is a no-op when
+  // enableEnhancedSiteControls is false.
   test('NavigateToSitePermissionsFail', function() {
-    assertFalse(manager.enableEnhancedSiteControls);
+    manager.enableEnhancedSiteControls = false;
+    flush();
 
     // Try to open the site permissions page.
     navigation.navigateTo({page: Page.SITE_PERMISSIONS});
@@ -180,8 +185,9 @@ suite('ExtensionManagerTest', function() {
     assertViewActive('extensions-item-list');
   });
 
+  // Test that navigating to site permissions pages opens the corresponding page
+  // when enableEnhancedSiteControls is true.
   test('NavigateToSitePermissionsSuccess', function() {
-    // Set the enableEnhancedSiteControls flag to true.
     manager.enableEnhancedSiteControls = true;
     flush();
 

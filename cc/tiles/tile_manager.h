@@ -432,6 +432,10 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient,
   void DidFinishRunningTileTasksRequiredForActivation();
   void DidFinishRunningTileTasksRequiredForDraw();
   void DidFinishRunningAllTileTasks(bool has_pending_queries);
+  void ExternalDependencyCompletedForRasterTask(
+      scoped_refptr<TileTask> dependent);
+  void ExternalDependencyCompletedForNonRasterTask(
+      scoped_refptr<TileTask> dependent);
 
   scoped_refptr<TileTask> CreateTaskSetFinishedTask(
       void (TileManager::*callback)());
@@ -471,6 +475,13 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient,
   static constexpr base::TimeDelta kDelayBeforeTimeReclaim = base::Minutes(5);
 
  private:
+  void InsertNodesForRasterTask(TileTask* raster_task,
+                                uint16_t priority,
+                                bool use_foreground_category);
+  void InsertNodeForDecodeTask(TileTask* task,
+                               uint16_t priority,
+                               bool use_foreground_category);
+
   raw_ptr<TileManagerClient, DanglingUntriaged> client_;
   raw_ptr<base::SequencedTaskRunner> task_runner_;
   raw_ptr<ResourcePool, DanglingUntriaged> resource_pool_;

@@ -13,7 +13,7 @@
 #import "base/strings/string_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/context_menu/ui_bundled/context_menu_configuration_provider.h"
-#import "ios/chrome/browser/lens_overlay/coordinator/lens_result_page_web_state_delegate.h"
+#import "ios/chrome/browser/lens_overlay/coordinator/lens_result_page_mediator_delegate.h"
 #import "ios/chrome/browser/lens_overlay/ui/lens_result_page_consumer.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -22,7 +22,10 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/tabs/model/tab_helper_util.h"
+#import "ios/chrome/browser/web/model/web_navigation_util.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/web/public/navigation/navigation_context.h"
+#import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/navigation/web_state_policy_decider.h"
 #import "ios/web/public/navigation/web_state_policy_decider_bridge.h"
 #import "ios/web/public/ui/context_menu_params.h"
@@ -39,12 +42,57 @@
 
 namespace {
 
-/// Returns whether the navigation is allowed inside of the result page.
-BOOL IsValidURLToOpenInResultsPage(const GURL& URL) {
+BOOL URLHostIsGoogle(const GURL& URL) {
   std::string_view host = URL.host_piece();
-  return base::EqualsCaseInsensitiveASCII(host, "google.com") ||
-         base::EqualsCaseInsensitiveASCII(host, "www.google.com") ||
-         base::EqualsCaseInsensitiveASCII(host, "translate.google.com");
+
+  return (base::EqualsCaseInsensitiveASCII(host, "google.com") ||
+          base::EqualsCaseInsensitiveASCII(host, "www.google.com"));
+}
+
+BOOL URLIsFlights(const GURL& URL) {
+  std::string_view path = URL.path_piece();
+  BOOL pathIsFlights = path.rfind("/travel/flights", 0) == 0;
+
+  return URLHostIsGoogle(URL) && pathIsFlights;
+}
+
+BOOL URLIsFinance(const GURL& URL) {
+  std::string_view path = URL.path_piece();
+  BOOL pathIsFinance = path.rfind("/finance", 0) == 0;
+
+  return URLHostIsGoogle(URL) && pathIsFinance;
+}
+
+BOOL URLIsShopping(const GURL& URL) {
+  std::string_view query = URL.query_piece();
+  BOOL queryMatchesShoppingParam = query.find("udm=28") != std::string::npos;
+
+  return URLHostIsGoogle(URL) && queryMatchesShoppingParam;
+}
+
+/// Currently some websites don't render properly in the bottom sheet. Filter
+/// them out explicitly.
+GURL URLByRemovingLensSurfaceParamIfNecessary(const GURL& URL) {
+  // If not a finance or flights URL, do nothing
+  if (URLIsFinance(URL) || URLIsFlights(URL) || URLIsShopping(URL)) {
+    return net::AppendOrReplaceQueryParameter(URL, "lns_surface", std::nullopt);
+  }
+
+  return GURL(URL);
+}
+
+/// Returns whether the navigation is allowed inside of the result page, and the
+/// rewritten URL when applicable. For example, for some websites we temporarily
+/// want to open them in a new tab, and override one of the URL params, while a
+/// server-side fix is pending.
+std::pair<BOOL, std::optional<GURL>> IsValidURLToOpenInResultsPage(
+    const GURL& originalURL) {
+  GURL URL = URLByRemovingLensSurfaceParamIfNecessary(originalURL);
+  if (!URLHostIsGoogle(URL)) {
+    return std::pair(NO, std::nullopt);
+  }
+
+  return std::pair(URL.spec().find("lns_surface=4") != std::string::npos, URL);
 }
 
 /// Detect special URL that requests the bottom sheet resize.
@@ -120,6 +168,8 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
   base::WeakPtr<WebStateList> _webStateList;
   /// Whether the interface is in dark mode.
   BOOL _isDarkMode;
+  /// The last commited progress to the loading bar.
+  float _lastCommitedProgress;
 }
 
 - (instancetype)
@@ -153,12 +203,10 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
   [_consumer setWebView:_webState->GetView()];
 }
 
-- (void)setWebStateDelegate:
-    (id<LensResultPageWebStateDelegate>)webStateDelegate {
-  _webStateDelegate = webStateDelegate;
+- (void)setDelegate:(id<LensResultPageMediatorDelegate>)delegate {
+  _delegate = delegate;
   if (_webState) {
-    [self.webStateDelegate
-        lensResultPageDidChangeActiveWebState:_webState.get()];
+    [self.delegate lensResultPageDidChangeActiveWebState:_webState.get()];
   }
 }
 
@@ -204,16 +252,24 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
 
   _isInflightRequestLensInitiated = YES;
   [_consumer setLoadingProgress:kProgressBarLensResponseReceived];
-  _webState->OpenURL(web::WebState::OpenURLParams(
-      URL, web::Referrer(), WindowOpenDisposition::CURRENT_TAB,
-      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false));
+
+  web::NavigationManager::WebLoadParams webParams =
+      web::NavigationManager::WebLoadParams(URL);
+
+  // Add variation headers.
+  webParams.extra_headers =
+      web_navigation_util::VariationHeadersForURL(URL, _isIncognito);
+
+  _webState->GetNavigationManager()->LoadURLWithParams(webParams);
 }
 
 - (void)handleSearchRequestStarted {
+  _lastCommitedProgress = kProgressBarLensRequestStarted;
   [_consumer setLoadingProgress:kProgressBarLensRequestStarted];
 }
 
 - (void)handleSearchRequestErrored {
+  _lastCommitedProgress = kProgressBarFull;
   [_consumer setLoadingProgress:kProgressBarFull];
 }
 
@@ -223,8 +279,16 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
                requestInfo:(web::WebStatePolicyDecider::RequestInfo)requestInfo
            decisionHandler:(PolicyDecisionHandler)decisionHandler {
   GURL URL = net::GURLWithNSURL(request.URL);
-  if (requestInfo.target_frame_is_main && !IsValidURLToOpenInResultsPage(URL)) {
+  std::pair<BOOL, std::optional<GURL>> allowURL =
+      IsValidURLToOpenInResultsPage(URL);
+  URL = allowURL.second.value_or(URL);
+
+  if (requestInfo.target_frame_is_main && !allowURL.first) {
     decisionHandler(web::WebStatePolicyDecider::PolicyDecision::Cancel());
+
+    if (URL.IsAboutBlank()) {
+      return;
+    }
 
     if (IsMaximizeBottomSheetURL(URL)) {
       [self.presentationDelegate requestMaximizeBottomSheet];
@@ -236,13 +300,10 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
       return;
     }
 
-    OpenNewTabCommand* command =
-        [[OpenNewTabCommand alloc] initWithURL:URL
-                                      referrer:web::Referrer()
-                                   inIncognito:_isIncognito
-                                  inBackground:NO
-                                      appendTo:OpenPosition::kCurrentTab];
-    [self.applicationHandler openURLInNewTab:command];
+    [self.delegate lensResultPageOpenURLInNewTabRequsted:URL];
+    [self.delegate
+         lensResultPageMediator:self
+        didOpenNewTabFromSource:lens::LensOverlayNewTabSource::kWebNavigation];
   } else {
     decisionHandler(web::WebStatePolicyDecider::PolicyDecision::Allow());
   }
@@ -252,6 +313,15 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
 
 - (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   [_consumer setWebViewHidden:NO];
+}
+
+- (void)webState:(web::WebState*)webState
+    didStartNavigation:(web::NavigationContext*)navigationContext {
+  BOOL isSameDocument = navigationContext->IsSameDocument();
+  // Disregard same document navigation from initiating progress loading.
+  if (!isSameDocument) {
+    _lastCommitedProgress = 0;
+  }
 }
 
 - (void)webState:(web::WebState*)webState
@@ -273,6 +343,11 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
                     kProgressBarLensResponseReceived, kProgressBarFull);
   }
 
+  if (progress <= _lastCommitedProgress) {
+    return;
+  }
+
+  _lastCommitedProgress = progress;
   [_consumer setLoadingProgress:progress];
 }
 
@@ -375,6 +450,9 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
       l10n_util::GetNSString(IDS_IOS_LENS_OVERLAY_GO_TO_NEW_TAB);
   snackbarMessage.action = action;
   [self.snackbarHandler showSnackbarMessage:snackbarMessage bottomOffset:0];
+  [self.delegate
+       lensResultPageMediator:self
+      didOpenNewTabFromSource:lens::LensOverlayNewTabSource::kContextMenu];
 }
 
 #pragma mark - LensWebProvider
@@ -417,7 +495,7 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
     _webState->SetWebUsageEnabled(true);
     [self.consumer setWebView:_webState->GetView()];
   }
-  [self.webStateDelegate lensResultPageDidChangeActiveWebState:_webState.get()];
+  [self.delegate lensResultPageDidChangeActiveWebState:_webState.get()];
 }
 
 /// Activates the web state with the given `URL`.
@@ -438,7 +516,7 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
     _webStateObserverBridge.reset();
   }
 
-  [self.webStateDelegate lensResultPageWebStateDestroyed];
+  [self.delegate lensResultPageWebStateDestroyed];
 }
 
 @end

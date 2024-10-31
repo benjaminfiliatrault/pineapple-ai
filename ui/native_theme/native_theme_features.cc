@@ -18,13 +18,22 @@ constexpr base::FeatureState kOverlayScrollbarFeatureState =
 constexpr base::FeatureState kOverlayScrollbarFeatureState =
     base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-
 // Enables or disables overlay scrollbars in Blink (i.e. web content) on Aura
 // or Linux.  The status of native UI overlay scrollbars is determined in
 // PlatformStyle::CreateScrollBar. Does nothing on Mac.
 BASE_FEATURE(kOverlayScrollbar,
              "OverlayScrollbar",
              kOverlayScrollbarFeatureState);
+// Enables the os settings of overlay scrollbars for ChromeOS.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+BASE_FEATURE(kOverlayScrollbarsOSSetting,
+             "OverlayScrollbarsOSSetting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsOverlayScrollbarOSSettingEnabled() {
+  return base::FeatureList::IsEnabled(features::kOverlayScrollbarsOSSetting);
+}
+#endif
 
 // Fluent scrollbars aim to modernize the Chromium scrollbars (both overlay and
 // non-overlay) to fit the Fluent design language. For now, the feature will
@@ -47,9 +56,13 @@ BASE_FEATURE(kFluentOverlayScrollbar,
 
 namespace ui {
 
-bool IsOverlayScrollbarEnabled() {
-  return base::FeatureList::IsEnabled(features::kOverlayScrollbar) ||
-         IsFluentOverlayScrollbarEnabled();
+bool IsFluentOverlayScrollbarEnabled() {
+// Fluent scrollbars are only used for some OSes due to UI design guidelines.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+  return base::FeatureList::IsEnabled(features::kFluentOverlayScrollbar);
+#else
+  return false;
+#endif
 }
 
 bool IsFluentScrollbarEnabled() {
@@ -61,13 +74,10 @@ bool IsFluentScrollbarEnabled() {
   return false;
 #endif
 }
-bool IsFluentOverlayScrollbarEnabled() {
-// Fluent scrollbars are only used for some OSes due to UI design guidelines.
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
-  return base::FeatureList::IsEnabled(features::kFluentOverlayScrollbar);
-#else
-  return false;
-#endif
+
+bool IsOverlayScrollbarEnabledByFeatureFlag() {
+  return base::FeatureList::IsEnabled(features::kOverlayScrollbar) ||
+         IsFluentOverlayScrollbarEnabled();
 }
 
 }  // namespace ui

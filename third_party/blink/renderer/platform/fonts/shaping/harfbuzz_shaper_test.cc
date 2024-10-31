@@ -150,7 +150,7 @@ class HarfBuzzShaperTest : public FontTestBase {
   // Hardcoded font names created with `CreateNotoEmoji` and
   // `CreateNotoColorEmoji`.
   const char* kNotoEmojiFontName = "Noto Emoji";
-  const char* kNotoColorEmojiFontName = "Noto Color Emoji (Fontations)";
+  const char* kNotoColorEmojiFontName = "Noto Color Emoji";
 
 #if BUILDFLAG(IS_MAC)
   const char* kSystemColorEmojiFont = "Apple Color Emoji";
@@ -162,6 +162,7 @@ class HarfBuzzShaperTest : public FontTestBase {
 
 #if BUILDFLAG(IS_MAC)
   const char* kSystemMonoEmojiFont = "Apple Symbols";
+  const char* kSystemMonoTextDefaultEmojiFont = "Hiragino Mincho ProN";
 #elif BUILDFLAG(IS_ANDROID)
   const char* kSystemMonoEmojiFont = "Noto Sans Symbols";
 #elif BUILDFLAG(IS_WIN)
@@ -178,6 +179,15 @@ class HarfBuzzShaperTest : public FontTestBase {
     result->GetRunFontData(&run_font_data);
     EXPECT_EQ(run_font_data.size(), 1u);
     return run_font_data[0].font_data_->PlatformData().FontFamilyName();
+  }
+
+  StringView MaybeStripFontationsSuffix(const String& font_name) {
+    wtf_size_t found_index = font_name.ReverseFind(" (Fontations)");
+    if (found_index != WTF::kNotFound) {
+      return StringView(font_name, 0, found_index);
+    } else {
+      return font_name;
+    }
   }
 
   const ShapeResult* SplitRun(ShapeResult* shape_result, unsigned offset) {
@@ -816,10 +826,18 @@ TEST_F(HarfBuzzShaperTest, SystemEmojiVS15) {
       u"\u2614"
       u"\ufe0e");
   for (String text : {text_default, emoji_default}) {
-    EXPECT_EQ(GetShapedFontFamilyNameForEmojiVS(mono_font, text),
-              kNotoEmojiFontName);
-    EXPECT_EQ(GetShapedFontFamilyNameForEmojiVS(color_font, text),
-              kSystemMonoEmojiFont);
+    EXPECT_EQ(MaybeStripFontationsSuffix(
+                  GetShapedFontFamilyNameForEmojiVS(mono_font, text)),
+              String(kNotoEmojiFontName));
+    const char* system_mono_font_name = kSystemMonoEmojiFont;
+#if BUILDFLAG(IS_MAC)
+    if (text == text_default) {
+      system_mono_font_name = kSystemMonoTextDefaultEmojiFont;
+    }
+#endif
+    EXPECT_EQ(MaybeStripFontationsSuffix(
+                  GetShapedFontFamilyNameForEmojiVS(color_font, text)),
+              String(system_mono_font_name));
   }
 }
 
@@ -840,7 +858,8 @@ TEST_F(HarfBuzzShaperTest, SystemEmojiVS16) {
   for (String text : {text_default, emoji_default}) {
     EXPECT_EQ(GetShapedFontFamilyNameForEmojiVS(mono_font, text),
               kSystemColorEmojiFont);
-    EXPECT_EQ(GetShapedFontFamilyNameForEmojiVS(color_font, text),
+    EXPECT_EQ(MaybeStripFontationsSuffix(
+                  GetShapedFontFamilyNameForEmojiVS(color_font, text)),
               kNotoColorEmojiFontName);
   }
 }
@@ -883,10 +902,18 @@ TEST_P(FontVariantEmojiTest, FontVariantEmojiSystemFallback) {
     const char* expected_name_for_color_requested_font =
         is_emoji_presentation ? kNotoColorEmojiFontName : kSystemMonoEmojiFont;
 
-    EXPECT_EQ(GetShapedFontFamilyNameForEmojiVS(mono_font, text),
-              expected_name_for_mono_requested_font);
-    EXPECT_EQ(GetShapedFontFamilyNameForEmojiVS(color_font, text),
-              expected_name_for_color_requested_font);
+#if BUILDFLAG(IS_MAC)
+    if (text == text_default && !is_emoji_presentation) {
+      expected_name_for_color_requested_font = kSystemMonoTextDefaultEmojiFont;
+    }
+#endif
+
+    EXPECT_EQ(MaybeStripFontationsSuffix(
+                  GetShapedFontFamilyNameForEmojiVS(mono_font, text)),
+              String(expected_name_for_mono_requested_font));
+    EXPECT_EQ(MaybeStripFontationsSuffix(
+                  GetShapedFontFamilyNameForEmojiVS(color_font, text)),
+              String(expected_name_for_color_requested_font));
   }
 }
 
@@ -912,6 +939,25 @@ TEST_F(HarfBuzzShaperTest, VSOverrideFontVariantEmoji) {
             kSystemMonoEmojiFont);
   EXPECT_EQ(run_font_data[2].font_data_->PlatformData().FontFamilyName(),
             kSystemColorEmojiFont);
+}
+
+TEST_F(HarfBuzzShaperTest, FontVariantEmojiTextSystemFallback) {
+  ScopedFontVariationSequencesForTest scoped_feature_vs(true);
+  ScopedSystemFallbackEmojiVSSupportForTest scoped_feature_system_emoji_vs(
+      true);
+  ScopedFontVariantEmojiForTest scoped_feature_variant_emoji(true);
+#if BUILDFLAG(IS_MAC)
+  if (base::mac::MacOSVersion() < 13'00'00) {
+    GTEST_SKIP();
+  }
+  const char* mono_font_name = "STIX Two Math";
+#elif BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN)
+  const char* mono_font_name = kSystemMonoEmojiFont;
+#endif
+  String text(u"\u26CE");
+  Font color_font = CreateNotoColorEmoji(FontVariantEmoji::kTextVariantEmoji);
+  EXPECT_EQ(GetShapedFontFamilyNameForEmojiVS(color_font, text),
+            mono_font_name);
 }
 
 #endif
@@ -1136,8 +1182,7 @@ TEST_F(HarfBuzzShaperTest, EmojiZWJSequence) {
                                 0x270C, 0x200D, 0xD83C, 0xDFFC};
   TextDirection direction = TextDirection::kLtr;
 
-  HarfBuzzShaper shaper(
-      String(emoji_zwj_sequence, std::size(emoji_zwj_sequence)));
+  HarfBuzzShaper shaper{String(base::span(emoji_zwj_sequence))};
   shaper.Shape(&font, direction);
 }
 

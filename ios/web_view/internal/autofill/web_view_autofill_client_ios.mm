@@ -84,6 +84,10 @@ WebViewAutofillClientIOS::~WebViewAutofillClientIOS() {
   HideAutofillSuggestions(SuggestionHidingReason::kTabGone);
 }
 
+base::WeakPtr<AutofillClient> WebViewAutofillClientIOS::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
 bool WebViewAutofillClientIOS::IsOffTheRecord() const {
   return web_state_->GetBrowserState()->IsOffTheRecord();
 }
@@ -198,7 +202,7 @@ translate::TranslateDriver* WebViewAutofillClientIOS::GetTranslateDriver() {
 
 void WebViewAutofillClientIOS::ShowAutofillSettings(
     SuggestionType suggestion_type) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void WebViewAutofillClientIOS::ConfirmSaveAddressProfile(
@@ -216,7 +220,7 @@ void WebViewAutofillClientIOS::ShowEditAddressProfileDialog(
     AddressProfileSavePromptCallback on_user_decision_callback) {
   // Please note: This method is only implemented on desktop and is therefore
   // unreachable here.
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void WebViewAutofillClientIOS::ShowDeleteAddressProfileDialog(
@@ -224,7 +228,7 @@ void WebViewAutofillClientIOS::ShowDeleteAddressProfileDialog(
     AddressProfileDeleteDialogCallback delete_dialog_callback) {
   // Please note: This method is only implemented on desktop and is therefore
   // unreachable here.
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 AutofillClient::SuggestionUiSessionId

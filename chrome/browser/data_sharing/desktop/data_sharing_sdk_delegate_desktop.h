@@ -54,6 +54,10 @@ class DataSharingSDKDelegateDesktop : public DataSharingSDKDelegate,
       const data_sharing_pb::RemoveMemberParams& params,
       base::OnceCallback<void(const absl::Status&)> callback) override;
 
+  void LeaveGroup(
+      const data_sharing_pb::LeaveGroupParams& params,
+      base::OnceCallback<void(const absl::Status&)> callback) override;
+
   void DeleteGroup(
       const data_sharing_pb::DeleteGroupParams& params,
       base::OnceCallback<void(const absl::Status&)> callback) override;
@@ -82,6 +86,9 @@ class DataSharingSDKDelegateDesktop : public DataSharingSDKDelegate,
 
   void OnReadGroups(ReadGroupsCallback callback,
                     data_sharing::mojom::ReadGroupsResultPtr mojom_result);
+
+  void OnDeleteGroup(base::OnceCallback<void(const absl::Status&)> callback,
+                     int status_code);
 
   // A list of callback to be invoked.
   base::OnceCallbackList<void(content::WebContents*)> callbacks_;

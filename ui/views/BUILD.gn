@@ -611,6 +611,7 @@ component("views") {
     "//ui/gfx",
     "//ui/gfx/animation",
     "//ui/gfx/geometry",
+    "//ui/menus",
     "//ui/touch_selection/vector_icons",
     "//ui/views/resources",
     "//ui/views/window/vector_icons",
@@ -765,6 +766,7 @@ component("views") {
       "/DELAYLOAD:user32.dll",
     ]
     deps += [
+      "//components/stylus_handwriting/win:win",
       "//services/tracing/public/cpp:cpp",
       "//third_party/iaccessible2",
       "//third_party/wtl",
@@ -784,6 +786,7 @@ component("views") {
       "accessibility/ax_window_obj_wrapper.h",
       "controls/native/native_view_host_aura.h",
       "corewm/tooltip.h",
+      "corewm/tooltip_aura.h",
       "corewm/tooltip_controller.h",
       "corewm/tooltip_state_manager.h",
       "corewm/tooltip_view_aura.h",
@@ -812,6 +815,7 @@ component("views") {
       "controls/menu/menu_pre_target_handler_aura.cc",
       "controls/menu/menu_pre_target_handler_aura.h",
       "controls/native/native_view_host_aura.cc",
+      "corewm/tooltip_aura.cc",
       "corewm/tooltip_controller.cc",
       "corewm/tooltip_state_manager.cc",
       "corewm/tooltip_view_aura.cc",
@@ -829,13 +833,6 @@ component("views") {
     ]
     if (!is_chromeos_ash) {
       sources += [ "accessibility/widget_ax_tree_id_map.cc" ]
-    }
-    if (is_chromeos_lacros) {
-      public += [ "corewm/tooltip_lacros.h" ]
-      sources += [ "corewm/tooltip_lacros.cc" ]
-    } else {
-      public += [ "corewm/tooltip_aura.h" ]
-      sources += [ "corewm/tooltip_aura.cc" ]
     }
     deps += [
       "//ui/aura",
@@ -1138,6 +1135,7 @@ source_set("test_support") {
     "//ui/base/dragdrop/mojom",
     "//ui/base/emoji",
     "//ui/base/ime/init",
+    "//ui/base/interaction:test_support",
     "//ui/compositor",
     "//ui/compositor:test_support",
     "//ui/events",
@@ -1383,6 +1381,7 @@ test("views_unittests") {
     "//ui/base/emoji",
     "//ui/base/ime/init",
     "//ui/base/mojom:mojom",
+    "//ui/base/mojom:ui_base_types",
     "//ui/color",
     "//ui/color:mixers",
     "//ui/compositor:test_support",
@@ -1395,6 +1394,7 @@ test("views_unittests") {
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
     "//ui/gl:test_support",
+    "//ui/menus",
     "//ui/native_theme",
     "//ui/native_theme:test_support",
     "//ui/platform_window/wm",
@@ -1417,7 +1417,10 @@ test("views_unittests") {
       "//third_party/wtl",
     ]
 
-    deps += [ "//ui/base:data_exchange" ]
+    deps += [
+      "//components/stylus_handwriting/win:win",
+      "//ui/base:data_exchange",
+    ]
 
     libs = [
       "imm32.lib",

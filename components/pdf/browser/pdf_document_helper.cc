@@ -17,10 +17,10 @@
 #include "content/public/common/referrer_type_converters.h"
 #include "pdf/mojom/pdf.mojom.h"
 #include "pdf/pdf_features.h"
-#include "ui/base/pointer/touch_editing_controller.h"
-#include "ui/base/ui_base_types.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/touch_selection/touch_editing_controller.h"
 
 namespace pdf {
 
@@ -203,12 +203,14 @@ void PDFDocumentHelper::SelectBetweenCoordinates(const gfx::PointF& base,
 }
 
 void PDFDocumentHelper::GetPdfBytes(
+    uint32_t size_limit,
     pdf::mojom::PdfListener::GetPdfBytesCallback callback) {
   if (!remote_pdf_client_) {
-    std::move(callback).Run(std::vector<uint8_t>());
+    std::move(callback).Run(
+        pdf::mojom::PdfListener::GetPdfBytesStatus::kFailed, {});
     return;
   }
-  remote_pdf_client_->GetPdfBytes(std::move(callback));
+  remote_pdf_client_->GetPdfBytes(size_limit, std::move(callback));
 }
 
 void PDFDocumentHelper::OnSelectionEvent(ui::SelectionEventType event) {
@@ -294,7 +296,7 @@ void PDFDocumentHelper::RunContextMenu() {
       widget->GetView()->TransformPointToRootCoordSpaceF(gfx::PointF());
   anchor_point.Offset(-origin.x(), -origin.y());
   widget->ShowContextMenuAtPoint(gfx::ToRoundedPoint(anchor_point),
-                                 ui::MENU_SOURCE_TOUCH_EDIT_MENU);
+                                 ui::mojom::MenuSourceType::kTouchEditMenu);
 
   // Hide selection handles after getting rect-between-bounds from touch
   // selection controller; otherwise, rect would be empty and the above

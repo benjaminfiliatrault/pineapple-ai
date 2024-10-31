@@ -219,13 +219,15 @@ class OnDeviceModelComponentStateManagerDelegate
         std::move(callback));
   }
 
-  void RegisterInstaller(scoped_refptr<OnDeviceModelComponentStateManager>
-                             state_manager) override {
+  void RegisterInstaller(
+      scoped_refptr<OnDeviceModelComponentStateManager> state_manager,
+      bool is_already_installing) override {
     if (!g_browser_process) {
       return;
     }
     component_updater::RegisterOptimizationGuideOnDeviceModelComponent(
-        g_browser_process->component_updater(), state_manager);
+        g_browser_process->component_updater(), state_manager,
+        is_already_installing);
   }
 
   void Uninstall(scoped_refptr<OnDeviceModelComponentStateManager>
@@ -637,22 +639,24 @@ OptimizationGuideKeyedService::StartSession(
 void OptimizationGuideKeyedService::ExecuteModel(
     optimization_guide::ModelBasedCapabilityKey feature,
     const google::protobuf::MessageLite& request_metadata,
+    const std::optional<base::TimeDelta>& execution_timeout,
     optimization_guide::OptimizationGuideModelExecutionResultCallback
         callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!model_execution_manager_) {
     std::move(callback).Run(
+        optimization_guide::OptimizationGuideModelExecutionResult(
         base::unexpected(
             optimization_guide::OptimizationGuideModelExecutionError::
                 FromModelExecutionError(
                     optimization_guide::OptimizationGuideModelExecutionError::
-                        ModelExecutionError::kGenericFailure)),
+                        ModelExecutionError::kGenericFailure)), nullptr),
         nullptr);
     return;
   }
-  model_execution_manager_->ExecuteModel(feature, request_metadata,
-                                         /*log_ai_data_request=*/nullptr,
-                                         std::move(callback));
+  model_execution_manager_->ExecuteModel(
+      feature, request_metadata, execution_timeout,
+      /*log_ai_data_request=*/nullptr, std::move(callback));
 }
 
 void OptimizationGuideKeyedService::AddOnDeviceModelAvailabilityChangeObserver(
@@ -729,6 +733,11 @@ void OptimizationGuideKeyedService::
   model_quality_logs_uploader_service_ = std::move(uploader);
 }
 
+void OptimizationGuideKeyedService::AllowUnsignedUserForTesting(
+    optimization_guide::UserVisibleFeatureKey feature) {
+  model_execution_features_controller_->AllowUnsignedUserForTesting(feature);  // IN-TEST
+}
+
 bool OptimizationGuideKeyedService::ShouldFeatureBeCurrentlyEnabledForUser(
     optimization_guide::UserVisibleFeatureKey feature) const {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -737,6 +746,13 @@ bool OptimizationGuideKeyedService::ShouldFeatureBeCurrentlyEnabledForUser(
   }
   return model_execution_features_controller_
       ->ShouldFeatureBeCurrentlyEnabledForUser(feature);
+}
+
+bool OptimizationGuideKeyedService::
+    ShouldFeatureAllowModelExecutionForSignedInUser(
+        optimization_guide::UserVisibleFeatureKey feature) const {
+  return model_execution_features_controller_
+      ->ShouldFeatureAllowModelExecutionForSignedInUser(feature);
 }
 
 bool OptimizationGuideKeyedService::ShouldFeatureBeCurrentlyAllowedForFeedback(
@@ -757,16 +773,14 @@ bool OptimizationGuideKeyedService::ShouldFeatureBeCurrentlyAllowedForFeedback(
   // Otherwise, feedback is disabled, with one exception: On dogfood clients,
   // feedback is always enabled (as long as the feature is enabled).
   auto* variations_service = g_browser_process->variations_service();
-  bool is_dogfood_client =
-      !!variations_service && variations_service->IsLikelyDogfoodClient();
-  std::optional<optimization_guide::UserVisibleFeatureKey> feature_key =
-      metadata->user_visible_feature_key();
-  if (!feature_key) {
-    // This isn't a user-visible feature, so we shouldn't show the feedback UI.
-    return false;
-  }
-  return is_dogfood_client &&
-         ShouldFeatureBeCurrentlyEnabledForUser(*feature_key);
+  return !!variations_service && variations_service->IsLikelyDogfoodClient();
+}
+
+bool OptimizationGuideKeyedService::ShouldModelExecutionBeAllowedForUser()
+    const {
+  return model_execution_features_controller_ &&
+         model_execution_features_controller_
+             ->ShouldModelExecutionBeAllowedForUser();
 }
 
 bool OptimizationGuideKeyedService::IsSettingVisible(
@@ -775,6 +789,13 @@ bool OptimizationGuideKeyedService::IsSettingVisible(
   if (!model_execution_features_controller_) {
     return false;
   }
+
+#if !BUILDFLAG(IS_ANDROID)
+  if (optimization_guide::features::kShowAiSettingsForTesting.Get()) {
+    return true;
+  }
+#endif
+
   return model_execution_features_controller_->IsSettingVisible(feature);
 }
 
@@ -827,7 +848,7 @@ void OptimizationGuideKeyedService::RemoveModelExecutionSettingsEnabledObserver(
 void OptimizationGuideKeyedService::
     RecordModelExecutionFeatureSyntheticFieldTrial(
         optimization_guide::UserVisibleFeatureKey feature,
-        const std::string_view feature_name) {
+        std::string_view feature_name) {
   ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
       base::StrCat({"SyntheticModelExecutionFeature", feature_name}),
       ShouldFeatureBeCurrentlyEnabledForUser(feature) ? "Enabled" : "Disabled",

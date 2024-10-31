@@ -880,6 +880,7 @@
     "anywhere",
 
     // hyphens
+    // caret-animation
     "manual",
 
     // -webkit-appearance
@@ -1786,6 +1787,10 @@
     // @view-transition navigation
     // auto
     // none
+
+    // view-transition-capture-mode
+    "layered",
+    // flat
 
     // container-type
     // inline-size,

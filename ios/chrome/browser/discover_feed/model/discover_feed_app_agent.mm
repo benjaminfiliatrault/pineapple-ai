@@ -24,15 +24,13 @@
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service_factory.h"
 #import "ios/chrome/browser/discover_feed/model/feed_constants.h"
 #import "ios/chrome/browser/ntp/shared/metrics/feed_metrics_recorder.h"
-#import "ios/chrome/browser/push_notification/model/provisional_push_notification_util.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_client_id.h"
+#import "ios/chrome/browser/push_notification/model/push_notification_util.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/utils/first_run_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/signin/model/authentication_service.h"
-#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 
 namespace {
@@ -215,19 +213,19 @@ class DiscoverFeedProfileHelperList {
 #pragma mark - AppStateObserver
 
 - (void)appState:(AppState*)appState
-    didTransitionFromInitStage:(InitStage)previousInitStage {
-  if (appState.initStage == InitStageBrowserBasic) {
+    didTransitionFromInitStage:(AppInitStage)previousInitStage {
+  if (appState.initStage == AppInitStage::kBrowserBasic) {
     // Apple docs say that background tasks must be registered before the
     // end of `application:didFinishLaunchingWithOptions:`.
-    // InitStageBrowserBasic fulfills that requirement.
+    // AppInitStage::kBrowserBasic fulfills that requirement.
     [self maybeRegisterBackgroundRefreshTask];
     // This is a provisional permission, which does not prompt the user at this
     // point.
     [self maybeRequestUserNotificationPermissions];
   } else if (appState.initStage ==
-             InitStageBrowserObjectsForBackgroundHandlers) {
+             AppInitStage::kBrowserObjectsForBackgroundHandlers) {
     // Save the value of the feature flag now since 'base::FeatureList' was
-    // not available in `InitStageBrowserBasic`.
+    // not available in `AppInitStage::kBrowserBasic`.
     // IsFeedBackgroundRefreshCapabilityEnabled() simply reads the saved value
     // saved by SaveFeedBackgroundRefreshCapabilityEnabledForNextColdStart(). Do
     // not wrap this in IsFeedBackgroundRefreshCapabilityEnabled() -- in this
@@ -383,13 +381,8 @@ class DiscoverFeedProfileHelperList {
   if (!IsFeedBackgroundRefreshCompletedNotificationEnabled()) {
     return;
   }
-  UNUserNotificationCenter* center =
-      UNUserNotificationCenter.currentNotificationCenter;
-  [center requestAuthorizationWithOptions:(UNAuthorizationOptionProvisional |
-                                           UNAuthorizationOptionAlert |
-                                           UNAuthorizationOptionSound)
-                        completionHandler:^(BOOL granted, NSError* error){
-                        }];
+
+  [PushNotificationUtil enableProvisionalPushNotificationPermission:nil];
 }
 
 // Requests OS to send a local user notification with `title`.

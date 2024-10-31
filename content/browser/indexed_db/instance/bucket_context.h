@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <list>
 #include <memory>
 #include <queue>
 #include <string>
@@ -40,8 +41,10 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
-#include "third_party/leveldatabase/env_chromium.h"
-#include "third_party/leveldatabase/src/include/leveldb/status.h"
+
+namespace base {
+class UpdateableSequencedTaskRunner;
+}
 
 namespace storage {
 class QuotaManagerProxy;
@@ -54,6 +57,7 @@ class BackingStorePreCloseTaskQueue;
 class BucketContextHandle;
 class Database;
 class IndexedDBDataItemReader;
+struct PendingConnection;
 
 // BucketContext manages the per-bucket IndexedDB state, and other important
 // context like the backing store and lock manager.
@@ -73,33 +77,6 @@ class CONTENT_EXPORT BucketContext
       public base::trace_event::MemoryDumpProvider {
  public:
   using DBMap = base::flat_map<std::u16string, std::unique_ptr<Database>>;
-
-  // Represents a method of `BucketContext` which is not yet bound to a
-  // particular instance of `BucketContext`. This is used for the
-  // `for_each_bucket_context` delegate callback.
-  using InstanceClosure = base::RepeatingCallback<void(BucketContext&)>;
-
-  // Maximum time interval between runs of the IndexedDBSweeper. Sweeping only
-  // occurs after backing store close.
-  // Visible for testing.
-  static constexpr const base::TimeDelta kMaxEarliestGlobalSweepFromNow =
-      base::Hours(1);
-  // Maximum time interval between runs of the IndexedDBSweeper for a given
-  // bucket. Sweeping only occurs after backing store close.
-  // Visible for testing.
-  static constexpr const base::TimeDelta kMaxEarliestBucketSweepFromNow =
-      base::Days(3);
-
-  // Maximum time interval between runs of the IndexedDBCompactionTask.
-  // Compaction only occurs after backing store close.
-  // Visible for testing.
-  static constexpr const base::TimeDelta kMaxEarliestGlobalCompactionFromNow =
-      base::Hours(1);
-  // Maximum time interval between runs of the IndexedDBCompactionTask for a
-  // given bucket. Compaction only occurs after backing store close.
-  // Visible for testing.
-  static constexpr const base::TimeDelta kMaxEarliestBucketCompactionFromNow =
-      base::Days(3);
 
   // `CheckCanUseDiskSpace` fudges quota values a little. If there is excess
   // free space, QuotaManager may not be checked the next time a transaction
@@ -157,30 +134,18 @@ class CONTENT_EXPORT BucketContext
     // the amount of disk space used has completed. The parameter is true for
     // transactions that caused the backing store to flush.
     base::RepeatingCallback<void(bool /*did_sync*/)> on_files_written;
-
-    // Called to run a given callback on every bucket context (including the one
-    // in the current sequence and those in other sequences/associated with
-    // other buckets). This method will also be called on every subsequently
-    // created bucket context (see `initialization_closure` in constructor),
-    // until it is replaced by another initialization closure.
-    base::RepeatingCallback<void(InstanceClosure)> for_each_bucket_context;
   };
 
-  // If non-null, `initialization_closure` is immediately run on `this`. If it
-  // is null, `this` will generate a new initialization closure and return it to
-  // the delegate via `for_each_bucket_context`. The delegate, i.e.
-  // `IDBFactory`, will pass a null `InstanceClosure` to the first
-  // `BucketContext` it creates.
-  BucketContext(storage::BucketInfo bucket_info,
-                const base::FilePath& data_path,
-                Delegate&& delegate,
-                scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-                scoped_refptr<base::TaskRunner> io_task_runner,
-                mojo::PendingRemote<storage::mojom::BlobStorageContext>
-                    blob_storage_context,
-                mojo::PendingRemote<storage::mojom::FileSystemAccessContext>
-                    file_system_access_context,
-                InstanceClosure initialization_closure);
+  BucketContext(
+      storage::BucketInfo bucket_info,
+      const base::FilePath& data_path,
+      Delegate&& delegate,
+      scoped_refptr<base::UpdateableSequencedTaskRunner> updateable_task_runner,
+      scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
+      mojo::PendingRemote<storage::mojom::BlobStorageContext>
+          blob_storage_context,
+      mojo::PendingRemote<storage::mojom::FileSystemAccessContext>
+          file_system_access_context);
 
   BucketContext(const BucketContext&) = delete;
   BucketContext& operator=(const BucketContext&) = delete;
@@ -212,9 +177,9 @@ class CONTENT_EXPORT BucketContext
 
   void ReportOutstandingBlobs(bool blobs_outstanding);
 
-  // Runs `method` on `this`. This exists to facilitate running the setter on
-  // the correct sequence.
-  void RunInstanceClosure(InstanceClosure method);
+  // Called whenever some active or new connection's scheduling priority has
+  // changed.
+  void OnConnectionPriorityUpdated();
 
   // Called when `space_requested` bytes are about to be used by committing a
   // transaction. Will invoke `disk_space_check_callback` if this usage is
@@ -344,10 +309,9 @@ class CONTENT_EXPORT BucketContext
   friend class TransactionTest;
 
   FRIEND_TEST_ALL_PREFIXES(IndexedDBTest, CompactionKillSwitchWorks);
-  FRIEND_TEST_ALL_PREFIXES(IndexedDBTest, CompactionTaskTiming);
-  FRIEND_TEST_ALL_PREFIXES(IndexedDBTest, TombstoneSweeperTiming);
   FRIEND_TEST_ALL_PREFIXES(IndexedDBTest, TooLongOrigin);
   FRIEND_TEST_ALL_PREFIXES(IndexedDBTest, BasicFactoryCreationAndTearDown);
+  FRIEND_TEST_ALL_PREFIXES(IndexedDBTest, TaskRunnerPriority);
   FRIEND_TEST_ALL_PREFIXES(BucketContextTest, BucketSpaceDecay);
   FRIEND_TEST_ALL_PREFIXES(BucketContextTest, MetadataRecordingStateHistory);
 
@@ -371,12 +335,6 @@ class CONTENT_EXPORT BucketContext
         client_state_checker_remote;
   };
 
-  // Used to synchronize the global throttling of LevelDB cleanup operations.
-  // See `for_each_bucket_context`.
-  static void SetInternalState(base::Time earliest_global_sweep_time,
-                               base::Time earliest_global_compaction_time,
-                               BucketContext& context);
-
   Database* AddDatabase(const std::u16string& name,
                         std::unique_ptr<Database> database);
 
@@ -394,16 +352,6 @@ class CONTENT_EXPORT BucketContext
 
   void RunTasks();
 
-  // Executes database operations, and if `true` is returned by this function,
-  // then the current time will be written to the database as the last sweep
-  // time.
-  bool ShouldRunTombstoneSweeper();
-
-  // Executes database operations, and if `true` is returned by this function,
-  // then the current time will be written to the database as the last
-  // compaction time.
-  bool ShouldRunCompaction();
-
   void OnGotBucketSpaceRemaining(storage::QuotaErrorOr<int64_t> space_left);
 
   // Returns the amount of bucket space `this` has the authority to approve by
@@ -414,7 +362,6 @@ class CONTENT_EXPORT BucketContext
   // Bind `receiver` to read from the file at `path`.
   void BindFileReader(
       const base::FilePath& path,
-      base::Time expected_modification_time,
       base::OnceClosure release_callback,
       mojo::PendingReceiver<storage::mojom::BlobDataItemReader> receiver);
   // Removes all readers for this file path.
@@ -439,6 +386,10 @@ class CONTENT_EXPORT BucketContext
 
   const storage::BucketInfo bucket_info_;
 
+  // The task runner `this` runs on, if `this` runs on a task runner that can be
+  // updated with different task traits (priority).
+  scoped_refptr<base::UpdateableSequencedTaskRunner> updateable_task_runner_;
+
   // Base directory for blobs and backing store files.
   const base::FilePath data_path_;
 
@@ -449,8 +400,6 @@ class CONTENT_EXPORT BucketContext
 
   bool running_tasks_ = false;
 
-  base::Time earliest_global_sweep_time_;
-  base::Time earliest_global_compaction_time_;
   ClosingState closing_stage_ = ClosingState::kNotClosing;
   base::OneShotTimer close_timer_;
   std::unique_ptr<PartitionedLockManager> lock_manager_;
@@ -467,6 +416,9 @@ class CONTENT_EXPORT BucketContext
   // for this object, see CanClose.
   int64_t open_handles_ = 0;
 
+  // Pending connections are also inputs to the calculated scheduling priority.
+  std::list<base::WeakPtr<PendingConnection>> pending_connections_;
+
   // A queue of callbacks representing `CheckCanUseDiskSpace()` requests.
   std::queue<std::tuple<int64_t /*space_requested*/,
                         base::OnceCallback<void(bool /*allowed*/)>>>
@@ -480,9 +432,6 @@ class CONTENT_EXPORT BucketContext
   base::TimeTicks bucket_space_remaining_timestamp_;
 
   // Members in the following block are used for `CreateAllExternalObjects`.
-  // This handle to the content IO thread is necessary because
-  // net::FileStream::Context can only be used from an IO thread on Windows.
-  const scoped_refptr<base::TaskRunner> io_task_runner_;
   // Mojo connection to `BlobStorageContext`, which runs on the IO thread.
   mojo::Remote<storage::mojom::BlobStorageContext> blob_storage_context_;
   // Mojo connection to `FileSystemAccessContextImpl`, which runs on the UI

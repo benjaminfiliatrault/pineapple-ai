@@ -12,6 +12,8 @@
 #include <vector>
 
 #include "base/containers/flat_set.h"
+#include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/types/strong_alias.h"
@@ -105,10 +107,7 @@ class RendererSavePasswordProgressLogger;
 class PasswordGenerationAgent;
 
 // This class is responsible for filling password forms.
-// TODO(crbug.com/40281981): Remove FormTracker::Observer after launching
-// kAutofillUnifyAndFixFormTracking.
 class PasswordAutofillAgent : public content::RenderFrameObserver,
-                              public FormTracker::Observer,
                               public mojom::PasswordAutofillAgent {
  public:
   using EnableHeavyFormDataScraping =
@@ -140,7 +139,8 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // mojom::PasswordAutofillAgent:
   void SetPasswordFillData(const PasswordFormFillData& form_data) override;
   void FillPasswordSuggestion(const std::u16string& username,
-                              const std::u16string& password) override;
+                              const std::u16string& password,
+                              base::OnceCallback<void(bool)> callback) override;
   void FillPasswordSuggestionById(FieldRendererId username_element_id,
                                   FieldRendererId password_element_id,
                                   const std::u16string& username,
@@ -165,13 +165,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void TriggerFormSubmission() override;
 #endif
 
-  // FormTracker::Observer
-  void OnProvisionallySaveForm(const blink::WebFormElement& form,
-                               const blink::WebFormControlElement& element,
-                               SaveFormReason source) override;
-  void OnProbablyFormSubmitted() override;
-  void OnFormSubmitted(const blink::WebFormElement& form) override;
-  void OnInferredFormSubmission(mojom::SubmissionSource source) override;
+  void OnFormSubmitted(const blink::WebFormElement& form);
 
   // WebLocalFrameClient editor related calls forwarded by AutofillAgent.
   // If they return true, it indicates the event was consumed and should not
@@ -490,7 +484,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
   // Given `username_element` and `password_element`, fills `username` and
   // `password` respectively into them.
-  void FillUsernameAndPasswordElements(blink::WebInputElement username_element,
+  bool FillUsernameAndPasswordElements(blink::WebInputElement username_element,
                                        blink::WebInputElement password_element,
                                        const std::u16string& username,
                                        const std::u16string& password);

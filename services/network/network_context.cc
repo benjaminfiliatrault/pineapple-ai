@@ -17,6 +17,7 @@
 #include "base/build_time.h"
 #include "base/callback_list.h"
 #include "base/check.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/dcheck_is_on.h"
@@ -89,6 +90,7 @@
 #include "net/http/http_request_headers.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/http_transaction_factory.h"
+#include "net/log/net_log_source_type.h"
 #include "net/net_buildflags.h"
 #include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/proxy_resolution/proxy_config.h"
@@ -578,6 +580,23 @@ mojom::URLLoaderFactoryParamsPtr CreateURLLoaderFactoryParamsForPrefetch() {
   return params;
 }
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(HSTSRedirectUpgradeReason)
+enum class HSTSRedirectUpgradeReason {
+  kNotUpgradedNotHTTP = 0,
+  kNotUpgradedHSTSUnavailable = 1,
+  kNotUpgradedNoHSTSPin = 2,
+  kUpgraded = 3,
+  kMaxValue = kUpgraded,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/net/enums.xml:HSTSRedirectUpgradeReason)
+
+void RecordHSTSPreconnectUpgradeReason(HSTSRedirectUpgradeReason reason) {
+  base::UmaHistogramEnumeration("Net.PreconnectHSTSUpgradesUrl", reason);
+}
+
 }  // namespace
 
 constexpr uint32_t NetworkContext::kMaxOutstandingRequestsPerProcess;
@@ -942,6 +961,14 @@ void NetworkContext::CreateURLLoaderFactoryForCertNetFetcher(
   url_loader_factory_params->process_id = mojom::kBrowserProcessId;
   url_loader_factory_params->automatically_assign_isolation_info = true;
   url_loader_factory_params->is_orb_enabled = false;
+  if (url_request_context()->bound_network() !=
+      net::handles::kInvalidNetworkHandle) {
+    // This is done to maintain consistency with network-bound
+    // URLLoaderFactories used by multi-network CCT. See
+    // CorsURLLoaderFactory::IsCorsPreflighLoadOptionAllowed
+    // http://crrev.com/c/5899528.
+    url_loader_factory_params->disable_web_security = true;
+  }
   CreateURLLoaderFactory(std::move(factory_receiver),
                          std::move(url_loader_factory_params));
 }
@@ -2157,7 +2184,9 @@ void NetworkContext::VerifyCertificateForTesting(
       result,
       base::BindOnce(TestVerifyCertCallback, std::move(state),
                      std::move(callback)),
-      request, net::NetLogWithSource());
+      request,
+      net::NetLogWithSource::Make(net::NetLog::Get(),
+                                  net::NetLogSourceType::NONE));
 }
 
 void NetworkContext::PreconnectSockets(
@@ -2168,7 +2197,7 @@ void NetworkContext::PreconnectSockets(
   DCHECK(!require_network_anonymization_key_ ||
          !network_anonymization_key.IsEmpty());
 
-  GURL url = GetHSTSRedirect(original_url);
+  GURL url = GetHSTSRedirectForPreconnect(original_url);
 
   // |PreconnectSockets| may receive arguments from the renderer, which is not
   // guaranteed to validate them.
@@ -2252,7 +2281,7 @@ void NetworkContext::CreateMdnsResponder(
 
   mdns_responder_manager_->CreateMdnsResponder(std::move(responder_receiver));
 #else
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 #endif  // BUILDFLAG(ENABLE_MDNS)
 }
 
@@ -2530,26 +2559,29 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
   // Decide which ProxyDelegate to create. At most one of these will be the
   // case for any given NetworkContext: either PrefetchProxy, handling its
   // custom proxy configs, or IpProtection, using the proxy allowlist.
-  // TODO(https://crbug.com/40947771): Once the WebView traffic experiment is
-  // done, we should only create an IpProtectionProxyDelegate when
-  // `params_->ip_protection_config_getter` is set (to avoid creating
-  // proxynetwork_conte delegates for network contexts that don't participate in
-  // IP Protection, or for any network context when the IP Protection feature is
-  // disabled).
-  auto* nspal = network_service_->masked_domain_list_manager();
+  auto* mdl_manager = network_service_->masked_domain_list_manager();
   std::unique_ptr<ip_protection::IpProtectionControlMojo>
       ip_protection_control_mojo;
-  if (!params_->initial_custom_proxy_config && nspal->IsEnabled()) {
-    auto ipp_core = std::make_unique<ip_protection::IpProtectionCoreImpl>(
-        std::make_unique<ip_protection::IpProtectionConfigGetterMojoImpl>(
-            std::move(params_->ip_protection_config_getter)),
-        params_->enable_ip_protection);
+  bool requires_ipp_proxy_delegate =
+      mdl_manager->IsEnabled() &&
+      (params_->ip_protection_core_host ||
+       net::features::kIpPrivacyAlwaysCreateCore.Get());
+  if (requires_ipp_proxy_delegate) {
+    CHECK(!params_->initial_custom_proxy_config);
+    CHECK(!params_->custom_proxy_config_client_receiver);
+    auto ip_protection_core_impl =
+        std::make_unique<ip_protection::IpProtectionCoreImpl>(
+            std::make_unique<ip_protection::IpProtectionConfigGetterMojoImpl>(
+                std::move(params_->ip_protection_core_host)),
+            mdl_manager, params_->enable_ip_protection);
     ip_protection_control_mojo =
         std::make_unique<ip_protection::IpProtectionControlMojo>(
-            std::move(params_->ip_protection_control), ipp_core.get());
+            std::move(params_->ip_protection_control),
+            ip_protection_core_impl.get());
     builder.set_proxy_delegate(
         std::make_unique<ip_protection::IpProtectionProxyDelegate>(
-            nspal, std::move(ipp_core)));
+            ip_protection_core_impl.get()));
+    ip_protection_core_ = std::move(ip_protection_core_impl);
   } else if (params_->initial_custom_proxy_config ||
              params_->custom_proxy_config_client_receiver) {
     builder.set_proxy_delegate(std::make_unique<NetworkServiceProxyDelegate>(
@@ -2857,6 +2889,20 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
 #if BUILDFLAG(ENABLE_DEVICE_BOUND_SESSIONS)
   if (params_->device_bound_sessions_enabled) {
     builder.set_has_device_bound_session_service(true);
+
+    if (base::FeatureList::IsEnabled(
+            net::features::kPersistDeviceBoundSessions)) {
+      base::FilePath device_bound_sessions_file_path;
+      if (GetFullDataFilePath(params_->file_paths,
+                              &network::mojom::NetworkContextFilePaths::
+                                  device_bound_sessions_database_name,
+                              device_bound_sessions_file_path)) {
+        // Network-bound NetworkContexts should not persist state on disk.
+        CHECK(!is_network_bound);
+        builder.set_device_bound_sessions_file_path(
+            device_bound_sessions_file_path);
+      }
+    }
   }
 #endif
 
@@ -2985,15 +3031,30 @@ void NetworkContext::OnConnectionError() {
     std::move(on_connection_close_callback_).Run(this);
 }
 
-GURL NetworkContext::GetHSTSRedirect(const GURL& original_url) {
+GURL NetworkContext::GetHSTSRedirectForPreconnect(const GURL& original_url) {
   // TODO(lilyhoughton) This needs to be gotten rid of once explicit
   // construction with a URLRequestContext is no longer supported.
-  if (!url_request_context_->transport_security_state() ||
-      !original_url.SchemeIs("http") ||
-      !url_request_context_->transport_security_state()->ShouldUpgradeToSSL(
-          original_url.host())) {
+
+  if (!url_request_context_->transport_security_state()) {
+    RecordHSTSPreconnectUpgradeReason(
+        HSTSRedirectUpgradeReason::kNotUpgradedHSTSUnavailable);
     return original_url;
   }
+
+  if (!original_url.SchemeIs(url::kHttpScheme)) {
+    RecordHSTSPreconnectUpgradeReason(
+        HSTSRedirectUpgradeReason::kNotUpgradedNotHTTP);
+    return original_url;
+  }
+
+  if (!url_request_context_->transport_security_state()->ShouldUpgradeToSSL(
+          original_url.host())) {
+    RecordHSTSPreconnectUpgradeReason(
+        HSTSRedirectUpgradeReason::kNotUpgradedNoHSTSPin);
+    return original_url;
+  }
+
+  RecordHSTSPreconnectUpgradeReason(HSTSRedirectUpgradeReason::kUpgraded);
 
   GURL::Replacements replacements;
   replacements.SetSchemeStr("https");

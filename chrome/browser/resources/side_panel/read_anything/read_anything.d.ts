@@ -286,12 +286,9 @@ declare namespace chrome {
     // Read Aloud state should be updated if the lock screen state changes.
     function onLockScreen(): void;
 
-    // Called with the response of sendGetVoicePackInfoRequest()
+    // Called with the response of sendGetVoicePackInfoRequest() or
+    // sendInstallVoicePackRequest()
     function updateVoicePackStatus(lang: string, status: string): void;
-
-    // Called with the response of sendInstallVoicePackRequest()
-    function updateVoicePackStatusFromInstallResponse(
-        lang: string, status: string): void;
 
     // Ping that the theme choices of the user have been retrieved from
     // preferences and can be used to set up the page.
@@ -353,12 +350,10 @@ declare namespace chrome {
 
     // Should be called in onImageDownloaded. This function gets the bitmap data
     // as a byte array along with the height and width of the image so that the
-    // bitmap can be rendered to a canvas.
+    // bitmap can be rendered to a canvas. The scale is the factor by which the
+    // width of the bitmap must scale to match the website's desired size.
     function getImageBitmap(nodeId: number):
-        {data: Uint8ClampedArray, width: number, height: number};
-
-    // Gets the stored image data url from the AXNode.
-    function getImageDataUrl(nodeId: number): string;
+        {data: Uint8ClampedArray, width: number, height: number, scale: number};
 
     // Gets the readable name for a locale code
     function getDisplayNameForLocale(locale: string, displayLocale: string):
@@ -371,7 +366,7 @@ declare namespace chrome {
 
     // Sends an async request to install a  Natural voice pack for a
     // specific language. The response is sent back to the UI via
-    // updateVoicePackStatusFromInstallResponse()
+    // updateVoicePackStatus()
     function sendInstallVoicePackRequest(language: string): void;
 
     // Log UmaHistogramCount

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <atomic>
 #include <compare>
+#include <limits>
 #include <list>
 #include <ostream>
 #include <set>
@@ -33,7 +34,6 @@
 #include "base/no_destructor.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/rand_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -44,6 +44,7 @@
 #include "base/task/task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/task/updateable_sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/common/trace_event_common.h"
@@ -81,8 +82,6 @@
 #include "content/browser/indexed_db/instance/database.h"
 #include "content/browser/indexed_db/instance/database_callbacks.h"
 #include "content/browser/indexed_db/instance/factory_client.h"
-#include "content/browser/indexed_db/instance/leveldb_compaction_task.h"
-#include "content/browser/indexed_db/instance/leveldb_tombstone_sweeper.h"
 #include "content/browser/indexed_db/instance/pending_connection.h"
 #include "content/browser/indexed_db/instance/transaction.h"
 #include "content/browser/indexed_db/list_set.h"
@@ -104,6 +103,8 @@
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_transfer_token.mojom.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-shared.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
+#include "third_party/leveldatabase/env_chromium.h"
+#include "third_party/leveldatabase/src/include/leveldb/status.h"
 
 namespace content::indexed_db {
 namespace {
@@ -113,69 +114,6 @@ namespace {
 const int64_t kBackingStoreGracePeriodSeconds = 2;
 // Total time we let pre-close tasks run.
 const int64_t kRunningPreCloseTasksMaxRunPeriodSeconds = 60;
-// The number of iterations for every 'round' of the tombstone sweeper.
-const int kTombstoneSweeperRoundIterations = 1000;
-// The maximum total iterations for the tombstone sweeper.
-const int kTombstoneSweeperMaxIterations = 10 * 1000 * 1000;
-
-constexpr const base::TimeDelta kMinEarliestBucketSweepFromNow = base::Days(1);
-static_assert(kMinEarliestBucketSweepFromNow <
-                  BucketContext::kMaxEarliestBucketSweepFromNow,
-              "Min < Max");
-
-constexpr const base::TimeDelta kMinEarliestGlobalSweepFromNow =
-    base::Minutes(5);
-static_assert(kMinEarliestGlobalSweepFromNow <
-                  BucketContext::kMaxEarliestGlobalSweepFromNow,
-              "Min < Max");
-
-base::Time GenerateNextBucketSweepTime(base::Time now) {
-  uint64_t range =
-      BucketContext::kMaxEarliestBucketSweepFromNow.InMilliseconds() -
-      kMinEarliestBucketSweepFromNow.InMilliseconds();
-  int64_t rand_millis = kMinEarliestBucketSweepFromNow.InMilliseconds() +
-                        static_cast<int64_t>(base::RandGenerator(range));
-  return now + base::Milliseconds(rand_millis);
-}
-
-base::Time GenerateNextGlobalSweepTime(base::Time now) {
-  uint64_t range =
-      BucketContext::kMaxEarliestGlobalSweepFromNow.InMilliseconds() -
-      kMinEarliestGlobalSweepFromNow.InMilliseconds();
-  int64_t rand_millis = kMinEarliestGlobalSweepFromNow.InMilliseconds() +
-                        static_cast<int64_t>(base::RandGenerator(range));
-  return now + base::Milliseconds(rand_millis);
-}
-
-constexpr const base::TimeDelta kMinEarliestBucketCompactionFromNow =
-    base::Days(1);
-static_assert(kMinEarliestBucketCompactionFromNow <
-                  BucketContext::kMaxEarliestBucketCompactionFromNow,
-              "Min < Max");
-
-constexpr const base::TimeDelta kMinEarliestGlobalCompactionFromNow =
-    base::Minutes(5);
-static_assert(kMinEarliestGlobalCompactionFromNow <
-                  BucketContext::kMaxEarliestGlobalCompactionFromNow,
-              "Min < Max");
-
-base::Time GenerateNextBucketCompactionTime(base::Time now) {
-  uint64_t range =
-      BucketContext::kMaxEarliestBucketCompactionFromNow.InMilliseconds() -
-      kMinEarliestBucketCompactionFromNow.InMilliseconds();
-  int64_t rand_millis = kMinEarliestBucketCompactionFromNow.InMilliseconds() +
-                        static_cast<int64_t>(base::RandGenerator(range));
-  return now + base::Milliseconds(rand_millis);
-}
-
-base::Time GenerateNextGlobalCompactionTime(base::Time now) {
-  uint64_t range =
-      BucketContext::kMaxEarliestGlobalCompactionFromNow.InMilliseconds() -
-      kMinEarliestGlobalCompactionFromNow.InMilliseconds();
-  int64_t rand_millis = kMinEarliestGlobalCompactionFromNow.InMilliseconds() +
-                        static_cast<int64_t>(base::RandGenerator(range));
-  return now + base::Milliseconds(rand_millis);
-}
 
 // This struct facilitates requesting bucket space usage from the quota manager.
 // There have been reports of the callback being passed to the quota manager
@@ -292,17 +230,11 @@ std::
 class IndexedDBDataItemReader : public storage::mojom::BlobDataItemReader {
  public:
   IndexedDBDataItemReader(const base::FilePath& file_path,
-                          base::Time expected_modification_time,
                           base::OnceCallback<void(const base::FilePath&)>
-                              on_last_receiver_disconnected,
-                          scoped_refptr<base::TaskRunner> io_task_runner)
+                              on_last_receiver_disconnected)
       : file_path_(file_path),
-        expected_modification_time_(std::move(expected_modification_time)),
         on_last_receiver_disconnected_(
-            std::move(on_last_receiver_disconnected)),
-        io_task_runner_(std::move(io_task_runner)) {
-    DCHECK(io_task_runner_);
-
+            std::move(on_last_receiver_disconnected)) {
     // The `BlobStorageContext` will disconnect when the blob is no longer
     // referenced.
     receivers_.set_disconnect_handler(
@@ -327,18 +259,8 @@ class IndexedDBDataItemReader : public storage::mojom::BlobDataItemReader {
             mojo::ScopedDataPipeProducerHandle pipe,
             ReadCallback callback) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-    ReadCallback result_callback = base::BindPostTask(
-        base::SequencedTaskRunner::GetCurrentDefault(), std::move(callback));
-    io_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            &MakeFileStreamAdapterAndRead,
-            storage::FileStreamReader::CreateForLocalFile(
-                base::ThreadPool::CreateTaskRunner(
-                    {base::MayBlock(), base::TaskPriority::USER_BLOCKING}),
-                file_path_, offset, expected_modification_time_),
-            std::move(pipe), std::move(result_callback), length));
+    OpenFileAndReadIntoPipe(file_path_, offset, length, std::move(pipe),
+                            std::move(callback));
   }
 
   void ReadSideData(ReadSideDataCallback callback) override {
@@ -361,33 +283,19 @@ class IndexedDBDataItemReader : public storage::mojom::BlobDataItemReader {
   mojo::ReceiverSet<storage::mojom::BlobDataItemReader> receivers_;
 
   base::FilePath file_path_;
-  base::Time expected_modification_time_;
 
   // Called when the last receiver is disconnected. Will destroy `this`.
   base::OnceCallback<void(const base::FilePath&)>
       on_last_receiver_disconnected_;
 
-  // net::FileStream (used by LocalFileStreamReader) needs to be run
-  // on an IO thread for asynchronous file operations on Windows.
-  const scoped_refptr<base::TaskRunner> io_task_runner_;
-
   SEQUENCE_CHECKER(sequence_checker_);
 };
-
-constexpr const base::TimeDelta BucketContext::kMaxEarliestGlobalSweepFromNow;
-constexpr const base::TimeDelta BucketContext::kMaxEarliestBucketSweepFromNow;
-
-constexpr const base::TimeDelta
-    BucketContext::kMaxEarliestGlobalCompactionFromNow;
-constexpr const base::TimeDelta
-    BucketContext::kMaxEarliestBucketCompactionFromNow;
 
 BucketContext::Delegate::Delegate()
     : on_ready_for_destruction(base::DoNothing()),
       on_receiver_bounced(base::DoNothing()),
       on_content_changed(base::DoNothing()),
-      on_files_written(base::DoNothing()),
-      for_each_bucket_context(base::DoNothing()) {}
+      on_files_written(base::DoNothing()) {}
 
 BucketContext::Delegate::Delegate(Delegate&& other) = default;
 BucketContext::Delegate::~Delegate() = default;
@@ -396,17 +304,16 @@ BucketContext::BucketContext(
     storage::BucketInfo bucket_info,
     const base::FilePath& data_path,
     Delegate&& delegate,
+    scoped_refptr<base::UpdateableSequencedTaskRunner> updateable_task_runner,
     scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-    scoped_refptr<base::TaskRunner> io_task_runner,
     mojo::PendingRemote<storage::mojom::BlobStorageContext>
         blob_storage_context,
     mojo::PendingRemote<storage::mojom::FileSystemAccessContext>
-        file_system_access_context,
-    InstanceClosure initialize_closure)
+        file_system_access_context)
     : bucket_info_(std::move(bucket_info)),
+      updateable_task_runner_(updateable_task_runner),
       data_path_(data_path),
       quota_manager_proxy_(std::move(quota_manager_proxy)),
-      io_task_runner_(std::move(io_task_runner)),
       blob_storage_context_(std::move(blob_storage_context)),
       file_system_access_context_(std::move(file_system_access_context)),
       delegate_(std::move(delegate)) {
@@ -414,16 +321,6 @@ BucketContext::BucketContext(
       ->RegisterDumpProviderWithSequencedTaskRunner(
           this, "BucketContext", base::SequencedTaskRunner::GetCurrentDefault(),
           base::trace_event::MemoryDumpProvider::Options());
-
-  if (!initialize_closure) {
-    base::Time now = base::Time::Now();
-    initialize_closure = base::BindRepeating(
-        &BucketContext::SetInternalState, GenerateNextGlobalSweepTime(now),
-        GenerateNextGlobalCompactionTime(now));
-    delegate_.for_each_bucket_context.Run(initialize_closure);
-  }
-  initialize_closure.Run(*this);
-
   receivers_.set_disconnect_handler(base::BindRepeating(
       &BucketContext::OnReceiverDisconnected, base::Unretained(this)));
 }
@@ -459,7 +356,7 @@ void BucketContext::ForceClose(bool doom) {
     // Don't run the preclosing tasks after a ForceClose, whether or not we've
     // started them.  Compaction in particular can run long and cannot be
     // interrupted, so it can cause shutdown hangs.
-    close_timer_.AbandonAndStop();
+    close_timer_.Stop();
     if (pre_close_task_queue_) {
       pre_close_task_queue_->Stop();
       pre_close_task_queue_.reset();
@@ -530,8 +427,33 @@ void BucketContext::ReportOutstandingBlobs(bool blobs_outstanding) {
   MaybeStartClosing();
 }
 
-void BucketContext::RunInstanceClosure(InstanceClosure method) {
-  method.Run(*this);
+void BucketContext::OnConnectionPriorityUpdated() {
+  if (!updateable_task_runner_) {
+    return;
+  }
+  int scheduling_priority = std::numeric_limits<int>::max();
+  // Established connections:
+  for (const auto& [name, database] : databases_) {
+    for (auto* connection : database->connections()) {
+      scheduling_priority =
+          std::min(scheduling_priority, connection->scheduling_priority());
+    }
+  }
+  // Pending connections:
+  for (auto iter = pending_connections_.begin();
+       iter != pending_connections_.end();) {
+    if (iter->WasInvalidated()) {
+      iter = pending_connections_.erase(iter);
+    } else {
+      scheduling_priority =
+          std::min(scheduling_priority, (*iter)->scheduling_priority);
+      ++iter;
+    }
+  }
+  base::TaskPriority priority = scheduling_priority == 0
+                                    ? base::TaskPriority::USER_BLOCKING
+                                    : base::TaskPriority::USER_VISIBLE;
+  updateable_task_runner_->UpdatePriority(priority);
 }
 
 void BucketContext::CheckCanUseDiskSpace(
@@ -610,18 +532,19 @@ void BucketContext::CreateAllExternalObjects(
   }
 
   for (size_t i = 0; i < objects.size(); ++i) {
-    auto& blob_info = objects[i];
-    auto& mojo_object = (*mojo_objects)[i];
+    const IndexedDBExternalObject& blob_info = objects[i];
+    blink::mojom::IDBExternalObjectPtr& mojo_object = (*mojo_objects)[i];
 
     switch (blob_info.object_type()) {
       case IndexedDBExternalObject::ObjectType::kBlob:
       case IndexedDBExternalObject::ObjectType::kFile: {
         DCHECK(mojo_object->is_blob_or_file());
-        auto& output_info = mojo_object->get_blob_or_file();
+        blink::mojom::IDBBlobInfoPtr& output_info =
+            mojo_object->get_blob_or_file();
 
-        auto receiver = output_info->blob.InitWithNewPipeAndPassReceiver();
+        mojo::PendingReceiver<blink::mojom::Blob> receiver =
+            output_info->blob.InitWithNewPipeAndPassReceiver();
         if (blob_info.is_remote_valid()) {
-          output_info->uuid = blob_info.uuid();
           blob_info.Clone(std::move(receiver));
           continue;
         }
@@ -633,21 +556,16 @@ void BucketContext::CreateAllExternalObjects(
         element->content_type = base::UTF16ToUTF8(blob_info.type());
         element->type = storage::mojom::BlobDataItemType::kIndexedDB;
 
-        base::Time last_modified;
-        // Android doesn't seem to consistently be able to set file modification
-        // times. https://crbug.com/1045488
-#if !BUILDFLAG(IS_ANDROID)
-        last_modified = blob_info.last_modified();
-#endif
-        BindFileReader(blob_info.indexed_db_file_path(), last_modified,
+        BindFileReader(blob_info.indexed_db_file_path(),
                        blob_info.release_callback(),
                        element->reader.InitWithNewPipeAndPassReceiver());
 
         // Write results to output_info.
-        output_info->uuid = base::Uuid::GenerateRandomV4().AsLowercaseString();
-
         blob_storage_context_->RegisterFromDataItem(
-            std::move(receiver), output_info->uuid, std::move(element));
+            std::move(receiver),
+            base::Uuid::GenerateRandomV4().AsLowercaseString(),
+            std::move(element));
+
         break;
       }
       case IndexedDBExternalObject::ObjectType::kFileSystemAccessHandle: {
@@ -821,7 +739,9 @@ void BucketContext::Open(
     database_ptr = it->second.get();
   }
 
+  pending_connections_.push_back(connection->weak_factory.GetWeakPtr());
   database_ptr->ScheduleOpenConnection(std::move(connection));
+  OnConnectionPriorityUpdated();
 }
 
 void BucketContext::DeleteDatabase(
@@ -953,11 +873,8 @@ void BucketContext::CompactBackingStoreForTesting() {
 
 void BucketContext::WriteToIndexedDBForTesting(const std::string& key,
                                                const std::string& value) {
-  TransactionalLevelDBDatabase* db = backing_store_->db();
-  std::string value_copy = value;
-  Status s(db->Put(key, &value_copy));
-  CHECK(s.ok()) << s.ToString();
-  ForceClose(true);
+  backing_store_->WriteToIndexedDBForTesting(key, value);  // IN-TEST
+  ForceClose(/*doom=*/true);
 }
 
 void BucketContext::BindMockFailureSingletonForTesting(
@@ -966,18 +883,6 @@ void BucketContext::BindMockFailureSingletonForTesting(
   transactional_leveldb_factory_ =
       std::make_unique<MockBrowserTestIndexedDBClassFactory>(
           std::move(receiver));
-}
-
-// static
-void BucketContext::SetInternalState(base::Time earliest_global_sweep_time,
-                                     base::Time earliest_global_compaction_time,
-                                     BucketContext& context) {
-  if (!earliest_global_sweep_time.is_null()) {
-    context.earliest_global_sweep_time_ = earliest_global_sweep_time;
-  }
-  if (!earliest_global_compaction_time.is_null()) {
-    context.earliest_global_compaction_time_ = earliest_global_compaction_time;
-  }
 }
 
 Database* BucketContext::AddDatabase(const std::u16string& name,
@@ -992,7 +897,7 @@ void BucketContext::OnHandleCreated() {
   ++open_handles_;
   if (closing_stage_ != ClosingState::kNotClosing) {
     closing_stage_ = ClosingState::kNotClosing;
-    close_timer_.AbandonAndStop();
+    close_timer_.Stop();
     if (pre_close_task_queue_) {
       pre_close_task_queue_->Stop();
       pre_close_task_queue_.reset();
@@ -1064,18 +969,8 @@ void BucketContext::StartPreCloseTasks() {
       },
       weak_factory_.GetWeakPtr()));
 
-  std::list<std::unique_ptr<BackingStorePreCloseTaskQueue::PreCloseTask>> tasks;
-
-  if (ShouldRunTombstoneSweeper()) {
-    tasks.push_back(std::make_unique<LevelDbTombstoneSweeper>(
-        kTombstoneSweeperRoundIterations, kTombstoneSweeperMaxIterations,
-        backing_store_->db()->db()));
-  }
-
-  if (ShouldRunCompaction()) {
-    tasks.push_back(
-        std::make_unique<IndexedDBCompactionTask>(backing_store_->db()->db()));
-  }
+  std::list<std::unique_ptr<BackingStorePreCloseTaskQueue::PreCloseTask>>
+      tasks = backing_store_->GetPreCloseTasks();
 
   if (!tasks.empty()) {
     pre_close_task_queue_ = std::make_unique<BackingStorePreCloseTaskQueue>(
@@ -1090,108 +985,13 @@ void BucketContext::StartPreCloseTasks() {
 
 void BucketContext::CloseNow() {
   closing_stage_ = ClosingState::kClosed;
-  close_timer_.AbandonAndStop();
+  close_timer_.Stop();
   pre_close_task_queue_.reset();
   QueueRunTasks();
 }
 
-bool BucketContext::ShouldRunTombstoneSweeper() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  if (!backing_store_) {
-    return false;
-  }
-
-  // Check that the last sweep hasn't run too recently.
-  base::Time now = base::Time::Now();
-  if (earliest_global_sweep_time_ > now) {
-    return false;
-  }
-
-  base::Time bucket_earliest_sweep;
-  Status s = GetEarliestSweepTime(backing_store_->db(), &bucket_earliest_sweep);
-  // TODO(dmurph): Log this or report to UMA.
-  if (!s.ok() && !s.IsNotFound()) {
-    return false;
-  }
-
-  if (bucket_earliest_sweep > now) {
-    return false;
-  }
-
-  // A sweep will happen now, so reset the sweep timers.
-  earliest_global_sweep_time_ = GenerateNextGlobalSweepTime(now);
-  delegate().for_each_bucket_context.Run(base::BindRepeating(
-      &BucketContext::SetInternalState, earliest_global_sweep_time_,
-      earliest_global_compaction_time_));
-  std::unique_ptr<LevelDBDirectTransaction> txn =
-      transactional_leveldb_factory_->CreateLevelDBDirectTransaction(
-          backing_store_->db());
-  s = SetEarliestSweepTime(txn.get(), GenerateNextBucketSweepTime(now));
-  // TODO(dmurph): Log this or report to UMA.
-  if (!s.ok()) {
-    return false;
-  }
-  s = txn->Commit();
-
-  // TODO(dmurph): Log this or report to UMA.
-  if (!s.ok()) {
-    return false;
-  }
-  return true;
-}
-
-bool BucketContext::ShouldRunCompaction() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  if (!backing_store_) {
-    return false;
-  }
-
-  base::Time now = base::Time::Now();
-  // Check that the last compaction hasn't run too recently.
-  if (earliest_global_compaction_time_ > now) {
-    return false;
-  }
-
-  base::Time bucket_earliest_compaction;
-  Status s = GetEarliestCompactionTime(backing_store_->db(),
-                                       &bucket_earliest_compaction);
-  // TODO(dmurph): Log this or report to UMA.
-  if (!s.ok() && !s.IsNotFound()) {
-    return false;
-  }
-
-  if (bucket_earliest_compaction > now) {
-    return false;
-  }
-
-  // A compaction will happen now, so reset the compaction timers.
-  earliest_global_compaction_time_ = GenerateNextGlobalCompactionTime(now);
-  delegate().for_each_bucket_context.Run(base::BindRepeating(
-      &BucketContext::SetInternalState, earliest_global_sweep_time_,
-      earliest_global_compaction_time_));
-  std::unique_ptr<LevelDBDirectTransaction> txn =
-      transactional_leveldb_factory_->CreateLevelDBDirectTransaction(
-          backing_store_->db());
-  s = SetEarliestCompactionTime(txn.get(),
-                                GenerateNextBucketCompactionTime(now));
-  // TODO(dmurph): Log this or report to UMA.
-  if (!s.ok()) {
-    return false;
-  }
-  s = txn->Commit();
-
-  // TODO(dmurph): Log this or report to UMA.
-  if (!s.ok()) {
-    return false;
-  }
-  return true;
-}
-
 void BucketContext::BindFileReader(
     const base::FilePath& path,
-    base::Time expected_modification_time,
     base::OnceClosure release_callback,
     mojo::PendingReceiver<storage::mojom::BlobDataItemReader> receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1201,10 +1001,8 @@ void BucketContext::BindFileReader(
   if (itr == file_reader_map_.end()) {
     // Unretained is safe because `this` owns the reader.
     auto reader = std::make_unique<IndexedDBDataItemReader>(
-        path, expected_modification_time,
-        base::BindOnce(&BucketContext::RemoveBoundReaders,
-                       base::Unretained(this)),
-        io_task_runner_);
+        path, base::BindOnce(&BucketContext::RemoveBoundReaders,
+                             base::Unretained(this)));
     itr = file_reader_map_
               .insert({path, std::make_tuple(std::move(reader),
                                              base::ScopedClosureRunner(
@@ -1259,7 +1057,7 @@ void BucketContext::OnDatabaseError(Status status, const std::string& message) {
   if (status.IsIOError()) {
     quota_manager_proxy_->OnClientWriteFailed(bucket_info_.storage_key);
   }
-  ForceClose(/*will_be_deleted=*/false);
+  ForceClose(/*doom=*/false);
 }
 
 bool BucketContext::OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,

@@ -28,8 +28,8 @@
 #include "ui/base/models/combobox_model_observer.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/base/models/menu_separator_types.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/ui_base_features.h"
-#include "ui/base/ui_base_types.h"
 #include "ui/color/color_provider.h"
 #include "ui/events/event.h"
 #include "ui/events/types/event_type.h"
@@ -89,6 +89,7 @@ class Arrow : public Button {
     ConfigureComboboxButtonInkDrop(this);
     GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
     UpdateAccessibleDefaultActionVerb();
+    GetViewAccessibility().SetHasPopup(ax::mojom::HasPopup::kMenu);
   }
   Arrow(const Arrow&) = delete;
   Arrow& operator=(const Arrow&) = delete;
@@ -110,11 +111,6 @@ class Arrow : public Button {
             style::CONTEXT_TEXTFIELD,
             GetEnabled() ? style::STYLE_PRIMARY : style::STYLE_DISABLED)),
         arrow_bounds, canvas);
-  }
-
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    Button::GetAccessibleNodeData(node_data);
-    node_data->SetHasPopup(ax::mojom::HasPopup::kMenu);
   }
 
   void UpdateAccessibleDefaultActionVerb() {
@@ -393,6 +389,10 @@ EditableCombobox::EditableCombobox(
   if (display_arrow) {
     arrow_ = AddControlElement(std::make_unique<Arrow>(base::BindRepeating(
         &EditableCombobox::ArrowButtonPressed, base::Unretained(this))));
+    // We need this so the arrow icon is not covered when the combo box view is
+    // hovered
+    arrow_->SetPaintToLayer();
+    arrow_->layer()->SetFillsBoundsOpaquely(false);
   }
 
   SetLayoutManager(std::make_unique<DelegatingLayoutManager>(this));
@@ -481,7 +481,7 @@ void EditableCombobox::OnVisibleBoundsChanged() {
 void EditableCombobox::ContentsChanged(Textfield* sender,
                                        const std::u16string& new_contents) {
   HandleNewContent(new_contents);
-  ShowDropDownMenu(ui::MENU_SOURCE_KEYBOARD);
+  ShowDropDownMenu(ui::mojom::MenuSourceType::kKeyboard);
 }
 
 bool EditableCombobox::HandleKeyEvent(Textfield* sender,
@@ -489,7 +489,7 @@ bool EditableCombobox::HandleKeyEvent(Textfield* sender,
   if (key_event.type() == ui::EventType::kKeyPressed &&
       (key_event.key_code() == ui::VKEY_UP ||
        key_event.key_code() == ui::VKEY_DOWN)) {
-    ShowDropDownMenu(ui::MENU_SOURCE_KEYBOARD);
+    ShowDropDownMenu(ui::mojom::MenuSourceType::kKeyboard);
     return true;
   }
   return false;
@@ -577,7 +577,7 @@ void EditableCombobox::ArrowButtonPressed(const ui::Event& event) {
   }
 }
 
-void EditableCombobox::ShowDropDownMenu(ui::MenuSourceType source_type) {
+void EditableCombobox::ShowDropDownMenu(ui::mojom::MenuSourceType source_type) {
   constexpr int kMenuBorderWidthTop = 1;
 
   if (dropdown_blocked_for_animation_) {

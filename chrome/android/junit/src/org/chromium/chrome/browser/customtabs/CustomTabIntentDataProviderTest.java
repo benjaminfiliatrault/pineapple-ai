@@ -175,7 +175,7 @@ public class CustomTabIntentDataProviderTest {
                 new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
 
         assertEquals(
-                mContext.getResources().getString(R.string.share),
+                mContext.getString(R.string.share),
                 dataProvider.getCustomButtonsOnToolbar().get(0).getDescription());
     }
 
@@ -1190,7 +1190,7 @@ public class CustomTabIntentDataProviderTest {
 
     @Test
     @EnableFeatures({ChromeFeatureList.SEARCH_IN_CCT})
-    public void searchInCCT_originValidation() {
+    public void searchInCct_originValidation() {
         CustomTabIntentDataProvider.OMNIBOX_ALLOWED_PACKAGE_NAMES.setForTesting(
                 "com.a.b.c|org.d.e.f");
         CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
@@ -1211,7 +1211,7 @@ public class CustomTabIntentDataProviderTest {
 
     @Test
     @DisableFeatures({ChromeFeatureList.SEARCH_IN_CCT})
-    public void searchInCCT_allowedPackagesRejectedWithFeatureDisabled() {
+    public void searchInCct_allowedPackagesRejectedWithFeatureDisabled() {
         CustomTabIntentDataProvider.OMNIBOX_ALLOWED_PACKAGE_NAMES.setForTesting(
                 "com.a.b.c|org.d.e.f");
         CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
@@ -1232,7 +1232,7 @@ public class CustomTabIntentDataProviderTest {
 
     @Test
     @EnableFeatures({ChromeFeatureList.SEARCH_IN_CCT})
-    public void searchInCCT_notAllowedInOffTheRecordMode() {
+    public void searchInCct_notAllowedInOffTheRecordMode() {
         CustomTabIntentDataProvider.OMNIBOX_ALLOWED_PACKAGE_NAMES.setForTesting("com.a.b.c");
         CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
         CustomTabsConnection.setInstanceForTesting(connection);
@@ -1248,7 +1248,7 @@ public class CustomTabIntentDataProviderTest {
 
     @Test
     @EnableFeatures({ChromeFeatureList.SEARCH_IN_CCT})
-    public void searchInCCT_notAllowedOnPartialCCTs() {
+    public void searchInCct_notAllowedOnPartialCcts() {
         CustomTabIntentDataProvider.OMNIBOX_ALLOWED_PACKAGE_NAMES.setForTesting("com.a.b.c");
         CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
         CustomTabsConnection.setInstanceForTesting(connection);
@@ -1264,7 +1264,7 @@ public class CustomTabIntentDataProviderTest {
 
     @Test
     @EnableFeatures({ChromeFeatureList.SEARCH_IN_CCT})
-    public void searchInCCT_notAllowedOnAutomotive() {
+    public void searchInCct_notAllowedOnAutomotive() {
         var shadowPkgMgr = Shadows.shadowOf(mContext.getPackageManager());
         shadowPkgMgr.setSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, /* supported= */ true);
         assertTrue(BuildInfo.getInstance().isAutomotive);
@@ -1406,6 +1406,84 @@ public class CustomTabIntentDataProviderTest {
         assertEquals(1, buttons.size());
         assertEquals(
                 CustomButtonParams.ButtonType.CCT_OPEN_IN_BROWSER_BUTTON, buttons.get(0).getType());
+    }
+
+    @Test
+    public void openInBrowserStateExtraTrue_enabledByEmbedderTrue_openInBrowserButtonAdded() {
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        CustomTabsConnection.setInstanceForTesting(connection);
+
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_OPEN_IN_BROWSER_STATE,
+                CustomTabIntentDataProvider.CustomTabsButtonState.BUTTON_STATE_ON);
+
+        // Buttons are initialized as part of the Constructor logic.
+        // Expect only the Open in Browser button, as the Share button is gated by empty Toolbar.
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        var buttons = dataProvider.getCustomButtonsOnToolbar();
+        assertEquals(1, buttons.size());
+        assertEquals(
+                CustomButtonParams.ButtonType.CCT_OPEN_IN_BROWSER_BUTTON, buttons.get(0).getType());
+    }
+
+    @Test
+    @DisableFeatures({ChromeFeatureList.CCT_OPEN_IN_BROWSER_BUTTON_IF_ENABLED_BY_EMBEDDER})
+    @EnableFeatures({ChromeFeatureList.CCT_OPEN_IN_BROWSER_BUTTON_IF_ALLOWED_BY_EMBEDDER})
+    public void
+            openInBrowserStateExtraTrue_enabledByEmbedderFalse_allowedByEmbedderTrue_openInBrowserButtonAllowedExtraTrue_openInBrowserButtonAdded() {
+        Intent intent = addExtrasForOpenInBrowserButton(true);
+
+        // Buttons are initialized as part of the Constructor logic.
+        // Expect only the Open in Browser button, as the Share button is gated by empty Toolbar.
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        var buttons = dataProvider.getCustomButtonsOnToolbar();
+        assertEquals(1, buttons.size());
+        assertEquals(
+                CustomButtonParams.ButtonType.CCT_OPEN_IN_BROWSER_BUTTON, buttons.get(0).getType());
+    }
+
+    @Test
+    @DisableFeatures({ChromeFeatureList.CCT_OPEN_IN_BROWSER_BUTTON_IF_ENABLED_BY_EMBEDDER})
+    public void
+            openInBrowserStateExtraTrue_enabledByEmbedderFalse_allowedByEmbedderFalse_openInBrowserButtonAllowedExtraTrue_openInBrowserButtonNotAdded() {
+        Intent intent = addExtrasForOpenInBrowserButton(true);
+
+        // Buttons are initialized as part of the Constructor logic.
+        // Expect only the Open in Browser button, as the Share button is gated by empty Toolbar.
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        var buttons = dataProvider.getCustomButtonsOnToolbar();
+        assertEquals(1, buttons.size());
+        assertEquals(CustomButtonParams.ButtonType.CCT_SHARE_BUTTON, buttons.get(0).getType());
+    }
+
+    @Test
+    @DisableFeatures({ChromeFeatureList.CCT_OPEN_IN_BROWSER_BUTTON_IF_ENABLED_BY_EMBEDDER})
+    @EnableFeatures({ChromeFeatureList.CCT_OPEN_IN_BROWSER_BUTTON_IF_ALLOWED_BY_EMBEDDER})
+    public void
+            openInBrowserStateExtraTrue_enabledByEmbedderFalse_allowedByEmbedderTrue_openInBrowserButtonAllowedExtraFalse_openInBrowserButtonNotAdded() {
+        Intent intent = addExtrasForOpenInBrowserButton(false);
+
+        // Buttons are initialized as part of the Constructor logic.
+        // Expect only the Open in Browser button, as the Share button is gated by empty Toolbar.
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        var buttons = dataProvider.getCustomButtonsOnToolbar();
+        assertEquals(1, buttons.size());
+        assertEquals(CustomButtonParams.ButtonType.CCT_SHARE_BUTTON, buttons.get(0).getType());
+    }
+
+    private Intent addExtrasForOpenInBrowserButton(boolean openInBrowserButtonAllowedExtra) {
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        CustomTabsConnection.setInstanceForTesting(connection);
+
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_OPEN_IN_BROWSER_STATE,
+                CustomTabIntentDataProvider.CustomTabsButtonState.BUTTON_STATE_ON);
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_OPEN_IN_BROWSER_BUTTON_ALLOWED,
+                openInBrowserButtonAllowedExtra);
+        return intent;
     }
 
     private Bundle createActionButtonInToolbarBundle() {

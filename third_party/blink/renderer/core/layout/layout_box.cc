@@ -197,7 +197,7 @@ LayoutUnit TextFieldIntrinsicInlineSize(const HTMLInputElement& input,
     if (LayoutBox* spin_box =
             spin_button ? spin_button->GetLayoutBox() : nullptr) {
       const Length& logical_width = spin_box->StyleRef().LogicalWidth();
-      result += spin_box->BorderAndPaddingLogicalWidth();
+      result += spin_box->BorderAndPaddingInlineSize();
       // Since the width of spin_box is not calculated yet,
       // spin_box->LogicalWidth() returns 0. Use the computed logical
       // width instead.
@@ -356,8 +356,7 @@ LayoutUnit MenuListIntrinsicBlockSize(const HTMLSelectElement& select,
   DCHECK(font_data);
   const LayoutBox* inner_box = select.InnerElement().GetLayoutBox();
   return (font_data ? font_data->GetFontMetrics().Height() : 0) +
-         (inner_box ? inner_box->BorderAndPaddingLogicalHeight()
-                    : LayoutUnit());
+         (inner_box ? inner_box->BorderAndPaddingBlockSize() : LayoutUnit());
 }
 
 #if DCHECK_IS_ON()
@@ -2858,11 +2857,6 @@ void LayoutBox::ClearSpannerPlaceholder() {
   rare_data_->spanner_placeholder_ = nullptr;
 }
 
-PhysicalRect LayoutBox::LocalVisualRectIgnoringVisibility() const {
-  NOT_DESTROYED();
-  return SelfVisualOverflowRect();
-}
-
 void LayoutBox::InflateVisualRectForFilterUnderContainer(
     TransformState& transform_state,
     const LayoutObject& container,
@@ -3054,9 +3048,7 @@ LayoutUnit LayoutBox::ContainingBlockLogicalHeightForPositioned(
   return height_result;
 }
 
-PhysicalRect LayoutBox::LocalCaretRect(
-    int caret_offset,
-    LayoutUnit* extra_width_to_end_of_line) const {
+PhysicalRect LayoutBox::LocalCaretRect(int caret_offset) const {
   NOT_DESTROYED();
   // VisiblePositions at offsets inside containers either a) refer to the
   // positions before/after those containers (tables and select elements) or
@@ -3066,20 +3058,8 @@ PhysicalRect LayoutBox::LocalCaretRect(
   // before/after elements.
   LayoutUnit caret_width = GetFrameView()->CaretWidth();
   LogicalSize size(LogicalWidth(), LogicalHeight());
-  const bool is_horizontal = IsHorizontalWritingMode();
-  PhysicalOffset offset = PhysicalLocation();
-  PhysicalRect rect(offset, is_horizontal
-                                ? PhysicalSize(caret_width, size.block_size)
-                                : PhysicalSize(size.block_size, caret_width));
-  bool ltr = StyleRef().IsLeftToRightDirection();
 
-  if ((!caret_offset) ^ ltr) {
-    rect.Move(
-        is_horizontal
-            ? PhysicalOffset(size.inline_size - caret_width, LayoutUnit())
-            : PhysicalOffset(LayoutUnit(), size.inline_size - caret_width));
-  }
-
+  LayoutUnit caret_block_size = size.block_size;
   // If height of box is smaller than font height, use the latter one,
   // otherwise the caret might become invisible.
   //
@@ -3093,27 +3073,52 @@ PhysicalRect LayoutBox::LocalCaretRect(
   LayoutUnit font_height =
       LayoutUnit(font_data ? font_data->GetFontMetrics().Height() : 0);
   if (font_height > size.block_size || (!IsAtomicInlineLevel() && !IsTable())) {
-    if (is_horizontal) {
-      rect.SetHeight(font_height);
-    } else {
-      rect.SetWidth(font_height);
-    }
+    caret_block_size = font_height;
   }
 
-  if (extra_width_to_end_of_line) {
-    *extra_width_to_end_of_line =
-        is_horizontal ? (offset.left + Size().width - rect.Right())
-                      : (offset.top + Size().height - rect.Bottom());
+  // FIXME: Border/padding should be added for all elements but this workaround
+  // is needed because we use offsets inside an "atomic" element to represent
+  // positions before and after the element in deprecated editing offsets.
+  bool apply_border_padding =
+      GetNode() &&
+      !(EditingIgnoresContent(*GetNode()) || IsDisplayInsideTable(GetNode()));
+
+  if (RuntimeEnabledFeatures::SidewaysWritingModesEnabled()) {
+    WritingDirectionMode writing_direction = Style()->GetWritingDirection();
+    LogicalOffset offset;
+    LayoutUnit content_inline_size = size.inline_size;
+    if (apply_border_padding) {
+      BoxStrut border_padding = (BorderOutsets() + PaddingOutsets())
+                                    .ConvertToLogical(writing_direction);
+      offset.inline_offset = border_padding.inline_start;
+      offset.block_offset = border_padding.block_start;
+      content_inline_size -= border_padding.InlineSum();
+    }
+    if (caret_offset) {
+      offset.inline_offset += content_inline_size - caret_width;
+    }
+
+    LogicalRect rect(offset, LogicalSize(caret_width, caret_block_size));
+    return WritingModeConverter(writing_direction, Size()).ToPhysical(rect);
+  }
+  const bool is_horizontal = IsHorizontalWritingMode();
+  PhysicalOffset offset = PhysicalLocation();
+  PhysicalRect rect(offset, is_horizontal
+                                ? PhysicalSize(caret_width, caret_block_size)
+                                : PhysicalSize(caret_block_size, caret_width));
+  bool ltr = StyleRef().IsLeftToRightDirection();
+
+  if ((!caret_offset) ^ ltr) {
+    rect.Move(
+        is_horizontal
+            ? PhysicalOffset(size.inline_size - caret_width, LayoutUnit())
+            : PhysicalOffset(LayoutUnit(), size.inline_size - caret_width));
   }
 
   // Move to local coords
   rect.Move(-offset);
 
-  // FIXME: Border/padding should be added for all elements but this workaround
-  // is needed because we use offsets inside an "atomic" element to represent
-  // positions before and after the element in deprecated editing offsets.
-  if (GetNode() &&
-      !(EditingIgnoresContent(*GetNode()) || IsDisplayInsideTable(GetNode()))) {
+  if (apply_border_padding) {
     rect.SetX(rect.X() + BorderLeft() + PaddingLeft());
     rect.SetY(rect.Y() + PaddingTop() + BorderTop());
   }
@@ -3553,9 +3558,6 @@ void LayoutBox::CopyVisualOverflowFromFragments() {
   const PhysicalRect visual_overflow = VisualOverflowRect();
   if (visual_overflow == previous_visual_overflow)
     return;
-  if (!RuntimeEnabledFeatures::IntersectionOptimizationEnabled()) {
-    DeprecatedInvalidateIntersectionObserverCachedRects();
-  }
   SetShouldCheckForPaintInvalidation();
 }
 

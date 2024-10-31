@@ -24,9 +24,10 @@ namespace autofill_prediction_improvements {
 class AutofillPredictionImprovementsFillingEngine {
  public:
   struct Prediction {
-    Prediction(std::u16string value, std::u16string label);
+    Prediction(std::u16string value, std::u16string label, bool is_focusable);
     Prediction(std::u16string value,
                std::u16string label,
+               bool is_focusable,
                std::optional<std::u16string> select_option_text);
     Prediction(const Prediction& other);
     ~Prediction();
@@ -36,15 +37,10 @@ class AutofillPredictionImprovementsFillingEngine {
     std::u16string value;
     // The label to be shown in the suggestion.
     std::u16string label;
+    // True when the field targeted for this prediction is focusable.
+    bool is_focusable;
     // Shown as main text in the suggestion if set.
     std::optional<std::u16string> select_option_text = std::nullopt;
-
-   private:
-    // For tests to readably print an instance of this struct.
-    friend void PrintTo(
-        const AutofillPredictionImprovementsFillingEngine::Prediction&
-            prediction,
-        std::ostream* os);
   };
   using PredictionsByGlobalId =
       base::flat_map<autofill::FieldGlobalId, Prediction>;
@@ -60,6 +56,8 @@ class AutofillPredictionImprovementsFillingEngine {
   // there was an error retrieving predictions.
   virtual void GetPredictions(
       autofill::FormData form_data,
+      base::flat_map<autofill::FieldGlobalId, bool> field_eligibility_map,
+      base::flat_map<autofill::FieldGlobalId, bool> field_sensitivity_map,
       optimization_guide::proto::AXTreeUpdate ax_tree_update,
       PredictionsReceivedCallback callback) = 0;
 };

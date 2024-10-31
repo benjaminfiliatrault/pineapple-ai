@@ -19,6 +19,8 @@
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/common/exported_shared_image.mojom-shared.h"
 #include "gpu/ipc/common/gpu_memory_buffer_handle_info.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
+#include "third_party/skia/include/core/SkPixmap.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
@@ -50,10 +52,10 @@ class GPU_EXPORT ClientSharedImage
    public:
     ~ScopedMapping();
 
-    // Returns a pointer to the beginning of the plane.
-    void* Memory(const uint32_t plane_index);
-
     base::span<uint8_t> GetMemoryForPlane(const uint32_t plane_index);
+
+    SkPixmap GetSkPixmapForPlane(const uint32_t plane_index,
+                                 SkImageInfo sk_image_info);
 
     // Returns plane stride.
     size_t Stride(const uint32_t plane_index);
@@ -83,9 +85,17 @@ class GPU_EXPORT ClientSharedImage
 
     ScopedMapping();
     static std::unique_ptr<ScopedMapping> Create(
-        gfx::GpuMemoryBuffer* gpu_memory_buffer);
+        gfx::GpuMemoryBuffer* gpu_memory_buffer,
+        bool is_already_mapped);
+    static void StartCreateAsync(
+        gfx::GpuMemoryBuffer* gpu_memory_buffer,
+        base::OnceCallback<void(std::unique_ptr<ScopedMapping>)> result_cb);
+    static void FinishCreateAsync(
+        gfx::GpuMemoryBuffer* gpu_memory_buffer,
+        base::OnceCallback<void(std::unique_ptr<ScopedMapping>)> result_cb,
+        bool success);
 
-    bool Init(gfx::GpuMemoryBuffer* gpu_memory_buffer);
+    bool Init(gfx::GpuMemoryBuffer* gpu_memory_buffer, bool is_already_mapped);
 
     // ScopedMapping is essentially a wrapper around GpuMemoryBuffer for now for
     // simplicity and will be removed later.
@@ -152,6 +162,17 @@ class GPU_EXPORT ClientSharedImage
   // backing this ClientSI must have been created with CPU_READ/CPU_WRITE usage.
   std::unique_ptr<ScopedMapping> Map();
 
+  // Maps |mailbox| into CPU visible memory and returns a ScopedMapping object
+  // which can be used to read/write to the CPU mapped memory. The SharedImage
+  // backing this ClientSI must have been created with CPU_READ/CPU_WRITE usage.
+  // Default implementation is blocking. However, on some platforms, where
+  // possible, the implementation is non-blocking and may execute the callback
+  // on the GpuMemoryThread. But if no GPU work is necessary, it still may
+  // execute the callback immediately in the current sequence. Note: `this` must
+  // be kept alive until the result callback is executed.
+  void MapAsync(
+      base::OnceCallback<void(std::unique_ptr<ScopedMapping>)> result_cb);
+
   // Returns an unowned copy of the current ClientSharedImage. This function
   // is a temporary workaround for the situation where a ClientSharedImage may
   // have more than one reference when being destroyed.
@@ -176,6 +197,7 @@ class GPU_EXPORT ClientSharedImage
   // SharedImageInterface for testing.
   static scoped_refptr<ClientSharedImage> CreateForTesting();
   static scoped_refptr<ClientSharedImage> CreateForTesting(
+      viz::SharedImageFormat format,
       uint32_t texture_target);
 
   static scoped_refptr<ClientSharedImage> CreateForTesting(
@@ -241,9 +263,7 @@ class GPU_EXPORT ClientSharedImage
         base::UnsafeSharedMemoryRegion memory_region,
         base::OnceCallback<void(bool)> callback) final;
 
-    bool CopyGpuMemoryBufferSync(
-        gfx::GpuMemoryBufferHandle buffer_handle,
-        base::UnsafeSharedMemoryRegion memory_region) final;
+    bool IsConnected() final;
 
    private:
     // Points to the parent ClientSharedImage. It will be used to access SII via
@@ -293,6 +313,11 @@ class GPU_EXPORT ClientSharedImage
     CHECK(gpu_memory_buffer_);
     return gpu_memory_buffer_->GetType() ==
            gfx::GpuMemoryBufferType::SHARED_MEMORY_BUFFER;
+  }
+
+  bool AsyncMappingIsNonBlocking() const {
+    CHECK(gpu_memory_buffer_);
+    return gpu_memory_buffer_->AsyncMappingIsNonBlocking();
   }
 
   // This pair of functions are used by SharedImageTexture to notify

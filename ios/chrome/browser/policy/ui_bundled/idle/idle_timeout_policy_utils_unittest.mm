@@ -32,15 +32,12 @@ class IdleTimeoutPolicyUtilsTest : public PlatformTest {
     TestProfileIOS::Builder builder;
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        AuthenticationServiceFactory::GetDefaultFactory());
-    scoped_feature_list_.InitWithFeatures(
-        {kClearDeviceDataOnSignOutForManagedUsers}, {});
+        AuthenticationServiceFactory::GetFactoryWithDelegate(
+            std::make_unique<FakeAuthenticationServiceDelegate>()));
     profile_ = std::move(builder).Build();
-    AuthenticationServiceFactory::CreateAndInitializeForProfile(
-        profile_.get(), std::make_unique<FakeAuthenticationServiceDelegate>());
     pref_service_ = profile_.get()->GetPrefs();
-    authentication_service_ = static_cast<AuthenticationService*>(
-        AuthenticationServiceFactory::GetForProfile(profile_.get()));
+    authentication_service_ =
+        AuthenticationServiceFactory::GetForProfile(profile_.get());
   }
 
   void TearDown() override { profile_.reset(); }
@@ -66,7 +63,6 @@ class IdleTimeoutPolicyUtilsTest : public PlatformTest {
   }
 
   web::WebTaskEnvironment task_environment_;
-  base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<TestProfileIOS> profile_;
   raw_ptr<PrefService> pref_service_;
   raw_ptr<AuthenticationService> authentication_service_;

@@ -27,7 +27,6 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/cpu.h"
-#include "base/features.h"
 #include "base/functional/bind.h"
 #include "base/i18n/icu_util.h"
 #include "base/i18n/rtl.h"
@@ -106,7 +105,7 @@ std::optional<int> AwMainDelegate::BasicStartupComplete() {
   cl->AppendSwitch(switches::kDisableNotifications);
 
   // Check damage in OnBeginFrame to prevent unnecessary draws.
-  cl->AppendSwitch(cc::switches::kCheckDamageEarly);
+  cl->AppendSwitch(switches::kCheckDamageEarly);
 
   // This is needed for sharing textures across the different GL threads.
   cl->AppendSwitch(switches::kEnableThreadedTextureMailboxes);
@@ -247,12 +246,6 @@ std::optional<int> AwMainDelegate::BasicStartupComplete() {
 
 void AwMainDelegate::PreSandboxStartup() {
   TRACE_EVENT0("startup", "AwMainDelegate::PreSandboxStartup");
-#if defined(ARCH_CPU_ARM_FAMILY)
-  // Create an instance of the CPU class to parse /proc/cpuinfo and cache
-  // cpu_brand info.
-  base::CPU cpu_info;
-#endif
-
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
 
@@ -331,11 +324,6 @@ std::optional<int> AwMainDelegate::PostEarlyInitialization(
     InitIcuAndResourceBundleBrowserSide();
     aw_feature_list_creator_->CreateFeatureListAndFieldTrials();
     content::InitializeMojoCore();
-
-    // Initialize //base features that depend on the `FeatureList`. Don't force
-    // emitting profiler metadata since the profiler doesn't run on Webview.
-    base::features::Init(base::features::EmitThreadControllerProfilerMetadata::
-                             kFeatureDependent);
 
     // WebView apps can override WebView#computeScroll to achieve custom
     // scroll/fling. As a result, fling animations may not be ticked,

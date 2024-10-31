@@ -20,6 +20,13 @@ BASE_FEATURE(kHistoryEmbeddings,
              "HistoryEmbeddings",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Note: This feature has no parameters. Since it entirely depends on the
+// above kHistoryEmbeddings feature, all parameters are owned by that
+// feature to avoid confusion about which feature owns which parameters.
+BASE_FEATURE(kHistoryEmbeddingsAnswers,
+             "HistoryEmbeddingsAnswers",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 const base::FeatureParam<bool> kShowSourcePassages(&kHistoryEmbeddings,
                                                    "ShowSourcePassages",
                                                    false);
@@ -36,11 +43,11 @@ const base::FeatureParam<int> kPassageExtractionMaxWordsPerAggregatePassage(
 const base::FeatureParam<int> kSearchQueryMinimumWordCount(
     &kHistoryEmbeddings,
     "SearchQueryMinimumWordCount",
-    1);
+    2);
 const base::FeatureParam<int> kSearchPassageMinimumWordCount(
     &kHistoryEmbeddings,
     "SearchPassageMinimumWordCount",
-    2);
+    5);
 
 // TODO(b/352384806): Take model metadata from Answerer when available,
 //  and eliminate this parameter as it will then be unnecessary.
@@ -68,7 +75,7 @@ const base::FeatureParam<double> kSearchScoreThreshold(&kHistoryEmbeddings,
                                                        -1);
 
 // This one defaults true because we generally want it whenever v2 is enabled
-// and it will only be used if applicable (EnableAnswers true).
+// and it will only be used if applicable.
 const base::FeatureParam<bool> kEnableIntentClassifier(&kHistoryEmbeddings,
                                                        "EnableIntentClassifier",
                                                        true);
@@ -77,9 +84,10 @@ const base::FeatureParam<bool> kUseMlIntentClassifier(&kHistoryEmbeddings,
                                                       "UseMlIntentClassifier",
                                                       false);
 
-const base::FeatureParam<bool> kEnableAnswers(&kHistoryEmbeddings,
-                                              "EnableAnswers",
-                                              false);
+const base::FeatureParam<int> kMockIntentClassifierDelayMS(
+    &kHistoryEmbeddings,
+    "MockIntentClassifierDelayMS",
+    0);
 
 const base::FeatureParam<bool> kUseMlAnswerer(&kHistoryEmbeddings,
                                               "UseMlAnswerer",
@@ -89,17 +97,35 @@ const base::FeatureParam<double> kMlAnswererMinScore(&kHistoryEmbeddings,
                                                      "MlAnswererMinScore",
                                                      0.5);
 
+const base::FeatureParam<int> kMockAnswererDelayMS(&kHistoryEmbeddings,
+                                                   "MockAnswererDelayMS",
+                                                   0);
+
+// Default to `ComputeAnswerStatus::SUCCESS`.
+const base::FeatureParam<int> kMockAnswererStatus(&kHistoryEmbeddings,
+                                                  "MockAnswererStatus",
+                                                  2);
+
+const base::FeatureParam<bool> kForceAnswererUseAllowed(
+    &kHistoryEmbeddings,
+    "ForceAnswererUseAllowed",
+    false);
+
 const base::FeatureParam<bool> kEnableImagesForResults(&kHistoryEmbeddings,
                                                        "EnableImagesForResults",
                                                        false);
 
 const base::FeatureParam<bool> kOmniboxScoped(&kHistoryEmbeddings,
                                               "OmniboxScoped",
-                                              false);
+                                              true);
 
 const base::FeatureParam<bool> kOmniboxUnscoped(&kHistoryEmbeddings,
                                                 "OmniboxUnscoped",
                                                 false);
+
+const base::FeatureParam<bool> kAnswersInOmniboxScoped(&kHistoryEmbeddings,
+                                                       "AnswersInOmniboxScoped",
+                                                       false);
 
 const base::FeatureParam<int> kScheduledEmbeddingsMax(&kHistoryEmbeddings,
                                                       "ScheduledEmbeddingsMax",
@@ -149,6 +175,15 @@ const base::FeatureParam<bool> kEnableSidePanel(&kHistoryEmbeddings,
                                                 "EnableSidePanel",
                                                 false);
 
+const base::FeatureParam<bool> kTrimAfterHostInResults(&kHistoryEmbeddings,
+                                                       "TrimAfterHostInResults",
+                                                       false);
+
+const base::FeatureParam<int> kMaxAnswererContextUrlCount(
+    &kHistoryEmbeddings,
+    "MaxAnswererContextUrlCount",
+    1);
+
 const base::FeatureParam<double> kWordMatchMinEmbeddingScore(
     &kHistoryEmbeddings,
     "WordMatchMinEmbeddingScore",
@@ -172,6 +207,19 @@ const base::FeatureParam<int> kWordMatchSmoothingFactor(
     "WordMatchSmoothingFactor",
     1);
 
+const base::FeatureParam<int> kWordMatchMaxTermCount(&kHistoryEmbeddings,
+                                                     "WordMatchMaxTermCount",
+                                                     3);
+
+const base::FeatureParam<bool> kScrollTagsEnabled(&kHistoryEmbeddings,
+                                                  "ScrollTagsEnabled",
+                                                  false);
+
+const base::FeatureParam<double> kWordMatchRequiredTermRatio(
+    &kHistoryEmbeddings,
+    "WordMatchRequiredTermRatio",
+    1.0);
+
 bool IsHistoryEmbeddingsEnabled() {
 #if BUILDFLAG(IS_CHROMEOS)
   return chromeos::features::IsFeatureManagementHistoryEmbeddingEnabled() &&
@@ -179,6 +227,11 @@ bool IsHistoryEmbeddingsEnabled() {
 #else
   return base::FeatureList::IsEnabled(kHistoryEmbeddings);
 #endif
+}
+
+bool IsHistoryEmbeddingsAnswersEnabled() {
+  return IsHistoryEmbeddingsEnabled() &&
+         base::FeatureList::IsEnabled(kHistoryEmbeddingsAnswers);
 }
 
 }  // namespace history_embeddings

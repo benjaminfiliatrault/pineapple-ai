@@ -44,6 +44,7 @@
 #include "chrome/browser/devtools/device/tcp_device_provider.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
+#include "chrome/browser/devtools/features.h"
 #include "chrome/browser/devtools/protocol/browser_handler.h"
 #include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
 #include "chrome/browser/extensions/chrome_extension_test_notification_observer.h"
@@ -74,10 +75,10 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
-#include "chrome/browser/ui/extensions/extension_side_panel_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/side_panel/extensions/extension_side_panel_manager.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -1955,7 +1956,8 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
   ASSERT_TRUE(extension);
 
   ExtensionTestMessageListener default_path_listener("default_path");
-  extensions::OpenExtensionSidePanel(*browser(), extension->id());
+  browser()->GetFeatures().side_panel_ui()->Show(
+      SidePanelEntry::Key(SidePanelEntry::Id::kExtension, extension->id()));
   ASSERT_TRUE(default_path_listener.WaitUntilSatisfied());
 
   content::WebContents* side_panel_contents =
@@ -2992,11 +2994,11 @@ IN_PROC_BROWSER_TEST_F(DevToolsTest,
 IN_PROC_BROWSER_TEST_F(DevToolsTest, TestRawHeadersWithRedirectAndHSTS) {
   net::EmbeddedTestServer https_test_server(
       net::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.SetSSLConfig(
-      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
+  https_test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_TEST_NAMES);
   https_test_server.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
   ASSERT_TRUE(https_test_server.Start());
-  GURL https_url = https_test_server.GetURL("localhost", "/devtools/image.png");
+  // Localhost does not support HSTS, so we must serve from "a.test" instead.
+  GURL https_url = https_test_server.GetURL("a.test", "/devtools/image.png");
   base::Time expiry = base::Time::Now() + base::Days(1000);
   bool include_subdomains = false;
   mojo::ScopedAllowSyncCallForTesting allow_sync_call;
@@ -4263,4 +4265,35 @@ IN_PROC_BROWSER_TEST_F(DevToolsSelfXssTest, FooFoo) {
   EXPECT_TRUE(hasQueryParam(wc, "&disableSelfXssWarnings=true"));
 
   CloseDevToolsWindow();
+}
+
+class DevToolsRenderDocumentTest : public DevToolsTest {
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    content::InitAndEnableRenderDocumentForAllFrames(
+        &feature_list_for_render_document_);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_for_render_document_;
+};
+
+// This test verifies that the devtools window is not accidentally destroyed
+// on reload with RenderDocument enabled (https://crbug.com/337794575).
+IN_PROC_BROWSER_TEST_F(DevToolsRenderDocumentTest, ReloadWithRFHSwap) {
+  OpenDevToolsWindow(kDebuggerTestPage, false);
+  bool called = false;
+  auto* inspected_web_contents = GetInspectedTab();
+  auto agent_host =
+      content::DevToolsAgentHost::GetOrCreateForTab(inspected_web_contents);
+  EXPECT_EQ(window_, DevToolsWindow::FindDevToolsWindow(agent_host.get()));
+  DevToolsWindowTesting::Get(window_)->SetCloseCallback(
+      base::BindOnce([](bool& called) { called = true; }, std::ref(called)));
+  WebContents* main_web_contents =
+      DevToolsWindowTesting::Get(window_)->main_web_contents();
+  main_web_contents->ReloadFocusedFrame();
+  EXPECT_TRUE(WaitForLoadStop(main_web_contents));
+  EXPECT_FALSE(called);
+  EXPECT_EQ(window_, DevToolsWindow::FindDevToolsWindow(agent_host.get()));
+  DevToolsWindowTesting::Get(window_)->CloseDevToolsWindowSync(window_);
 }

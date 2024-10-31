@@ -216,7 +216,6 @@ class PasswordDetailsTableViewControllerTest
     : public LegacyChromeTableViewControllerTest {
  protected:
   PasswordDetailsTableViewControllerTest() {
-    feature_list_.InitAndEnableFeature(syncer::kSyncWebauthnCredentials);
     handler_ = [[FakePasswordDetailsHandler alloc] init];
     delegate_ = [[FakePasswordDetailsDelegate alloc] init];
     reauthentication_module_ = [[MockReauthenticationModule alloc] init];
@@ -444,6 +443,10 @@ TEST_F(PasswordDetailsTableViewControllerTest, TestPassword) {
 
 // Tests that passkey is displayed properly.
 TEST_F(PasswordDetailsTableViewControllerTest, TestPasskey) {
+  if (!syncer::IsWebauthnCredentialSyncEnabled()) {
+    GTEST_SKIP() << "This build configuration does not support passkeys.";
+  }
+
   base::Time creation_time = SetPasskey();
   EXPECT_EQ(1, NumberOfSections());
   EXPECT_EQ(4, NumberOfItemsInSection(0));
@@ -452,7 +455,7 @@ TEST_F(PasswordDetailsTableViewControllerTest, TestPasskey) {
   CheckEditCellText(Username(), 0, 2);
   CheckEditCellText(
       l10n_util::GetNSStringF(IDS_IOS_PASSKEY_CREATION_DATE,
-                              base::TimeFormatShortDateNumeric(creation_time)),
+                              base::TimeFormatShortDate(creation_time)),
       0, 3);
 }
 
@@ -601,11 +604,12 @@ TEST_F(PasswordDetailsTableViewControllerTest, TestChangePasswordOnWebsite) {
       [model indexPathForItemType:PasswordDetailsItemTypeChangePasswordButton];
 
   OCMExpect([applicationCommandsMock
-      closeSettingsUIAndOpenURL:[OCMArg checkWithBlock:^BOOL(id value) {
-        // This block verifies that the closeSettingsUIAndOpenURL function is
-        // called with a URL argument which matches the initial URL passed to
-        // the password form above. Information may have been appended to the
-        // URL argument, so we only make sure it includes the initial URL.
+      closePresentedViewsAndOpenURL:[OCMArg checkWithBlock:^BOOL(id value) {
+        // This block verifies that the closePresentedViewsAndOpenURL
+        // function is called with a URL argument which matches the initial URL
+        // passed to the password form above. Information may have been appended
+        // to the URL argument, so we only make sure it includes the initial
+        // URL.
         return base::Contains(((OpenNewTabCommand*)value).URL.spec(),
                               kExampleCom);
       }]]);

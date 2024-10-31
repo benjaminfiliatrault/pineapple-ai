@@ -203,13 +203,11 @@ export class SummarizationView extends ReactiveLitElement {
   override updated(): void {
     const summaryState = this.platformHandler.summaryModelLoader.state;
     if (settings.value.summaryEnabled === SummaryEnableState.ENABLED &&
-      summaryState.value.kind === 'installing') {
+        summaryState.value.kind === 'installing') {
       this.downloadRequested.value = true;
-    } else if (
-      this.downloadRequested.value &&
-      !this.downloadPerfCollected.value &&
-      summaryState.value.kind === 'installed'
-    ) {
+    } else if (this.downloadRequested.value &&
+               !this.downloadPerfCollected.value &&
+               summaryState.value.kind === 'installed') {
       // TODO: b/367263595 - Collect perf in PlatformHandler instead.
       this.platformHandler.perfLogger.finish('summaryModelDownload');
       this.downloadPerfCollected.value = true;
@@ -248,7 +246,13 @@ export class SummarizationView extends ReactiveLitElement {
     return html`
       <div id="footer">
         ${i18n.genAiDisclaimerText}
-        <a href=${HELP_URL} target="_blank">${i18n.genAiLearnMoreLink}</a>
+        <a
+          href=${HELP_URL}
+          target="_blank"
+          aria-label=${i18n.genAiLearnMoreLinkTooltip}
+        >
+          ${i18n.genAiLearnMoreLink}
+        </a>
       </div>
       <genai-feedback-buttons .resultType=${GenaiResultType.SUMMARY}>
       </genai-feedback-buttons>
@@ -288,10 +292,7 @@ export class SummarizationView extends ReactiveLitElement {
         return html`<spoken-message role="status" aria-live="polite">
             ${i18n.summaryFinishedStatusMessage}
           </spoken-message>
-          <ul
-            id="summary"
-            ${ref(this.summaryContainer)}
-          >
+          <ul id="summary" ${ref(this.summaryContainer)}>
             ${this.renderSummaryResult(summary.result)}
           </ul>
           ${this.renderSummaryFooter()}`;
@@ -317,9 +318,12 @@ export class SummarizationView extends ReactiveLitElement {
     // TODO: b/336963138 - Implement error state.
     const downloadStatus = html`<spoken-message
       role="status"
-      aria-live="polite">
-        ${i18n.summaryDownloadFinishedStatusMessage}
-      </spoken-message>`;
+      aria-live="polite"
+    >
+      ${i18n.summaryDownloadFinishedStatusMessage}
+    </spoken-message>`;
+    // TODO(hsuanling): add tooltip to arrow button once `cros-accordion`
+    // exposes an anchor slot.
     return html`
       <cros-accordion variant="compact">
         <cros-accordion-item

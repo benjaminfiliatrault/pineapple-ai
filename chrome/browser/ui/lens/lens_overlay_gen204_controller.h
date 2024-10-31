@@ -17,16 +17,20 @@ namespace lens {
 class LensOverlayGen204Controller {
  public:
   LensOverlayGen204Controller();
-  ~LensOverlayGen204Controller();
+
+  virtual ~LensOverlayGen204Controller();
 
   // Sets the state of the controller. Should be called once
-  // per query flow, at the start.
+  // per query flow, at the start, when the Lens Overlay opens.
   void OnQueryFlowStart(lens::LensOverlayInvocationSource invocation_source,
                         Profile* profile,
                         uint64_t gen204_id);
 
   // Sends a Lens objects request latency gen204 request.
-  void SendLatencyGen204IfEnabled(int64_t latency_ms, bool is_translate_query);
+  void SendLatencyGen204IfEnabled(
+      base::TimeDelta full_image_latency,
+      std::optional<base::TimeDelta> cluster_info_latency,
+      bool is_translate_query);
 
   // Sends a task completion gen204 request. The analytics id is the
   // latest Lens request analytics id from the query controller.
@@ -35,15 +39,21 @@ class LensOverlayGen204Controller {
   void SendTaskCompletionGen204IfEnabled(std::string encoded_analytics_id,
                                          lens::mojom::UserAction user_action);
 
+  // Sends a semantic event gen204 request.
+  void SendSemanticEventGen204IfEnabled(lens::mojom::SemanticEvent event);
+
   // Sends any final gen204 requests and marks the end of the query flow.
+  // Called when the Lens Overlay is closed.
   // The analytics id is the latest Lens request analytics id from the
   // query controller.
   void OnQueryFlowEnd(std::string encoded_analytics_id);
 
- private:
   // Issues the gen204 network request and adds a loader to gen204_loaders_.
-  void IssueGen204NetworkRequest(GURL url);
+  // Checks that the user is opted into metrics logging.
+  // Can be overridden for testing.
+  virtual void CheckMetricsConsentAndIssueGen204NetworkRequest(GURL url);
 
+ private:
   // Handles the gen204 network response and removes the source from
   // gen204_loaders_.
   void OnGen204NetworkResponse(const network::SimpleURLLoader* source,

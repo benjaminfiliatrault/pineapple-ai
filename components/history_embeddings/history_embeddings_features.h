@@ -10,7 +10,15 @@
 
 namespace history_embeddings {
 
+// This is the main feature switch for history embeddings search, and when it is
+// disabled, answering functionality will not be available either.
 BASE_DECLARE_FEATURE(kHistoryEmbeddings);
+
+// This feature specifies whether to answer queries using an answerer; it can be
+// considered a toggle for v2 answering functionality. Parameters are all kept
+// under the primary kHistoryEmbeddings feature. The kHistoryEmbeddingsAnswers
+// feature state is not applicable if kHistoryEmbeddings is disabled.
+BASE_DECLARE_FEATURE(kHistoryEmbeddingsAnswers);
 
 // Displays source passages in the UI on chrome://history for debug purposes.
 extern const base::FeatureParam<bool> kShowSourcePassages;
@@ -61,15 +69,27 @@ extern const base::FeatureParam<bool> kEnableIntentClassifier;
 // used).
 extern const base::FeatureParam<bool> kUseMlIntentClassifier;
 
-// Specifies whether to answer queries using an answerer (mock or ML). This
-// can be considered a toggle for v2 functionality.
-extern const base::FeatureParam<bool> kEnableAnswers;
+// Specifies the delay in milliseconds to use for the mock intent classifier for
+// local development.
+extern const base::FeatureParam<int> kMockIntentClassifierDelayMS;
 
 // Specifies whether to use the ML Answerer (if false, the mock is used).
 extern const base::FeatureParam<bool> kUseMlAnswerer;
 
 // Specifies the min score for generated answer from the ML answerer.
 extern const base::FeatureParam<double> kMlAnswererMinScore;
+
+// Specifies the delay in milliseconds to use for the mock answerer for local
+// development.
+extern const base::FeatureParam<int> kMockAnswererDelayMS;
+
+// Specifies the answer status to use for the mock answerer for local
+// development.
+extern const base::FeatureParam<int> kMockAnswererStatus;
+
+// This can be used to bypass IsAnswererUseAllowed checks. It's necessary for
+// testing and development but should remain false in real configurations.
+extern const base::FeatureParam<bool> kForceAnswererUseAllowed;
 
 // Specifies whether to show images in results for search results on the
 // chrome://history page.
@@ -82,6 +102,10 @@ extern const base::FeatureParam<bool> kOmniboxScoped;
 // Whether history embedding results should be shown in the omnibox when not in
 // the '@history' scope. If true, behaves as if `kOmniboxScoped` is also true.
 extern const base::FeatureParam<bool> kOmniboxUnscoped;
+
+// Whether history embedding answers should be shown in the omnibox when in the
+// '@history' scope. No-op if `kOmniboxScoped` is false.
+extern const base::FeatureParam<bool> kAnswersInOmniboxScoped;
 
 // The maximum number of embeddings to submit to the primary (ML) embedder
 // in a single batch via the scheduling embedder.
@@ -129,17 +153,33 @@ extern const base::FeatureParam<base::TimeDelta> kEmbeddingsServiceTimeout;
 // history embeddings.
 extern const base::FeatureParam<bool> kEnableSidePanel;
 
+// Specifies whether history embedding results should show just the hostname of
+// the result's URL.
+extern const base::FeatureParam<bool> kTrimAfterHostInResults;
+
+// The maximum number of URLs to use when building context for answerer.
+extern const base::FeatureParam<int> kMaxAnswererContextUrlCount;
+
 // These control score boosting from passage text word matching.
+// See comments for `SearchParams` struct for more details about each value.
 extern const base::FeatureParam<double> kWordMatchMinEmbeddingScore;
 extern const base::FeatureParam<int> kWordMatchMinTermLength;
 extern const base::FeatureParam<double> kWordMatchScoreBoostFactor;
 extern const base::FeatureParam<int> kWordMatchLimit;
 extern const base::FeatureParam<int> kWordMatchSmoothingFactor;
+extern const base::FeatureParam<int> kWordMatchMaxTermCount;
+extern const base::FeatureParam<double> kWordMatchRequiredTermRatio;
+
+// Whether to include scroll to text fragment directives with answer citations.
+extern const base::FeatureParam<bool> kScrollTagsEnabled;
 
 // Whether the history embeddings feature is enabled. This only checks if the
 // feature flags are enabled and does not check the user's opt-in preference.
 // See chrome/browser/history_embeddings/history_embeddings_utils.h.
 bool IsHistoryEmbeddingsEnabled();
+
+// Whether the history answers feature is enabled.
+bool IsHistoryEmbeddingsAnswersEnabled();
 
 }  // namespace history_embeddings
 

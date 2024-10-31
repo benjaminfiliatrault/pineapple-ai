@@ -100,6 +100,20 @@ void AddCertificateManagerV2Strings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_CERTIFICATE_MANAGER_V2_EXPORT_BUTTON_LABEL},
       {"certificateManagerV2ExportButtonAriaLabel",
        IDS_SETTINGS_CERTIFICATE_MANAGER_V2_EXPORT_BUTTON_ARIA_LABEL},
+      {"certificateManagerV2DeleteErrorTitle",
+       IDS_SETTINGS_CERTIFICATE_MANAGER_V2_DELETE_ERROR_TITLE},
+      {"certificateManagerV2ImportErrorTitle",
+       IDS_SETTINGS_CERTIFICATE_MANAGER_V2_IMPORT_ERROR_TITLE},
+      {"certificateManagerV2ImportButtonLabel",
+       IDS_SETTINGS_CERTIFICATE_MANAGER_V2_IMPORT_BUTTON_LABEL},
+      {"certificateManagerV2ImportButtonAriaLabel",
+       IDS_SETTINGS_CERTIFICATE_MANAGER_V2_IMPORT_BUTTON_ARIA_LABEL},
+      {"certificateManagerV2ImportAndBindButtonLabel",
+       IDS_SETTINGS_CERTIFICATE_MANAGER_V2_IMPORT_AND_BIND_BUTTON_LABEL},
+      {"certificateManagerV2ImportAndBindButtonAriaLabel",
+       IDS_SETTINGS_CERTIFICATE_MANAGER_V2_IMPORT_AND_BIND_BUTTON_ARIA_LABEL},
+      {"certificateManagerV2EnterPasswordTitle",
+       IDS_SETTINGS_CERTIFICATE_MANAGER_V2_ENTER_PASSWORD_TITLE},
       {"certificateManagerV2PlatformCertsTitle",
        IDS_SETTINGS_CERTIFICATE_MANAGER_V2_PLATFORM_CERTS_TITLE},
       {"certificateManagerV2PlatformCertsToggleLabel",
@@ -124,7 +138,8 @@ void AddCertificateManagerV2Strings(content::WebUIDataSource* html_source) {
        IDS_CERTIFICATE_MANAGER_V2_CERT_ENTRY_DELETE_ARIA_LABEL},
       {"certificateManagerV2CertHashCopyAriaLabel",
        IDS_CERTIFICATE_MANAGER_V2_CERT_HASH_COPY_ARIA_LABEL},
-  };
+      {"certificateManagerV2UserCertsTitle",
+       IDS_SETTINGS_CERTIFICATE_MANAGER_V2_USER_CERTS_TITLE}};
   html_source->AddLocalizedStrings(kLocalizedStrings);
 }
 #endif  // BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)

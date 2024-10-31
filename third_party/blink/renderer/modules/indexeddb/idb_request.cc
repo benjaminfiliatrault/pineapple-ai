@@ -39,6 +39,7 @@
 #include "third_party/blink/public/platform/web_blob_info.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_binding_for_modules.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_idb_request_ready_state.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_idbcursor_idbindex_idbobjectstore.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_idbindex_idbobjectstore.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
@@ -320,18 +321,18 @@ const IDBRequest::Source* IDBRequest::source(ScriptState* script_state) const {
   return source_.Get();
 }
 
-const String& IDBRequest::readyState() const {
+V8IDBRequestReadyState IDBRequest::readyState() const {
   if (!GetExecutionContext()) {
     DCHECK(ready_state_ == DONE || ready_state_ == kEarlyDeath);
-    return indexed_db_names::kDone;
+    return V8IDBRequestReadyState(V8IDBRequestReadyState::Enum::kDone);
   }
 
   DCHECK(ready_state_ == PENDING || ready_state_ == DONE);
 
   if (ready_state_ == PENDING)
-    return indexed_db_names::kPending;
+    return V8IDBRequestReadyState(V8IDBRequestReadyState::Enum::kPending);
 
-  return indexed_db_names::kDone;
+  return V8IDBRequestReadyState(V8IDBRequestReadyState::Enum::kDone);
 }
 
 void IDBRequest::Abort(bool queue_dispatch) {
@@ -427,7 +428,6 @@ bool IDBRequest::CanStillSendResult() const {
 }
 
 void IDBRequest::HandleResponse(std::unique_ptr<IDBKey> key) {
-  transit_blob_handles_.clear();
   transaction_->EnqueueResult(std::make_unique<IDBRequestQueueItem>(
       this, std::move(key),
       WTF::BindOnce(&IDBTransaction::OnResultReady,
@@ -435,7 +435,6 @@ void IDBRequest::HandleResponse(std::unique_ptr<IDBKey> key) {
 }
 
 void IDBRequest::HandleResponse(int64_t value) {
-  DCHECK(transit_blob_handles_.empty());
   transaction_->EnqueueResult(std::make_unique<IDBRequestQueueItem>(
       this, value,
       WTF::BindOnce(&IDBTransaction::OnResultReady,
@@ -443,14 +442,12 @@ void IDBRequest::HandleResponse(int64_t value) {
 }
 
 void IDBRequest::HandleResponse() {
-  transit_blob_handles_.clear();
   transaction_->EnqueueResult(std::make_unique<IDBRequestQueueItem>(
       this, WTF::BindOnce(&IDBTransaction::OnResultReady,
                           WrapPersistent(transaction_.Get()))));
 }
 
 void IDBRequest::HandleResponse(std::unique_ptr<IDBValue> value) {
-  DCHECK(transit_blob_handles_.empty());
   value->SetIsolate(GetIsolate());
   transaction_->EnqueueResult(std::make_unique<IDBRequestQueueItem>(
       this, std::move(value),
@@ -462,8 +459,6 @@ void IDBRequest::HandleResponseAdvanceCursor(
     std::unique_ptr<IDBKey> key,
     std::unique_ptr<IDBKey> primary_key,
     std::unique_ptr<IDBValue> optional_value) {
-  DCHECK(transit_blob_handles_.empty());
-
   std::unique_ptr<IDBValue> value =
       optional_value
           ? std::move(optional_value)
@@ -484,12 +479,12 @@ void IDBRequest::OnClear(bool success) {
 }
 
 void IDBRequest::OnGetAll(
-    bool key_only,
+    mojom::blink::IDBGetAllResultType result_type,
     mojo::PendingAssociatedReceiver<mojom::blink::IDBDatabaseGetAllResultSink>
         receiver) {
   probe::AsyncTask async_task(GetExecutionContext(), &async_task_context_,
                               "success");
-  DCHECK(transit_blob_handles_.empty());
+  bool key_only = (result_type == mojom::blink::IDBGetAllResultType::Keys);
   transaction_->EnqueueResult(std::make_unique<IDBRequestQueueItem>(
       this, key_only, std::move(receiver),
       WTF::BindOnce(&IDBTransaction::OnResultReady,
@@ -647,7 +642,6 @@ void IDBRequest::HandleError(mojom::blink::IDBErrorPtr error) {
       static_cast<DOMExceptionCode>(code),
       error ? error->error_message : "Invalid response");
 
-  transit_blob_handles_.clear();
   transaction_->EnqueueResult(std::make_unique<IDBRequestQueueItem>(
       this, exception,
       WTF::BindOnce(&IDBTransaction::OnResultReady,
@@ -729,7 +723,6 @@ void IDBRequest::SendResult(IDBAny* result) {
   }
 
   DCHECK(!pending_cursor_);
-  DCHECK(transit_blob_handles_.empty());
   SetResult(result);
   DispatchEvent(*Event::Create(event_type_names::kSuccess));
 }

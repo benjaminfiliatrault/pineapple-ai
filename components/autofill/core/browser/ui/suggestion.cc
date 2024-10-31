@@ -12,162 +12,21 @@
 #include "components/autofill/core/browser/ui/suggestion_type.h"
 
 namespace autofill {
-Suggestion::PasswordSuggestionDetails::PasswordSuggestionDetails() = default;
-Suggestion::PasswordSuggestionDetails::PasswordSuggestionDetails(
-    std::u16string_view username,
-    std::u16string_view password,
-    std::string_view signon_realm,
-    std::u16string_view display_signon_realm,
-    bool is_cross_domain)
-    : username(username),
-      password(password),
-      signon_realm(signon_realm),
-      display_signon_realm(display_signon_realm),
-      is_cross_domain(is_cross_domain) {}
 
-Suggestion::PasswordSuggestionDetails::PasswordSuggestionDetails(
-    const PasswordSuggestionDetails&) = default;
-Suggestion::PasswordSuggestionDetails::PasswordSuggestionDetails(
-    PasswordSuggestionDetails&) = default;
-Suggestion::PasswordSuggestionDetails&
-Suggestion::PasswordSuggestionDetails::operator=(
-    const PasswordSuggestionDetails&) = default;
-Suggestion::PasswordSuggestionDetails&
-Suggestion::PasswordSuggestionDetails::operator=(PasswordSuggestionDetails&&) =
-    default;
-Suggestion::PasswordSuggestionDetails::~PasswordSuggestionDetails() = default;
+namespace {
 
-Suggestion::PlusAddressPayload::PlusAddressPayload() = default;
-
-Suggestion::PlusAddressPayload::PlusAddressPayload(
-    std::optional<std::u16string> address)
-    : address(std::move(address)) {}
-
-Suggestion::PlusAddressPayload::PlusAddressPayload(const PlusAddressPayload&) =
-    default;
-
-Suggestion::PlusAddressPayload::PlusAddressPayload(PlusAddressPayload&&) =
-    default;
-
-Suggestion::PlusAddressPayload& Suggestion::PlusAddressPayload::operator=(
-    const PlusAddressPayload&) = default;
-
-Suggestion::PlusAddressPayload& Suggestion::PlusAddressPayload::operator=(
-    PlusAddressPayload&&) = default;
-
-Suggestion::PlusAddressPayload::~PlusAddressPayload() = default;
-
-Suggestion::PredictionImprovementsPayload::PredictionImprovementsPayload() =
-    default;
-
-Suggestion::PredictionImprovementsPayload::PredictionImprovementsPayload(
-    const base::flat_map<FieldGlobalId, std::u16string>& values_to_fill,
-    const FieldTypeSet& field_types_to_fill,
-    const DenseSet<FieldFillingSkipReason>& ignorable_skip_reasons)
-    : values_to_fill(std::move(values_to_fill)),
-      field_types_to_fill(std::move(field_types_to_fill)),
-      ignorable_skip_reasons(std::move(ignorable_skip_reasons)) {}
-
-Suggestion::PredictionImprovementsPayload::PredictionImprovementsPayload(
-    const PredictionImprovementsPayload&) = default;
-
-Suggestion::PredictionImprovementsPayload::PredictionImprovementsPayload(
-    PredictionImprovementsPayload&&) = default;
-
-Suggestion::PredictionImprovementsPayload&
-Suggestion::PredictionImprovementsPayload::operator=(
-    const PredictionImprovementsPayload&) = default;
-
-Suggestion::PredictionImprovementsPayload&
-Suggestion::PredictionImprovementsPayload::operator=(
-    PredictionImprovementsPayload&&) = default;
-
-Suggestion::PredictionImprovementsPayload::~PredictionImprovementsPayload() =
-    default;
-
-Suggestion::PaymentsPayload::PaymentsPayload() = default;
-
-Suggestion::PaymentsPayload::PaymentsPayload(
-    bool should_display_terms_available)
-    : should_display_terms_available(should_display_terms_available) {}
-
-Suggestion::PaymentsPayload::PaymentsPayload(const PaymentsPayload&) = default;
-
-Suggestion::PaymentsPayload::PaymentsPayload(PaymentsPayload&&) = default;
-
-Suggestion::PaymentsPayload& Suggestion::PaymentsPayload::operator=(
-    const PaymentsPayload&) = default;
-
-Suggestion::PaymentsPayload& Suggestion::PaymentsPayload::operator=(
-    PaymentsPayload&&) = default;
-
-Suggestion::PaymentsPayload::~PaymentsPayload() = default;
-
-Suggestion::Text::Text() = default;
-
-Suggestion::Text::Text(std::u16string value,
-                       IsPrimary is_primary,
-                       ShouldTruncate should_truncate)
-    : value(value), is_primary(is_primary), should_truncate(should_truncate) {}
-
-Suggestion::Text::Text(const Text& other) = default;
-Suggestion::Text::Text(Text& other) = default;
-
-Suggestion::Text& Suggestion::Text::operator=(const Text& other) = default;
-Suggestion::Text& Suggestion::Text::operator=(Text&& other) = default;
-
-Suggestion::Text::~Text() = default;
-
-Suggestion::Suggestion() = default;
-
-Suggestion::Suggestion(std::u16string main_text)
-    : main_text(std::move(main_text), Text::IsPrimary(true)) {}
-
-Suggestion::Suggestion(SuggestionType type) : type(type) {}
-
-Suggestion::Suggestion(std::u16string main_text, SuggestionType type)
-    : type(type), main_text(std::move(main_text), Text::IsPrimary(true)) {}
-
-Suggestion::Suggestion(std::string_view main_text,
-                       std::string_view label,
-                       Icon icon,
-                       SuggestionType type)
-    : type(type),
-      main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
-      icon(icon) {
-  if (!label.empty())
-    this->labels = {{Text(base::UTF8ToUTF16(label))}};
+std::string_view ConvertAcceptabilityToPrintableString(
+  Suggestion::Acceptability acceptability) {
+  switch (acceptability) {
+    case Suggestion::Acceptability::kAcceptable:
+      return "kAcceptable";
+    case Suggestion::Acceptability::kUnacceptable:
+      return "kUnacceptable";
+    case Suggestion::Acceptability::kUnacceptableWithDeactivatedStyle:
+      return "kUnacceptableWithDeactivatedStyle";
+  }
+  NOTREACHED();
 }
-
-Suggestion::Suggestion(std::string_view main_text,
-                       std::vector<std::vector<Text>> labels,
-                       Icon icon,
-                       SuggestionType type)
-    : type(type),
-      main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
-      labels(std::move(labels)),
-      icon(icon) {}
-
-Suggestion::Suggestion(std::string_view main_text,
-                       std::string_view minor_text,
-                       std::string_view label,
-                       Icon icon,
-                       SuggestionType type)
-    : type(type),
-      main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
-      minor_text(base::UTF8ToUTF16(minor_text)),
-      icon(icon) {
-  if (!label.empty())
-    this->labels = {{Text(base::UTF8ToUTF16(label))}};
-}
-
-Suggestion::Suggestion(const Suggestion& other) = default;
-Suggestion::Suggestion(Suggestion&& other) = default;
-
-Suggestion& Suggestion::operator=(const Suggestion& other) = default;
-Suggestion& Suggestion::operator=(Suggestion&& other) = default;
-
-Suggestion::~Suggestion() = default;
 
 std::string_view ConvertIconToPrintableString(Suggestion::Icon icon) {
   switch (icon) {
@@ -261,6 +120,213 @@ std::string_view ConvertIconToPrintableString(Suggestion::Icon icon) {
   NOTREACHED();
 }
 
+} // namespace
+
+Suggestion::PasswordSuggestionDetails::PasswordSuggestionDetails() = default;
+Suggestion::PasswordSuggestionDetails::PasswordSuggestionDetails(
+    std::u16string_view username,
+    std::u16string_view password,
+    std::string_view signon_realm,
+    std::u16string_view display_signon_realm,
+    bool is_cross_domain)
+    : username(username),
+      password(password),
+      signon_realm(signon_realm),
+      display_signon_realm(display_signon_realm),
+      is_cross_domain(is_cross_domain) {}
+
+Suggestion::PasswordSuggestionDetails::PasswordSuggestionDetails(
+    const PasswordSuggestionDetails&) = default;
+Suggestion::PasswordSuggestionDetails::PasswordSuggestionDetails(
+    PasswordSuggestionDetails&) = default;
+Suggestion::PasswordSuggestionDetails&
+Suggestion::PasswordSuggestionDetails::operator=(
+    const PasswordSuggestionDetails&) = default;
+Suggestion::PasswordSuggestionDetails&
+Suggestion::PasswordSuggestionDetails::operator=(PasswordSuggestionDetails&&) =
+    default;
+Suggestion::PasswordSuggestionDetails::~PasswordSuggestionDetails() = default;
+
+Suggestion::PlusAddressPayload::PlusAddressPayload() = default;
+
+Suggestion::PlusAddressPayload::PlusAddressPayload(
+    std::optional<std::u16string> address)
+    : address(std::move(address)) {}
+
+Suggestion::PlusAddressPayload::PlusAddressPayload(const PlusAddressPayload&) =
+    default;
+
+Suggestion::PlusAddressPayload::PlusAddressPayload(PlusAddressPayload&&) =
+    default;
+
+Suggestion::PlusAddressPayload& Suggestion::PlusAddressPayload::operator=(
+    const PlusAddressPayload&) = default;
+
+Suggestion::PlusAddressPayload& Suggestion::PlusAddressPayload::operator=(
+    PlusAddressPayload&&) = default;
+
+Suggestion::PlusAddressPayload::~PlusAddressPayload() = default;
+
+Suggestion::PredictionImprovementsPayload::PredictionImprovementsPayload() =
+    default;
+
+Suggestion::PredictionImprovementsPayload::PredictionImprovementsPayload(
+    const base::flat_map<FieldGlobalId, std::u16string>& values_to_fill,
+    const FieldTypeSet& field_types_to_fill,
+    const DenseSet<FieldFillingSkipReason>& ignorable_skip_reasons)
+    : values_to_fill(std::move(values_to_fill)),
+      field_types_to_fill(std::move(field_types_to_fill)),
+      ignorable_skip_reasons(std::move(ignorable_skip_reasons)) {}
+
+Suggestion::PredictionImprovementsPayload::PredictionImprovementsPayload(
+    const PredictionImprovementsPayload&) = default;
+
+Suggestion::PredictionImprovementsPayload::PredictionImprovementsPayload(
+    PredictionImprovementsPayload&&) = default;
+
+Suggestion::PredictionImprovementsPayload&
+Suggestion::PredictionImprovementsPayload::operator=(
+    const PredictionImprovementsPayload&) = default;
+
+Suggestion::PredictionImprovementsPayload&
+Suggestion::PredictionImprovementsPayload::operator=(
+    PredictionImprovementsPayload&&) = default;
+
+Suggestion::PredictionImprovementsPayload::~PredictionImprovementsPayload() =
+    default;
+
+Suggestion::AutofillProfilePayload::AutofillProfilePayload() = default;
+Suggestion::AutofillProfilePayload::AutofillProfilePayload(Guid guid)
+    : AutofillProfilePayload(std::move(guid), u"") {}
+Suggestion::AutofillProfilePayload::AutofillProfilePayload(
+    Guid guid,
+    std::u16string email_override)
+    : guid(std::move(guid)), email_override(std::move(email_override)) {}
+
+Suggestion::AutofillProfilePayload::AutofillProfilePayload(
+    const AutofillProfilePayload&) = default;
+
+Suggestion::AutofillProfilePayload::AutofillProfilePayload(
+    AutofillProfilePayload&&) = default;
+
+Suggestion::AutofillProfilePayload&
+Suggestion::AutofillProfilePayload::operator=(const AutofillProfilePayload&) =
+    default;
+
+Suggestion::AutofillProfilePayload&
+Suggestion::AutofillProfilePayload::operator=(AutofillProfilePayload&&) =
+    default;
+
+Suggestion::AutofillProfilePayload::~AutofillProfilePayload() = default;
+
+Suggestion::PaymentsPayload::PaymentsPayload() = default;
+
+Suggestion::PaymentsPayload::PaymentsPayload(
+    std::u16string main_text_content_description,
+    bool should_display_terms_available)
+    : main_text_content_description(main_text_content_description),
+      should_display_terms_available(should_display_terms_available) {}
+
+Suggestion::PaymentsPayload::PaymentsPayload(const PaymentsPayload&) = default;
+
+Suggestion::PaymentsPayload::PaymentsPayload(PaymentsPayload&&) = default;
+
+Suggestion::PaymentsPayload& Suggestion::PaymentsPayload::operator=(
+    const PaymentsPayload&) = default;
+
+Suggestion::PaymentsPayload& Suggestion::PaymentsPayload::operator=(
+    PaymentsPayload&&) = default;
+
+Suggestion::PaymentsPayload::~PaymentsPayload() = default;
+
+Suggestion::Text::Text() = default;
+
+Suggestion::Text::Text(std::u16string value,
+                       IsPrimary is_primary,
+                       ShouldTruncate should_truncate)
+    : value(value), is_primary(is_primary), should_truncate(should_truncate) {}
+
+Suggestion::Text::Text(const Text& other) = default;
+Suggestion::Text::Text(Text& other) = default;
+
+Suggestion::Text& Suggestion::Text::operator=(const Text& other) = default;
+Suggestion::Text& Suggestion::Text::operator=(Text&& other) = default;
+
+Suggestion::Text::~Text() = default;
+
+Suggestion::Suggestion() = default;
+
+Suggestion::Suggestion(std::u16string main_text)
+    : main_text(std::move(main_text), Text::IsPrimary(true)) {}
+
+Suggestion::Suggestion(SuggestionType type) : type(type) {}
+
+Suggestion::Suggestion(std::u16string main_text, SuggestionType type)
+    : type(type), main_text(std::move(main_text), Text::IsPrimary(true)) {}
+
+Suggestion::Suggestion(std::string_view main_text,
+                       std::string_view label,
+                       Icon icon,
+                       SuggestionType type)
+    : type(type),
+      main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
+      icon(icon) {
+  if (!label.empty())
+    this->labels = {{Text(base::UTF8ToUTF16(label))}};
+}
+
+Suggestion::Suggestion(std::string_view main_text,
+                       std::vector<std::vector<Text>> labels,
+                       Icon icon,
+                       SuggestionType type)
+    : type(type),
+      main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
+      labels(std::move(labels)),
+      icon(icon) {}
+
+Suggestion::Suggestion(std::string_view main_text,
+                       std::string_view minor_text,
+                       std::string_view label,
+                       Icon icon,
+                       SuggestionType type)
+    : type(type),
+      main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
+      minor_text(base::UTF8ToUTF16(minor_text)),
+      icon(icon) {
+  if (!label.empty())
+    this->labels = {{Text(base::UTF8ToUTF16(label))}};
+}
+
+Suggestion::Suggestion(const Suggestion& other) = default;
+Suggestion::Suggestion(Suggestion&& other) = default;
+
+Suggestion& Suggestion::operator=(const Suggestion& other) = default;
+Suggestion& Suggestion::operator=(Suggestion&& other) = default;
+
+Suggestion::~Suggestion() = default;
+
+bool Suggestion::IsAcceptable() const {
+  switch (acceptability) {
+    case Acceptability::kAcceptable:
+      return true;
+    case Acceptability::kUnacceptable:
+    case Acceptability::kUnacceptableWithDeactivatedStyle:
+      return false;
+  }
+  NOTREACHED();
+}
+
+bool Suggestion::HasDeactivatedStyle() const {
+  switch (acceptability) {
+    case Acceptability::kAcceptable:
+    case Acceptability::kUnacceptable:
+      return false;
+    case Acceptability::kUnacceptableWithDeactivatedStyle:
+      return true;
+  }
+  NOTREACHED();
+}
+
 void PrintTo(const Suggestion& suggestion, std::ostream* os) {
   *os << std::endl
       << "Suggestion (type:" << suggestion.type << ", main_text:\""
@@ -269,8 +335,9 @@ void PrintTo(const Suggestion& suggestion, std::ostream* os) {
       << ", minor_text:\"" << suggestion.minor_text.value << "\""
       << (suggestion.minor_text.is_primary ? "(Primary)" : "(Not Primary)")
       << ", additional_label: \"" << suggestion.additional_label << "\""
-      << ", apply_deactivated_style: \"" << suggestion.apply_deactivated_style
-      << "\"" << ", icon:" << ConvertIconToPrintableString(suggestion.icon)
+      << ", acceptability: \""
+      << ConvertAcceptabilityToPrintableString(suggestion.acceptability) << "\""
+      << ", icon:" << ConvertIconToPrintableString(suggestion.icon)
       << ", trailing_icon:"
       << ConvertIconToPrintableString(suggestion.trailing_icon) << ")";
 }

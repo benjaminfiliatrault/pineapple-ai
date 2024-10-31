@@ -20,6 +20,7 @@
 <translation id="1070066693520972135">WEP</translation>
 <translation id="1071587090247825784">Брандмаэур анықталды.</translation>
 <translation id="1075811647922107217">Бет өлшемі</translation>
+<translation id="108084407137234521"><ph name="MIN_WORD_LENGTH" /> сөзге жетпейтін транскрипцияны қорытындылау мүмкін емес.</translation>
 <translation id="1082009148392559545">Скринсейверді жүктеп алу</translation>
 <translation id="1094693127011229778">IP мекенжайы жоқ.</translation>
 <translation id="1100902271996134409">Суреттер жасалып жатыр...</translation>
@@ -43,6 +44,7 @@
 <translation id="11743817593307477">Бұл басқару элементін қажетті ойын әрекетіне жылжыту үшін бағыт пернелерін басыңыз. Басқару элементін орналастыру үшін Enter пернесін басыңыз. Бас тарту үшін Escape пернесін қолданыңыз.</translation>
 <translation id="1175697296044146566"><ph name="DEVICE_TYPE" /> құрылғысын <ph name="MANAGER" /> басқарады.</translation>
 <translation id="1175951029573070619">Орташа (<ph name="SIGNAL_STRENGTH" />)</translation>
+<translation id="1178581264944972037">Кідірту</translation>
 <translation id="1180621378971766337">жайлы</translation>
 <translation id="1181037720776840403">Өшіру</translation>
 <translation id="1191518099344003522">APN қосылды.</translation>
@@ -218,6 +220,7 @@
 <translation id="1905710495812624430">Максималды рұқсат етілетін әрекеттер шегінен асып кетті.</translation>
 <translation id="1908234395526491708">UDP сұрауының ақаулары</translation>
 <translation id="1908394185991500139">сол жақ көрсеткісі</translation>
+<translation id="1914144885717544695">жұма күні</translation>
 <translation id="1923388006036088459">Акценттік түстер</translation>
 <translation id="1945403655450283000">Диктофон</translation>
 <translation id="1947737735496445907">Басып шығарылған</translation>
@@ -248,7 +251,6 @@
 <translation id="2085089206770112532">Дисплей жарықтығын азайту</translation>
 <translation id="2086091080968010660">Уақытқа негізделген өзгерістер дұрыс болмауы мүмкін. Параметрлерде жүйенің локацияны пайдалану рұқсатын қосыңыз.</translation>
 <translation id="2102231663024125441">Мәтін өңдеу</translation>
-<translation id="2102648867808308635">Осы бетті оқуға көмек керек</translation>
 <translation id="2105810540595158374">Бұл — ойын контроллері.</translation>
 <translation id="2119172414412204879"><ph name="BOARD_NAME" />, <ph name="MILESTONE_VERSION" />-нұсқа</translation>
 <translation id="2124643134650336457">Әзірше тек ағылшын (АҚШ) тілінде қолжетімді.</translation>
@@ -257,6 +259,7 @@
 <translation id="2138109643290557664">Қалқу</translation>
 <translation id="2141644705054017895"><ph name="PERCENTAGE_VALUE" />%</translation>
 <translation id="2148716181193084225">Бүгін</translation>
+<translation id="215206000155329774"><ph name="INTENT" />; <ph name="QUERY_TEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="2152882202543497059"><ph name="NUMBER" /> фотосурет</translation>
 <translation id="2154460308960858308">Іздеу жолын тазалау</translation>
 <translation id="2157660087437850958">эмоджи таңдағыш</translation>
@@ -375,6 +378,7 @@
 <translation id="2713444072780614174">Ақ</translation>
 <translation id="2715723665057727940">өзен</translation>
 <translation id="2717139507051041123">Қараңғы түс режимін қосу</translation>
+<translation id="2726755229438917165">дүйсенбі күні</translation>
 <translation id="2728460467788544679">Барлық басып шығару тарихын өшіру</translation>
 <translation id="2731700343119398978">Күтіңіз…</translation>
 <translation id="2740531572673183784">Жарайды</translation>
@@ -414,9 +418,11 @@
 <translation id="3031560714565892478">Бұл — бейнекамера.</translation>
 <translation id="3042927241478734594">Жазудан шығу керек пе?</translation>
 <translation id="3054177598518735801"><ph name="CURRENT_VALUE" /> mA</translation>
+<translation id="3055176406666937744"><ph name="MAX_WORD_LENGTH" /> сөзден асатын транскрипцияны қорытындылау мүмкін емес.</translation>
 <translation id="3056720590588772262">Соңғы нүкте</translation>
 <translation id="3060579846059757016">Негізгі қағидалар</translation>
 <translation id="3061850252076394168">Select to Speak функциясын қосу</translation>
+<translation id="3066772729299747758">сейсенбі күні</translation>
 <translation id="3069085583900247081">Тексерілмеді.</translation>
 <translation id="3078740164268491126">кесте</translation>
 <translation id="3081652522083185657">жарық</translation>
@@ -450,6 +456,7 @@
 <translation id="3226657629376379887">Форматтың әрекеттер мәзірі</translation>
 <translation id="3227186760713762082"><ph name="CATEGORY_TEXT" /> мәнін <ph name="CONVERSION_RATE" /> санына бөлу</translation>
 <translation id="3237710083340813756">Қайта жазу</translation>
+<translation id="3245518008592055173"><ph name="MIN_WORD_LENGTH" /> сөзге жетпейтін транскрипция үшін атаулар жасау мүмкін емес.</translation>
 <translation id="3246869037381808805">1 күннен асқан баспа жұмыстары өшіріледі.</translation>
 <translation id="324961752321393509">Әкімшіңіз бұл қолданбаны жабуға рұқсат бермейді</translation>
 <translation id="3263941347294171263">Жаңарту процесін жалғастыру үшін <ph name="DEVICE_NAME" /> құрылғысын ажыратып, қайта жалғаңыз.</translation>
@@ -472,6 +479,7 @@
 <translation id="3361618936611118375">суши</translation>
 <translation id="3368922792935385530">Қосылған</translation>
 <translation id="3369013195428705271">Басып шығару тарихын шынымен толығымен тазалағыңыз келе ме? Қазір орындалып жатқан басып шығару жұмысының деректері сақталады.</translation>
+<translation id="3369632935976756339"><ph name="INTENT" />; <ph name="QUERY_TEXT" />; <ph name="SUBTEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="3373141842870501561">Жер қозғалысы бейнеленген тұсқағаз</translation>
 <translation id="33736539805963175"><ph name="LETTERS_LETTER" /> әрпі бар <ph name="LETTERS_COLOR" /> фон</translation>
 <translation id="3383623117265110236">Эксклюзивті</translation>
@@ -499,7 +507,6 @@
 <translation id="3502426834823382181">барлық қолданбаны көру</translation>
 <translation id="3510890413042482857"><ph name="BEGIN_LINK1" />Өнімділікті бақылау деректерін<ph name="END_LINK1" /> жіберу</translation>
 <translation id="3517001332549868749">Chrome OS жаңарту</translation>
-<translation id="3522508178835057262"><ph name="MAX_WORD_LENGTH" /> сөзден ұзағырақ мәтінді транскрипциялауға қолдау көрсетілмейді.</translation>
 <translation id="3527036260304016759">Сәтсіз: белгісіз қате шықты</translation>
 <translation id="353214771040290298">Өңдеу аяқталды</translation>
 <translation id="3532980081107202182">Шамамен <ph name="MIN_REMAINING" /> минут қалды.</translation>
@@ -611,6 +618,7 @@
 <translation id="409427325554347132">Сынақ мәліметтерін сақтау</translation>
 <translation id="409469431304488632">Эксперименттік</translation>
 <translation id="4095829376260267438">WPA2WPA3</translation>
+<translation id="4105182082354119881"><ph name="MAX_WORD_LENGTH" /> сөзден асатын транскрипция үшін атаулар жасау мүмкін емес.</translation>
 <translation id="4110686435123617899">"<ph name="TITLE" />" альбомын таңдаңыз (<ph name="DESC" />).</translation>
 <translation id="4111761024568264522">USB сенсорлық тақтасы</translation>
 <translation id="4113067922640381334">Енді жаңа <ph name="BEGIN_LINK_WALLPAPER_SUBPAGE" />тұсқағаздар<ph name="END_LINK_WALLPAPER_SUBPAGE" /> пайдалана алатын боласыз</translation>
@@ -619,6 +627,7 @@
 <translation id="4130035430755296270">Тағы басқа формат опцияларын көру үшін курсорды апарыңыз.</translation>
 <translation id="4130750466177569591">Мен келісемін</translation>
 <translation id="4131410914670010031">Қара мен ақ</translation>
+<translation id="4137700675046373159">сенбі күні</translation>
 <translation id="4143226836069425823">Ауыстыру үшін пернетақтаның басқа пернесін түртіңіз.</translation>
 <translation id="4145784616224233563">HTTP брандмауэрі</translation>
 <translation id="4147897805161313378">Google Photos</translation>
@@ -641,6 +650,7 @@
 <translation id="4227825898293920515">Құпия сөздің мерзімі <ph name="TIME" /> өткен соң аяқталады.</translation>
 <translation id="4238516577297848345">Ешқандай баспа жұмысы орындалып жатқан жоқ.</translation>
 <translation id="4239069858505860023">GPRS</translation>
+<translation id="4249717042534905822">жексенбі күні</translation>
 <translation id="4250229828105606438">Скриншот</translation>
 <translation id="4251839292699800785">Стильді кеңсе</translation>
 <translation id="4258281355379922695">HTTP кідірісі</translation>
@@ -660,6 +670,7 @@
 <translation id="4333390807948134856"><ph name="KEY_NAME" /> пернесі басылды.</translation>
 <translation id="4334293042716981313"><ph name="BEGIN_LINK_FREEFORM_SUBPAGE" />Өз нұсқауыңызды жазсаңыз<ph name="END_LINK_FREEFORM_SUBPAGE" /> да болады.</translation>
 <translation id="4354430579665871434">перне</translation>
+<translation id="4356100841225547054">Дыбыс деңгейін өшіру</translation>
 <translation id="4361257691546579041">APN әдепкі.</translation>
 <translation id="437294888293595148">Барлық таңбашаны қайта орнату</translation>
 <translation id="437477383107495720">қояндар</translation>
@@ -715,7 +726,6 @@
 <translation id="458794348635939462">Барлық хост атаулары түрлендірілмеді.</translation>
 <translation id="4593212453765072419">Прокси растауы талап етіледі.</translation>
 <translation id="4594021849294327751">Транскрипция жасау</translation>
-<translation id="4602266091140407479">Микрофон</translation>
 <translation id="4607282946861182308">Мұндай сурет жасау мүмкін емес. Басқа нұсқау жазып көріңіз.</translation>
 <translation id="4609350030397390689">Пернетақта жарықтығын азайту</translation>
 <translation id="4623061655523261501">Жазба атаулары сәтті жасалды</translation>
@@ -754,7 +764,6 @@
 <translation id="4809927044794281115">Жарық режим</translation>
 <translation id="4813136279048157860">Суреттерім</translation>
 <translation id="4813345808229079766">Байланыс</translation>
-<translation id="4824527342590024245"><ph name="MIN_WORD_LENGTH" /> сөзден аз мәтінді транскрипциялауға қолдау көрсетілмейді.</translation>
 <translation id="4830894019733815633">шатқал</translation>
 <translation id="4832079907277790330">Files қолданбасында қалта таңдау...</translation>
 <translation id="4835901797422965222">Ешқандай белсенді желі жоқ.</translation>
@@ -815,12 +824,12 @@
 <translation id="5089810972385038852">Штат</translation>
 <translation id="5090362543162270857">IPsec (IKEv2)</translation>
 <translation id="5095761549884461003">Жаңарту процесін жалғастыру үшін <ph name="DEVICE_NAME" /> USB кабелін ажыратып, қайта жалғаңыз.</translation>
-<translation id="5095864667399748231">Дыбысты өшіру/қосу</translation>
 <translation id="5099354524039520280">жоғары</translation>
 <translation id="5107243100836678918"><ph name="META_KEY" /> пернесі жоқ пернелер тіркесімі кейбір қолданбаның пернелер тіркесіміне қайшы келуі мүмкін. Осы пернелер тіркесімін пайдалануды жалғастыру үшін қайта басыңыз немесе <ph name="KEY" /> пернесін пайдаланып, жаңа пернелер тіркесімін басыңыз. <ph name="LINK_BEGIN" />Толық ақпарат<ph name="LINK_END" /></translation>
 <translation id="5108781503443873320">Ұқсас:</translation>
 <translation id="5130848777448318809">понилер</translation>
 <translation id="5137451382116112100">Толық</translation>
+<translation id="5140788690559353412">Оқу аккаунтына кіру мүмкіндігінен айырылып қалсаңыз, Gmail, Docs, Slides және т.б. сияқты байланысты электрондық пошта мен Google Drive файлдарына енді кіре алмайсыз.</translation>
 <translation id="5142961317498132443">Аутентификация</translation>
 <translation id="5144311987923128508">Растау түймесі өшірілді.</translation>
 <translation id="5144887194300568405">Аударманы көшіру</translation>
@@ -898,6 +907,7 @@
 <translation id="550600468576850160">көгал</translation>
 <translation id="551689408806449779">Құрылғы ажыратылған. Сынау үшін қайта қосылып көріңіз.</translation>
 <translation id="5519195206574732858">LTE</translation>
+<translation id="5527146180235316490">Микрофон опциялары</translation>
 <translation id="5534900277405737921">Жер қыртысы</translation>
 <translation id="554067135846762198">маржан және қоңырқай</translation>
 <translation id="5543701552415191873">құлыпталған</translation>
@@ -1008,6 +1018,7 @@
 <translation id="6075872808778243331">HTTP кідірісі (Android)</translation>
 <translation id="6078323886959318429">Таңбашаны енгізу</translation>
 <translation id="6091080061796993741">сары</translation>
+<translation id="6093853427925392522">Оқу аккаунтындағы деректі кіру мүмкіндігінен айырылып қалмай тұрып жеке аккаунтқа тасымалдау үшін Google ұсынған Content Transfer қолданбасын пайдаланыңыз.</translation>
 <translation id="6104112872696127344">Сканерлеу тоқтатылды.</translation>
 <translation id="6106186594183574873">Аяқтау үшін ескі құпия сөзді енгізіңіз.</translation>
 <translation id="6108689792487843350">Шлюзбен байланыс орнату мүмкін емес.</translation>
@@ -1020,6 +1031,7 @@
 <translation id="6122191549521593678">Онлайн</translation>
 <translation id="6122277663991249694">ChromeOS енгізу әдісі қызметі</translation>
 <translation id="6127426868813166163">ақ</translation>
+<translation id="613049107179582049">Chromebook аудиосы қосулы кезде, диктофон осы құрылғыда ойнап жатқан барлық аудионы жазып алады.</translation>
 <translation id="6136285399872347291">backspace</translation>
 <translation id="6137614725462089991">киберпанк</translation>
 <translation id="6137767437444130246">Пайдаланушы сертификаты</translation>
@@ -1114,6 +1126,7 @@
 <translation id="6527081081771465939">WiFi қауіпсіздік протоколы белгісіз.</translation>
 <translation id="6535178685492749208">Офлайн режимдесіз. Пікір кейінірек жіберіледі.</translation>
 <translation id="6543412779435705598">такос</translation>
+<translation id="6550369542114086980">бейсенбі күні</translation>
 <translation id="6551839203326557324">алмалар</translation>
 <translation id="65526652485742171">Растау түймесі қосылды.</translation>
 <translation id="6557784757915238407">APN түрі — <ph name="ATTACH" />.</translation>
@@ -1139,7 +1152,6 @@
 <translation id="6650062777702288430">Кана мен әріптік-сандық белгілерді өзара ауыстыру</translation>
 <translation id="6657240842932274095">Жүйелік қызметтердің локацияңызды пайдалануына рұқсат беру қажет пе?</translation>
 <translation id="6657585470893396449">Құпия сөз</translation>
-<translation id="6659594942844771486">Қойынды</translation>
 <translation id="66621959568103627">маржан қызғылт</translation>
 <translation id="6667885109186363316"><ph name="SEA_PEN_INTRO_FIRST_PARAGRAPH" />
           <ph name="LINE_BREAK" />
@@ -1244,6 +1256,7 @@
 <translation id="7130438335435247835">Кіру нүктесінің атауы (APN)</translation>
 <translation id="7134436342991564651">{0,plural, =1{Сервер атауы}other{Сервер атаулары}}</translation>
 <translation id="7135814714616751706">Таңбашаларды іздеу</translation>
+<translation id="7141470099673912333">Content Transfer</translation>
 <translation id="7143207342074048698">Қосылып жатыр</translation>
 <translation id="7144878232160441200">Қайталау</translation>
 <translation id="7144954474087165241">пагода</translation>
@@ -1260,6 +1273,7 @@
 <translation id="7180865173735832675">Реттеу</translation>
 <translation id="7182063559013288142">Лезде істейтін хотспот</translation>
 <translation id="7184043045742675738">Түймені бейімдеу үшін кез келген пернені басыңыз. Тінтуір немесе бағыт пернелері көмегімен перне орнын өзгертіңіз.</translation>
+<translation id="7187669805838282391">сәрсенбі күні</translation>
 <translation id="7206979415662233817">Қызмет көрсету шарттары</translation>
 <translation id="7210635925306941239">көк жасыл</translation>
 <translation id="7212547870105584639">Желінің APN параметрлерін басқаруға арналған. APN аттары ұялы желі мен интернет арасында байланыс орнатады. <ph name="BEGIN_LINK_LEARN_MORE" />Толық ақпарат<ph name="END_LINK_LEARN_MORE" /></translation>
@@ -1306,6 +1320,7 @@
 <translation id="7388959671917308825">Ендірілген сенсорлық тақта</translation>
 <translation id="7397270852490618635">Жарық режимді өшіру</translation>
 <translation id="7401543881546089382">Таңбашаны жою</translation>
+<translation id="7405493795721832710"><ph name="DEVICE_NAME" /> жаңартуға дайын</translation>
 <translation id="741244894080940828">түрлендіру</translation>
 <translation id="7415801143053185905">HTTP кідірісі өте жоғары.</translation>
 <translation id="7425037327577270384">Жазуға көмектесіңіз</translation>
@@ -1320,6 +1335,7 @@
 <translation id="7500205272584643581">Диктофонға сөйлеушілерді анықтап, белгілеуге рұқсат беру керек пе?</translation>
 <translation id="7501957181231305652">немесе</translation>
 <translation id="7502658306369382406">IPv6 мекенжайы</translation>
+<translation id="7503342217608032738">Құрылғыны пайдалану мүмкін емес</translation>
 <translation id="7507061649493508884">Жарқыраған <ph name="FLOWER_COLOR" /> <ph name="FLOWER_TYPE" /></translation>
 <translation id="7513770521371759388">төменгі жақ</translation>
 <translation id="7514365320538308">Жүктеу</translation>
@@ -1334,6 +1350,7 @@
 <translation id="7551123448725492271">Бұл — аудио құрылғы.</translation>
 <translation id="7559239713112547082">Скриншотты алдын ала көру</translation>
 <translation id="7561454561030345039">Бұл әрекетті әкімшіңіз басқарады.</translation>
+<translation id="7561759921596375678">Дыбыс деңгейін қосу</translation>
 <translation id="7569444139234840525"><ph name="QUERY_TEXT" /> · /<ph name="PHONETICS" />/</translation>
 <translation id="7570674786725311828">USB сенсорлық экраны</translation>
 <translation id="757747079855995705">тас</translation>
@@ -1392,7 +1409,9 @@
 <translation id="785170686607360576">қызғалдақ</translation>
 <translation id="7856267634822906833">Bluetooth сенсорлық экраны</translation>
 <translation id="7859006200041800233">кактус гүлі</translation>
+<translation id="7865217133132122390">Микрофонды қосу</translation>
 <translation id="7869143217755017858">Қараңғы режимді өшіру</translation>
+<translation id="7878972877380405573">"Оқуға көмек керек" көмегімен қорытындылау</translation>
 <translation id="7881066108824108340">DNS</translation>
 <translation id="7882358943899516840">Провайдер түрі</translation>
 <translation id="7882501334836096755">Ашық кілт</translation>
@@ -1419,6 +1438,7 @@
 <translation id="7983597390787556680">{NUM_ROOL_APPS,plural, =1{"<ph name="APP_NAME_1" />" автоматты түрде іске қосылды}other{# қолданба автоматты түрде іске қосылды}}</translation>
 <translation id="7994702968232966508">EAP әдісі</translation>
 <translation id="8004582292198964060">Браузер</translation>
+<translation id="8010765388850538088">Жасампаз жасанды интеллект туралы толық ақпарат</translation>
 <translation id="8017679124341497925">Таңбаша өзгерді</translation>
 <translation id="802154636333426148">Жүктеу сәтсіз аяқталды</translation>
 <translation id="8028993641010258682">Көлемі</translation>
@@ -1428,6 +1448,7 @@
 <translation id="8045012663542226664">Микрофон дыбысын өшіру</translation>
 <translation id="8054112564438735763">сарғыш қоңыр</translation>
 <translation id="8062968459344882447"><ph name="CHARACTERS_BACKGROUND" /> фондағы <ph name="CHARACTERS_COLOR" /> <ph name="CHARACTERS_SUBJECTS" /></translation>
+<translation id="8064337065720789104"><ph name="QUERY_TEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="8067126283828232460">APN қосылған.</translation>
 <translation id="8067208048261192356">қоңыр</translation>
 <translation id="8067224607978179455"><ph name="ACTION_NAME" /> жою</translation>
@@ -1456,12 +1477,12 @@
 <translation id="8179976553408161302">Enter</translation>
 <translation id="8183975772394450380">жағажай</translation>
 <translation id="819278132617411009">Өнімділікті арттыру үшін Google AI пайдаланыңыз</translation>
+<translation id="8200772114523450471">Жалғастыру</translation>
 <translation id="8206859287963243715">Ұялы</translation>
 <translation id="8208861521865154048">Бонустар</translation>
 <translation id="8226628635270268143">Өзіңізге ұнайтын фотосуреттер мен альбомдарды таңдау</translation>
 <translation id="8227119283605456246">Файл тіркеу</translation>
 <translation id="8230672074305416752">Әдепкі желі шлюзінің байланысы тексерілмеді.</translation>
-<translation id="8236972776513018241">Транскрипция</translation>
 <translation id="8238771987802558562">APN таңдау</translation>
 <translation id="8246209727385807362">Белгісіз оператор</translation>
 <translation id="8250926778281121244">тот</translation>
@@ -1531,11 +1552,13 @@
 <translation id="8557447961879934694">WPA2</translation>
 <translation id="8575298406870537639">Желіге қосылу үшін оператор осы опцияны талап етуі мүмкін. Мәліметтер алу үшін операторыңызға хабарласыңыз.</translation>
 <translation id="8576249514688522074">Бастаудан бас тартылды</translation>
+<translation id="8584654835905316966"><ph name="DEVICE_NAME" /> құрылғысына арналған микробағдарламаны <ph name="VERSION" /> нұсқасына орнату үшін құрылғыны өшіріп қосу қажет. Компьютер бірнеше рет өшіп қосылуы мүмкін. Бұл — қалыпты жағдай.</translation>
 <translation id="8593058461203131755">мультимедианы кідірту</translation>
 <translation id="8620617069779373398">Роуминг күйі</translation>
 <translation id="8626489604350149811"><ph name="APN_NAME" /> қосымша әрекеттері</translation>
 <translation id="86356131183441916">Ашық күлгін</translation>
 <translation id="8647595191512746911">Аудио транскрипциясы</translation>
+<translation id="8650852232143958317">Gmail және Google Drive файлдарын алып қалыңыз</translation>
 <translation id="8651481478098336970">дыбысты өшіру</translation>
 <translation id="8655295600908251630">Арна</translation>
 <translation id="8655828773034788261">URL мекенжайын бөлісу:</translation>
@@ -1587,7 +1610,6 @@
 <translation id="8864415976656252616">Ұсынылған контент жоқ. Үздік анықтамалық контентды көріңіз.</translation>
 <translation id="8868741746785112895">GUID</translation>
 <translation id="8876270629542503161">Бұл — планшет.</translation>
-<translation id="8878117140814294155">Микрофонның дыбысын өшіру</translation>
 <translation id="8881098542468797602">Тексеріс сәтті аяқталды.</translation>
 <translation id="8882789155418924367">үкілер</translation>
 <translation id="8892443466059986410">Пернелер тіркесімін өзгертуден бас тарту</translation>
@@ -1664,6 +1686,7 @@
 <translation id="917720651393141712">Тексеру</translation>
 <translation id="9188992814426075118">Пернетақта тұсқағазды автоматты түрде сәйкестендіре алады.</translation>
 <translation id="9189000703457422362">Автоматты түрде анықталған APN аттары арқылы бұл желіге қосылу мүмкін емес. Қосымша ақпарат алу үшін мобильдік операторыңызға хабарласыңыз.</translation>
+<translation id="9190726385682694354"><ph name="QUERY_TEXT" />; <ph name="SUBTEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="9193744392140377127">APN*</translation>
 <translation id="9195918315673527512">Таңдалған джойстик пернелері — <ph name="KEYS" />. Басқару элементін өзгерту үшін түймені түртіңіз.</translation>
 <translation id="9204237731135241582">Android қолданбаларынан шлюзге қосылу мүмкін емес.</translation>
@@ -1684,5 +1707,6 @@
 <translation id="982713511914535780">Зарядтың азаюы тексерісін іске қосу</translation>
 <translation id="98515147261107953">Альбомдық</translation>
 <translation id="987264212798334818">Жалпы</translation>
+<translation id="994473081369871639">Микрофонды өшіру</translation>
 <translation id="995062385528875723">Екпін белгісі бар әріптерді, латыннан басқа алфавитті немесе таңбаларды пайдалануға болмайды.</translation>
 </translationbundle>

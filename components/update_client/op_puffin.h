@@ -28,15 +28,15 @@ struct CategorizedError;
 // successful. If unsuccessful, `callback` is posted with an error. In either
 // case, `patch_file` is deleted.
 void PuffOperation(
-    std::optional<scoped_refptr<CrxCache>> crx_cache,
+    scoped_refptr<CrxCache> crx_cache,
     scoped_refptr<Patcher> patcher,
     base::RepeatingCallback<void(base::Value::Dict)> event_adder,
     const std::string& id,
     const std::string& prev_fp,
     const base::FilePath& patch_file,
     const base::FilePath& temp_dir,
-    base::OnceCallback<void(
-        const base::expected<base::FilePath, CategorizedError>&)> callback);
+    base::OnceCallback<void(base::expected<base::FilePath, CategorizedError>)>
+        callback);
 
 }  // namespace update_client
 

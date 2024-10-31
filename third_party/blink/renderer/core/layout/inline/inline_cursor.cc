@@ -115,7 +115,6 @@ bool ShouldIgnoreForPositionForPoint(const FragmentItem& item) {
       // All/LayoutViewHitTestTest.PseudoElementAfter* needs this.
       return item.IsGeneratedText();
     case FragmentItem::kLine:
-      DCHECK(RuntimeEnabledFeatures::RubyLineBreakableEnabled());
       return true;
     case FragmentItem::kInvalid:
       NOTREACHED_IN_MIGRATION();
@@ -556,12 +555,14 @@ PhysicalRect InlineCursor::CurrentRectInBlockFlow() const {
   // consumed in previous fragments.
   auto writing_direction = ContainerFragment().Style().GetWritingDirection();
   switch (writing_direction.GetWritingMode()) {
-    default:
+    case WritingMode::kHorizontalTb:
       rect.offset.top += previously_consumed_block_size_;
       break;
+    case WritingMode::kSidewaysLr:
     case WritingMode::kVerticalLr:
       rect.offset.left += previously_consumed_block_size_;
       break;
+    case WritingMode::kSidewaysRl:
     case WritingMode::kVerticalRl: {
       // For vertical-rl writing-mode it's a bit more complicated. We need to
       // convert to logical coordinates in the containing box fragment, in order
@@ -1425,7 +1426,6 @@ void InlineCursor::SlowMoveToNextForSameLayoutObject(
 void InlineCursor::MoveTo(const LayoutObject& layout_object) {
   DCHECK(layout_object.IsInLayoutNGInlineFormattingContext());
   if (layout_object.IsOutOfFlowPositioned()) [[unlikely]] {
-    NOTREACHED_IN_MIGRATION();
     MakeNull();
     return;
   }

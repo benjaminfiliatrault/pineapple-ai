@@ -4,8 +4,12 @@
 
 #include "ui/ozone/platform/wayland/host/wayland_window_manager.h"
 
+#include <algorithm>
+
+#include "base/check.h"
 #include "base/observer_list.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+#include "ui/display/display.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/ozone/platform/wayland/host/wayland_window_drag_controller.h"
@@ -281,6 +285,19 @@ void WaylandWindowManager::SetFontScale(float new_font_scale) {
   for (WaylandWindow* window : GetAllWindows()) {
     window->OnFontScaleFactorChanged();
   }
+}
+
+float WaylandWindowManager::DetermineUiScale() const {
+  using display::Display;
+  constexpr float kMinUiScale = 0.5f;
+  constexpr float kMaxUiScale = 3.0f;
+  CHECK(connection_->IsUiScaleEnabled() || font_scale_ == 1.0f) << font_scale_;
+
+  const float ui_scale =
+      Display::HasForceDeviceScaleFactor() && connection_->IsUiScaleEnabled()
+          ? Display::GetForcedDeviceScaleFactor()
+          : font_scale_;
+  return std::clamp(ui_scale, kMinUiScale, kMaxUiScale);
 }
 
 }  // namespace ui

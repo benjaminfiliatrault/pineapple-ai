@@ -8,7 +8,7 @@ import("//components/signin/features.gni")
 assert(!is_fuchsia && !is_android)
 
 # Removes circular dep between |login| and |signin|.
-if (!is_chromeos_ash) {
+if (!is_chromeos) {
   source_set("signin_ui_error") {
     sources = [
       "signin_ui_error.cc",
@@ -41,10 +41,11 @@ source_set("signin_utils") {
     "//build:chromeos_buildflags",
     "//components/signin/public/base",
     "//components/signin/public/base:signin_buildflags",
+    "//components/signin/public/identity_manager:identity_manager",
     "//url",
   ]
 
-  if (!is_chromeos_ash) {
+  if (!is_chromeos) {
     sources += [ "signin_utils_desktop.h" ]
   }
 }
@@ -62,7 +63,7 @@ source_set("signin_utils_impl") {
     "//base",
     "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile",
-    "//chrome/browser/profiles:profile_attributes",
+    "//chrome/browser/profiles:profile_util",
     "//chrome/common",
     "//chrome/common:non_code_constants",
     "//components/prefs",
@@ -74,7 +75,7 @@ source_set("signin_utils_impl") {
     "//net",
   ]
 
-  if (!is_chromeos_ash) {
+  if (!is_chromeos) {
     sources += [ "signin_utils_desktop.cc" ]
     deps += [ ":signin_ui_error" ]
   }
@@ -105,7 +106,7 @@ source_set("signin") {
     ]
   }
 
-  if (!is_chromeos_ash) {
+  if (!is_chromeos) {
     sources += [
       "signin_email_confirmation_dialog.h",
       "signin_email_confirmation_ui.h",
@@ -141,7 +142,6 @@ source_set("signin_impl") {
     "//base",
     "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile",
-    "//chrome/browser/profiles:profile_attributes",
     "//chrome/browser/profiles:profile_util",
     "//chrome/browser/resources/signin:resources",
     "//chrome/browser/sync",
@@ -158,10 +158,6 @@ source_set("signin_impl") {
     "//net",
   ]
 
-  if (is_chromeos_lacros) {
-    deps += [ "//ash/webui/settings/public/constants:mojom" ]
-  }
-
   if (enable_dice_support) {
     sources += [
       "dice_web_signin_intercept_handler.cc",
@@ -170,7 +166,7 @@ source_set("signin_impl") {
     deps += [ "//chrome/browser/ui/webui" ]
   }
 
-  if (!is_chromeos_ash) {
+  if (!is_chromeos) {
     sources += [
       "signin_email_confirmation_dialog.cc",
       "signin_email_confirmation_ui.cc",
@@ -185,16 +181,13 @@ source_set("signin_impl") {
 
     deps += [
       ":login",
+      "//chrome/browser/ui/tabs:tab_strip",
       "//chrome/browser/ui/webui:webui_util",
       "//components/keyed_service/content",
       "//components/policy/core/browser",
       "//components/signin/core/browser",
       "//components/unified_consent",
     ]
-
-    if (is_chromeos_lacros) {
-      deps += [ ":profile" ]
-    }
   }
 }
 
@@ -215,7 +208,7 @@ source_set("login") {
     "//net",
   ]
 
-  if (!is_chromeos_ash) {
+  if (!is_chromeos) {
     public_deps += [ ":signin_ui_error" ]
   }
 
@@ -223,9 +216,12 @@ source_set("login") {
     sources += [ "inline_login_handler_impl.h" ]
   }
 
-  if (enable_dice_support || is_chromeos_ash) {
+  if (enable_dice_support || is_chromeos) {
     sources += [ "inline_login_ui.h" ]
-    public_deps += [ "//ui/web_dialogs" ]
+    public_deps += [
+      "//chrome/common",
+      "//ui/web_dialogs",
+    ]
   }
 }
 
@@ -269,15 +265,16 @@ source_set("login_impl") {
     ]
   }
 
-  if (enable_dice_support || is_chromeos_ash) {
+  if (enable_dice_support || is_chromeos) {
     sources += [ "inline_login_ui.cc" ]
     deps += [
       "//chrome/browser/extensions",
+      "//chrome/browser/prefs",
       "//chrome/browser/resources/gaia_auth_host:resources",
       "//chrome/browser/ui/webui:webui_util",
     ]
 
-    if (is_chromeos_ash) {
+    if (is_chromeos) {
       deps += [
         "//chrome/browser/ash/account_manager",
         "//chrome/browser/ash/profiles",
@@ -297,7 +294,7 @@ source_set("login_impl") {
   }
 }
 
-if (!is_chromeos_ash) {
+if (!is_chromeos) {
   source_set("profile") {
     sources = [
       "managed_user_profile_notice_handler.h",
@@ -314,8 +311,7 @@ if (!is_chromeos_ash) {
       "//build:buildflag_header_h",
       "//build:chromeos_buildflags",
       "//chrome/browser/profiles:profile",
-      "//chrome/browser/profiles:profile_attributes",
-      "//chrome/browser/profiles:profile_statistics",
+      "//chrome/browser/profiles:profile_util",
       "//chrome/browser/ui:browser_list",
       "//chrome/browser/ui/webui/top_chrome",
       "//chrome/common",
@@ -329,11 +325,6 @@ if (!is_chromeos_ash) {
       "//ui/webui",
       "//ui/webui/resources/cr_components/help_bubble:mojo_bindings",
     ]
-
-    if (is_chromeos_lacros) {
-      sources += [ "profile_picker_lacros_sign_in_provider.h" ]
-      public_deps += [ "//chrome/browser/lacros/account_manager" ]
-    }
   }
 
   source_set("profile_impl") {
@@ -362,8 +353,6 @@ if (!is_chromeos_ash) {
       "//chrome/browser:resources",
       "//chrome/browser/new_tab_page/chrome_colors:generate_chrome_colors_info",
       "//chrome/browser/profiles:profile",
-      "//chrome/browser/profiles:profile_attributes",
-      "//chrome/browser/profiles:profile_statistics",
       "//chrome/browser/profiles:profile_util",
       "//chrome/browser/resources/signin:resources",
       "//chrome/browser/resources/signin/profile_picker:resources",
@@ -397,15 +386,6 @@ if (!is_chromeos_ash) {
       "//ui/strings:ui_strings",
       "//url",
     ]
-
-    if (is_chromeos_lacros) {
-      sources += [ "profile_picker_lacros_sign_in_provider.cc" ]
-      deps += [
-        "//ash/webui/settings/public/constants:mojom",
-        "//chromeos/lacros",
-        "//ui/chromeos",
-      ]
-    }
   }
 }
 
@@ -431,7 +411,6 @@ source_set("unit_tests") {
     "//chrome/browser:browser_process",
     "//chrome/browser/extensions",
     "//chrome/browser/extensions:test_support",
-    "//chrome/browser/profiles:profile_attributes",
     "//chrome/browser/profiles:profile_util",
     "//chrome/browser/signin",
     "//chrome/browser/ui",
@@ -451,7 +430,7 @@ source_set("unit_tests") {
     "//url",
   ]
 
-  if (!is_chromeos_ash) {
+  if (!is_chromeos) {
     sources += [
       "managed_user_profile_notice_handler_unittest.cc",
       "profile_picker_handler_unittest.cc",
@@ -464,12 +443,6 @@ source_set("unit_tests") {
       "//components/unified_consent",
       "//components/user_manager",
     ]
-    if (is_chromeos_lacros) {
-      deps += [
-        "//chrome/browser/lacros/account_manager",
-        "//components/account_manager_core:test_support",
-      ]
-    }
   }
 
   if (enable_dice_support) {
@@ -505,7 +478,7 @@ source_set("test_support_ui") {
   ]
 }
 
-if (!is_chromeos_ash) {
+if (!is_chromeos) {
   source_set("browser_tests") {
     testonly = true
 

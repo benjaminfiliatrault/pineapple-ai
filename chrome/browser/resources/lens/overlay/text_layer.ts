@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import './strings.m.js';
+import '/strings.m.js';
 
 import {assert} from '//resources/js/assert.js';
 import {skColorToHexColor, skColorToRgba} from '//resources/js/color_utils.js';
@@ -20,9 +20,9 @@ import {findWordsInRegion} from './find_words_in_region.js';
 import {CenterRotatedBox_CoordinateType} from './geometry.mojom-webui.js';
 import type {CenterRotatedBox} from './geometry.mojom-webui.js';
 import {bestHit} from './hit.js';
-import {UserAction} from './lens.mojom-webui.js';
+import {SemanticEvent, UserAction} from './lens.mojom-webui.js';
 import {INVOCATION_SOURCE} from './lens_overlay_app.js';
-import {recordLensOverlayInteraction} from './metrics_utils.js';
+import {recordLensOverlayInteraction, recordLensOverlaySemanticEvent} from './metrics_utils.js';
 import type {CursorData, SelectedRegionContextMenuData, SelectedTextContextMenuData} from './selection_overlay.js';
 import {CursorType} from './selection_utils.js';
 import type {GestureEvent} from './selection_utils.js';
@@ -33,9 +33,9 @@ import type {TranslateState} from './translate_button.js';
 import {toPercent} from './values_converter.js';
 
 // Lowest font size that translate text can be rendered at in pixels.
-const MIN_FONT_SIZE = 1;
+const MIN_FONT_SIZE = 3;
 // Largest font size that translate text can be rendered at in pixels.
-const MAX_FONT_SIZE = 100;
+const MAX_FONT_SIZE = 150;
 // Highest font size where the opacity of the background should be 100%.
 const FONT_SIZE_OPAQUE_BOUND = 10;
 // Lowest font size where the opacity of the background should be transparent
@@ -304,6 +304,11 @@ export class TextLayerElement extends PolymerElement {
   override disconnectedCallback() {
     super.disconnectedCallback();
 
+    // If there was rendered text, log a text gleam render end event.
+    if (this.renderedWords?.length > 0) {
+      recordLensOverlaySemanticEvent(SemanticEvent.kTextGleamsViewEnd);
+    }
+
     this.listenerIds.forEach(
         id => assert(this.browserProxy.callbackRouter.removeListener(id)));
     this.listenerIds = [];
@@ -441,6 +446,9 @@ export class TextLayerElement extends PolymerElement {
       return;
     }
 
+    if (this.selectionStartIndex === undefined) {
+      this.selectionStartIndex = words.indexOf(hit);
+    }
     this.selectionEndIndex = words.indexOf(hit);
   }
 
@@ -452,8 +460,8 @@ export class TextLayerElement extends PolymerElement {
     // Return early if we are not in translate mode or there are no rendered
     // translate words.
     if (!this.shouldRenderTranslateWords ||
-        !(this.renderedTranslateLines.length > 0) ||
-        !(this.renderedTranslateWords.length > 0)) {
+        !(this.renderedTranslateLines?.length > 0) ||
+        !(this.renderedTranslateWords?.length > 0)) {
       return;
     }
 
@@ -530,7 +538,8 @@ export class TextLayerElement extends PolymerElement {
 
     // On selection complete, send the selected text to C++.
     this.browserProxy.handler.issueTextSelectionRequest(
-        highlightedText, this.selectionStartIndex, this.selectionEndIndex);
+        highlightedText, this.selectionStartIndex, this.selectionEndIndex,
+        this.shouldRenderTranslateWords);
     recordLensOverlayInteraction(
         INVOCATION_SOURCE,
         this.shouldRenderTranslateWords ? UserAction.kTranslateTextSelection :
@@ -601,6 +610,11 @@ export class TextLayerElement extends PolymerElement {
     this.contentLanguage = text.contentLanguage ?? '';
     let lineNumber = 0;
     let paragraphNumber = 0;
+
+    // If there was already text, log a text gleam render end event.
+    if (this.renderedWords?.length > 0) {
+      recordLensOverlaySemanticEvent(SemanticEvent.kTextGleamsViewEnd);
+    }
 
     // Reset all old translation text.
     let detectedWordIndex = 0;
@@ -693,6 +707,10 @@ export class TextLayerElement extends PolymerElement {
     // Need to set this.renderedWords to a new array instead of
     // this.renderedWords.push() to ensure the dom-repeat updates.
     this.renderedWords = receivedWords;
+    // If there is text, log a text gleam render start event.
+    if (this.renderedWords.length > 0) {
+      recordLensOverlaySemanticEvent(SemanticEvent.kTextGleamsViewStart);
+    }
     assert(this.lineNumbers.length === this.renderedWords.length);
     assert(this.paragraphNumbers.length === this.renderedWords.length);
 
@@ -1064,9 +1082,15 @@ export class TextLayerElement extends PolymerElement {
       return '';
     }
 
+    // Get screenshot aspect ratio to get correct paddings for image data.
+    const paragraph =
+        this.renderedTranslateParagraphs[translatedLineData.paragraphIndex];
+    const screenshotAspectRatio =
+        paragraph.resizedBitmapSize.width / paragraph.resizedBitmapSize.height;
+
     // Both background image padding values are relative to the line height.
-    const horizontalPadding =
-        backgroundImageData.horizontalPadding * lineBoundingBox.box.height;
+    const horizontalPadding = backgroundImageData.horizontalPadding *
+        lineBoundingBox.box.height / screenshotAspectRatio;
     const verticalPadding =
         backgroundImageData.verticalPadding * lineBoundingBox.box.height;
 

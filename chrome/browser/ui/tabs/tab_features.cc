@@ -11,7 +11,6 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browsing_topics/browsing_topics_service_factory.h"
 #include "chrome/browser/commerce/shopping_service_factory.h"
-#include "chrome/browser/dips/dips_navigation_flow_detector_wrapper.h"
 #include "chrome/browser/enterprise/data_protection/data_protection_navigation_controller.h"
 #include "chrome/browser/fingerprinting_protection/chrome_fingerprinting_protection_web_contents_helper_factory.h"
 #include "chrome/browser/image_fetcher/image_fetcher_service_factory.h"
@@ -28,11 +27,11 @@
 #include "chrome/browser/ui/tabs/tab_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
+#include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_translate_action_listener.h"
 #include "chrome/browser/ui/views/side_panel/customize_chrome/side_panel_controller_views.h"
 #include "chrome/browser/ui/views/side_panel/extensions/extension_side_panel_manager.h"
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_side_panel_controller.h"
 #include "chrome/browser/ui/views/webid/fedcm_account_selection_view_controller.h"
-#include "chrome/browser/user_annotations/user_annotations_web_contents_observer.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "components/browsing_topics/browsing_topics_service.h"
@@ -82,7 +81,7 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
 
   // TODO(crbug.com/346148554): Do not create a SidePanelRegistry or
   // dependencies for non-normal browsers.
-  side_panel_registry_ = std::make_unique<SidePanelRegistry>();
+  side_panel_registry_ = std::make_unique<SidePanelRegistry>(&tab);
 
   // Features that are only enabled for normal browser windows. By default most
   // features should be instantiated in this block.
@@ -101,16 +100,12 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
         std::make_unique<permissions::PermissionIndicatorsTabData>(
             tab.GetContents());
 
-    dips_navigation_flow_detector_wrapper_ =
-        std::make_unique<DipsNavigationFlowDetectorWrapper>(tab);
-
-    user_annotations_web_contents_observer_ =
-        user_annotations::UserAnnotationsWebContentsObserver::
-            MaybeCreateForWebContents(tab.GetContents());
-
     chrome_autofill_prediction_improvements_client_ =
         ChromeAutofillPredictionImprovementsClient::MaybeCreateForWebContents(
-            tab.GetContents());
+            tab.GetContents(), profile);
+
+    pinned_translate_action_listener_ =
+        std::make_unique<PinnedTranslateActionListener>(&tab);
 
     if (!profile->IsIncognitoProfile()) {
       commerce_ui_tab_helper_ =
@@ -120,12 +115,6 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
     privacy_sandbox_tab_observer_ =
         std::make_unique<privacy_sandbox::PrivacySandboxTabObserver>(
             tab.GetContents());
-  }
-
-  if (web_app::AreWebAppsEnabled(profile)) {
-    auto* web_app_tab_helper =
-        web_app::WebAppTabHelper::FromWebContents(tab.GetContents());
-    web_app_tab_helper->InitForTabFeatures(&tab);
   }
 
   // FedCM is supported in general web content, but not in chrome UI. Of the
@@ -142,7 +131,7 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
 
   extension_side_panel_manager_ =
       std::make_unique<extensions::ExtensionSidePanelManager>(
-          profile, tab.GetContents(), side_panel_registry_.get());
+          profile, &tab, side_panel_registry_.get());
 
   data_protection_controller_ = std::make_unique<
       enterprise_data_protection::DataProtectionNavigationController>(&tab);
@@ -158,6 +147,10 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
         tab.GetContents(), profile->GetPrefs(),
         TrackingProtectionSettingsFactory::GetForProfile(profile),
         profile->IsIncognitoProfile());
+  }
+
+  if (web_app::AreWebAppsEnabled(profile)) {
+    web_app::WebAppTabHelper::Create(&tab, tab.GetContents());
   }
 }
 
@@ -189,6 +182,9 @@ TabFeatures::CreateCommerceUiTabHelper(content::WebContents* web_contents,
 void TabFeatures::WillDiscardContents(tabs::TabInterface* tab,
                                       content::WebContents* old_contents,
                                       content::WebContents* new_contents) {
+  Profile* profile =
+      Profile::FromBrowserContext(new_contents->GetBrowserContext());
+
   // This method is transiently used to reset features that do not handle tab
   // discarding themselves.
   read_anything_side_panel_controller_->ResetForTabDiscard();
@@ -201,27 +197,15 @@ void TabFeatures::WillDiscardContents(tabs::TabInterface* tab,
   // scoped.
   side_panel_registry_->Deregister(
       SidePanelEntry::Key(SidePanelEntry::Id::kAboutThisSite));
-  extension_side_panel_manager_->WillDiscard();
-  extension_side_panel_manager_ =
-      std::make_unique<extensions::ExtensionSidePanelManager>(
-          Profile::FromBrowserContext(new_contents->GetBrowserContext()),
-          new_contents, side_panel_registry_.get());
 
   if (commerce_ui_tab_helper_) {
     commerce_ui_tab_helper_.reset();
-    commerce_ui_tab_helper_ = CreateCommerceUiTabHelper(
-        new_contents,
-        Profile::FromBrowserContext(new_contents->GetBrowserContext()));
-  }
-  if (user_annotations_web_contents_observer_) {
-    user_annotations_web_contents_observer_ =
-        user_annotations::UserAnnotationsWebContentsObserver::
-            MaybeCreateForWebContents(new_contents);
+    commerce_ui_tab_helper_ = CreateCommerceUiTabHelper(new_contents, profile);
   }
   if (chrome_autofill_prediction_improvements_client_) {
     chrome_autofill_prediction_improvements_client_ =
         ChromeAutofillPredictionImprovementsClient::MaybeCreateForWebContents(
-            new_contents);
+            new_contents, profile);
   }
 
   if (privacy_sandbox_tab_observer_) {
@@ -229,6 +213,11 @@ void TabFeatures::WillDiscardContents(tabs::TabInterface* tab,
     privacy_sandbox_tab_observer_ =
         std::make_unique<privacy_sandbox::PrivacySandboxTabObserver>(
             tab->GetContents());
+  }
+
+  if (web_app::AreWebAppsEnabled(
+          tab->GetBrowserWindowInterface()->GetProfile())) {
+    web_app::WebAppTabHelper::Create(tab, new_contents);
   }
 }
 

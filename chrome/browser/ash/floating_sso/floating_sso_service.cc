@@ -11,8 +11,11 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/values.h"
+#include "base/version_info/channel.h"
 #include "chrome/browser/ash/floating_sso/cookie_sync_conversions.h"
 #include "chrome/browser/ash/floating_sso/floating_sso_sync_bridge.h"
+#include "chrome/browser/ash/floating_workspace/floating_workspace_util.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #include "components/google/core/common/google_util.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -67,6 +70,10 @@ void FloatingSsoService::RegisterPolicyListeners() {
       base::BindRepeating(&FloatingSsoService::StartOrStop,
                           base::Unretained(this)));
   pref_change_registrar_->Add(
+      syncer::prefs::internal::kSyncKeepEverythingSynced,
+      base::BindRepeating(&FloatingSsoService::StartOrStop,
+                          base::Unretained(this)));
+  pref_change_registrar_->Add(
       syncer::prefs::internal::kSyncCookies,
       base::BindRepeating(&FloatingSsoService::StartOrStop,
                           base::Unretained(this)));
@@ -112,7 +119,9 @@ void FloatingSsoService::UpdateUrlMatchers() {
 
 void FloatingSsoService::StartOrStop() {
   if (IsFloatingSsoEnabled()) {
-    scoped_observation_.Observe(bridge_.get());
+    if (!scoped_observation_.IsObserving()) {
+      scoped_observation_.Observe(bridge_.get());
+    }
     MaybeStartListening();
   } else {
     scoped_observation_.Reset();
@@ -121,16 +130,29 @@ void FloatingSsoService::StartOrStop() {
 }
 
 bool FloatingSsoService::IsFloatingSsoEnabled() {
-  // FloatingSsoEnabled policy.
-  bool floating_sso_enabled = prefs_->GetBoolean(::prefs::kFloatingSsoEnabled);
-  // User selection in the Sync settings.
-  bool sync_cookies_user_selection =
-      prefs_->GetBoolean(syncer::prefs::internal::kSyncCookies);
-  // kSyncManaged maps to SyncDisabled policy.
-  bool sync_disabled =
-      prefs_->GetBoolean(syncer::prefs::internal::kSyncManaged);
-
-  return floating_sso_enabled && sync_cookies_user_selection && !sync_disabled;
+  // The feature is restricted to Beta users for the initial testing
+  // period. Unknown channel is added to support test execution in CQ,
+  // where tests are run on non-branded builds.
+  version_info::Channel channel = chrome::GetChannel();
+  if (channel != version_info::Channel::BETA &&
+      channel != version_info::Channel::DEV &&
+      channel != version_info::Channel::UNKNOWN) {
+    return false;
+  }
+  // Check FloatingSsoEnabled policy.
+  if (!prefs_->GetBoolean(::prefs::kFloatingSsoEnabled)) {
+    return false;
+  }
+  // Check SyncDisabled policy (it maps to kSyncManaged pref).
+  if (prefs_->GetBoolean(syncer::prefs::internal::kSyncManaged)) {
+    return false;
+  }
+  // Check that user either syncs everything or has selected cookies as one of
+  // synced types.
+  if (!prefs_->GetBoolean(syncer::prefs::internal::kSyncKeepEverythingSynced)) {
+    return prefs_->GetBoolean(syncer::prefs::internal::kSyncCookies);
+  }
+  return true;
 }
 
 void FloatingSsoService::MaybeStartListening() {
@@ -265,7 +287,8 @@ void FloatingSsoService::OnCookiesLoaded(const net::CookieList& cookies) {
 bool FloatingSsoService::ShouldSyncCookie(
     const net::CanonicalCookie& cookie) const {
   // Filter out session cookies (except when Floating Workspace is enabled).
-  if (!cookie.IsPersistent() && !IsFloatingWorkspaceEnabled()) {
+  if (!cookie.IsPersistent() &&
+      !ash::floating_workspace_util::IsFloatingWorkspaceV2Enabled()) {
     return false;
   }
 
@@ -295,13 +318,6 @@ bool FloatingSsoService::IsDomainAllowed(
 
   // The domain is not blocked if it doesn't have matches in the blocklist.
   return block_url_matcher_->MatchURL(cookie_domain_url).empty();
-}
-
-bool FloatingSsoService::IsFloatingWorkspaceEnabled() const {
-  bool floating_workspace_policy_enabled =
-      prefs_->GetBoolean(ash::prefs::kFloatingWorkspaceV2Enabled);
-  return floating_workspace_policy_enabled &&
-         ash::features::IsFloatingWorkspaceV2Enabled();
 }
 
 void FloatingSsoService::OnConnectionError() {

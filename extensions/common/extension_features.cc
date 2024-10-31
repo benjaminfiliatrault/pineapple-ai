@@ -65,6 +65,10 @@ BASE_FEATURE(kEnableWebHidInWebView,
              "EnableWebHidInWebView",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kExtensionDisableUnsupportedDeveloper,
+             "ExtensionDisableUnsupportedDeveloper",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kExtensionDynamicURLRedirection,
              "ExtensionDynamicURLRedirection",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -130,13 +134,6 @@ BASE_FEATURE(kLaunchWindowsNativeHostsDirectly,
              "LaunchWindowsNativeHostsDirectly",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-#if BUILDFLAG(IS_MAC)
-// TODO(crbug.com/357636604): Remove this feature flag in M132.
-BASE_FEATURE(kMacRejectFilePathsEndingWithSeparator,
-             "MacRejectFilePathsEndingWithSeparator",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
-
 BASE_FEATURE(kNewExtensionFaviconHandling,
              "ExtensionsNewFaviconHandling",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -180,7 +177,7 @@ BASE_FEATURE(kIncludeJSCallStackInExtensionApiRequest,
 
 BASE_FEATURE(kUseItemSnippetsAPI,
              "UseItemSnippetsAPI",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kUseNewServiceWorkerTaskQueue,
              "UseNewServiceWorkerTaskQueue",
@@ -188,6 +185,10 @@ BASE_FEATURE(kUseNewServiceWorkerTaskQueue,
 
 BASE_FEATURE(kDeclarativeNetRequestHeaderSubstitution,
              "DeclarativeNetRequestHeaderSubstitution",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSilentDebuggerExtensionAPI,
+             "SilentDebuggerExtensionAPI",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace extensions_features

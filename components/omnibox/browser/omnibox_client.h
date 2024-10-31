@@ -167,9 +167,9 @@ class OmniboxClient {
   // icon.
   virtual const gfx::VectorIcon& GetVectorIcon() const = 0;
 
-  // Returns the LensOverlayInteractionResponse if available.
-  virtual std::optional<lens::proto::LensOverlayInteractionResponse>
-  GetLensOverlayInteractionResponse() const;
+  // Returns the LensOverlaySuggestInputs if available.
+  virtual std::optional<lens::proto::LensOverlaySuggestInputs>
+  GetLensOverlaySuggestInputs() const;
 
   // Checks whether |template_url| is an extension keyword; if so, asks the
   // ExtensionOmniboxEventRouter to process |match| for it and returns true.
@@ -259,6 +259,11 @@ class OmniboxClient {
       const AutocompleteMatch& match,
       const AutocompleteMatch& alternative_nav_match,
       IDNA2008DeviationCharacter deviation_char_in_hostname) = 0;
+
+  // Called when the input is accepted with a thumbnail and no user text. This
+  // is required because there is no verbatim match when the input is just an
+  // image without text.
+  virtual void OnThumbnailOnlyAccept() {}
 
   // Called when the view should update itself without restoring any tab state.
   virtual void OnInputInProgress(bool in_progress) {}

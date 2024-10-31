@@ -20,6 +20,9 @@ import androidx.annotation.Nullable;
 
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
+import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
@@ -28,7 +31,8 @@ import org.chromium.ui.widget.TextViewWithClickableSpans;
 import org.chromium.url.GURL;
 
 /** Implements the content for the plus address creation bottom sheet. */
-public class PlusAddressCreationBottomSheetContent implements BottomSheetContent {
+public class PlusAddressCreationBottomSheetContent extends EmptyBottomSheetObserver
+        implements BottomSheetContent {
     private final Context mContext;
     private final BottomSheetController mBottomSheetController;
 
@@ -45,13 +49,16 @@ public class PlusAddressCreationBottomSheetContent implements BottomSheetContent
     // Contains the plus address icon, the proposed plus address text view and the refresh icon
     // if plus address refresh is supported.
     final ViewGroup mProposedPlusAddressContainer;
+    // Shows plus address logo before the plus address text view to the user.
+    final ImageView mProposedPlusAddressIcon;
+    // Shows a loading view, which is visible only when the plus address is being reserved or
+    // refreshed.
+    final LoadingView mProposedPlusAddressLoadingView;
     // Displays the proposed plus address to the user. This UI string can be updated if plus address
     // refresh is supported and user didn't reach the allocation limit.
     final TextView mProposedPlusAddress;
     // The clickable icon used to refresh the suggested plus address.
     final ImageView mRefreshIcon;
-    // Legacy error reporting instruction.
-    final TextViewWithClickableSpans mPlusAddressErrorReportView;
     // The button to confirm the proposed plus address.
     final Button mPlusAddressConfirmButton;
     // The button to cancel the plus address creation dialog. Only visible on
@@ -91,12 +98,23 @@ public class PlusAddressCreationBottomSheetContent implements BottomSheetContent
 
         mProposedPlusAddressContainer =
                 mContentView.findViewById(R.id.proposed_plus_address_container);
+        mProposedPlusAddressIcon = mContentView.findViewById(R.id.proposed_plus_address_logo);
+        mProposedPlusAddressLoadingView =
+                mContentView.findViewById(R.id.proposed_plus_address_loading_view);
+        mProposedPlusAddressLoadingView.addObserver(
+                new LoadingView.Observer() {
+                    @Override
+                    public void onShowLoadingUIComplete() {}
+
+                    @Override
+                    public void onHideLoadingUIComplete() {
+                        if (mDelegate != null) {
+                            mContentView.post(mDelegate::onPlusAddressLoadingViewHidden);
+                        }
+                    }
+                });
         mProposedPlusAddress = mContentView.findViewById(R.id.proposed_plus_address);
         mProposedPlusAddress.setTypeface(Typeface.MONOSPACE);
-
-        mPlusAddressErrorReportView =
-                mContentView.findViewById(R.id.plus_address_modal_error_report);
-        mPlusAddressErrorReportView.setMovementMethod(LinkMovementMethod.getInstance());
 
         mRefreshIcon = mContentView.findViewById(R.id.refresh_plus_address_icon);
 
@@ -107,6 +125,21 @@ public class PlusAddressCreationBottomSheetContent implements BottomSheetContent
         mPlusAddressCancelButton.setOnClickListener(unused -> mDelegate.onCanceled());
 
         mLoadingView = mContentView.findViewById(R.id.plus_address_creation_loading_view);
+        // {@link LoadingView} is shown and hidden with a delay. This prevents the bottom sheet to
+        // adjust its height automatically. This observer ensures that the bottom sheet height is
+        // adjusted after every loading view state change event.
+        mLoadingView.addObserver(
+                new LoadingView.Observer() {
+                    @Override
+                    public void onShowLoadingUIComplete() {}
+
+                    @Override
+                    public void onHideLoadingUIComplete() {
+                        if (mDelegate != null) {
+                            mDelegate.onConfirmationLoadingViewHidden();
+                        }
+                    }
+                });
 
         mErrorContentStub = mContentView.findViewById(R.id.plus_address_error_container_stub);
 
@@ -116,6 +149,20 @@ public class PlusAddressCreationBottomSheetContent implements BottomSheetContent
                         ? View.LAYOUT_DIRECTION_RTL
                         : View.LAYOUT_DIRECTION_LTR;
         mContentView.setLayoutDirection(layoutDirection);
+
+        mBottomSheetController.addObserver(this);
+    }
+
+    @Override
+    public void onSheetStateChanged(@SheetState int newState, @StateChangeReason int reason) {
+        // If we update the sheet contents while its animation is running it won't update its height
+        // to the updated text size. Request expansion again to fix this.
+        // TODO: crbug.com/354881207 - Check if this logic can be incorporated into the bottom
+        // sheet implementation.
+        if (newState == SheetState.FULL
+                && mBottomSheetController.getCurrentOffset() != mContentView.getHeight()) {
+            mBottomSheetController.expandSheet();
+        }
     }
 
     void setOnboardingNotice(String notice, GURL learnMoreUrl) {
@@ -137,6 +184,18 @@ public class PlusAddressCreationBottomSheetContent implements BottomSheetContent
             mBottomSheetController.requestShowContent(this, /* animate= */ true);
         } else {
             mBottomSheetController.hideContent(this, /* animate= */ true);
+        }
+    }
+
+    void setPlusAddressIconVisible(boolean visible) {
+        mProposedPlusAddressIcon.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
+    void setPlusAddressLoadingViewVisible(boolean visible) {
+        if (visible) {
+            mProposedPlusAddressLoadingView.showLoadingUI(/* skipDelay= */ true);
+        } else {
+            mProposedPlusAddressLoadingView.hideLoadingUI();
         }
     }
 
@@ -172,24 +231,6 @@ public class PlusAddressCreationBottomSheetContent implements BottomSheetContent
     /** Sets the delegate listening for actions the user performs on this bottom sheet. */
     void setDelegate(PlusAddressCreationDelegate delegate) {
         mDelegate = delegate;
-    }
-
-    void setLegacyErrorReportingInstructionVisible(boolean visible) {
-        mProposedPlusAddressContainer.setVisibility(visible ? View.GONE : View.VISIBLE);
-        mPlusAddressErrorReportView.setVisibility(visible ? View.VISIBLE : View.GONE);
-    }
-
-    void setLegacyErrorReportingInstruction(String intruction, GURL errorReportUrl) {
-        NoUnderlineClickableSpan errorReportLink =
-                new NoUnderlineClickableSpan(
-                        mContext,
-                        v -> {
-                            mDelegate.openUrl(errorReportUrl);
-                        });
-        SpannableString errorReportString =
-                SpanApplier.applySpans(
-                        intruction, new SpanApplier.SpanInfo("<link>", "</link>", errorReportLink));
-        mPlusAddressErrorReportView.setText(errorReportString);
     }
 
     void setLoadingIndicatorVisible(boolean visible) {

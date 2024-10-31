@@ -584,13 +584,15 @@ public class ExternalNavigationHandler {
         if (result.getResultType() == OverrideUrlLoadingResultType.NO_OVERRIDE) {
             result =
                     handleFallbackUrl(
-                            params,
-                            targetIntent,
-                            browserFallbackUrl,
-                            canLaunchExternalFallbackResult.get());
+                            params, browserFallbackUrl, canLaunchExternalFallbackResult.get());
         }
         if (debug()) printDebugShouldOverrideUrlLoadingResultType(result);
 
+        if (result.getResultType() == OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT
+                || result.getResultType()
+                        == OverrideUrlLoadingResultType.OVERRIDE_WITH_ASYNC_ACTION) {
+            mDelegate.maybeRecordExternalNavigationSchemeHistogram(params.getUrl());
+        }
         if (result.getResultType() == OverrideUrlLoadingResultType.OVERRIDE_WITH_ASYNC_ACTION) {
             params.onAsyncActionStarted();
         }
@@ -599,7 +601,6 @@ public class ExternalNavigationHandler {
 
     private OverrideUrlLoadingResult handleFallbackUrl(
             ExternalNavigationParams params,
-            Intent targetIntent,
             GURL browserFallbackUrl,
             boolean canLaunchExternalFallback) {
         if (browserFallbackUrl.isEmpty()) {
@@ -924,10 +925,21 @@ public class ExternalNavigationHandler {
     }
 
     /**
-     * Special case - It makes no sense to use an external application for a YouTube
-     * pairing code URL, since these match the current tab with a device (Chromecast
-     * or similar) it is supposed to be controlling. Using a different application
-     * that isn't expecting this (in particular YouTube) doesn't work.
+     * The "fido:" scheme is disabled in Clank. Pages should use the Web Authentication API to
+     * access that platform functionality.
+     */
+    private boolean hasFidoScheme(GURL targetUrl, Intent targetIntent) {
+        if (UrlUtilities.hasIntentScheme(targetUrl) && targetIntent.getData() != null) {
+            return UrlConstants.FIDO_SCHEME.equals(targetIntent.getData().getScheme());
+        }
+        return UrlConstants.FIDO_SCHEME.equals(targetUrl.getScheme());
+    }
+
+    /**
+     * Special case - It makes no sense to use an external application for a YouTube pairing code
+     * URL, since these match the current tab with a device (Chromecast or similar) it is supposed
+     * to be controlling. Using a different application that isn't expecting this (in particular
+     * YouTube) doesn't work.
      */
     @VisibleForTesting
     protected boolean isYoutubePairingCode(GURL url) {
@@ -960,7 +972,6 @@ public class ExternalNavigationHandler {
      */
     private @NavigationChainResult int navigationChainBlocksExternalNavigation(
             ExternalNavigationParams params,
-            Intent targetIntent,
             QueryIntentActivitiesSupplier resolvingInfos,
             boolean isExternalProtocol,
             boolean shouldReturnAsResult) {
@@ -1197,7 +1208,6 @@ public class ExternalNavigationHandler {
     private boolean isInsecureIntentToOtherBrowser(
             Intent targetIntent,
             QueryIntentActivitiesSupplier resolveInfos,
-            boolean isIntentWithSupportedProtocol,
             ResolveActivitySupplier resolveActivity,
             boolean intentHasExtras) {
         // If an intent has Extras or a data URI it may be used to launch arbitrary URIs in insecure
@@ -1434,7 +1444,7 @@ public class ExternalNavigationHandler {
             }
         }
 
-        OverrideUrlLoadingResult result = handleFallbackUrl(params, intent, fallbackUrl, false);
+        OverrideUrlLoadingResult result = handleFallbackUrl(params, fallbackUrl, false);
         if (params.getRequiredAsyncActionTakenCallback() != null) {
             if (result.getResultType() == OverrideUrlLoadingResultType.NO_OVERRIDE) {
                 // There was no fallback URL and we can't handle the URL the intent was targeting.
@@ -1552,12 +1562,6 @@ public class ExternalNavigationHandler {
                     new GURL(getUrlFromSelfSchemeUrl(selfScheme, intentTargetUrl.getSpec()));
         }
 
-        // intent: URLs are considered an external protocol, but may still contain a Data URI that
-        // this app does support, and may still end up launching this app.
-        boolean isIntentWithSupportedProtocol =
-                UrlUtilities.hasIntentScheme(params.getUrl())
-                        && UrlUtilities.isAcceptedScheme(intentTargetUrl);
-
         // Needs to be checked first as a failure for this reason is persisted through the
         // navigation chain, and other failures should not cause this check to be skipped.
         if (isHiddenCrossFrameRenavigation(params)) return OverrideUrlLoadingResult.forNoOverride();
@@ -1586,7 +1590,8 @@ public class ExternalNavigationHandler {
 
         if (hasInternalScheme(params.getUrl(), targetIntent)
                 || hasContentScheme(params.getUrl(), targetIntent)
-                || hasFileSchemeInIntentURI(params.getUrl(), targetIntent)) {
+                || hasFileSchemeInIntentURI(params.getUrl(), targetIntent)
+                || hasFidoScheme(params.getUrl(), targetIntent)) {
             return OverrideUrlLoadingResult.forNoOverride();
         }
 
@@ -1620,11 +1625,7 @@ public class ExternalNavigationHandler {
         @NavigationChainResult
         int navigationChainResult =
                 navigationChainBlocksExternalNavigation(
-                        params,
-                        targetIntent,
-                        resolvingInfos,
-                        isExternalProtocol,
-                        shouldReturnAsResult);
+                        params, resolvingInfos, isExternalProtocol, shouldReturnAsResult);
 
         // Short-circuit expensive quertyIntentActivities calls below since we won't prompt anyways
         // for protocols the browser can handle.
@@ -1639,6 +1640,7 @@ public class ExternalNavigationHandler {
         }
 
         if (shouldReturnAsResult) {
+            mDelegate.notifyCctPasswordSavingRecorderOfExternalNavigation();
             mDelegate.returnAsActivityResult(intentTargetUrl);
             return OverrideUrlLoadingResult.forClosingAfterAuth();
         }
@@ -1706,11 +1708,7 @@ public class ExternalNavigationHandler {
         } else {
             requiresIntentChooser =
                     isInsecureIntentToOtherBrowser(
-                            targetIntent,
-                            resolvingInfos,
-                            isIntentWithSupportedProtocol,
-                            resolveActivity,
-                            intentHasExtras);
+                            targetIntent, resolvingInfos, resolveActivity, intentHasExtras);
 
             if (shouldAvoidShowingDisambiguationPrompt(
                     isExternalProtocol, intentTargetUrl, resolvingInfos, resolveActivity)) {
@@ -1726,7 +1724,6 @@ public class ExternalNavigationHandler {
                         params);
             }
         }
-
         return startActivity(
                 targetIntent,
                 params,
@@ -1807,12 +1804,12 @@ public class ExternalNavigationHandler {
 
         // The intent is staying in the app, so we can simply navigate to the intent's URL,
         // while staying in incognito.
-        return handleFallbackUrl(params, targetIntent, fallbackUrl, false);
+        return handleFallbackUrl(params, fallbackUrl, false);
     }
 
     /**
-     * Sanitize intent to be passed to {@link queryIntentActivities()}
-     * ensuring that web pages cannot bypass browser security.
+     * Sanitize intent to be passed to {@link queryIntentActivities()} ensuring that web pages
+     * cannot bypass browser security.
      */
     public static void sanitizeQueryIntentActivitiesIntent(Intent intent) {
         intent.setFlags(intent.getFlags() & ALLOWED_INTENT_FLAGS);
@@ -2102,7 +2099,7 @@ public class ExternalNavigationHandler {
      * @param resolveActivity The resolving Activity |intent| matches against.
      * @param browserFallbackUrl The fallback URL if the user chooses not to leave this app.
      * @param intentTargetUrl The URL |intent| is targeting.
-     * @returns The OverrideUrlLoadingResult for starting (or not starting) the Activity.
+     * @return The OverrideUrlLoadingResult for starting (or not starting) the Activity.
      */
     protected OverrideUrlLoadingResult startActivity(
             Intent intent,
@@ -2137,6 +2134,7 @@ public class ExternalNavigationHandler {
                         params,
                         context);
             }
+            mDelegate.notifyCctPasswordSavingRecorderOfExternalNavigation();
             return doStartActivity(intent, context);
         } catch (SecurityException e) {
             // https://crbug.com/808494: Handle the URL internally if dispatching to another
@@ -2162,6 +2160,7 @@ public class ExternalNavigationHandler {
         if (debug()) Log.i(TAG, "startActivity");
         context.startActivity(intent);
         recordExternalNavigationDispatched(intent);
+        mDelegate.reportIntentToSafeBrowsing(intent);
         return OverrideUrlLoadingResult.forExternalIntent();
     }
 

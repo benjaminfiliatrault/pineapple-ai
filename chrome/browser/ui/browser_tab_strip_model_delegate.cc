@@ -36,7 +36,7 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/reading_list/core/reading_list_model.h"
-#include "components/saved_tab_groups/features.h"
+#include "components/saved_tab_groups/public/features.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/sessions/content/content_live_tab.h"
 #include "components/sessions/core/session_id.h"
@@ -332,11 +332,22 @@ BrowserTabStripModelDelegate::GetBrowserWindowInterface() {
 
 void BrowserTabStripModelDelegate::OnGroupsDestruction(
     const std::vector<tab_groups::TabGroupId>& group_ids,
-    base::OnceCallback<void()> callback) {
-  tab_groups::SavedTabGroupUtils::MaybeShowSavedTabGroupDeletionDialog(
-      browser_,
-      tab_groups::DeletionDialogController::DialogType::CloseTabAndDelete,
-      group_ids, std::move(callback));
+    base::OnceCallback<void()> close_callback,
+    bool is_bulk_operation) {
+  if (is_bulk_operation && tab_groups::IsTabGroupsSaveV2Enabled()) {
+    // If this is a bulk operation, close the groups rather than delete
+    // them to retain the saved group.
+    for (auto group_id : group_ids) {
+      tab_groups::SavedTabGroupUtils::RemoveGroupFromTabstrip(browser_,
+                                                              group_id);
+    }
+    std::move(close_callback).Run();
+  } else {
+    tab_groups::SavedTabGroupUtils::MaybeShowSavedTabGroupDeletionDialog(
+        browser_,
+        tab_groups::DeletionDialogController::DialogType::CloseTabAndDelete,
+        group_ids, std::move(close_callback));
+  }
 }
 
 void BrowserTabStripModelDelegate::OnRemovingAllTabsFromGroups(

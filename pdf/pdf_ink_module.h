@@ -5,8 +5,6 @@
 #ifndef PDF_PDF_INK_MODULE_H_
 #define PDF_PDF_INK_MODULE_H_
 
-#include <stddef.h>
-
 #include <map>
 #include <memory>
 #include <optional>
@@ -18,6 +16,8 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "pdf/buildflags.h"
+#include "pdf/pdf_ink_brush.h"
+#include "pdf/pdf_ink_stroke_id.h"
 #include "pdf/pdf_ink_undo_redo_model.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/ink/src/ink/strokes/in_progress_stroke.h"
@@ -36,10 +36,40 @@ class WebMouseEvent;
 
 namespace chrome_pdf {
 
-class PdfInkBrush;
 class PdfInkModuleClient;
 
 class PdfInkModule {
+ private:
+  // Some initial definitions needed for internal working of public classes.
+
+  // A stroke that has been completed, its ID, and whether it should be drawn
+  // or not.
+  struct FinishedStrokeState {
+    FinishedStrokeState(ink::Stroke stroke, InkStrokeId id);
+    FinishedStrokeState(const FinishedStrokeState&) = delete;
+    FinishedStrokeState& operator=(const FinishedStrokeState&) = delete;
+    FinishedStrokeState(FinishedStrokeState&&) noexcept;
+    FinishedStrokeState& operator=(FinishedStrokeState&&) noexcept;
+    ~FinishedStrokeState();
+
+    // Coordinates for each stroke are stored in a canonical format specified in
+    // pdf_ink_transform.h.
+    ink::Stroke stroke;
+
+    // A unique ID to identify this stroke.
+    InkStrokeId id;
+
+    bool should_draw = true;
+  };
+
+  // Each page of a document can have many strokes.  Each stroke is restricted
+  // to just one page.
+  // The elements are stored with IDs in an increasing order.
+  using PageStrokes = std::vector<FinishedStrokeState>;
+
+  // Mapping of a 0-based page index to the strokes for that page.
+  using DocumentStrokesMap = std::map<int, PageStrokes>;
+
  public:
   using StrokeInputPoints = std::vector<gfx::PointF>;
 
@@ -50,6 +80,47 @@ class PdfInkModule {
   // Mapping of a 0-based page index to the input points that make up the
   // strokes for that page.
   using DocumentStrokeInputPointsMap = std::map<int, PageStrokeInputPoints>;
+
+  struct PageInkStroke {
+    int page_index;
+    raw_ref<const ink::Stroke> stroke;
+  };
+
+  // Iterator to get visible strokes.  Once created, the caller should ensure
+  // that there is no further PdfInkModule interactions until the iterator has
+  // been destroyed.
+  class PageInkStrokeIterator {
+   public:
+    explicit PageInkStrokeIterator(const DocumentStrokesMap& strokes);
+    PageInkStrokeIterator(const PageInkStrokeIterator&) = delete;
+    PageInkStrokeIterator& operator=(const PageInkStrokeIterator&) = delete;
+    ~PageInkStrokeIterator();
+
+    // Gets the next visible stroke if there is one, and advances the internal
+    // iterator to the next visible stroke.
+    std::optional<PageInkStroke> GetNextStrokeAndAdvance();
+
+   private:
+    // Helper to advance to the next page which has visible strokes.  If there
+    // is another page with visible strokes, performs the iterators
+    // initialization to be able to get the visible strokes for it.  Leaves
+    // `pages_iterator_` at end position if there are no more pages with
+    // visible strokes.
+    void AdvanceToNextPageWithVisibleStrokes();
+
+    // Helper to advance to the next visible stroke for the current page, if
+    // there is one.  Leaves `page_strokes_iterator_` at end position if there
+    // are no more visible strokes.
+    void AdvanceForCurrentPage();
+
+    const raw_ref<const DocumentStrokesMap> strokes_;
+
+    // Iterator for getting pages with visible strokes.
+    DocumentStrokesMap::const_iterator pages_iterator_;
+
+    // Iterator for getting visible strokes of a particular page.
+    PageStrokes::const_iterator page_strokes_iterator_;
+  };
 
   explicit PdfInkModule(PdfInkModuleClient& client);
   PdfInkModule(const PdfInkModule&) = delete;
@@ -66,6 +137,11 @@ class PdfInkModule {
   // the region for the page at `page_index`, so this only draws strokes for
   // that page, regardless of page visibility.
   bool DrawThumbnail(SkCanvas& canvas, int page_index);
+
+  // Gets an iterator for the visible strokes across all pages.
+  // Modifying the set of visible strokes while using the iterator is not
+  // supported and can result in undefined behavior.
+  PageInkStrokeIterator GetVisibleStrokesIterator();
 
   // Returns whether the event was handled or not.
   bool HandleInputEvent(const blink::WebInputEvent& event);
@@ -97,10 +173,10 @@ class PdfInkModule {
     DrawingStrokeState& operator=(const DrawingStrokeState&) = delete;
     ~DrawingStrokeState();
 
-    // The current brush to use for drawing strokes. Never null.
-    std::unique_ptr<PdfInkBrush> brush;
+    // The current brush type to use for drawing strokes.
+    PdfInkBrush::Type brush_type;
 
-    std::optional<base::Time> start_time;
+    std::optional<base::TimeTicks> start_time;
 
     // The 0-based page index which is currently being stroked.
     int page_index = -1;
@@ -120,47 +196,19 @@ class PdfInkModule {
     std::vector<ink::StrokeInputBatch> inputs;
   };
 
-  // A stroke that has been completed, its ID, and whether it should be drawn
-  // or not.
-  struct FinishedStrokeState {
-    FinishedStrokeState(ink::Stroke stroke, size_t id);
-    FinishedStrokeState(const FinishedStrokeState&) = delete;
-    FinishedStrokeState& operator=(const FinishedStrokeState&) = delete;
-    FinishedStrokeState(FinishedStrokeState&&) noexcept;
-    FinishedStrokeState& operator=(FinishedStrokeState&&) noexcept;
-    ~FinishedStrokeState();
-
-    // Coordinates for each stroke are stored in a canonical format specified in
-    // pdf_ink_transform.h.
-    ink::Stroke stroke;
-
-    // A unique ID to identify this stroke.
-    size_t id;
-
-    bool should_draw = true;
-  };
-
-  // Each page of a document can have many strokes.  Each stroke is restricted
-  // to just one page.
-  // The elements are stored with IDs in an increasing order.
-  using PageStrokes = std::vector<FinishedStrokeState>;
-
-  // Mapping of a 0-based page index to the strokes for that page.
-  using DocumentStrokesMap = std::map<int, PageStrokes>;
-
   class StrokeIdGenerator {
    public:
     StrokeIdGenerator();
     ~StrokeIdGenerator();
 
     // Returns an available ID and advance the next available ID internally.
-    size_t GetIdAndAdvance();
+    InkStrokeId GetIdAndAdvance();
 
-    void ResetIdTo(size_t id);
+    void ResetIdTo(InkStrokeId id);
 
    private:
     // The next available ID for use in FinishedStrokeState.
-    size_t next_stroke_id_ = 0;
+    InkStrokeId next_stroke_id_ = InkStrokeId(0);
   };
 
   struct EraserState {
@@ -171,7 +219,6 @@ class PdfInkModule {
 
     bool erasing = false;
     base::flat_set<int> page_indices_with_erased_strokes;
-    float eraser_size = 0;
   };
 
   // Returns whether the event was handled or not.
@@ -180,9 +227,9 @@ class PdfInkModule {
   bool OnMouseMove(const blink::WebMouseEvent& event);
 
   // Return values have the same semantics as OnMouse()* above.
-  bool StartStroke(const gfx::PointF& position);
-  bool ContinueStroke(const gfx::PointF& position);
-  bool FinishStroke(const gfx::PointF& position);
+  bool StartStroke(const gfx::PointF& position, base::TimeTicks timestamp);
+  bool ContinueStroke(const gfx::PointF& position, base::TimeTicks timestamp);
+  bool FinishStroke(const gfx::PointF& position, base::TimeTicks timestamp);
 
   // Return values have the same semantics as OnMouse*() above.
   bool StartEraseStroke(const gfx::PointF& position);
@@ -195,6 +242,7 @@ class PdfInkModule {
 
   void HandleAnnotationRedoMessage(const base::Value::Dict& message);
   void HandleAnnotationUndoMessage(const base::Value::Dict& message);
+  void HandleGetAnnotationBrushMessage(const base::Value::Dict& message);
   void HandleSetAnnotationBrushMessage(const base::Value::Dict& message);
   void HandleSetAnnotationModeMessage(const base::Value::Dict& message);
 
@@ -217,6 +265,13 @@ class PdfInkModule {
     return absl::get<EraserState>(current_tool_state_);
   }
 
+  // Returns the current brush. Must be in a drawing stroke state.
+  PdfInkBrush& GetDrawingBrush();
+  const PdfInkBrush& GetDrawingBrush() const;
+
+  // Returns the brush with type `brush_type`.
+  const PdfInkBrush& GetBrush(PdfInkBrush::Type brush_type) const;
+
   // Converts `current_tool_state_` into segments of `ink::InProgressStroke`.
   // Requires `current_tool_state_` to hold a `DrawingStrokeState`. If there is
   // no `DrawingStrokeState`, or the state currently has no inputs, then the
@@ -231,11 +286,13 @@ class PdfInkModule {
       int page_index);
 
   // Helper to convert `position` to a canonical position and record it into
-  // `current_tool_state_`. Can only be called when drawing.
-  void RecordStrokePosition(const gfx::PointF& position);
+  // `current_tool_state_` for the indicated time. Can only be called when
+  // drawing.
+  void RecordStrokePosition(const gfx::PointF& position,
+                            base::TimeTicks timestamp);
 
   void ApplyUndoRedoCommands(const PdfInkUndoRedoModel::Commands& commands);
-  void ApplyUndoRedoCommandsHelper(std::set<size_t> ids, bool should_draw);
+  void ApplyUndoRedoCommandsHelper(std::set<InkStrokeId> ids, bool should_draw);
 
   void ApplyUndoRedoDiscards(
       const PdfInkUndoRedoModel::DiscardedDrawCommands& discards);
@@ -248,6 +305,12 @@ class PdfInkModule {
 
   // Generates IDs for use in FinishedStrokeState and PdfInkUndoRedoModel.
   StrokeIdGenerator stroke_id_generator_;
+
+  // Store a PdfInkBrush for each brush type so that the brush parameters are
+  // saved when swapping between brushes.
+  PdfInkBrush highlighter_brush_;
+  PdfInkBrush pen_brush_;
+  float eraser_size_ = 3.0f;
 
   // The state of the current tool that is in use.
   absl::variant<DrawingStrokeState, EraserState> current_tool_state_;

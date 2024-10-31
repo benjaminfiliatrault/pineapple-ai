@@ -465,7 +465,7 @@ BASE_FEATURE(kContextMenuSaveVideoFrameAs,
 // Enables the "Search Video Frame with <Search Provider>" context menu item.
 BASE_FEATURE(kContextMenuSearchForVideoFrame,
              "ContextMenuSearchForVideoFrame",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
 // If echo cancellation for a mic signal is requested, mix and cancel all audio
@@ -473,49 +473,6 @@ BASE_FEATURE(kContextMenuSearchForVideoFrame,
 BASE_FEATURE(kChromeWideEchoCancellation,
              "ChromeWideEchoCancellation",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-// When audio processing is done in the audio process, at the renderer side IPC
-// is set up to receive audio at the processing sample rate. This is a
-// kill-switch to fallback to receiving audio at the default sample rate of the
-// audio capture device.
-const base::FeatureParam<bool> kChromeWideEchoCancellationMinimizeResampling{
-    &kChromeWideEchoCancellation, "minimize_resampling", true};
-
-// Dynamically sets audio::SyncReader's timeout based off of a percentage of
-// buffer duration, in an attempt to minimize glitches.
-// The default negative value indicates that no experiment is running, and
-// we shouldn't use a mixing specific timeout value.
-// If the similar kDynamicAudioTimeout feature is enabled and this value is set,
-// this parameter will override kDynamicAudioTimeout values when we are mixing.
-const base::FeatureParam<double>
-    kChromeWideEchoCancellationDynamicMixingTimeout{
-        &kChromeWideEchoCancellation, "mixing_buffer_duration_percent", -1.0};
-
-// Allows all sample rates to be used for audio processing. If disabled, only
-// sample rates divisible by 100 are allowed; a request for a media stream with
-// enabled audio processing will fail otherwise. For context see
-// https://crbug.com/1332484.
-const base::FeatureParam<bool> kChromeWideEchoCancellationAllowAllSampleRates{
-    &kChromeWideEchoCancellation, "allow_all_sample_rates", true};
-
-// https://crbug.com/1420568
-// Applicable only if kChromeWideEchoCancellation is enabled.
-// If disabled, the ProcessingAudioFifo size defaults to 110.
-// If enabled, the ProcessingAudioFifo size is set to the value of the fifo_size
-// parameter.
-//
-// If the ProcessingAudioFifo size is non-zero, audio processing is done on a
-// dedicated processing thread which receives audio from the audio capture
-// thread via a fifo of a specified size.
-// If the ProcessingAudioFifo size is zero, the usage of this processing thread
-// is disabled and processing is done on the audio capture thread itself.
-BASE_FEATURE(kDecreaseProcessingAudioFifoSize,
-             "DecreaseProcessingAudioFifoSize",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-const base::FeatureParam<int> kDecreaseProcessingAudioFifoSizeValue{
-    &kDecreaseProcessingAudioFifoSize, "fifo_size", 10};
-
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -631,6 +588,14 @@ BASE_FEATURE(kDeferAudioFocusUntilAudible,
 #endif
 );
 
+#if !BUILDFLAG(IS_ANDROID)
+// Allow document picture-in-picture to navigate.  This should be disabled
+// except for testing.
+BASE_FEATURE(kDocumentPictureInPictureNavigation,
+             "DocumentPictureInPictureNavigation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // !BUILDFLAG(IS_ANDROID)
+
 // Adds an animation to document picture-in-picture resizes.
 BASE_FEATURE(kDocumentPictureInPictureAnimateResize,
              "DocumentPictureInPictureAnimateResize",
@@ -731,18 +696,22 @@ BASE_FEATURE(kUnifiedAutoplay,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_LINUX)
-// Enable vaapi video decoding on linux. This is already enabled by default on
-// chromeos, but needs an experiment on linux.
-BASE_FEATURE(kVaapiVideoDecodeLinux,
-             "VaapiVideoDecoder",
+// Enable vaapi/v4l2 video decoding on linux. This is already enabled by default
+// on chromeos, but needs an experiment on linux.
+BASE_FEATURE(kAcceleratedVideoDecodeLinux,
+             "AcceleratedVideoDecoder",
+#if BUILDFLAG(USE_VAAPI)
              base::FEATURE_ENABLED_BY_DEFAULT);
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
-BASE_FEATURE(kVaapiVideoDecodeLinuxGL,
-             "VaapiVideoDecodeLinuxGL",
+BASE_FEATURE(kAcceleratedVideoDecodeLinuxGL,
+             "AcceleratedVideoDecodeLinuxGL",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kVaapiVideoEncodeLinux,
-             "VaapiVideoEncoder",
+BASE_FEATURE(kAcceleratedVideoEncodeLinux,
+             "AcceleratedVideoEncoder",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Ignore the non-intel driver blacklist for VaapiVideoDecoder implementations.
@@ -831,13 +800,6 @@ BASE_FEATURE(kVSyncMjpegDecoding,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS)
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
-// Enables the new V4L2StatefulVideoDecoder instead of V4L2VideoDecoder.
-// Owners: frkoenig@chromium.org, mcasas@chromium.org
-// Expiry: When the |V4L2FlatVideoDecoder| flag handles stateful decoding on
-// all platforms.
-BASE_FEATURE(kV4L2FlatStatefulVideoDecoder,
-             "V4L2FlatStatefulVideoDecoder",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 // Enable H264 temporal layer encoding with V4L2 HW encoder on ChromeOS.
 BASE_FEATURE(kV4L2H264TemporalLayerHWEncoding,
              "V4L2H264TemporalLayerHWEncoding",
@@ -1095,10 +1057,10 @@ BASE_FEATURE(kAVDColorSpaceChanges,
 // BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS) is false.
 BASE_FEATURE(kBuiltInH264Decoder,
              "BuiltInH264Decoder",
-#if BUILDFLAG(IS_ANDROID) || !BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#else
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
              base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
 
@@ -1617,12 +1579,6 @@ BASE_FEATURE(kAudioFocusLossSuspendMediaSession,
              "AudioFocusMediaSession",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Hides the media metadata from the OS' media player if running in an Incognito
-// session.
-BASE_FEATURE(kHideIncognitoMediaMetadata,
-             "HideIncognitoMediaMetadata",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Enables the internal Media Session logic without enabling the Media Session
 // service.
 BASE_FEATURE(kInternalMediaSession,
@@ -1784,6 +1740,12 @@ BASE_FEATURE(kMediaSharedBitmapToSharedImage,
              "MediaSharedBitmapToSharedImage",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+#if BUILDFLAG(IS_WIN)
+BASE_FEATURE(kMediaFoundationD3DVideoProcessing,
+             "MediaFoundationD3DVideoProcessing",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
 bool IsChromeWideEchoCancellationEnabled() {
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
   return base::FeatureList::IsEnabled(kChromeWideEchoCancellation);
@@ -1801,20 +1763,6 @@ bool IsDedicatedMediaServiceThreadEnabled(gl::ANGLEImplementation impl) {
 #endif
 
   return base::FeatureList::IsEnabled(kDedicatedMediaServiceThread);
-}
-
-int GetProcessingAudioFifoSize() {
-#if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
-  if (!IsChromeWideEchoCancellationEnabled()) {
-    return 0;
-  }
-  if (base::FeatureList::IsEnabled(media::kDecreaseProcessingAudioFifoSize)) {
-    return media::kDecreaseProcessingAudioFifoSizeValue.Get();
-  }
-  return 110;
-#else
-  return 0;
-#endif
 }
 
 bool IsHardwareSecureDecryptionEnabled() {

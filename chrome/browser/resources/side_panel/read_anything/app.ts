@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import './read_anything_toolbar.js';
-import './strings.m.js';
+import '/strings.m.js';
 import '//read-anything-side-panel.top-chrome/shared/sp_empty_state.js';
 import '//resources/cr_elements/cr_button/cr_button.js';
 import '//resources/cr_elements/cr_toast/cr_toast.js';
@@ -453,11 +453,6 @@ export class AppElement extends AppElementBase {
           this.updateVoicePackStatus(lang, status);
         };
 
-    chrome.readingMode.updateVoicePackStatusFromInstallResponse =
-        (lang: string, status: string) => {
-          this.updateVoicePackStatusFromInstallResponse(lang, status);
-        };
-
     chrome.readingMode.showLoading = () => {
       this.showLoading();
     };
@@ -604,22 +599,7 @@ export class AppElement extends AppElementBase {
     const textNode = document.createTextNode(textContent);
     this.domNodeToAxNodeIdMap_.set(textNode, nodeId);
     const isOverline = chrome.readingMode.isOverline(nodeId);
-    let shouldBold = chrome.readingMode.shouldBold(nodeId);
-
-    if (chrome.readingMode.isGoogleDocs) {
-      const dataFontCss = chrome.readingMode.getDataFontCss(nodeId);
-      if (dataFontCss) {
-        const styleNode = document.createElement('style');
-        styleNode.style.cssText = `font:${dataFontCss}`;
-        if (styleNode.style.fontStyle === 'italic') {
-          shouldBold = true;
-        }
-        const fontWeight = +styleNode.style.fontWeight;
-        if (!isNaN(fontWeight) && fontWeight > 500) {
-          shouldBold = true;
-        }
-      }
-    }
+    const shouldBold = chrome.readingMode.shouldBold(nodeId);
 
     if (!shouldBold && !isOverline) {
       return textNode;
@@ -689,7 +669,9 @@ export class AppElement extends AppElementBase {
 
     this.willDrawAgainSoon_ = chrome.readingMode.requiresDistillation;
     const node = this.buildSubtree_(rootId);
-    if (!node.textContent) {
+    // If there is not text or images in the node, do not prodeed. The empty
+    // state container will show instead.
+    if (!node.textContent && this.imageNodeIdsToFetch_.size === 0) {
       return;
     }
 
@@ -717,6 +699,7 @@ export class AppElement extends AppElementBase {
     if (data && element && element instanceof HTMLCanvasElement) {
       element.width = data.width;
       element.height = data.height;
+      element.style.zoom = data.scale.toString();
       const context = element.getContext('2d');
       // Context should not be null unless another was already requested.
       assert(context);
@@ -883,39 +866,6 @@ export class AppElement extends AppElementBase {
     chrome.readingMode.onScrolledToBottom();
   }
 
-  updateVoicePackStatusFromInstallResponse(lang: string, status: string) {
-    if (!lang) {
-      return;
-    }
-
-    const newVoicePackStatus = mojoVoicePackStatusToVoicePackStatusEnum(status);
-
-    if (isVoicePackStatusError(newVoicePackStatus)) {
-      // Keep the server responses.
-      this.setVoicePackServerStatus_(lang, newVoicePackStatus);
-
-      // Update application state.
-      this.updateApplicationState(lang, newVoicePackStatus);
-
-      // Disable the associated language if there are no other Google voices for
-      // it.
-      const availableVoicesForLang = this.getVoices_().filter(
-          v => getVoicePackConvertedLangIfExists(v.lang) === lang);
-      if (availableVoicesForLang.length === 0 ||
-          availableVoicesForLang.every(v => isEspeak(v))) {
-        this.enabledLangs = this.enabledLangs.filter(
-            enabledLang =>
-                getVoicePackConvertedLangIfExists(enabledLang) !== lang);
-      }
-    } else {
-      // Do not rely on the status from Install response. It has responded
-      // "installed" for voices that are not installed. Instead, request the
-      // status from GetVoicePackInfo. The result will be returned in
-      // updateVoicePackStatus().
-      this.sendGetVoicePackInfoRequest(lang);
-    }
-  }
-
   updateVoicePackStatus(lang: string, status: string) {
     if (!lang) {
       return;
@@ -928,6 +878,19 @@ export class AppElement extends AppElementBase {
 
     // Update application state
     this.updateApplicationState(lang, newVoicePackStatus);
+
+    if (isVoicePackStatusError(newVoicePackStatus)) {
+      // Disable the associated language if there are no other Google voices for
+      // it.
+      const availableVoicesForLang = this.getVoices_().filter(
+          v => getVoicePackConvertedLangIfExists(v.lang) === lang);
+      if (availableVoicesForLang.length === 0 ||
+          availableVoicesForLang.some(v => isEspeak(v))) {
+        this.enabledLangs = this.enabledLangs.filter(
+            enabledLang =>
+                getVoicePackConvertedLangIfExists(enabledLang) !== lang);
+      }
+    }
   }
 
 

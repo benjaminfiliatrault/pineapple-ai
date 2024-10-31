@@ -34,8 +34,9 @@ class PrefService;
 class Profile;
 
 namespace base {
-class Clock;
-}
+class SequencedTaskRunner;
+class TickClock;
+}  // namespace base
 
 namespace chromeos {
 class PasskeyDialogController;
@@ -267,8 +268,6 @@ class ChromeAuthenticatorRequestDelegate
                                  credential_list) override;
   void SetUserEntityForMakeCredentialRequest(
       const device::PublicKeyCredentialUserEntity& user_entity) override;
-  std::vector<std::unique_ptr<device::FidoDiscoveryBase>>
-  CreatePlatformDiscoveries() override;
 
   // device::FidoRequestHandlerBase::Observer:
   void OnTransportAvailabilityEnumerated(
@@ -295,21 +294,17 @@ class ChromeAuthenticatorRequestDelegate
   void OnCancelRequest() override;
   void OnManageDevicesClicked() override;
 
-  // SetPassEmptyUsbDeviceManagerForTesting controls whether the
-  // `DiscoveryFactory` will be given an empty USB device manager. This is
-  // needed in tests because creating a real `device::mojom::UsbDeviceManager`
-  // can create objects on thread-pool threads. Those objects aren't scheduled
-  // for deletion until after the thread-pool is shutdown when testing, causing
-  // "leaks" to be reported.
-  void SetPassEmptyUsbDeviceManagerForTesting(bool value);
-
   // Allows setting a mock `TrustedVaultConnection` so a real one will not be
   // created. This is only used for a single request, and is destroyed
   // afterward.
   void SetTrustedVaultConnectionForTesting(
       std::unique_ptr<trusted_vault::TrustedVaultConnection> connection);
 
-  void SetClockForTesting(base::Clock*);
+  // Overrides the tick clock and task runner used to track the vault connection
+  // timeout.
+  void SetMockTimeForTesting(
+      base::TickClock const* tick_clock,
+      scoped_refptr<base::SequencedTaskRunner> task_runner);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ChromeAuthenticatorRequestDelegatePrivateTest,
@@ -417,8 +412,6 @@ class ChromeAuthenticatorRequestDelegate
   // requests. When empty, no filter is applied and all passkeys are displayed.
   std::vector<device::PublicKeyCredentialDescriptor> credential_filter_;
 
-  // See `SetPassEmptyUsbDeviceManagerForTesting`.
-  bool pass_empty_usb_device_manager_ = false;
 
   // cable_device_ready_ is true if a caBLE handshake has completed. At this
   // point we assume that any errors were communicated on the caBLE device and
@@ -428,11 +421,6 @@ class ChromeAuthenticatorRequestDelegate
   // can_use_synced_phone_passkeys_ is true if there is a phone pairing
   // available that can service requests for synced GPM passkeys.
   bool can_use_synced_phone_passkeys_ = false;
-
-#if BUILDFLAG(IS_CHROMEOS)
-  std::unique_ptr<chromeos::PasskeyDialogController>
-      chromeos_passkey_controller_;
-#endif
 
   // TODO(crbug.com/40187814): Don't define this on ChromeOS.
   std::unique_ptr<GPMEnclaveController> enclave_controller_;
@@ -451,7 +439,8 @@ class ChromeAuthenticatorRequestDelegate
   // `enclave_controller_` when it is created.
   std::unique_ptr<trusted_vault::TrustedVaultConnection>
       pending_trusted_vault_connection_;
-  raw_ptr<base::Clock> clock_ = nullptr;
+  raw_ptr<const base::TickClock> tick_clock_ = nullptr;
+  scoped_refptr<base::SequencedTaskRunner> timer_task_runner_;
 
   base::WeakPtrFactory<ChromeAuthenticatorRequestDelegate> weak_ptr_factory_{
       this};

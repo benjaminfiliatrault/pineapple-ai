@@ -44,7 +44,7 @@ class GroupDataModel : public CollaborationGroupSyncBridge::Observer {
 
   // `collaboration_group_sync_bridge` and `sdk_delegate` must not be null and
   // must outlive `this`.
-  GroupDataModel(const base::FilePath& profile_dir,
+  GroupDataModel(const base::FilePath& data_sharing_dir,
                  CollaborationGroupSyncBridge* collaboration_group_sync_bridge,
                  DataSharingSDKDelegate* sdk_delegate);
   ~GroupDataModel() override;
@@ -71,10 +71,7 @@ class GroupDataModel : public CollaborationGroupSyncBridge::Observer {
   void OnGroupsUpdated(const std::vector<GroupId>& added_group_ids,
                        const std::vector<GroupId>& updated_group_ids,
                        const std::vector<GroupId>& deleted_group_ids) override;
-  // TODO(crbug.com/301390275): refer to collaborations in the name, since it is
-  // currently confusing (we have model, store and bridge, that are all
-  // indicates that their state is loaded).
-  void OnDataLoaded() override;
+  void OnCollaborationGroupSyncDataLoaded() override;
 
   GroupDataStore& GetGroupDataStoreForTesting();
 

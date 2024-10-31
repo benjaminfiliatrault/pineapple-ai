@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
-import 'chrome://resources/cr_elements/icons_lit.html.js';
+import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/cr_elements/cr_progress/cr_progress.js';
 import './icons.html.js';
 import './viewer_download_controls.js';
@@ -12,6 +12,7 @@ import './shared_vars.css.js';
 // <if expr="enable_ink">
 import './viewer_annotations_bar.js';
 import './viewer_annotations_mode_dialog.js';
+
 // </if>
 
 import type {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
@@ -214,6 +215,20 @@ export class ViewerToolbarElement extends CrLitElement {
     return this.iconsetName_() +
         (this.fittingType_ === FittingType.FIT_TO_PAGE ? ':fit-to-height' :
                                                          ':fit-to-width');
+  }
+
+  // TODO(crbug.com/360265881): Remove conditional icons after the UI refresh
+  // fully launches.
+  protected menuIcon_(): string {
+    return this.pdfCr23Enabled ? 'pdf-cr23:menu' : 'cr20:menu';
+  }
+
+  protected moreIcon_(): string {
+    return this.pdfCr23Enabled ? 'pdf-cr23:more' : 'cr:more-vert';
+  }
+
+  protected printIcon_(): string {
+    return this.pdfCr23Enabled ? 'pdf-cr23:print' : 'cr:print';
   }
 
   /** @return The appropriate tooltip for the current state. */

@@ -1362,7 +1362,9 @@ void RenderProcessHost::SetMaxRendererProcessCount(size_t count) {
   g_max_renderer_count_override = count;
 
   if (RenderProcessHostImpl::GetProcessCount() > count) {
-    SpareRenderProcessHostManagerImpl::Get().CleanupSpare();
+    // TODO(pmonette): Only cleanup n spares, where n is the count of processes
+    // that is over the limit.
+    SpareRenderProcessHostManagerImpl::Get().CleanupSpares();
   }
 }
 
@@ -1872,11 +1874,8 @@ void RenderProcessHostImpl::InitializeSharedMemoryRegionsOnceChannelIsUp() {
   // (such as when recovering from a renderer crash). Need to transfer
   // duplicates of all handles in case this happens, so that the original
   // handles can be shared again with the new process.
-  renderer_interface_->TransferSharedMemoryRegions(
-      last_foreground_time_region_->DuplicateReadOnlyRegion(),
-      GetContentClient()->browser()->GetPerformanceScenarioRegionForProcess(
-          this),
-      GetContentClient()->browser()->GetGlobalPerformanceScenarioRegion());
+  renderer_interface_->TransferSharedLastForegroundTime(
+      last_foreground_time_region_->DuplicateReadOnlyRegion());
 }
 
 void RenderProcessHostImpl::ResetChannelProxy() {
@@ -3079,7 +3078,8 @@ bool RenderProcessHostImpl::HostHasNotBeenUsed() {
 }
 
 bool RenderProcessHostImpl::IsSpare() const {
-  return this == SpareRenderProcessHostManagerImpl::Get().GetSpare();
+  return base::Contains(SpareRenderProcessHostManagerImpl::Get().GetSpares(),
+                        this);
 }
 
 void RenderProcessHostImpl::SetProcessLock(
@@ -3159,7 +3159,7 @@ StoragePartitionImpl* RenderProcessHostImpl::GetStoragePartition() {
 
 static void AppendCompositorCommandLineFlags(base::CommandLine* command_line) {
   command_line->AppendSwitchASCII(
-      cc::switches::kNumRasterThreads,
+      switches::kNumRasterThreads,
       base::NumberToString(NumberOfRendererRasterThreads()));
 
   int msaa_sample_count = GpuRasterizationMSAASampleCount();
@@ -3180,7 +3180,7 @@ static void AppendCompositorCommandLineFlags(base::CommandLine* command_line) {
   }
 
   if (IsMainFrameBeforeActivationEnabled())
-    command_line->AppendSwitch(cc::switches::kEnableMainFrameBeforeActivation);
+    command_line->AppendSwitch(switches::kEnableMainFrameBeforeActivation);
 }
 
 void RenderProcessHostImpl::AppendRendererCommandLine(
@@ -3289,156 +3289,156 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
       // Allow this to be set when invoking the browser and relayed along.
       sandbox::policy::switches::kEnableSandboxLogging,
 #endif
-    switches::kAllowCommandLinePlugins,
-    switches::kAllowLoopbackInPeerConnection,
-    switches::kAudioBufferSize,
-    switches::kAutoplayPolicy,
-    switches::kDisable2dCanvasImageChromium,
-    switches::kDisableYUVImageDecoding,
-    switches::kDisableAcceleratedVideoDecode,
-    switches::kDisableBackForwardCache,
-    switches::kDisableBackgroundTimerThrottling,
-    switches::kDisableBestEffortTasks,
-    switches::kDisableBreakpad,
-    switches::kDisableDatabases,
-    switches::kDisableFileSystem,
-    switches::kDisableFrameRateLimit,
-    switches::kDisableGpuMemoryBufferVideoFrames,
-    switches::kDisableHistogramCustomizer,
-    switches::kDisableLCDText,
-    switches::kDisableBackgroundMediaSuspend,
-    switches::kDisableNotifications,
-    switches::kDisableOriginTrialControlledBlinkFeatures,
-    switches::kDisablePresentationAPI,
-    switches::kDisableRTCSmoothnessAlgorithm,
-    switches::kDisableScrollToTextFragment,
-    switches::kDisableSharedWorkers,
-    switches::kDisableSkiaRuntimeOpts,
-    switches::kDisableSpeechAPI,
-    switches::kDisableThreadedCompositing,
-    switches::kDisableTouchDragDrop,
-    switches::kDisableV8IdleTasks,
-    switches::kDisableVideoCaptureUseGpuMemoryBuffer,
-    switches::kDisableWebGLImageChromium,
-    switches::kDomAutomationController,
-    switches::kEnableAutomation,
-    switches::kEnableBackgroundThreadPool,
-    switches::kEnableExperimentalAccessibilityLanguageDetection,
-    switches::kEnableExperimentalAccessibilityLabelsDebugging,
-    switches::kEnableExperimentalWebPlatformFeatures,
-    switches::kEnableBlinkTestFeatures,
-    switches::kEnableGPUClientLogging,
-    switches::kEnableGpuClientTracing,
-    switches::kEnableGpuMemoryBufferVideoFrames,
-    switches::kEnableGPUServiceLogging,
-    switches::kEnableLCDText,
-    switches::kEnableNetworkInformationDownlinkMax,
-    switches::kEnablePluginPlaceholderTesting,
-    switches::kEnablePreciseMemoryInfo,
-    switches::kEnableSkiaBenchmarking,
-    switches::kEnableTouchDragDrop,
-    switches::kEnableUnsafeWebGPU,
-    switches::kEnableViewport,
-    switches::kEnableVtune,
-    switches::kEnableWebGLDeveloperExtensions,
-    switches::kEnableWebGLDraftExtensions,
-    switches::kEnableWebGLImageChromium,
-    switches::kEnableWebGPUDeveloperFeatures,
-    switches::kFileUrlPathAlias,
-    switches::kForceDeviceScaleFactor,
-    switches::kForceDisplayColorProfile,
-    switches::kForceGpuMemAvailableMb,
-    switches::kForceHighContrast,
-    switches::kForceRasterColorProfile,
-    switches::kForceVideoOverlays,
-    switches::kFullMemoryCrashReport,
-    switches::kGaiaUrl,
-    switches::kIPCConnectionTimeout,
-    switches::kLogBestEffortTasks,
-    switches::kMaxActiveWebGLContexts,
-    switches::kMaxDecodedImageSizeMb,
-    switches::kMaxWebMediaPlayerCount,
-    switches::kMSEAudioBufferSizeLimitMb,
-    switches::kMSEVideoBufferSizeLimitMb,
-    switches::kNoZygote,
-    switches::kOverrideLanguageDetection,
-    switches::kPerfettoDisableInterning,
-    switches::kPpapiInProcess,
-    switches::kProfilingAtStart,
-    switches::kProfilingFile,
-    switches::kProfilingFlush,
-    switches::kRegisterPepperPlugins,
-    switches::kRemoteDebuggingPipe,
-    switches::kRemoteDebuggingPort,
-    switches::kRendererStartupDialog,
-    switches::kReportVp9AsAnUnsupportedMimeType,
-    switches::kStatsCollectionController,
-    switches::kSkiaFontCacheLimitMb,
-    switches::kSkiaResourceCacheLimitMb,
-    switches::kTestType,
-    switches::kTouchEventFeatureDetection,
-    switches::kTraceToConsole,
-    switches::kUseCmdDecoder,
-    switches::kUseFakeCodecForPeerConnection,
-    switches::kUseFakeUIForMediaStream,
-    switches::kUseMobileUserAgent,
-    switches::kVideoCaptureUseGpuMemoryBuffer,
-    switches::kVideoThreads,
-    switches::kWaitForDebuggerOnNavigation,
-    switches::kWebAuthRemoteDesktopSupport,
-    switches::kWebViewDrawFunctorUsesVulkan,
-    switches::kWebglAntialiasingMode,
-    switches::kWebglMSAASampleCount,
-    // Please keep these in alphabetical order.
-    blink::switches::kAllowPreCommitInput,
-    blink::switches::kBlinkSettings,
-    blink::switches::kDarkModeSettings,
-    blink::switches::kDefaultTileWidth,
-    blink::switches::kDefaultTileHeight,
-    blink::switches::kForcePermissionPolicyUnloadDefaultEnabled,
-    blink::switches::kDisableImageAnimationResync,
-    blink::switches::kDisableLowResTiling,
-    blink::switches::kDisablePreferCompositingToLCDText,
-    blink::switches::kDisableRGBA4444Textures,
-    blink::switches::kEnableLeakDetectionHeapSnapshot,
-    blink::switches::kEnableLowResTiling,
-    blink::switches::kEnablePreferCompositingToLCDText,
-    blink::switches::kEnableRGBA4444Textures,
-    blink::switches::kEnableRasterSideDarkModeForImages,
-    blink::switches::kMinHeightForGpuRasterTile,
-    blink::switches::kMaxUntiledLayerWidth,
-    blink::switches::kMaxUntiledLayerHeight,
-    blink::switches::kNetworkQuietTimeout,
-    blink::switches::kShowLayoutShiftRegions,
-    blink::switches::kShowPaintRects,
-    blink::switches::kTouchTextSelectionStrategy,
-    blink::switches::kJavaScriptFlags,
-    // Please keep these in alphabetical order. Compositor switches here
-    // should also be added to
-    // chrome/browser/ash/login/chrome_restart_request.cc.
-    cc::switches::kCCScrollAnimationDurationForTesting,
-    cc::switches::kCheckDamageEarly,
-    cc::switches::kDisableCheckerImaging,
-    cc::switches::kDisableCompositedAntialiasing,
-    cc::switches::kDisableThreadedAnimation,
-    cc::switches::kEnableGpuBenchmarking,
-    cc::switches::kEnableClippedImageScaling,
-    cc::switches::kHighlightNonLCDTextLayers,
-    cc::switches::kShowCompositedLayerBorders,
-    cc::switches::kShowFPSCounter,
-    cc::switches::kShowLayerAnimationBounds,
-    cc::switches::kShowPropertyChangedRects,
-    cc::switches::kShowScreenSpaceRects,
-    cc::switches::kShowSurfaceDamageRects,
-    cc::switches::kSlowDownRasterScaleFactor,
-    cc::switches::kBrowserControlsHideThreshold,
-    cc::switches::kBrowserControlsShowThreshold,
-    switches::kRunAllCompositorStagesBeforeDraw,
+      switches::kAllowCommandLinePlugins,
+      switches::kAllowLoopbackInPeerConnection,
+      switches::kAudioBufferSize,
+      switches::kAutoplayPolicy,
+      switches::kDisable2dCanvasImageChromium,
+      switches::kDisableYUVImageDecoding,
+      switches::kDisableAcceleratedVideoDecode,
+      switches::kDisableAcceleratedVideoEncode,
+      switches::kDisableBackForwardCache,
+      switches::kDisableBackgroundTimerThrottling,
+      switches::kDisableBestEffortTasks,
+      switches::kDisableBreakpad,
+      switches::kDisableDatabases,
+      switches::kDisableFileSystem,
+      switches::kDisableFrameRateLimit,
+      switches::kDisableGpuMemoryBufferVideoFrames,
+      switches::kDisableHistogramCustomizer,
+      switches::kDisableLCDText,
+      switches::kDisableBackgroundMediaSuspend,
+      switches::kDisableNotifications,
+      switches::kDisableOriginTrialControlledBlinkFeatures,
+      switches::kDisablePresentationAPI,
+      switches::kDisableRTCSmoothnessAlgorithm,
+      switches::kDisableScrollToTextFragment,
+      switches::kDisableSharedWorkers,
+      switches::kDisableSkiaRuntimeOpts,
+      switches::kDisableSpeechAPI,
+      switches::kDisableThreadedCompositing,
+      switches::kDisableTouchDragDrop,
+      switches::kDisableV8IdleTasks,
+      switches::kDisableVideoCaptureUseGpuMemoryBuffer,
+      switches::kDisableWebGLImageChromium,
+      switches::kDomAutomationController,
+      switches::kEnableAutomation,
+      switches::kEnableBackgroundThreadPool,
+      switches::kEnableExperimentalAccessibilityLanguageDetection,
+      switches::kEnableExperimentalAccessibilityLabelsDebugging,
+      switches::kEnableExperimentalWebPlatformFeatures,
+      switches::kEnableBlinkTestFeatures,
+      switches::kEnableGPUClientLogging,
+      switches::kEnableGpuClientTracing,
+      switches::kEnableGpuMemoryBufferVideoFrames,
+      switches::kEnableGPUServiceLogging,
+      switches::kEnableLCDText,
+      switches::kEnableNetworkInformationDownlinkMax,
+      switches::kEnablePluginPlaceholderTesting,
+      switches::kEnablePreciseMemoryInfo,
+      switches::kEnableSkiaBenchmarking,
+      switches::kEnableTouchDragDrop,
+      switches::kEnableUnsafeWebGPU,
+      switches::kEnableViewport,
+      switches::kEnableVtune,
+      switches::kEnableWebGLDeveloperExtensions,
+      switches::kEnableWebGLDraftExtensions,
+      switches::kEnableWebGLImageChromium,
+      switches::kEnableWebGPUDeveloperFeatures,
+      switches::kFileUrlPathAlias,
+      switches::kForceDeviceScaleFactor,
+      switches::kForceDisplayColorProfile,
+      switches::kForceGpuMemAvailableMb,
+      switches::kForceHighContrast,
+      switches::kForceRasterColorProfile,
+      switches::kForceVideoOverlays,
+      switches::kFullMemoryCrashReport,
+      switches::kGaiaUrl,
+      switches::kIPCConnectionTimeout,
+      switches::kLogBestEffortTasks,
+      switches::kMaxActiveWebGLContexts,
+      switches::kMaxDecodedImageSizeMb,
+      switches::kMaxWebMediaPlayerCount,
+      switches::kMSEAudioBufferSizeLimitMb,
+      switches::kMSEVideoBufferSizeLimitMb,
+      switches::kNoZygote,
+      switches::kOverrideLanguageDetection,
+      switches::kPerfettoDisableInterning,
+      switches::kPpapiInProcess,
+      switches::kProfilingAtStart,
+      switches::kProfilingFile,
+      switches::kProfilingFlush,
+      switches::kRegisterPepperPlugins,
+      switches::kRemoteDebuggingPipe,
+      switches::kRemoteDebuggingPort,
+      switches::kRendererStartupDialog,
+      switches::kReportVp9AsAnUnsupportedMimeType,
+      switches::kStatsCollectionController,
+      switches::kSkiaFontCacheLimitMb,
+      switches::kSkiaResourceCacheLimitMb,
+      switches::kTestType,
+      switches::kTouchEventFeatureDetection,
+      switches::kTraceToConsole,
+      switches::kUseCmdDecoder,
+      switches::kUseFakeCodecForPeerConnection,
+      switches::kUseFakeUIForMediaStream,
+      switches::kUseMobileUserAgent,
+      switches::kVideoCaptureUseGpuMemoryBuffer,
+      switches::kVideoThreads,
+      switches::kWaitForDebuggerOnNavigation,
+      switches::kWebAuthRemoteDesktopSupport,
+      switches::kWebViewDrawFunctorUsesVulkan,
+      switches::kWebglAntialiasingMode,
+      switches::kWebglMSAASampleCount,
+      // Please keep these in alphabetical order.
+      blink::switches::kAllowPreCommitInput,
+      blink::switches::kBlinkSettings,
+      blink::switches::kDarkModeSettings,
+      blink::switches::kDefaultTileWidth,
+      blink::switches::kDefaultTileHeight,
+      blink::switches::kForcePermissionPolicyUnloadDefaultEnabled,
+      blink::switches::kDisableImageAnimationResync,
+      blink::switches::kDisableLowResTiling,
+      blink::switches::kDisablePreferCompositingToLCDText,
+      blink::switches::kDisableRGBA4444Textures,
+      blink::switches::kEnableLeakDetectionHeapSnapshot,
+      blink::switches::kEnableLowResTiling,
+      blink::switches::kEnablePreferCompositingToLCDText,
+      blink::switches::kEnableRGBA4444Textures,
+      blink::switches::kEnableRasterSideDarkModeForImages,
+      blink::switches::kMinHeightForGpuRasterTile,
+      blink::switches::kMaxUntiledLayerWidth,
+      blink::switches::kMaxUntiledLayerHeight,
+      blink::switches::kNetworkQuietTimeout,
+      blink::switches::kShowLayoutShiftRegions,
+      blink::switches::kShowPaintRects,
+      blink::switches::kTouchTextSelectionStrategy,
+      blink::switches::kJavaScriptFlags,
+      // Please keep these in alphabetical order. Compositor switches here
+      // should also be added to
+      // chrome/browser/ash/login/chrome_restart_request.cc.
+      switches::kCCScrollAnimationDurationForTesting,
+      switches::kCheckDamageEarly,
+      switches::kDisableCheckerImaging,
+      switches::kDisableCompositedAntialiasing,
+      switches::kDisableThreadedAnimation,
+      switches::kEnableGpuBenchmarking,
+      switches::kEnableClippedImageScaling,
+      switches::kHighlightNonLCDTextLayers,
+      switches::kShowCompositedLayerBorders,
+      switches::kShowFPSCounter,
+      switches::kShowLayerAnimationBounds,
+      switches::kShowPropertyChangedRects,
+      switches::kShowScreenSpaceRects,
+      switches::kShowSurfaceDamageRects,
+      switches::kSlowDownRasterScaleFactor,
+      switches::kBrowserControlsHideThreshold,
+      switches::kBrowserControlsShowThreshold,
+      switches::kRunAllCompositorStagesBeforeDraw,
 
 #if BUILDFLAG(ENABLE_PPAPI)
       switches::kEnablePepperTesting,
 #endif
-      switches::kEnableWebRtcSrtpEncryptedHeaders,
       switches::kEnforceWebRtcIPPermissionCheck,
       switches::kWebRtcMaxCaptureFramerate,
       switches::kEnableLowEndDeviceMode,
@@ -4547,6 +4547,24 @@ bool RenderProcessHost::IsProcessLimitReached() {
                  << ": process_count >= GetMaxRendererProcessCount() ("
                  << process_count << " >= " << GetMaxRendererProcessCount()
                  << ") - will try to reuse an existing process";
+    // The Finch experiment is *only* for users who go over the process limit.
+    // This ensures that the experiment only measures the impact on affected
+    // users, as the experiment is configured with "starts_active" set to false
+    // (meaning it only collects data from users who reach this code).
+#if !BUILDFLAG(IS_ANDROID)
+    if (base::FeatureList::IsEnabled(features::kRemoveRendererProcessLimit)) {
+      // This is used for tests. To avoid changing test behaviors, don't
+      // change the behavior when it is set.
+      if (g_max_renderer_count_override) {
+        return process_count >= g_max_renderer_count_override;
+      }
+      size_t sys_limit = GetPlatformProcessLimit();
+      if (sys_limit == kUnknownPlatformProcessLimit) {
+        return false;
+      }
+      return process_count >= sys_limit;
+    }
+#endif
     return true;
   }
 

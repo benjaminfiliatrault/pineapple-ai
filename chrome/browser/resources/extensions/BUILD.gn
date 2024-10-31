@@ -52,10 +52,10 @@ build_webui("build") {
   ]
 
   non_web_component_files = [
+    "async_map_directive.ts",
     "drag_and_drop_handler.ts",
     "extensions.ts",
     "item_mixin.ts",
-    "item_mixin_lit.ts",
     "item_util.ts",
     "mv2_deprecation_delegate.ts",
     "mv2_deprecation_util.ts",
@@ -73,10 +73,14 @@ build_webui("build") {
   # Files that are passed as input to css_to_wrapper().
   css_files = [
     "code_section.css",
+    "detail_view.css",
     "drop_overlay.css",
     "error_page.css",
+    "host_permissions_toggle_list.css",
     "install_warnings_dialog.css",
     "item.css",
+    "item_list.css",
+    "keyboard_shortcuts.css",
     "load_error.css",
     "mv2_deprecation_panel.css",
     "options_dialog.css",
@@ -86,6 +90,16 @@ build_webui("build") {
     "shared_style.css",
     "shared_style_lit.css",
     "shared_vars.css",
+    "runtime_host_permissions.css",
+    "shortcut_input.css",
+    "sidebar.css",
+    "site_permissions/site_permissions.css",
+    "site_permissions/site_permissions_by_site.css",
+    "site_permissions/site_permissions_edit_permissions_dialog.css",
+    "site_permissions/site_permissions_list.css",
+    "site_permissions/site_permissions_site_group.css",
+    "toggle_row.css",
+    "toolbar.css",
   ]
 
   ts_composite = true

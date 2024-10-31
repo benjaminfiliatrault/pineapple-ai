@@ -14,6 +14,7 @@ import static org.chromium.chrome.browser.download.interstitial.DownloadIntersti
 import static org.chromium.chrome.browser.download.interstitial.DownloadInterstitialProperties.SECONDARY_BUTTON_TEXT;
 import static org.chromium.chrome.browser.download.interstitial.DownloadInterstitialProperties.STATE;
 import static org.chromium.chrome.browser.download.interstitial.DownloadInterstitialProperties.TITLE_TEXT;
+import static org.chromium.ui.modaldialog.ModalDialogManager.DialogName.DUPLICATE_DOWNLOAD_DIALOG;
 
 import android.content.ActivityNotFoundException;
 import android.content.Context;
@@ -24,6 +25,7 @@ import androidx.annotation.IntDef;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.util.Pair;
 
+import org.chromium.base.CallbackUtils;
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
@@ -97,6 +99,7 @@ class DownloadInterstitialMediator {
         mProvider = provider;
         mSnackbarManager = snackbarManager;
         mModalDialogManager = modalDialogManager;
+        mModalDialogManager.addObserver(getModalDialogManagerObserver());
 
         mModel.set(ListProperties.ENABLE_ITEM_ANIMATIONS, true);
         mModel.set(ListProperties.CALLBACK_OPEN, this::onOpenItem);
@@ -105,7 +108,7 @@ class DownloadInterstitialMediator {
         mModel.set(ListProperties.CALLBACK_CANCEL, this::onCancelItem);
         mModel.set(ListProperties.CALLBACK_SHARE, this::onShareItem);
         mModel.set(ListProperties.CALLBACK_REMOVE, this::onDeleteItem);
-        mModel.set(ListProperties.PROVIDER_VISUALS, (i, w, h, c) -> (() -> {}));
+        mModel.set(ListProperties.PROVIDER_VISUALS, (i, w, h, c) -> CallbackUtils.emptyRunnable());
         mModel.set(ListProperties.CALLBACK_RENAME, this::onRenameItem);
         mModel.set(ListProperties.CALLBACK_SELECTION, (item) -> {});
 
@@ -354,6 +357,20 @@ class DownloadInterstitialMediator {
                             setState(State.SUCCESSFUL);
                         }
                         break;
+                }
+            }
+        };
+    }
+
+    private ModalDialogManager.ModalDialogManagerObserver getModalDialogManagerObserver() {
+        return new ModalDialogManager.ModalDialogManagerObserver() {
+            @Override
+            public void onDialogSuppressed(PropertyModel model) {
+                if (DUPLICATE_DOWNLOAD_DIALOG == model.get(ModalDialogProperties.NAME)) {
+                    // If the duplicate download dialog is suppressed, we should continue with a
+                    // unique file name. This will dismiss the pending dialog in ModalDialogManager.
+                    model.get(ModalDialogProperties.CONTROLLER)
+                            .onClick(model, ModalDialogProperties.ButtonType.POSITIVE);
                 }
             }
         };

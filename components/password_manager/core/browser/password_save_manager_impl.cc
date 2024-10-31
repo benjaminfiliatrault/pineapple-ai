@@ -168,13 +168,12 @@ PendingCredentialsState ComputePendingCredentialsState(
     return PendingCredentialsState::UPDATE;
   }
 
-  // If the autofilled credentials were a PSL match, store a copy with the
+  // If the autofilled credentials were a weak match, store a copy with the
   // current origin and signon realm. This ensures that on the next visit, a
   // precise match is found.
-  // TODO(b/331409076): Investigate whether affiliated and grouped matches
-  // should be handled the same way.
-  if (password_manager_util::GetMatchType(*similar_saved_form) ==
-      password_manager_util::GetLoginMatchType::kPSL) {
+  // TODO: crbug.com/331409076 - Investigate whether affiliated matches should
+  // be handled the same way.
+  if (password_manager_util::IsCredentialWeakMatch(*similar_saved_form)) {
     return PendingCredentialsState::AUTOMATIC_SAVE;
   }
 
@@ -840,13 +839,18 @@ void PasswordSaveManagerImpl::UploadVotesAndMetrics(
         parsed_submitted_form.all_alternative_usernames);
   }
 
-  if (IsNewLogin()) {
-    metrics_util::LogNewlySavedPasswordMetrics(
+  if (IsNewLogin() || IsPasswordUpdate()) {
+    metrics_util::LogIfSavedPasswordWasGenerated(
         pending_credentials_.type == PasswordForm::Type::kGenerated,
-        pending_credentials_.username_value.empty(),
         client_->GetPasswordFeatureManager()
             ->ComputePasswordAccountStorageUsageLevel(),
         client_->GetUkmSourceId());
+  }
+
+  if (IsNewLogin()) {
+    metrics_util::LogNewlySavedPasswordMetrics(
+        pending_credentials_.type == PasswordForm::Type::kGenerated,
+        pending_credentials_.username_value.empty(), client_->GetUkmSourceId());
     // Don't send votes if there was no observed form.
     if (observed_form && votes_uploader_) {
       votes_uploader_->SendVotesOnSave(*observed_form, parsed_submitted_form,

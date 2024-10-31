@@ -49,8 +49,10 @@ CSSIdentifierValue::CSSIdentifierValue(const Length& length)
     case Length::kMaxContent:
       value_id_ = CSSValueID::kMaxContent;
       break;
-    case Length::kFillAvailable:
-      value_id_ = CSSValueID::kWebkitFillAvailable;
+    case Length::kStretch:
+      value_id_ = RuntimeEnabledFeatures::LayoutStretchEnabled()
+                      ? CSSValueID::kStretch
+                      : CSSValueID::kWebkitFillAvailable;
       break;
     case Length::kFitContent:
       value_id_ = CSSValueID::kFitContent;

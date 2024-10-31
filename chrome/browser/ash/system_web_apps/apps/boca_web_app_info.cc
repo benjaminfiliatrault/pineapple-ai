@@ -14,7 +14,9 @@
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/boca/boca_app_client.h"
 #include "chromeos/ash/components/boca/boca_role_util.h"
+#include "chromeos/ash/components/boca/boca_session_manager.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "url/gurl.h"
 
@@ -96,6 +98,13 @@ bool BocaSystemAppDelegate::HasCustomTabMenuModel() const {
   return IsConsumerProfile(profile());
 }
 
+gfx::Size BocaSystemAppDelegate::GetMinimumWindowSize() const {
+  if (!IsConsumerProfile(profile())) {
+    return {400, 100};
+  }
+  return SystemWebAppDelegate::GetMinimumWindowSize();
+}
+
 std::unique_ptr<ui::SimpleMenuModel> BocaSystemAppDelegate::GetTabMenuModel(
     ui::SimpleMenuModel::Delegate* delegate) const {
   std::unique_ptr<ui::SimpleMenuModel> tab_menu =
@@ -105,4 +114,20 @@ std::unique_ptr<ui::SimpleMenuModel> BocaSystemAppDelegate::GetTabMenuModel(
   tab_menu->AddItemWithStringId(TabStripModel::CommandGoBack,
                                 IDS_CONTENT_CONTEXT_BACK);
   return tab_menu;
+}
+
+Browser* BocaSystemAppDelegate::LaunchAndNavigateSystemWebApp(
+    Profile* profile,
+    web_app::WebAppProvider* provider,
+    const GURL& url,
+    const apps::AppLaunchParams& params) const {
+  Browser* const browser =
+      ash::SystemWebAppDelegate::LaunchAndNavigateSystemWebApp(
+          profile, provider, url, params);
+  if (IsConsumerProfile(profile)) {
+    // Notify downstream Boca components so they can prepare the app instance
+    // for OnTask and restore contents from the previous session if needed.
+    ash::boca::BocaAppClient::Get()->GetSessionManager()->NotifyAppReload();
+  }
+  return browser;
 }

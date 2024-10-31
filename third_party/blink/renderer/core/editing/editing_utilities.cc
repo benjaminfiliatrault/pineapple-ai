@@ -23,12 +23,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
+
+#include <array>
 
 #include "base/trace_event/trace_event.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_mime_types.h"
@@ -106,12 +103,11 @@ using mojom::blink::FormControlType;
 namespace {
 
 std::ostream& operator<<(std::ostream& os, PositionMoveType type) {
-  static const char* const kTexts[] = {"CodeUnit", "BackwardDeletion",
-                                       "GraphemeCluster"};
-  auto* const* const it = std::begin(kTexts) + static_cast<size_t>(type);
-  DCHECK_GE(it, std::begin(kTexts)) << "Unknown PositionMoveType value";
-  DCHECK_LT(it, std::end(kTexts)) << "Unknown PositionMoveType value";
-  return os << *it;
+  static const std::array<const char*, 3> kTexts = {
+      "CodeUnit", "BackwardDeletion", "GraphemeCluster"};
+  DCHECK_LT(static_cast<size_t>(type), kTexts.size())
+      << "Unknown PositionMoveType value";
+  return os << kTexts[static_cast<size_t>(type)];
 }
 
 UChar WhitespaceRebalancingCharToAppend(const String& string,
@@ -228,17 +224,16 @@ static bool HasEditableLevel(const Node& node, EditableLevel editable_level) {
         return false;
       }
     }
-
-    const ComputedStyle* style = ancestor.GetComputedStyle();
-    if (!style)
-      continue;
-    switch (style->UsedUserModify()) {
-      case EUserModify::kReadOnly:
-        return false;
-      case EUserModify::kReadWrite:
-        return true;
-      case EUserModify::kReadWritePlaintextOnly:
-        return editable_level != kRichlyEditable;
+    if (const ComputedStyle* style =
+            ancestor.GetComputedStyleForElementOrLayoutObject()) {
+      switch (style->UsedUserModify()) {
+        case EUserModify::kReadOnly:
+          return false;
+        case EUserModify::kReadWrite:
+          return true;
+        case EUserModify::kReadWritePlaintextOnly:
+          return editable_level != kRichlyEditable;
+      }
     }
   }
 
@@ -822,8 +817,7 @@ PositionInFlatTree NextPositionOf(const PositionInFlatTree& position,
 
 bool IsEnclosingBlock(const Node* node) {
   return node && node->GetLayoutObject() &&
-         !node->GetLayoutObject()->IsInline() &&
-         !node->GetLayoutObject()->IsRubyText();
+         !node->GetLayoutObject()->IsInline();
 }
 
 // TODO(yosin) Deploy this in all of the places where |enclosingBlockFlow()| and
@@ -1156,18 +1150,22 @@ HTMLElement* CreateDefaultParagraphElement(Document& document) {
 }
 
 bool IsTabHTMLSpanElement(const Node* node) {
-  if (!IsA<HTMLSpanElement>(node))
+  const auto* span = DynamicTo<HTMLSpanElement>(node);
+  if (!span) {
     return false;
-  const Node* const first_child = NodeTraversal::FirstChild(*node);
+  }
+  const Node* const first_child = NodeTraversal::FirstChild(*span);
   auto* first_child_text_node = DynamicTo<Text>(first_child);
-  if (!first_child_text_node)
+  if (!first_child_text_node) {
     return false;
-  if (!first_child_text_node->data().Contains('\t'))
+  }
+  if (!first_child_text_node->data().Contains('\t')) {
     return false;
+  }
   // TODO(editing-dev): Hoist the call of UpdateStyleAndLayoutTree to callers.
   // See crbug.com/590369 for details.
-  node->GetDocument().UpdateStyleAndLayoutTree();
-  const ComputedStyle* style = node->GetComputedStyle();
+  span->GetDocument().UpdateStyleAndLayoutTree();
+  const ComputedStyle* style = span->GetComputedStyle();
   return style && style->WhiteSpace() == EWhiteSpace::kPre;
 }
 

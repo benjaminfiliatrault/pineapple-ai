@@ -4,21 +4,26 @@
 
 #include "components/saved_tab_groups/messaging/android/messaging_backend_service_bridge.h"
 
+#include <memory>
 #include <optional>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
-#include "components/saved_tab_groups/android/tab_group_sync_conversions_bridge.h"
-#include "components/saved_tab_groups/android/tab_group_sync_conversions_utils.h"
+#include "components/saved_tab_groups/messaging/activity_log.h"
 #include "components/saved_tab_groups/messaging/android/conversion_utils.h"
 #include "components/saved_tab_groups/messaging/message.h"
+#include "components/saved_tab_groups/public/android/tab_group_sync_conversions_bridge.h"
+#include "components/saved_tab_groups/public/android/tab_group_sync_conversions_utils.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
 #include "components/saved_tab_groups/messaging/android/jni_headers/MessagingBackendServiceBridge_jni.h"
+
+using base::android::ConvertJavaStringToUTF16;
 
 namespace tab_groups::messaging::android {
 namespace {
@@ -40,7 +45,15 @@ MessagingBackendServiceBridge::GetBridgeForMessagingBackendService(
   MessagingBackendServiceBridge* bridge =
       static_cast<MessagingBackendServiceBridge*>(
           service->GetUserData(kMessagingBackendServiceBridgeUserDataKey));
-  return base::android::ScopedJavaLocalRef<jobject>(bridge->java_ref_);
+  return bridge->GetJavaObject();
+}
+
+// static
+std::unique_ptr<MessagingBackendServiceBridge>
+MessagingBackendServiceBridge::CreateForTest(MessagingBackendService* service) {
+  MessagingBackendServiceBridge* bridge =
+      new MessagingBackendServiceBridge(service);
+  return base::WrapUnique(bridge);
 }
 
 MessagingBackendServiceBridge::MessagingBackendServiceBridge(
@@ -59,6 +72,11 @@ MessagingBackendServiceBridge::~MessagingBackendServiceBridge() {
 
   Java_MessagingBackendServiceBridge_onNativeDestroyed(
       base::android::AttachCurrentThread(), java_ref_);
+}
+
+base::android::ScopedJavaLocalRef<jobject>
+MessagingBackendServiceBridge::GetJavaObject() {
+  return base::android::ScopedJavaLocalRef<jobject>(java_ref_);
 }
 
 bool MessagingBackendServiceBridge::IsInitialized(
@@ -144,6 +162,32 @@ MessagingBackendServiceBridge::GetMessages(
   return PersistentMessagesToJava(env, messages);
 }
 
+base::android::ScopedJavaLocalRef<jobject>
+MessagingBackendServiceBridge::GetActivityLog(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& j_caller,
+    jstring j_collaboration_id) {
+  ActivityLogQueryParams query_params;
+  query_params.collaboration_id = data_sharing::GroupId(
+      base::android::ConvertJavaStringToUTF8(env, j_collaboration_id));
+  auto activity_log_items = service_->GetActivityLog(query_params);
+  return ActivityLogItemsToJava(env, activity_log_items);
+}
+
+void MessagingBackendServiceBridge::RunInstantaneousMessageSuccessCallback(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& j_caller,
+    jlong j_callback,
+    jboolean j_result) {
+  CHECK(j_callback);
+  std::unique_ptr<
+      MessagingBackendService::InstantMessageDelegate::SuccessCallback>
+      callback_ptr(
+          reinterpret_cast<MessagingBackendService::InstantMessageDelegate::
+                               SuccessCallback*>(j_callback));
+  std::move(*callback_ptr).Run(j_result);
+}
+
 void MessagingBackendServiceBridge::OnMessagingBackendServiceInitialized() {
   if (java_ref_.is_null()) {
     return;
@@ -174,14 +218,31 @@ void MessagingBackendServiceBridge::HidePersistentMessage(
 }
 
 void MessagingBackendServiceBridge::DisplayInstantaneousMessage(
-    InstantMessage message) {
+    InstantMessage message,
+    InstantMessageDelegate::SuccessCallback success_callback) {
   if (java_ref_.is_null()) {
+    // We definitely failed to display the message.
+    std::move(success_callback).Run(false);
     return;
   }
 
   JNIEnv* env = base::android::AttachCurrentThread();
+
+  std::unique_ptr<
+      MessagingBackendService::InstantMessageDelegate::SuccessCallback>
+      wrapped_callback = std::make_unique<
+          MessagingBackendService::InstantMessageDelegate::SuccessCallback>(
+          std::move(success_callback));
+  CHECK(wrapped_callback.get());
+  jlong j_native_ptr = reinterpret_cast<jlong>(wrapped_callback.get());
+
   Java_MessagingBackendServiceBridge_displayInstantaneousMessage(
-      env, java_ref_, InstantMessageToJava(env, message));
+      env, java_ref_, InstantMessageToJava(env, message), j_native_ptr);
+
+  // We expect Java to always call us back through
+  // MessagingBackendServiceBridge::RunInstantaneousMessageSuccessCallback,
+  // which means we assume it is OK to release this object.
+  wrapped_callback.release();
 }
 
 }  // namespace tab_groups::messaging::android

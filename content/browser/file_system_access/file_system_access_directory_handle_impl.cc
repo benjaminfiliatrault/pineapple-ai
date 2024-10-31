@@ -49,7 +49,6 @@ using storage::FileSystemOperationRunner;
 namespace content {
 
 using HandleType = FileSystemAccessPermissionContext::HandleType;
-using PathType = FileSystemAccessPermissionContext::PathType;
 using SensitiveEntryResult =
     FileSystemAccessPermissionContext::SensitiveEntryResult;
 using UserAction = FileSystemAccessPermissionContext::UserAction;
@@ -154,13 +153,14 @@ void FileSystemAccessDirectoryHandleImpl::GetFile(const std::string& basename,
     // checked for the blocklist, a child symlink file may have been created
     // since then, pointing to a blocklisted file or directory.  Check for
     // sensitive entry access, which is run on the resolved path.
-    manager()->permission_context()->ConfirmSensitiveEntryAccess(
-        context().storage_key.origin(),
+    PathInfo path_info{
         child_url.type() == storage::FileSystemType::kFileSystemTypeLocal
             ? PathType::kLocal
             : PathType::kExternal,
-        child_url.path(), HandleType::kFile, UserAction::kNone,
-        context().frame_id,
+        child_url.path(), basename};
+    manager()->permission_context()->ConfirmSensitiveEntryAccess(
+        context().storage_key.origin(), path_info, HandleType::kFile,
+        UserAction::kNone, context().frame_id,
         base::BindOnce(&FileSystemAccessDirectoryHandleImpl::DoGetFile,
                        weak_factory_.GetWeakPtr(), create, child_url,
                        std::move(callback)));
@@ -544,7 +544,7 @@ void FileSystemAccessDirectoryHandleImpl::DidReadDirectory(
             weak_factory_.GetWeakPtr(), std::move(final_callback)));
 
     for (const auto& entry : file_list) {
-      std::string basename = storage::FilePathToString(entry.name);
+      std::string basename = storage::FilePathToString(entry.name.path());
       storage::FileSystemURL child_url;
       blink::mojom::FileSystemAccessErrorPtr get_child_url_result =
           GetChildURL(basename, &child_url);
@@ -567,11 +567,12 @@ void FileSystemAccessDirectoryHandleImpl::DidReadDirectory(
       // link.
       manager()->permission_context()->ConfirmSensitiveEntryAccess(
           context().storage_key.origin(),
-          child_url.type() == storage::FileSystemType::kFileSystemTypeLocal
-              ? PathType::kLocal
-              : PathType::kExternal,
-          child_url.path(), HandleType::kFile, UserAction::kNone,
-          context().frame_id,
+          PathInfo(
+              child_url.type() == storage::FileSystemType::kFileSystemTypeLocal
+                  ? PathType::kLocal
+                  : PathType::kExternal,
+              child_url.path(), entry.name.AsUTF8Unsafe()),
+          HandleType::kFile, UserAction::kNone, context().frame_id,
           base::BindOnce(&FileSystemAccessDirectoryHandleImpl::
                              DidVerifySensitiveAccessForFileEntry,
                          weak_factory_.GetWeakPtr(), entry.name,
@@ -582,7 +583,7 @@ void FileSystemAccessDirectoryHandleImpl::DidReadDirectory(
 
   std::vector<FileSystemAccessEntryPtr> entries;
   for (const auto& entry : file_list) {
-    std::string basename = storage::FilePathToString(entry.name);
+    std::string basename = storage::FilePathToString(entry.name.path());
 
     storage::FileSystemURL child_url;
     blink::mojom::FileSystemAccessErrorPtr get_child_url_result =
@@ -604,8 +605,8 @@ void FileSystemAccessDirectoryHandleImpl::DidReadDirectory(
 }
 
 void FileSystemAccessDirectoryHandleImpl::DidVerifySensitiveAccessForFileEntry(
-    base::FilePath basename,
-    base::FilePath display_name,
+    base::SafeBaseName basename,
+    std::string display_name,
     storage::FileSystemURL child_url,
     base::OnceCallback<void(FileSystemAccessEntryPtr)> barrier_callback,
     FileSystemAccessPermissionContext::SensitiveEntryResult
@@ -667,7 +668,8 @@ FileSystemAccessDirectoryHandleImpl::GetChildURL(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const storage::FileSystemURL& parent = url();
-  if (!manager()->IsSafePathComponent(parent.type(), basename)) {
+  if (!manager()->IsSafePathComponent(
+          parent.type(), context().storage_key.origin(), basename)) {
     return file_system_access_error::FromStatus(
         FileSystemAccessStatus::kInvalidArgument, "Name is not allowed.");
   }
@@ -697,14 +699,14 @@ FileSystemAccessDirectoryHandleImpl::GetChildURL(
 }
 
 FileSystemAccessEntryPtr FileSystemAccessDirectoryHandleImpl::CreateEntry(
-    const base::FilePath& basename,
-    const base::FilePath& display_name,
+    const base::SafeBaseName& basename,
+    const std::string& display_name,
     const storage::FileSystemURL& url,
     HandleType handle_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::string name =
-      storage::FilePathToString(display_name.empty() ? basename : display_name);
+      !display_name.empty() ? display_name : basename.AsUTF8Unsafe();
   if (handle_type == HandleType::kDirectory) {
     return FileSystemAccessEntry::New(
         FileSystemAccessHandle::NewDirectory(

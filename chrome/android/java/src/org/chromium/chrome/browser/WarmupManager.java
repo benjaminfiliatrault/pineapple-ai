@@ -57,6 +57,7 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.net.NetId;
@@ -109,8 +110,9 @@ public class WarmupManager {
         @Override
         // Invoked when tab crashes, or when the associated renderer process is killed.
         public void onCrash(Tab tab) {
+            if (mSpareTab != tab) return;
             mSpareTabFinalStatus = SpareTabFinalStatus.TAB_CRASHED;
-            destroySpareTabInternal();
+            destroySpareTabInternal(tab);
         }
 
         @Override
@@ -158,7 +160,7 @@ public class WarmupManager {
     private ViewGroup mMainView;
     @VisibleForTesting WebContents mSpareWebContents;
     private RenderProcessGoneObserver mObserver;
-    private boolean mIsCCTPrewarmTabEnabled;
+    private boolean mIsCctPrewarmTabEnabled;
 
     // Stores a prebuilt tab. To load a URL, this can be used if available instead of creating one
     // from scratch.
@@ -205,13 +207,15 @@ public class WarmupManager {
             ThreadUtils.assertOnUiThread();
 
             mSpareTabFinalStatus = SpareTabFinalStatus.TAB_DESTROYED;
-            destroySpareTabInternal();
+            destroySpareTabInternal(null);
         }
     }
 
-    private void destroySpareTabInternal() {
+    private void destroySpareTabInternal(Tab tab) {
         // Don't do anything if the spare tab doesn't exist.
         if (mSpareTab == null) return;
+
+        if (tab != null && tab != mSpareTab) return;
 
         // Record the SpareTabFinalStatus once its destroyed.
         recordSpareTabFinalStatusHistogram(mSpareTabFinalStatus);
@@ -337,16 +341,24 @@ public class WarmupManager {
     }
 
     /**
+     * @param targetsNetwork whether the activity/tab associated with this WebContents targets a
+     *     network (supported only by multi-network CCT, see @{link
+     *     BrowserServicesIntentDataProvider#getTargetNetwork).
      * @return Whether a spare tab is available for the given profile.
      */
-    public boolean hasSpareTab(Profile profile) {
+    public boolean hasSpareTab(Profile profile, boolean targetsNetwork) {
+        // Spare Tabs are not supported for multi-network CCT. In this case it's better to
+        // always create Tabs from scratch, otherwise we might break the "WebContents
+        // associated with a CCT tab targeting a network will always have
+        // WebContents::GetTargetNetwork == that target network" invariant (see
+        // WebContentsImpl::CreateWithOpener for more info).
+        if (targetsNetwork) return false;
         if (mSpareTab == null) return false;
         return mSpareTab.getProfile() == profile;
     }
 
     /**
      * @param tab Tab to compare with SpareTab with.
-     *
      * @return Returns true if tab is same as spare tab.
      */
     public boolean isSpareTab(Tab tab) {
@@ -416,13 +428,9 @@ public class WarmupManager {
             context.getTheme().applyStyle(elegantTextHeightOverlay, true);
         }
 
-        if (Build.VERSION.SDK_INT >= VERSION_CODES.TIRAMISU
-                && ChromeFeatureList.sAndroidGoogleSansText.isEnabled()) {
-            int defaultFontFamilyOverlay =
-                    ChromeBaseAppCompatActivity.DEFAULT_FONT_FAMILY_TESTING.getValue()
-                            ? R.style.ThemeOverlay_BrowserUI_DevTestingDefaultFontFamilyThemeOverlay
-                            : R.style.ThemeOverlay_BrowserUI_DefaultFontFamilyThemeOverlay;
-            context.getTheme().applyStyle(defaultFontFamilyOverlay, true);
+        if (Build.VERSION.SDK_INT >= VERSION_CODES.TIRAMISU) {
+            context.getTheme()
+                    .applyStyle(R.style.ThemeOverlay_BrowserUI_DefaultFontFamilyThemeOverlay, true);
         }
     }
 
@@ -633,9 +641,9 @@ public class WarmupManager {
      * @param verifiedSourceOrigin The origin that prefetch is requested from. Currently, this is
      *     always null.
      */
-    public void startPrefetchFromCCT(
+    public void startPrefetchFromCct(
             String url, boolean usePrefetchProxy, @Nullable String verifiedSourceOrigin) {
-        try (TraceEvent e = TraceEvent.scoped("WarmupManager.startPrefetchFromCCT")) {
+        try (TraceEvent e = TraceEvent.scoped("WarmupManager.startPrefetchFromCct")) {
             ThreadUtils.assertOnUiThread();
             if (!ChromeFeatureList.sPrefetchBrowserInitiatedTriggers.isEnabled()
                     || !ChromeFeatureList.sCctNavigationalPrefetch.isEnabled()) {
@@ -667,7 +675,7 @@ public class WarmupManager {
                 origin = Origin.create(new GURL(verifiedSourceOrigin));
             }
             WarmupManagerJni.get()
-                    .startPrefetchFromCCT(webContents, gurl, usePrefetchProxy, origin);
+                    .startPrefetchFromCct(webContents, gurl, usePrefetchProxy, origin);
         }
     }
 
@@ -705,20 +713,28 @@ public class WarmupManager {
     /**
      * Returns a spare WebContents or null, depending on the availability of one.
      *
-     * <p>The parameters are the same as for {@link WebContentsFactory#createWebContents()}.
-     *
+     * @param targetsNetwork whether the activity/tab associated with this WebContents targets a
+     *     network (supported only by multi-network CCT, see @{link
+     *     BrowserServicesIntentDataProvider#getTargetNetwork).
      * @return a WebContents, or null.
      */
-    public WebContents takeSpareWebContents(boolean incognito, boolean initiallyHidden) {
+    public WebContents takeSpareWebContents(
+            boolean incognito, boolean initiallyHidden, boolean targetsNetwork) {
         try (TraceEvent e = TraceEvent.scoped("WarmupManager.takeSpareWebContents")) {
             ThreadUtils.assertOnUiThread();
             if (incognito) return null;
+            // Spare WebContents are not supported for multi-network CCT. In this case it's better
+            // to always create WebContents from scratch, otherwise we might break the "WebContents
+            // associated with a CCT tab targeting a network will always have
+            // WebContents::GetTargetNetwork == that target network" invariant (see
+            // WebContentsImpl::CreateWithOpener for more info).
+            if (targetsNetwork) return null;
             WebContents result = mSpareWebContents;
             if (result == null) return null;
             mSpareWebContents = null;
             result.removeObserver(mObserver);
             mObserver = null;
-            if (!initiallyHidden) result.onShow();
+            if (!initiallyHidden) result.updateWebContentsVisibility(Visibility.VISIBLE);
             return result;
         }
     }
@@ -741,12 +757,12 @@ public class WarmupManager {
     // regardless of whether they actually interact with the feature, cache the flag here.
     // This only works if no non-test code calls
     // ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_PREWARM_TAB) directly.
-    public boolean isCCTPrewarmTabFeatureEnabled(boolean activateExperiment) {
+    public boolean isCctPrewarmTabFeatureEnabled(boolean activateExperiment) {
         if (activateExperiment) {
-            mIsCCTPrewarmTabEnabled =
+            mIsCctPrewarmTabEnabled =
                     ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_PREWARM_TAB);
         }
-        return mIsCCTPrewarmTabEnabled;
+        return mIsCctPrewarmTabEnabled;
     }
 
     @NativeMethods
@@ -756,7 +772,7 @@ public class WarmupManager {
         void preconnectUrlAndSubresources(
                 @JniType("Profile*") Profile profile, @JniType("std::string") String url);
 
-        void startPrefetchFromCCT(
+        void startPrefetchFromCct(
                 @JniType("content::WebContents*") WebContents webContents,
                 @JniType("GURL") GURL url,
                 boolean usePrefetchProxy,

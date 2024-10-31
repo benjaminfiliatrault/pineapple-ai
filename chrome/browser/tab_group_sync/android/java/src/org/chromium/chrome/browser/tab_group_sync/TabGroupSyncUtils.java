@@ -19,8 +19,8 @@ import org.chromium.base.Token;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.tab_group_sync.ClosingSource;
@@ -208,15 +208,15 @@ public final class TabGroupSyncUtils {
     }
 
     /**
-     * Called to update the URL redirect chain of the current page in the tab.
+     * Called to when a navigation finishes in the tab.
      *
      * @param tab Tab that triggers the navigation.
      * @param navigationHandle Navigation handle to retrieve the redirect chain from.
      */
-    public static void updateTabRedirectChain(Tab tab, NavigationHandle navigationHandle) {
+    public static void onDidFinishNavigation(Tab tab, NavigationHandle navigationHandle) {
         if (tab.getTabGroupId() == null) return;
         TabGroupSyncUtilsJni.get()
-                .updateTabRedirectChain(
+                .onDidFinishNavigation(
                         tab.getProfile(),
                         getLocalTabGroupId(tab),
                         tab.getId(),
@@ -239,7 +239,7 @@ public final class TabGroupSyncUtils {
 
     @NativeMethods
     interface Natives {
-        void updateTabRedirectChain(
+        void onDidFinishNavigation(
                 @JniType("Profile*") Profile profile,
                 LocalTabGroupId groupId,
                 int tabId,

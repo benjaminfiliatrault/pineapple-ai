@@ -251,11 +251,11 @@ std::unique_ptr<TestImage>
 JpegEncodeAcceleratorTestEnvironment::ReadTestYuvImage(
     const base::FilePath& input_file,
     const gfx::Size& image_size) {
-  int64_t file_size = 0;
-  LOG_ASSERT(GetFileSize(input_file, &file_size));
-  std::vector<uint8_t> image_data(file_size);
+  std::optional<int64_t> file_size = base::GetFileSize(input_file);
+  LOG_ASSERT(file_size.has_value());
+  std::vector<uint8_t> image_data(file_size.value());
   LOG_ASSERT(ReadFile(input_file, reinterpret_cast<char*>(image_data.data()),
-                      file_size) == file_size);
+                      file_size.value()) == file_size.value());
 
   base::FilePath output_filename = input_file.AddExtension(".jpg");
   return std::make_unique<TestImage>(std::move(image_data), image_size,
@@ -373,7 +373,7 @@ JpegClient::JpegClient(const std::vector<TestImage*>& test_aligned_images,
       exif_size_(exif_size),
       gpu_memory_buffer_manager_(new media::LocalGpuMemoryBufferManager()) {}
 
-JpegClient::~JpegClient() {}
+JpegClient::~JpegClient() = default;
 
 void JpegClient::CreateJpegEncoder() {
   auto jea_factories =
@@ -473,7 +473,6 @@ bool JpegClient::GetSoftwareEncodeResult(int width,
   const uint8_t* yuv_src = static_cast<uint8_t*>(in_shm_->mapping.memory());
   const int kBytesPerPixel = 4;
   std::vector<uint8_t> rgba_buffer(width * height * kBytesPerPixel);
-  std::vector<uint8_t> encoded;
   libyuv::I420ToABGR(yuv_src, y_stride, yuv_src + y_stride * height, u_stride,
                      yuv_src + y_stride * height + u_stride * height / 2,
                      v_stride, rgba_buffer.data(), width * kBytesPerPixel,
@@ -482,12 +481,14 @@ bool JpegClient::GetSoftwareEncodeResult(int width,
   SkImageInfo info = SkImageInfo::Make(width, height, kRGBA_8888_SkColorType,
                                        kOpaque_SkAlphaType);
   SkPixmap src(info, &rgba_buffer[0], width * kBytesPerPixel);
-  if (!gfx::JPEGCodec::Encode(src, kJpegDefaultQuality, &encoded)) {
+  std::optional<std::vector<uint8_t>> encoded =
+      gfx::JPEGCodec::Encode(src, kJpegDefaultQuality);
+  if (!encoded) {
     return false;
   }
 
-  memcpy(sw_out_mapping_.memory(), encoded.data(), encoded.size());
-  *sw_encoded_size = encoded.size();
+  memcpy(sw_out_mapping_.memory(), encoded->data(), encoded->size());
+  *sw_encoded_size = encoded->size();
   *sw_encode_time = base::TimeTicks::Now() - sw_encode_start;
   return true;
 }
@@ -718,7 +719,7 @@ class JpegEncodeAcceleratorTest : public ::testing::Test {
       delete;
 
  protected:
-  JpegEncodeAcceleratorTest() {}
+  JpegEncodeAcceleratorTest() = default;
 
   void TestEncode(size_t num_concurrent_encoders,
                   bool is_dma,

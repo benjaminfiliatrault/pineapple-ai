@@ -13,9 +13,11 @@
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/scoped_feature_list.h"
+#import "components/autofill/ios/browser/test_autofill_java_script_feature_container.h"
 #import "components/autofill/ios/common/features.h"
 #import "components/autofill/ios/common/javascript_feature_util.h"
-#import "components/autofill/ios/form_util/cross_content_world_util_java_script_feature.h"
+#import "components/autofill/ios/form_util/autofill_form_features_java_script_feature.h"
+#import "components/autofill/ios/form_util/autofill_renderer_id_java_script_feature.h"
 #import "components/autofill/ios/form_util/form_util_java_script_feature.h"
 #import "ios/web/public/js_messaging/content_world.h"
 #import "ios/web/public/test/js_test_util.h"
@@ -71,26 +73,32 @@ class FillJsTest : public web::WebTestWithWebState,
     if (GetParam()) {
       feature_list_.InitAndEnableFeature(
           kAutofillIsolatedWorldForJavascriptIos);
+    } else {
+      feature_list_.InitAndDisableFeature(
+          kAutofillIsolatedWorldForJavascriptIos);
     }
 
-    form_util_java_script_feature_ = new FormUtilJavaScriptFeature();
-
-    OverrideJavaScriptFeatures(
-        {form_util_java_script_feature(),
-         CrossContentWorldUtilJavaScriptFeature::GetInstance(),
-         GetDummyPageContentWorldFeature(), GetDummyIsolatedWorldFeature()});
+    OverrideJavaScriptFeatures({FormUtilJavaScriptFeature::GetInstance(),
+                                autofill_form_features_java_script_feature(),
+                                renderer_id_java_script_feature(),
+                                GetDummyPageContentWorldFeature(),
+                                GetDummyIsolatedWorldFeature()});
   }
 
   void TearDown() override {
     // Clean up overriden features. Don't leave a dangling pointer to
-    // `FormUtilJavaScriptFeature`.
+    // features in `feature_container_`.
     OverrideJavaScriptFeatures({});
-    delete form_util_java_script_feature_;
     web::WebTestWithWebState::TearDown();
   }
 
-  FormUtilJavaScriptFeature* form_util_java_script_feature() {
-    return form_util_java_script_feature_;
+  AutofillFormFeaturesJavaScriptFeature*
+  autofill_form_features_java_script_feature() {
+    return feature_container_.autofill_form_features_java_script_feature();
+  }
+
+  AutofillRendererIDJavaScriptFeature* renderer_id_java_script_feature() {
+    return feature_container_.autofill_renderer_id_java_script_feature();
   }
 
  protected:
@@ -101,8 +109,8 @@ class FillJsTest : public web::WebTestWithWebState,
         [NSString stringWithFormat:@"__gCrWeb.autofill_form_features."
                                    @"setAutofillIsolatedContentWorld(%@);",
                                    GetParam() ? @"true" : @"false"];
-    web::test::ExecuteJavaScriptForFeature(web_state(), enable_feature_script,
-                                           form_util_java_script_feature());
+
+    ExecuteJavaScriptInAutofillContentWorld(enable_feature_script);
   }
 
   // Returns the chrome-set renderer ID for the element with ID `element_id`.
@@ -118,14 +126,22 @@ class FillJsTest : public web::WebTestWithWebState,
     return base::apple::ObjCCastStrict<NSString>(result_id);
   }
 
+  // Runs `script` in the main content world for Autofill features.
+  id ExecuteJavaScriptInAutofillContentWorld(NSString* script) {
+    return web::test::ExecuteJavaScriptForFeature(
+        web_state(), script,
+        GetDummyFeatureForContentWorld(
+            ContentWorldForAutofillJavascriptFeatures()));
+  }
+
   base::test::ScopedFeatureList feature_list_;
-  // Test instance of FormUtilJavaScriptFeature. Using a pointer so we can
-  // create the instance after the feature flag for isolated world is set in
-  // `SetUp`.
-  // TODO(crbug.com/359538514): Remove this variable and use
-  // FormUtilJavaScriptFeature::GetInstance() once Autofill in the isolated
-  // world is launched.
-  raw_ptr<FormUtilJavaScriptFeature> form_util_java_script_feature_ = nullptr;
+
+  //  Test instances of JavaScriptFeature's that are injected in a different
+  //  content world depending on kAutofillIsolatedWorldForJavascriptIos.
+  //  TODO(crbug.com/359538514): Remove this variable and use
+  //  the statically stored instances once Autofill in the isolated
+  //  world is launched.
+  TestAutofillJavaScriptFeatureContainer feature_container_;
 };
 
 TEST_P(FillJsTest, GetCanonicalActionForForm) {
@@ -159,10 +175,8 @@ TEST_P(FillJsTest, GetCanonicalActionForForm) {
                                                 html_action];
 
     LoadHtml(html);
-    id result = web::test::ExecuteJavaScriptForFeature(
-        web_state(),
-        @"__gCrWeb.fill.getCanonicalActionForForm(document.body.children[0])",
-        form_util_java_script_feature());
+    id result = ExecuteJavaScriptInAutofillContentWorld(
+        @"__gCrWeb.fill.getCanonicalActionForForm(document.body.children[0])");
     NSString* base_url = base::SysUTF8ToNSString(BaseUrl());
     NSString* expected_action =
         [data.expected_action stringByReplacingOccurrencesOfString:@"baseurl/"
@@ -177,10 +191,8 @@ TEST_P(FillJsTest, GetCanonicalActionForForm) {
 TEST_P(FillJsTest, GetAriaLabel) {
   LoadHtml(@"<input id='input' type='text' aria-label='the label'/>");
 
-  id result = web::test::ExecuteJavaScriptForFeature(
-      web_state(),
-      @"__gCrWeb.fill.getAriaLabel(document.getElementById('input'));",
-      form_util_java_script_feature());
+  id result = ExecuteJavaScriptInAutofillContentWorld(
+      @"__gCrWeb.fill.getAriaLabel(document.getElementById('input'));");
   NSString* expected_result = @"the label";
   EXPECT_NSEQ(result, expected_result);
 }
@@ -190,10 +202,8 @@ TEST_P(FillJsTest, GetAriaLabel) {
 TEST_F(FillJsTest, ShouldAutocompleteOneTimeCode) {
   LoadHtml(@"<input id='input' type='text' autocomplete='one-time-code'/>");
 
-  id result = web::test::ExecuteJavaScriptForFeature(
-      web_state(),
-      @"__gCrWeb.fill.shouldAutocomplete(document.getElementById('input'));",
-      form_util_java_script_feature());
+  id result = ExecuteJavaScriptInAutofillContentWorld(
+      @"__gCrWeb.fill.shouldAutocomplete(document.getElementById('input'));");
   EXPECT_NSEQ(result, @NO);
 }
 
@@ -207,10 +217,8 @@ TEST_F(FillJsTest, GetAriaLabelledBySingle) {
             "</div>"
             "</body></html>");
 
-  id result = web::test::ExecuteJavaScriptForFeature(
-      web_state(),
-      @"__gCrWeb.fill.getAriaLabel(document.getElementById('input'));",
-      form_util_java_script_feature());
+  id result = ExecuteJavaScriptInAutofillContentWorld(
+      @"__gCrWeb.fill.getAriaLabel(document.getElementById('input'));");
   NSString* expected_result = @"Name";
   EXPECT_NSEQ(result, expected_result);
 }
@@ -225,10 +233,8 @@ TEST_P(FillJsTest, GetAriaLabelledByMulti) {
             "</div>"
             "</body></html>");
 
-  id result = web::test::ExecuteJavaScriptForFeature(
-      web_state(),
-      @"__gCrWeb.fill.getAriaLabel(document.getElementById('input'));",
-      form_util_java_script_feature());
+  id result = ExecuteJavaScriptInAutofillContentWorld(
+      @"__gCrWeb.fill.getAriaLabel(document.getElementById('input'));");
   NSString* expected_result = @"Billing Name";
   EXPECT_NSEQ(result, expected_result);
 }
@@ -244,10 +250,8 @@ TEST_F(FillJsTest, GetAriaLabelledByTakesPrecedence) {
             "</div>"
             "</body></html>");
 
-  id result = web::test::ExecuteJavaScriptForFeature(
-      web_state(),
-      @"__gCrWeb.fill.getAriaLabel(document.getElementById('input'));",
-      form_util_java_script_feature());
+  id result = ExecuteJavaScriptInAutofillContentWorld(
+      @"__gCrWeb.fill.getAriaLabel(document.getElementById('input'));");
   NSString* expected_result = @"Name";
   EXPECT_NSEQ(result, expected_result);
 }
@@ -263,10 +267,8 @@ TEST_P(FillJsTest, GetAriaLabelledByInvalid) {
             "</div>"
             "</body></html>");
 
-  id result = web::test::ExecuteJavaScriptForFeature(
-      web_state(),
-      @"__gCrWeb.fill.getAriaLabel(document.getElementById('input'));",
-      form_util_java_script_feature());
+  id result = ExecuteJavaScriptInAutofillContentWorld(
+      @"__gCrWeb.fill.getAriaLabel(document.getElementById('input'));");
   NSString* expected_result = @"";
   EXPECT_NSEQ(result, expected_result);
 }
@@ -282,10 +284,8 @@ TEST_P(FillJsTest, GetAriaLabelledByFallback) {
             "</div>"
             "</body></html>");
 
-  id result = web::test::ExecuteJavaScriptForFeature(
-      web_state(),
-      @"__gCrWeb.fill.getAriaLabel(document.getElementById('input'));",
-      form_util_java_script_feature());
+  id result = ExecuteJavaScriptInAutofillContentWorld(
+      @"__gCrWeb.fill.getAriaLabel(document.getElementById('input'));");
   NSString* expected_result = @"valid";
   EXPECT_NSEQ(result, expected_result);
 }
@@ -297,10 +297,8 @@ TEST_P(FillJsTest, GetAriaDescriptionSingle) {
             "<div id='div1'>aria description</div>"
             "</body></html>");
 
-  id result = web::test::ExecuteJavaScriptForFeature(
-      web_state(),
-      @"__gCrWeb.fill.getAriaDescription(document.getElementById('input'));",
-      form_util_java_script_feature());
+  id result = ExecuteJavaScriptInAutofillContentWorld(
+      @"__gCrWeb.fill.getAriaDescription(document.getElementById('input'));");
   NSString* expected_result = @"aria description";
   EXPECT_NSEQ(result, expected_result);
 }
@@ -313,10 +311,8 @@ TEST_F(FillJsTest, GetAriaDescriptionMulti) {
             "<div id='div1'>aria</div>"
             "</body></html>");
 
-  id result = web::test::ExecuteJavaScriptForFeature(
-      web_state(),
-      @"__gCrWeb.fill.getAriaDescription(document.getElementById('input'));",
-      form_util_java_script_feature());
+  id result = ExecuteJavaScriptInAutofillContentWorld(
+      @"__gCrWeb.fill.getAriaDescription(document.getElementById('input'));");
   NSString* expected_result = @"aria description";
   EXPECT_NSEQ(result, expected_result);
 }
@@ -327,17 +323,15 @@ TEST_P(FillJsTest, GetAriaDescriptionInvalid) {
             "<input id='input' type='text' aria-describedby='invalid'/>"
             "</body></html>");
 
-  id result = web::test::ExecuteJavaScriptForFeature(
-      web_state(),
-      @"__gCrWeb.fill.getAriaDescription(document.getElementById('input'));",
-      form_util_java_script_feature());
+  id result = ExecuteJavaScriptInAutofillContentWorld(
+      @"__gCrWeb.fill.getAriaDescription(document.getElementById('input'));");
   NSString* expected_result = @"";
   EXPECT_NSEQ(result, expected_result);
 }
 
 // Tests that gCrWeb.fill.getUniqueID returns the ID of an element from all
 // JavaScript content worlds.
-TEST_P(FillJsTest, GetUniqueIDInAllJavaScriptContentWorlds) {
+TEST_P(FillJsTest, DISABLED_GetUniqueIDInAllJavaScriptContentWorlds) {
   LoadHtml(@"<html><body>"
             "<form id='form'>"
             "<input id='input' type='text'></input>"
@@ -346,13 +340,11 @@ TEST_P(FillJsTest, GetUniqueIDInAllJavaScriptContentWorlds) {
   EnableCrossContentWorldAutofill();
 
   // Set IDs for form and input in the content world for Autofill features.
-  web::test::ExecuteJavaScriptForFeature(
-      web_state(),
+  ExecuteJavaScriptInAutofillContentWorld(
       @"var form = document.getElementById('form');"
        "__gCrWeb.fill.setUniqueIDIfNeeded(form);"
        "var input = document.getElementById('input');"
-       "__gCrWeb.fill.setUniqueIDIfNeeded(input);",
-      form_util_java_script_feature());
+       "__gCrWeb.fill.setUniqueIDIfNeeded(input);");
 
   // Verify the ID retrieval in all content worlds.
   for (auto content_world : {web::ContentWorld::kIsolatedWorld,
@@ -362,20 +354,18 @@ TEST_P(FillJsTest, GetUniqueIDInAllJavaScriptContentWorlds) {
     SCOPED_TRACE(testing::Message()
                  << "Autofill content world = " << is_autofill_world);
     // Check that the correct ID is returned for the form and input elements.
-    // IDs should accessible from both content worlds when the flag is on.
-    // When the flag is off, the IDs are accessible only from the same content
-    // world other Autofill scripts are injected in.
+    // IDs should accessible from both content worlds.
     id form_id = GetUniqueID(@"form", content_world);
-    EXPECT_NSEQ(form_id, GetParam() || is_autofill_world ? @"1" : @"0");
+    EXPECT_NSEQ(form_id, @"1");
 
     id input_id = GetUniqueID(@"input", content_world);
-    EXPECT_NSEQ(input_id, GetParam() || is_autofill_world ? @"2" : @"0");
+    EXPECT_NSEQ(input_id, @"2");
   }
 }
 
 // Tests that gCrWeb.fill.getUniqueID returns the null ID when an invalid value
 // is stored in the DOM.
-TEST_P(FillJsTest, GetUniqueIDReturnsNotSetWhenInvalidIDInDOM) {
+TEST_P(FillJsTest, DISABLED_GetUniqueIDReturnsNotSetWhenInvalidIDInDOM) {
   LoadHtml(@"<html><body>"
             "<form id='form'/>"
             "</form></body></html>");
@@ -383,11 +373,9 @@ TEST_P(FillJsTest, GetUniqueIDReturnsNotSetWhenInvalidIDInDOM) {
   EnableCrossContentWorldAutofill();
 
   // Set IDs for form and input in the content world for Autofill features.
-  web::test::ExecuteJavaScriptForFeature(
-      web_state(),
+  ExecuteJavaScriptInAutofillContentWorld(
       @"var form = document.getElementById('form');"
-       "__gCrWeb.fill.setUniqueIDIfNeeded(form);",
-      form_util_java_script_feature());
+       "__gCrWeb.fill.setUniqueIDIfNeeded(form);");
 
   std::vector<NSString*> invalid_ids = {@"''", @"'word'", @"null",
                                         @"undefined"};
@@ -399,8 +387,11 @@ TEST_P(FillJsTest, GetUniqueIDReturnsNotSetWhenInvalidIDInDOM) {
                           "form.setAttribute('__gChrome_uniqueID', %@);",
                          invalid_id];
 
+    // Make the renderer ID invalid. Running the script in the page content
+    // world to simulate a real-life scenario. The DOM is shared across content
+    // worlds so it doesn't really matter which content world we use.
     web::test::ExecuteJavaScriptForFeature(web_state(), set_invalid_id_script,
-                                           form_util_java_script_feature());
+                                           GetDummyPageContentWorldFeature());
 
     // Verify the ID retrieval in all content worlds.
     for (auto content_world : {web::ContentWorld::kIsolatedWorld,

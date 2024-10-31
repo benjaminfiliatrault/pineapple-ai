@@ -47,6 +47,7 @@
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_capabilities.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "gpu/config/gpu_switches.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_types.h"
@@ -66,12 +67,6 @@
 namespace media {
 
 namespace {
-
-// TODO(crbug.com/330865436): Resolve issue(s) causing crbug.com/369838163 and
-// re-enable.
-BASE_FEATURE(kAddScanoutUsageOnlyIfSupportedBySharedImage,
-             "AddScanoutUsageOnlyIfSupportedBySharedImage",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace
 
@@ -585,7 +580,7 @@ gfx::Size CodedSize(const VideoFrame* video_frame,
       output = gfx::Size(base::bits::AlignUp(width, size_t{2}), height);
       break;
     case GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
   DCHECK(gfx::Rect(video_frame->coded_size()).Contains(gfx::Rect(output)));
   return output;
@@ -645,7 +640,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
     return;
   }
 
-  bool is_software_backed_video_frame = !video_frame->HasTextures();
+  bool is_software_backed_video_frame = !video_frame->HasSharedImage();
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   is_software_backed_video_frame &= !video_frame->HasDmaBufs();
 #endif
@@ -913,7 +908,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CopyRowsToBuffer(
   auto* scoped_mapping = frame_resource->scoped_mapping.get();
 
   // To handle plane 0 of the underlying buffer.
-  uint8_t* memory_ptr0 = static_cast<uint8_t*>(scoped_mapping->Memory(0));
+  uint8_t* memory_ptr0 = scoped_mapping->GetMemoryForPlane(0).data();
   size_t stride0 = scoped_mapping->Stride(0);
 
   switch (output_format) {
@@ -940,7 +935,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CopyRowsToBuffer(
             plane_row_start, plane_rows_to_copy, plane_bytes_per_row,
             video_frame->BitDepth(), video_frame->visible_data(src_plane),
             video_frame->stride(src_plane),
-            static_cast<uint8_t*>(scoped_mapping->Memory(dst_plane)),
+            scoped_mapping->GetMemoryForPlane(dst_plane).data(),
             scoped_mapping->Stride(dst_plane));
       }
       break;
@@ -949,15 +944,14 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CopyRowsToBuffer(
     case GpuVideoAcceleratorFactories::OutputFormat::P010:
       CopyRowsToP010Buffer(row, rows_to_copy, coded_size.width(), video_frame,
                            memory_ptr0, stride0,
-                           static_cast<uint8_t*>(scoped_mapping->Memory(1)),
+                           scoped_mapping->GetMemoryForPlane(1).data(),
                            scoped_mapping->Stride(1));
       break;
 
     case GpuVideoAcceleratorFactories::OutputFormat::NV12:
       CopyRowsToNV12Buffer(row, rows_to_copy, coded_size.width(),
                            video_frame->BitDepth(), video_frame, memory_ptr0,
-                           stride0,
-                           static_cast<uint8_t*>(scoped_mapping->Memory(1)),
+                           stride0, scoped_mapping->GetMemoryForPlane(1).data(),
                            scoped_mapping->Stride(1));
       break;
     case GpuVideoAcceleratorFactories::OutputFormat::XB30:
@@ -970,7 +964,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CopyRowsToBuffer(
     }
 
     case GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 
@@ -1094,40 +1088,36 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
     frame->set_ycbcr_info(ycbcr_info);
   }
 
-  frame->set_shared_image_format_type(
-      SharedImageFormatType::kSharedImageFormat);
-  if (frame_resource->shared_image->format().PrefersExternalSampler()) {
-    frame->set_shared_image_format_type(
-        SharedImageFormatType::kSharedImageFormatExternalSampler);
-  }
-
   bool allow_overlay = false;
+  if (frame_resource->shared_image->usage().Has(
+          gpu::SHARED_IMAGE_USAGE_SCANOUT)) {
 #if BUILDFLAG(IS_WIN)
-  // Windows direct composition path only supports NV12 video overlays.
-  allow_overlay =
-      output_format_ == GpuVideoAcceleratorFactories::OutputFormat::NV12;
+    // Windows direct composition path only supports NV12 video overlays.
+    allow_overlay =
+        output_format_ == GpuVideoAcceleratorFactories::OutputFormat::NV12;
 #else
-  switch (output_format_) {
-    case GpuVideoAcceleratorFactories::OutputFormat::YV12:
-      allow_overlay = video_frame_allow_overlay;
-      break;
-    case GpuVideoAcceleratorFactories::OutputFormat::P010:
-    case GpuVideoAcceleratorFactories::OutputFormat::NV12:
-      allow_overlay = true;
-      break;
-    case GpuVideoAcceleratorFactories::OutputFormat::XR30:
-    case GpuVideoAcceleratorFactories::OutputFormat::XB30:
+    switch (output_format_) {
+      case GpuVideoAcceleratorFactories::OutputFormat::YV12:
+        allow_overlay = video_frame_allow_overlay;
+        break;
+      case GpuVideoAcceleratorFactories::OutputFormat::P010:
+      case GpuVideoAcceleratorFactories::OutputFormat::NV12:
+        allow_overlay = true;
+        break;
+      case GpuVideoAcceleratorFactories::OutputFormat::XR30:
+      case GpuVideoAcceleratorFactories::OutputFormat::XB30:
 #if BUILDFLAG(IS_MAC)
-      allow_overlay = IOSurfaceCanSetColorSpace(color_space);
+        allow_overlay = IOSurfaceCanSetColorSpace(color_space);
 #else
-      // TODO(crbug.com/41350508): Enable this for ChromeOS.
-      allow_overlay = false;
+        // TODO(crbug.com/41350508): Enable this for ChromeOS.
+        allow_overlay = false;
 #endif
-      break;
-    case GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED:
-      break;
-  }
+        break;
+      case GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED:
+        break;
+    }
 #endif  // BUILDFLAG(IS_WIN)
+  }
   frame->metadata().allow_overlay = allow_overlay;
   frame->metadata().read_lock_fences_enabled = true;
   frame->metadata().is_webgpu_compatible = is_webgpu_compatible;
@@ -1215,10 +1205,11 @@ GpuMemoryBufferVideoFramePool::PoolImpl::GetOrCreateFrameResource(
 
     // SCANOUT usage was historically added unconditionally. However, it
     // actually should be added only if scanout of SharedImages for this use
-    // case is supported. This CL makes that change under a killswitch.
+    // case is supported.
     // TODO(crbug.com/330865436): Remove killswitch post-safe rollout.
     if (base::FeatureList::IsEnabled(
-            kAddScanoutUsageOnlyIfSupportedBySharedImage)) {
+            features::
+                kSWVideoFrameAddScanoutUsageOnlyIfSupportedBySharedImage)) {
       auto si_caps = sii->GetCapabilities();
 
 #if BUILDFLAG(IS_WIN)
@@ -1238,7 +1229,7 @@ GpuMemoryBufferVideoFramePool::PoolImpl::GetOrCreateFrameResource(
       si_usage |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
     }
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
     // TODO(crbug.com/40194712): Always add the flag once the
     // OzoneImageBacking is by default turned on.
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -1246,6 +1237,9 @@ GpuMemoryBufferVideoFramePool::PoolImpl::GetOrCreateFrameResource(
       // This SharedImage may be used for zero-copy import into WebGPU.
       si_usage |= gpu::SHARED_IMAGE_USAGE_WEBGPU_READ;
     }
+#elif BUILDFLAG(IS_MAC)
+    // This SharedImage may be used for zero-copy import into WebGPU.
+    si_usage |= gpu::SHARED_IMAGE_USAGE_WEBGPU_READ;
 #endif
     // Create a Mappable shared image.
     frame_resource->shared_image =

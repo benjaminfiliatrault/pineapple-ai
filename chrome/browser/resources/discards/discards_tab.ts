@@ -4,7 +4,7 @@
 
 import 'chrome://resources/js/action_link.js';
 import 'chrome://resources/cr_elements/action_link.css.js';
-import './strings.m.js';
+import '/strings.m.js';
 
 import {assertNotReached} from 'chrome://resources/js/assert.js';
 import {getFaviconForPageURL} from 'chrome://resources/js/icon.js';
@@ -198,6 +198,8 @@ class DiscardsTabElement extends DiscardsTabElementBase {
         return 'proactive';
       case LifecycleUnitDiscardReason.SUGGESTED:
         return 'suggested';
+      case LifecycleUnitDiscardReason.FROZEN_WITH_GROWING_MEMORY:
+        return 'frozen with growing memory';
     }
   }
 
@@ -231,8 +233,6 @@ class DiscardsTabElement extends DiscardsTabElementBase {
     switch (state) {
       case LifecycleUnitState.ACTIVE:
         return pageLifecycleStateFromVisibilityAndFocus();
-      case LifecycleUnitState.THROTTLED:
-        return pageLifecycleStateFromVisibilityAndFocus() + ' (throttled)';
       case LifecycleUnitState.FROZEN:
         return 'frozen';
       case LifecycleUnitState.DISCARDED:

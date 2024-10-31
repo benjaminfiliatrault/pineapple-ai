@@ -114,6 +114,7 @@
 <translation id="132346741904777634">Камерата е поставена во горниот лев агол. Конфликт со површината на системот.</translation>
 <translation id="132415371743256095">Затвори ја <ph name="DESK_NAME" /> и прозорците</translation>
 <translation id="1333308631814936910"><ph name="DISPLAY_NAME" /> е поврзан</translation>
+<translation id="1337081488893096731">Користете ја апликацијата Content Transfer за да ги префрлите податоците од вашата училишна сметка во вашата лична сметка</translation>
 <translation id="1340378040547539434">Одзумира на страницата</translation>
 <translation id="1341651618736211726">Прелевање</translation>
 <translation id="1341926407152459446">Користете „<ph name="DEVICE_NAME" />“ за влез и излез за аудио</translation>
@@ -242,6 +243,7 @@
 <translation id="17722141032474077">Пресметки</translation>
 <translation id="1774796056689732716">Календар, <ph name="CURRENT_MONTH_YEAR" />, моментално е избран <ph name="DATE" />.</translation>
 <translation id="178347895271755507">Поставете прегледување на неодамнешните фотографии, аудиовизуелни содржини и известувања на телефонот</translation>
+<translation id="1786487376942610288">Менувај меѓу максималната и тековната големина на прозорецот за „Слика во слика“</translation>
 <translation id="1787955149152357925">Исклучено</translation>
 <translation id="1796561540704213354">Веб-сајтовите, заедно со страниците што сте ги посетиле, како и отворените страници</translation>
 <translation id="179842970735685253">Условите за користење на Google</translation>
@@ -498,6 +500,9 @@
 <translation id="2774348302533424868"><ph name="MODIFIER" /><ph name="DELIMITER" /><ph name="KEY_ONE" /> до <ph name="KEY_TWO" /></translation>
 <translation id="2778197796481941784">Ctrl+Search+S</translation>
 <translation id="2778650143428714839"><ph name="MANAGER" /> управува со <ph name="DEVICE_TYPE" /></translation>
+<translation id="2781658180588759579">Вградената допирна подлога е оневозможена. Користете ја тастатурата или друг уред за покажување за да ја потврдите промената.
+
+Во спротивно, вградената допирна подлога ќе се овозможи повторно по <ph name="TIMEOUT_SECONDS" />.</translation>
 <translation id="2782591952652094792">Излези од режимот на снимање</translation>
 <translation id="2785499565474703580">Поврзан е 1 уред</translation>
 <translation id="2791421900609674576">Ќе видите препораки за да можете да продолжите каде што сте застанале. Може да допрете и задржите за да ги отстраните препораките.</translation>
@@ -594,6 +599,9 @@
 <translation id="3113492864356515707">Нагласете ја претходната ставка на полицата</translation>
 <translation id="311799651966070385">Затвори го потсетувањето</translation>
 <translation id="3120421559657122717">Да се исклучи уредот?</translation>
+<translation id="3121411970001795539">Вградената допирна подлога е оневозможена бидејќи е поврзано глувче. Користете го глувчето или тастатурата за да ја потврдите промената.
+
+Во спротивно, вградената допирна подлога ќе се овозможи повторно по <ph name="TIMEOUT_SECONDS" />.</translation>
 <translation id="3122464029669770682">ЦПУ</translation>
 <translation id="3125690294288312932">Тип школска работа</translation>
 <translation id="3126026824346185272">Ctrl</translation>
@@ -620,6 +628,7 @@
 <translation id="3208321278970793882">Апликација</translation>
 <translation id="3213571860604332401">Зачувува линк како обележувач</translation>
 <translation id="3217205077783620295">Јачината на звук е вклучена. Ако смените, ќе се исклучи звукот на аудиото.</translation>
+<translation id="3218561536255328229">Притиснете Esc 5 пати за да ја овозможите допирната подлога</translation>
 <translation id="3226991577105957773">и уште <ph name="COUNT" /></translation>
 <translation id="3227137524299004712">Микрофон</translation>
 <translation id="3233611303007751344">Штедачот на батерија е исклучен</translation>
@@ -634,7 +643,6 @@
 <translation id="3265032511221679826">Дали да се вклучи пристап до прецизна локација?</translation>
 <translation id="3269597722229482060">Десен клик</translation>
 <translation id="3271554781793662131">Пребарајте за да вметнете</translation>
-<translation id="3273040715184276344">Caps Lock е исклучено</translation>
 <translation id="3274634049061007184">Прегледајте ги апликациите на телефонот</translation>
 <translation id="3289364673986435196">Мени на копчето за вклучување</translation>
 <translation id="3289544412142055976">Апликациите на Linux не се поддржани во моментов</translation>
@@ -972,6 +980,7 @@
 <translation id="4356872429719185452">Прикажи детали за точката на пристап. Точката на пристап се вклучува.</translation>
 <translation id="4364101114148522660">Се снима: <ph name="DURATION" /></translation>
 <translation id="4371348193907997655">Поставки за Cast</translation>
+<translation id="4371834685492830207">PIN-кодот мора да содржи само важечки знаци</translation>
 <translation id="4375482231364171368">Пребарува во лентата за адреси</translation>
 <translation id="4378479437904450384"><ph name="WIRELESS_PROVIDER" />, јачина на сигналот: <ph name="SIGNAL_STRENGTH" /> %</translation>
 <translation id="4378551569595875038">Се поврзува…</translation>
@@ -1137,6 +1146,7 @@
 <translation id="4902797682482387055">Предложена задача на којашто може да се фокусирате</translation>
 <translation id="490375751687810070">Вертикално</translation>
 <translation id="490788395437447240"><ph name="BATTERY_PERCENTAGE" /> % батерија</translation>
+<translation id="4911191962826748981">Ова е експериментална AI-функција, па нема секогаш да прикажува точни информации.</translation>
 <translation id="491504982845934899">Активирајте <ph name="NETWORK_NAME" /> по поставувањето на уредот</translation>
 <translation id="4917385247580444890">Силен</translation>
 <translation id="4918086044614829423">Прифати</translation>
@@ -1465,11 +1475,11 @@
 <translation id="5975235751479998104">Движете се нанапред низ прозорците</translation>
 <translation id="5978382165065462689">Споделување контрола на вашиот екран преку далечинска помош.</translation>
 <translation id="5980301590375426705">Излези од гостин</translation>
-<translation id="5982119059638483922">Притиснете Alt + „Пребарување“ или Shift за да откажете.</translation>
 <translation id="5983567367406220847">Точката на пристап е исклучена поради неактивност.</translation>
 <translation id="598407983968395253">Употреби го шаблонот</translation>
 <translation id="5986723678596105470">Придружете се со Google Meet</translation>
 <translation id="598882571027504733">За да го добиете ажурирањето, рестартирајте го Chromebook додека тастатурата е прикачена.</translation>
+<translation id="5990992855591814753">Бидете во тек со персонализираните плејлисти за „Режим за концентрација“. Добијте YouTube Music и YouTube, без реклами, со YouTube Premium во период од 3 месеци бесплатно. Важат „Условите“.</translation>
 <translation id="5998374579424866922">Исклучете ги контролите за игри</translation>
 <translation id="6000279412553873020">Клучеви, копчиња и друго</translation>
 <translation id="6012623610530968780">Страница <ph name="SELECTED_PAGE" /> од <ph name="TOTAL_PAGE_NUM" /></translation>
@@ -1534,7 +1544,6 @@
 <translation id="6166852626429024716">Пребарувајте низ уредот, апликациите, поставките, на интернет…</translation>
 <translation id="6168318496333165060">Отворете ја апликацијата Diagnostics</translation>
 <translation id="6168622430237609329">Вашите инсталирани апликации</translation>
-<translation id="6173151025443907148">Ако е овозможен Lacros, не е поддржано најавување втор корисник. Наместо тоа, користете втор профил за прелистувач во Lacros или оневозможете го Lacros и обидете се повторно.</translation>
 <translation id="6179832488876878285">Може да ги закачите вашите важни датотеки тука. Отворете ја апликацијата Files за да започнете.</translation>
 <translation id="6180193585172850042">Копче за назад</translation>
 <translation id="6180651297859206670">Копче за напред</translation>
@@ -1556,6 +1565,7 @@
 <translation id="6232416233079464213">Од <ph name="SESSION_NAME" /></translation>
 <translation id="6232891689835436217"><ph name="APP_NAME" /> ги користи камерата и микрофонот во моментов</translation>
 <translation id="6237231532760393653">1X</translation>
+<translation id="6240551054644725950">Лозинката мора да содржи само важечки знаци</translation>
 <translation id="6240603910551255087">Горно копче</translation>
 <translation id="6240821072888636753">Прашувај секогаш</translation>
 <translation id="6247728804802644171">Отворете ги известувањата</translation>
@@ -1585,6 +1595,7 @@
 <translation id="6352082849089527770">Непознати мрежи</translation>
 <translation id="6359587239691116345">Преземете ги најновите функции и подобрувања на безбедноста. Ако го одбиете ажурирањево, можно е уредот да не ви функционира правилно и може да наидете на проблеми со безбедноста и изведбата.</translation>
 <translation id="6362833380917912748">Запознајте се со вградените апликации</translation>
+<translation id="6364386432014869981">Вградената допирна подлога е вклучена</translation>
 <translation id="6376931439017688372">Bluetooth е вклучен</translation>
 <translation id="6378515133128829137">Закачете прозорец на десната страна</translation>
 <translation id="6381109794406942707">За да го отклучите уредот, внесете го вашиот PIN.</translation>
@@ -1685,6 +1696,7 @@
 <translation id="6682029141988159141">Ги лепи содржините од привремената меморија</translation>
 <translation id="6683022854667115063">Слушалки</translation>
 <translation id="6686023075541098243">Поставете прегледување на известувањата на телефонот</translation>
+<translation id="6694462491298752106">Вградената допирна подлога е оневозможена</translation>
 <translation id="6694973220096431421">Пребарајте во Google Drive</translation>
 <translation id="6696025732084565524">Отстранливата тастатура има потреба од важно ажурирање</translation>
 <translation id="6697913454192220372">Додајте нова работна површина</translation>
@@ -1704,6 +1716,7 @@
 <translation id="6751826523481687655">Следењето на изведбата е вклучено</translation>
 <translation id="6752912906630585008">Работниот простор <ph name="REMOVED_DESK" /> е отстранет и споен со работниот простор <ph name="RECEIVE_DESK" /></translation>
 <translation id="6753390234084146956">картички</translation>
+<translation id="6754918760968695779">Брзо вметнување</translation>
 <translation id="6757237461819837179">Нема пуштени аудиовизуелни содржини</translation>
 <translation id="6760438044935091345">Контролна табла за игри</translation>
 <translation id="6768043681523654438">простор</translation>
@@ -1953,7 +1966,6 @@
 <translation id="7670953955701272011">Отворете го датумов во „Календарот на Google“</translation>
 <translation id="7671610481353807627">Апликациите се подредени по боја</translation>
 <translation id="7672095158465655885">Поврзано со <ph name="NAME" />, <ph name="SUBTEXT" /></translation>
-<translation id="7680417644536099065">Caps Lock е вклучено</translation>
 <translation id="7682351277038250258">Ги лепи содржините од привремената меморија како обичен текст</translation>
 <translation id="7684531502177797067">Влезот на камерата е поставен на <ph name="CAMERA_NAME" />.</translation>
 <translation id="7687172143976244806">Вие отворивте</translation>
@@ -1994,6 +2006,7 @@
 <translation id="780301667611848630">Не, фала</translation>
 <translation id="7807067443225230855">„Пребарување“ и „Помошник“</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> и <ph name="MINUTE" /></translation>
+<translation id="7823946889603375473">„Ми се допаѓа“ ќе ги испрати повратните информации дека ви се допаѓа предлогов</translation>
 <translation id="7825412704590278437">Од претстоен настан во календарот</translation>
 <translation id="7829386189513694949">Силен сигнал</translation>
 <translation id="7830453190047749513">Може да ги персонализирате дејствата за копчињата, брзината на курсорот и друго за вашиот уред <ph name="PERIPHERAL_NAME" /></translation>
@@ -2147,6 +2160,7 @@
 <translation id="830868413617744215">Бета</translation>
 <translation id="8314772463905284467">Вклучено е Caps Lock</translation>
 <translation id="8315514906653279104">Се вклучува…</translation>
+<translation id="8319634750346253957">„Не ми се допаѓа“ ќе ги испрати повратните информации дека не ви се допаѓа предлогов</translation>
 <translation id="8331351032546853669">Преземање на чекање</translation>
 <translation id="8339706171276328417"><ph name="ACTION_DESCRIPTION" /> · <ph name="TIME" /></translation>
 <translation id="8341451174107936385"><ph name="UNLOCK_MORE_FEATURES" /> <ph name="GET_STARTED" /></translation>
@@ -2296,6 +2310,7 @@
 <translation id="8858369206579825206">Контроли на приватноста</translation>
 <translation id="8860366331836346216">Додајте eSIM</translation>
 <translation id="8870509716567206129">Апликацијата не поддржува поделен екран.</translation>
+<translation id="8873203135446552888">Потврдете дека сакате да ја оневозможите вградената допирна подлога</translation>
 <translation id="8874184842967597500">Не е поврзано</translation>
 <translation id="8875021410787719674">Преместувајте меѓу долниот десен агол, стартерот, лентата за адреси, лентата со обележувачи, отворениот веб-сајт и преземањата</translation>
 <translation id="8876148469852588625">Настан <ph name="EVENT_POSITION" /> од <ph name="EVENT_TOTAL_COUNT" /></translation>

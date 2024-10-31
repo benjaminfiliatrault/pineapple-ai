@@ -24,7 +24,6 @@
 #include "third_party/blink/public/mojom/ai/ai_manager.mojom.h"
 
 using optimization_guide::MockSession;
-using optimization_guide::MockSessionWrapper;
 using testing::_;
 using testing::AtMost;
 using testing::Invoke;
@@ -37,7 +36,7 @@ class AIManagerKeyedServiceTest : public AITestUtils::AITestBase {
 
     ON_CALL(*mock_optimization_guide_keyed_service_, StartSession(_, _))
         .WillByDefault(
-            [&] { return std::make_unique<MockSessionWrapper>(&session_); });
+            [&] { return std::make_unique<NiceMock<MockSession>>(&session_); });
     ON_CALL(session_, GetTokenLimits())
         .WillByDefault(AITestUtils::GetFakeTokenLimits);
     ON_CALL(session_, GetOnDeviceFeatureMetadata())
@@ -96,17 +95,20 @@ TEST_F(AIManagerKeyedServiceTest, NoUAFWithInvalidOnDeviceModelPath) {
 TEST_F(AIManagerKeyedServiceTest, AIContextBoundObjectSet) {
   SetupMockOptimizationGuideKeyedService();
 
-  base::MockCallback<blink::mojom::AIManager::CreateAssistantCallback> callback;
+  mojo::Remote<blink::mojom::AIAssistant> mock_session;
+  AITestUtils::MockCreateAssistantClient mock_create_assistant_client;
   base::RunLoop run_loop;
-  EXPECT_CALL(callback, Run(_))
-      .Times(AtMost(1))
-      .WillOnce(Invoke([&](blink::mojom::AIAssistantInfoPtr result) {
-        EXPECT_TRUE(result);
-        run_loop.Quit();
-      }));
+  EXPECT_CALL(mock_create_assistant_client, OnResult(_, _))
+      .WillOnce(testing::Invoke(
+          [&](mojo::PendingRemote<blink::mojom::AIAssistant> assistant,
+              blink::mojom::AIAssistantInfoPtr info) {
+            EXPECT_TRUE(assistant);
+            mock_session =
+                mojo::Remote<blink::mojom::AIAssistant>(std::move(assistant));
+            run_loop.Quit();
+          }));
 
   mojo::Remote<blink::mojom::AIManager> mock_remote = GetAIManagerRemote();
-  mojo::Remote<blink::mojom::AIAssistant> mock_session;
   // Initially the `AIContextBoundObjectSet` only contains the
   // `AIManagerReceiverRemover`.
   base::WeakPtr<AIContextBoundObjectSet> context_bound_objects =
@@ -116,10 +118,13 @@ TEST_F(AIManagerKeyedServiceTest, AIContextBoundObjectSet) {
 
   // After creating one `AIAssistant`, the `AIContextBoundObjectSet` contains 2
   // elements.
-  mock_remote->CreateAssistant(mock_session.BindNewPipeAndPassReceiver(),
-                               /*sampling_params=*/nullptr,
-                               /*system_prompt=*/std::nullopt,
-                               /*initial_prompts=*/{}, callback.Get());
+  mock_remote->CreateAssistant(
+      mock_create_assistant_client.BindNewPipeAndPassRemote(),
+      blink::mojom::AIAssistantCreateOptions::New(
+          /*sampling_params=*/nullptr,
+          /*system_prompt=*/std::nullopt,
+          /*initial_prompts=*/
+          std::vector<blink::mojom::AIAssistantInitialPromptPtr>()));
   run_loop.Run();
   ASSERT_EQ(2u, context_bound_objects->GetSizeForTesting());
 

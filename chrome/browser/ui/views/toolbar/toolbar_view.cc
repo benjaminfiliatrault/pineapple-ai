@@ -24,7 +24,6 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/link_capturing/link_capturing_features.h"
 #include "chrome/browser/command_updater.h"
-#include "chrome/browser/companion/core/features.h"
 #include "chrome/browser/download/bubble/download_bubble_prefs.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/performance_manager/public/user_tuning/user_tuning_utils.h"
@@ -45,7 +44,6 @@
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/ui/intent_picker_tab_helper.h"
 #include "chrome/browser/ui/layout_constants.h"
-#include "chrome/browser/ui/side_search/side_search_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_model.h"
 #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_prefs.h"
@@ -71,7 +69,6 @@
 #include "chrome/browser/ui/views/performance_controls/battery_saver_button.h"
 #include "chrome/browser/ui/views/performance_controls/performance_intervention_button.h"
 #include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_toolbar_icon_view.h"
-#include "chrome/browser/ui/views/side_panel/companion/companion_utils.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/app_menu.h"
 #include "chrome/browser/ui/views/toolbar/back_forward_button.h"
@@ -369,7 +366,8 @@ void ToolbarView::Init() {
     toolbar_divider = std::make_unique<views::View>();
   }
   std::unique_ptr<media_router::CastToolbarButton> cast;
-  if (!features::IsToolbarPinningEnabled()) {
+  if (!(features::IsToolbarPinningEnabled() &&
+      base::FeatureList::IsEnabled(features::kPinnedCastButton))) {
     if (media_router::MediaRouterEnabled(browser_->profile())) {
       cast = media_router::CastToolbarButton::Create(browser_);
     }
@@ -708,7 +706,8 @@ ExtensionsToolbarButton* ToolbarView::GetExtensionsButton() const {
 }
 
 ToolbarButton* ToolbarView::GetCastButton() const {
-  if (features::IsToolbarPinningEnabled()) {
+  if (features::IsToolbarPinningEnabled() &&
+      base::FeatureList::IsEnabled(features::kPinnedCastButton)) {
     return pinned_toolbar_actions_container()
                ? pinned_toolbar_actions_container()->GetButtonFor(
                      kActionRouteMedia)

@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_accelerators.h"
 #include "base/check.h"
@@ -29,6 +28,8 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/ash/app_mode/app_launch_utils.h"
 #include "chrome/browser/ash/app_mode/crash_recovery_launcher.h"
+#include "chrome/browser/ash/app_mode/isolated_web_app/kiosk_iwa_data.h"
+#include "chrome/browser/ash/app_mode/isolated_web_app/kiosk_iwa_manager.h"
 #include "chrome/browser/ash/app_mode/kiosk_app.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager_base.h"
@@ -78,6 +79,18 @@ std::optional<KioskApp> ChromeAppById(const KioskChromeAppManager& manager,
       manager_app.name, manager_app.icon);
 }
 
+std::optional<KioskApp> IsolatedWebAppById(const KioskIwaManager& manager,
+                                           const AccountId& account_id) {
+  const KioskIwaData* app_data = manager.GetApp(account_id);
+
+  if (!app_data) {
+    return std::nullopt;
+  }
+
+  return KioskApp(KioskAppId::ForIsolatedWebApp(account_id), app_data->name(),
+                  app_data->icon());
+}
+
 KioskApp EmptyKioskApp(const KioskAppId& app_id) {
   switch (app_id.type) {
     case KioskAppType::kChromeApp:
@@ -108,9 +121,7 @@ std::vector<KioskApp> KioskControllerImpl::GetApps() const {
   std::vector<KioskApp> apps;
   AppendWebApps(apps);
   AppendChromeApps(apps);
-  if (ash::features::IsIsolatedWebAppKioskEnabled()) {
-    AppendIsolatedWebApps(apps);
-  }
+  AppendIsolatedWebApps(apps);
   return apps;
 }
 
@@ -124,8 +135,7 @@ std::optional<KioskApp> KioskControllerImpl::GetAppById(
     case KioskAppType::kChromeApp:
       return ChromeAppById(chrome_app_manager_, app_id.app_id.value());
     case KioskAppType::kIsolatedWebApp:
-      // TODO(crbug.com/359774056): add IsolatedWebAppById.
-      return EmptyKioskApp(app_id);
+      return IsolatedWebAppById(iwa_manager_, app_id.account_id);
   }
 }
 
@@ -135,10 +145,18 @@ std::optional<KioskApp> KioskControllerImpl::GetAutoLaunchApp() const {
   if (const auto& web_account_id = web_app_manager_.GetAutoLaunchAccountId();
       web_account_id.is_valid()) {
     return WebAppById(web_app_manager_, web_account_id);
-  } else if (std::string chrome_app_id = chrome_app_manager_.GetAutoLaunchApp();
-             !chrome_app_id.empty()) {
+  }
+
+  if (const auto& chrome_app_id = chrome_app_manager_.GetAutoLaunchApp();
+      !chrome_app_id.empty()) {
     return ChromeAppById(chrome_app_manager_, chrome_app_id);
   }
+
+  if (const auto& iwa_account_id = iwa_manager_.GetAutoLaunchAccountId();
+      iwa_account_id.has_value()) {
+    return IsolatedWebAppById(iwa_manager_, *iwa_account_id);
+  }
+
   return std::nullopt;
 }
 

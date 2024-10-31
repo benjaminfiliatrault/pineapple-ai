@@ -41,12 +41,9 @@
 #include "components/omnibox/browser/in_memory_url_index_types.h"
 #include "components/omnibox/browser/omnibox_feature_configs.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
-#include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/remote_suggestions_service.h"
 #include "components/omnibox/browser/search_suggestion_parser.h"
 #include "components/omnibox/common/omnibox_features.h"
-#include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/pref_service.h"
 #include "components/search/search.h"
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/template_url_service.h"
@@ -75,7 +72,7 @@ enum class DocumentProviderAllowedReason : int {
   kUnknown = 1,
   kFeatureDisabled = 2,
   kSuggestSettingDisabled = 3,
-  kDriveSettingDisabled = 4,
+  kDriveSettingDisabledObsolete = 4,
   kOffTheRecord = 5,
   kNotLoggedIn = 6,
   kNotSyncing = 7,
@@ -336,12 +333,6 @@ DocumentProvider* DocumentProvider::Create(
   return new DocumentProvider(client, listener);
 }
 
-// static
-void DocumentProvider::RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterBooleanPref(omnibox::kDocumentSuggestEnabled, true);
-}
-
 bool DocumentProvider::IsDocumentProviderAllowed(
     const AutocompleteInput& input) {
   // Feature must be on.
@@ -357,15 +348,6 @@ bool DocumentProvider::IsDocumentProviderAllowed(
     base::UmaHistogramEnumeration(
         "Omnibox.DocumentSuggest.ProviderAllowed",
         DocumentProviderAllowedReason::kSuggestSettingDisabled);
-    return false;
-  }
-
-  // Client-side toggle must be enabled.
-  if (!base::FeatureList::IsEnabled(omnibox::kDocumentProviderNoSetting) &&
-      !client_->GetPrefs()->GetBoolean(omnibox::kDocumentSuggestEnabled)) {
-    base::UmaHistogramEnumeration(
-        "Omnibox.DocumentSuggest.ProviderAllowed",
-        DocumentProviderAllowedReason::kDriveSettingDisabled);
     return false;
   }
 
@@ -489,10 +471,13 @@ void DocumentProvider::Start(const AutocompleteInput& input,
 }
 
 void DocumentProvider::Run() {
+  // DocumentSuggestionsServiceFactory does not create a service instance for
+  // OTR profiles. We should not get this far for those profiles.
+  DCHECK(!client_->IsOffTheRecord());
   time_run_invoked_ = base::TimeTicks::Now();
   client_->GetRemoteSuggestionsService(/*create_if_necessary=*/true)
       ->CreateDocumentSuggestionsRequest(
-          input_.text(), client_->IsOffTheRecord(),
+          input_.text(), /*is_off_the_record=*/false,
           base::BindOnce(
               &DocumentProvider::OnDocumentSuggestionsLoaderAvailable,
               weak_ptr_factory_.GetWeakPtr()),

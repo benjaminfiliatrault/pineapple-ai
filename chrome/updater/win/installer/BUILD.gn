@@ -4,7 +4,6 @@
 
 import("//build/config/python.gni")
 import("//build/timestamp.gni")
-import("//chrome/enterprise_companion/buildflags.gni")
 import("//chrome/process_version_rc_template.gni")
 import("//chrome/updater/branding.gni")
 import("//testing/test.gni")
@@ -35,6 +34,7 @@ shared_library("msi_custom_action") {
   ]
 
   configs += [ "//build/config/win:windowed" ]
+  libs = [ "rpcrt4.lib" ]
 }
 
 source_set("lib") {
@@ -76,6 +76,7 @@ source_set("lib_with_resources") {
   visibility = [ ":*" ]
   sources = [ "installer.rc" ]
   public_deps = [ ":lib" ]
+  deps = [ "//build:branding_buildflags" ]
 }
 
 # `process_version_rc_template` invokes `process_version` with the default
@@ -154,12 +155,9 @@ template("generate_installer") {
 
     deps = invoker.archive_deps
 
-    if (is_component_build) {
+    if (is_component_build || is_asan) {
+      # Include component build / ASan DLLs in the installer.
       args += [ "--component_build=1" ]
-    }
-
-    if (include_enterprise_companion_in_installer) {
-      args += [ "--include_enterprise_companion" ]
     }
   }
 
@@ -197,10 +195,6 @@ generate_installer("installer") {
   deps = [ "//chrome/updater:constants_prod" ]
   release_file = "updater.release"
   runtime_deps = updater_runtime_deps
-
-  if (include_enterprise_companion_in_installer) {
-    archive_deps += [ "//chrome/enterprise_companion" ]
-  }
 }
 
 generate_installer("installer_test") {
@@ -213,9 +207,4 @@ generate_installer("installer_test") {
   deps = [ "//chrome/updater:constants_test" ]
   release_file = "updater_test.release"
   runtime_deps = updater_test_runtime_deps
-
-  if (include_enterprise_companion_in_installer) {
-    archive_deps +=
-        [ "//chrome/enterprise_companion:enterprise_companion_test" ]
-  }
 }

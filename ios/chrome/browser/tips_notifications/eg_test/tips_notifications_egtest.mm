@@ -41,8 +41,9 @@ void TapText(NSString* text) {
   [[EarlGrey selectElementWithMatcher:item] performAction:grey_tap()];
 }
 
-// Taps "Allow" on notification permissions alert, if it appears.
-void MaybeTapAllowNotifications() {
+// Taps "Allow" on notification permissions popup or Camera popup, if
+// either appears.
+void MaybeTapAllowOnPopup() {
   XCUIApplication* springboardApplication = [[XCUIApplication alloc]
       initWithBundleIdentifier:@"com.apple.springboard"];
   auto button = springboardApplication.buttons[@"Allow"];
@@ -107,14 +108,11 @@ void MaybeDismissNotification() {
   return config;
 }
 
-+ (void)setUpForTestCase {
-  [super setUpForTestCase];
-  [ChromeEarlGrey writeFirstRunSentinel];
-}
-
 - (void)setUp {
   [super setUp];
 
+  [ChromeEarlGrey closeAllTabs];
+  [ChromeEarlGrey writeFirstRunSentinel];
   [ChromeEarlGrey clearDefaultBrowserPromoData];
   [ChromeEarlGrey resetDataForLocalStatePref:
                       prefs::kIosCredentialProviderPromoLastActionTaken];
@@ -123,12 +121,14 @@ void MaybeDismissNotification() {
   [NewTabPageAppInterface resetSetUpListPrefs];
   [ChromeEarlGrey
       resetDataForLocalStatePref:prefs::kAppLevelPushNotificationPermissions];
+  [ChromeEarlGrey openNewTab];
 }
 
-- (void)tearDown {
+- (void)tearDownHelper {
   [ChromeEarlGrey
       resetDataForLocalStatePref:prefs::kAppLevelPushNotificationPermissions];
-  [super tearDown];
+  [ChromeEarlGrey removeUserDefaultsObjectForKey:@"edoTestPort"];
+  [super tearDownHelper];
 }
 
 #pragma mark - Helpers
@@ -136,9 +136,12 @@ void MaybeDismissNotification() {
 // Opt in to Tips Notications via the SetUpList long-press menu. Mark all
 // Tips Notifications as "sent", except for the ones included in `types`.
 - (void)optInToTipsNotifications:(std::vector<TipsNotificationType>)types {
+  // Ensure that the SetUpList reloads.
+  [ChromeEarlGrey closeCurrentTab];
+  [ChromeEarlGrey openNewTab];
   // Long press the SetUpList module.
   id<GREYMatcher> setUpList =
-      grey_accessibilityID(set_up_list::kDefaultBrowserItemID);
+      grey_accessibilityID(set_up_list::kSetUpListContainerID);
   [ChromeEarlGrey waitForUIElementToAppearWithMatcher:setUpList];
   [[EarlGrey selectElementWithMatcher:setUpList]
       performAction:grey_longPress()];
@@ -155,7 +158,7 @@ void MaybeDismissNotification() {
 
   // Tap the menu item to enable notifications.
   TapText(@"Turn on notifications");
-  MaybeTapAllowNotifications();
+  MaybeTapAllowOnPopup();
 
   // Tap the confirmation snackbar.
   WaitForThenTapText(@"notifications turned on");
@@ -165,7 +168,7 @@ void MaybeDismissNotification() {
 - (void)turnOffTipsNotifications {
   // Long press the SetUpList module.
   id<GREYMatcher> setUpList =
-      grey_accessibilityID(set_up_list::kDefaultBrowserItemID);
+      grey_accessibilityID(set_up_list::kSetUpListContainerID);
   [[EarlGrey selectElementWithMatcher:setUpList]
       performAction:grey_longPress()];
 
@@ -275,6 +278,10 @@ void MaybeDismissNotification() {
 
 // Tests that the Lens Promo appears when tapping on the Lens notification.
 - (void)testLensNotification {
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Skipped for iPad.");
+  }
+
   MaybeDismissNotification();
   [ChromeEarlGreyUI waitForAppToIdle];
   [self optInToTipsNotifications:{}];
@@ -293,6 +300,15 @@ void MaybeDismissNotification() {
   // Swipe down to dismiss the instructions.
   [[EarlGrey selectElementWithMatcher:instructions]
       performAction:grey_swipeFastInDirection(kGREYDirectionDown)];
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::NavigationBarDoneButton()]
+      performAction:grey_tap()];
+
+  // Request the notification a second time.
+  [ChromeEarlGrey requestTipsNotification:TipsNotificationType::kLens];
+  TapNotification();
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:grey_accessibilityID(
+                                                          @"kLensPromoAXID")];
   // Tap "Show me how" again.
   [[EarlGrey selectElementWithMatcher:
                  chrome_test_util::PromoStyleSecondaryActionButtonMatcher()]
@@ -302,16 +318,11 @@ void MaybeDismissNotification() {
                  grey_accessibilityID(
                      kConfirmationAlertPrimaryActionAccessibilityIdentifier)]
       performAction:grey_tap()];
-
-  // Request the notification a second time.
-  [ChromeEarlGrey requestTipsNotification:TipsNotificationType::kLens];
-  TapNotification();
-  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:grey_accessibilityID(
-                                                          @"kLensPromoAXID")];
-  TapText(@"Done");
+  MaybeTapAllowOnPopup();
+  [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"escape" flags:0];
 }
 
-// Tests that the Lens Promo appears when tapping on the Lens notification.
+// Tests that the ESB Promo appears when tapping on the ESB notification.
 - (void)testEnhancedSafeBrowsingNotification {
   MaybeDismissNotification();
   [ChromeEarlGreyUI waitForAppToIdle];
@@ -348,6 +359,8 @@ void MaybeDismissNotification() {
   TapNotification();
   [ChromeEarlGrey waitForUIElementToAppearWithMatcher:
                       grey_accessibilityID(@"kEnhancedSafeBrowsingPromoAXID")];
-  TapText(@"Done");
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::NavigationBarDoneButton()]
+      performAction:grey_tap()];
 }
 @end

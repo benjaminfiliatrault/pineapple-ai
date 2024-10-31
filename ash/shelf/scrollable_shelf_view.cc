@@ -26,6 +26,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/presentation_time_recorder.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -1062,7 +1063,7 @@ ScrollableShelfView::CreateScopedActiveInkDropCount(const ShelfButton* sender) {
 void ScrollableShelfView::ShowContextMenuForViewImpl(
     views::View* source,
     const gfx::Point& point,
-    ui::MenuSourceType source_type) {
+    ui::mojom::MenuSourceType source_type) {
   // |point| is in screen coordinates. So it does not need to transform.
   shelf_view_->ShowContextMenuForViewImpl(shelf_view_, point, source_type);
 }
@@ -1197,7 +1198,7 @@ void ScrollableShelfView::ScheduleScrollForItemDragIfNeeded(
 
   drag_item_bounds_in_screen_.emplace(item_bounds_in_screen);
   if (AreBoundsWithinVisibleSpace(*drag_item_bounds_in_screen_)) {
-    page_flip_timer_.AbandonAndStop();
+    page_flip_timer_.Stop();
     return;
   }
 
@@ -1209,7 +1210,7 @@ void ScrollableShelfView::ScheduleScrollForItemDragIfNeeded(
 void ScrollableShelfView::CancelScrollForItemDrag() {
   drag_item_bounds_in_screen_.reset();
   if (page_flip_timer_.IsRunning())
-    page_flip_timer_.AbandonAndStop();
+    page_flip_timer_.Stop();
 }
 
 void ScrollableShelfView::OnImplicitAnimationsCompleted() {

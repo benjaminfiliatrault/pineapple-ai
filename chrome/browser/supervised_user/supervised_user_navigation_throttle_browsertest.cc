@@ -853,17 +853,9 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest,
 // Tests that the trivial www-subdomain stripping is applied on the url
 // of the interstitial. Blocked urls without further conflicts will be
 // unblocked by a remote approval.
-// TODO(crbug.com/356676072): flaky on ChromeOS.
-#if BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_BlockedMainFrameFromClassifyUrlForUnstripedHostIsStrippedInRemoteApproval \
-  DISABLED_BlockedMainFrameFromClassifyUrlForUnstripedHostIsStrippedInRemoteApproval
-#else
-#define MAYBE_BlockedMainFrameFromClassifyUrlForUnstripedHostIsStrippedInRemoteApproval \
-  BlockedMainFrameFromClassifyUrlForUnstripedHostIsStrippedInRemoteApproval
-#endif
 IN_PROC_BROWSER_TEST_P(
     SupervisedUserIframeFilterTest,
-    MAYBE_BlockedMainFrameFromClassifyUrlForUnstripedHostIsStrippedInRemoteApproval) {
+    BlockedMainFrameFromClassifyUrlForUnstripedHostIsStrippedInRemoteApproval) {
   // Classify url blocks the navigation to the target url.
   // No matching blocklist entry exists for the host of the target url.
   kids_management_api_mock().RestrictSubsequentClassifyUrl();
@@ -887,9 +879,13 @@ IN_PROC_BROWSER_TEST_P(
   // The trivial "www" subdomain is stripped for the url in the remote approval
   // request.
   EXPECT_EQ(requested_host, kStrippedExampleHost);
+
+#if !BUILDFLAG(IS_CHROMEOS)
+  // TODO(crbug.com/376229427): Unguard once flakiness removed.
   WaitForNavigationFinished(blocked_frame_id, blocked_url);
   // The unstriped url gets unblocked.
   EXPECT_FALSE(IsInterstitialBeingShownInFrame(blocked_frame_id));
+#endif
 }
 
 // Tests that the url stripping is applied on the url on the interstitial, when
@@ -1384,15 +1380,9 @@ IN_PROC_BROWSER_TEST_P(
                 supervised_user::SupervisionMixin::SignInMode::kSupervised);
 }
 
-// TODO(crbug.com/359268574): Flaky on ChromeOS.
-#if BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_CheckAgainstClassifyUrlRPC DISABLED_CheckAgainstClassifyUrlRPC
-#else
-#define MAYBE_CheckAgainstClassifyUrlRPC CheckAgainstClassifyUrlRPC
-#endif
 IN_PROC_BROWSER_TEST_P(
     SupervisedUserNavigationThrottleOnlyEnabledForSupervisedUsers,
-    MAYBE_CheckAgainstClassifyUrlRPC) {
+    CheckAgainstClassifyUrlRPC) {
   kids_management_api_mock().RestrictSubsequentClassifyUrl();
 
   // Only supervised users should call the backend
@@ -1419,17 +1409,9 @@ IN_PROC_BROWSER_TEST_P(
                 supervised_user::SupervisionMixin::SignInMode::kSupervised);
 }
 
-// Flaky: crbug.com/361463503
-#if BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_CheckSameDocumentNavigationAgainstClassifyUrlRPC \
-  DISABLED_CheckSameDocumentNavigationAgainstClassifyUrlRPC
-#else
-#define MAYBE_CheckSameDocumentNavigationAgainstClassifyUrlRPC \
-  CheckSameDocumentNavigationAgainstClassifyUrlRPC
-#endif  // BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_P(
     SupervisedUserNavigationThrottleOnlyEnabledForSupervisedUsers,
-    MAYBE_CheckSameDocumentNavigationAgainstClassifyUrlRPC) {
+    CheckSameDocumentNavigationAgainstClassifyUrlRPC) {
   kids_management_api_mock().RestrictSubsequentClassifyUrl();
 
   // Only supervised users should call the backend

@@ -152,8 +152,7 @@ bool AdjustNavigateParamsForURL(NavigateParams* params) {
   // technically an incognito window, these URLs are allowed.
   Profile* profile = params->initiating_profile;
   if (!params->contents_to_insert && !params->switch_to_singleton_tab &&
-      !IsURLAllowedInIncognito(params->url, profile) &&
-      !profile->IsGuestSession() &&
+      !IsURLAllowedInIncognito(params->url) && !profile->IsGuestSession() &&
       (profile->IsOffTheRecord() ||
        params->disposition == WindowOpenDisposition::OFF_THE_RECORD)) {
     profile = profile->GetOriginalProfile();
@@ -575,6 +574,41 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
   return target_contents;
 }
 
+bool IsHostAllowedInIncognito(const GURL& url) {
+  std::string scheme = url.scheme();
+  std::string_view host = url.host_piece();
+  if (scheme != content::kChromeUIScheme) {
+    return true;
+  }
+
+  if (host == chrome::kChromeUIChromeSigninHost) {
+#if BUILDFLAG(IS_WIN)
+    // Allow incognito mode for the chrome-signin url if we only want to
+    // retrieve the login scope token without touching any profiles. This
+    // option is only available on Windows for use with Google Credential
+    // Provider for Windows.
+    return signin::GetSigninReasonForEmbeddedPromoURL(url) ==
+           signin_metrics::Reason::kFetchLstOnly;
+#else
+    return false;
+#endif  // BUILDFLAG(IS_WIN)
+  }
+
+  // Most URLs are allowed in incognito; the following are exceptions.
+  // chrome://extensions is on the list because it redirects to
+  // chrome://settings.
+  return host != chrome::kChromeUIAppLauncherPageHost &&
+         host != chrome::kChromeUISettingsHost &&
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+         host != chrome::kChromeUIOSSettingsHost &&
+#endif
+         host != chrome::kChromeUIHelpHost &&
+         host != chrome::kChromeUIHistoryHost &&
+         host != chrome::kChromeUIExtensionsHost &&
+         host != chrome::kChromeUIBookmarksHost &&
+         host != password_manager::kChromeUIPasswordManagerHost;
+}
+
 }  // namespace
 
 base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
@@ -732,19 +766,18 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
   // TODO(crbug.com/364657540): Revisit integration with web_application system
   // later if needed.
   int singleton_index;
-  std::optional<web_app::AppNavigationResult> app_navigation_result;
+
 #if !BUILDFLAG(IS_ANDROID)
-  // Store the disposition before modifications, for web_app navigation logic.
-  WindowOpenDisposition original_disposition = params->disposition;
-  app_navigation_result = web_app::MaybeHandleAppNavigation(*params);
-#endif  // !BUILDFLAG(IS_ANDROID)
-  if (app_navigation_result.has_value()) {
-    params->browser = app_navigation_result->browser;
-    singleton_index = app_navigation_result->tab_index;
-  } else {
-    std::tie(params->browser, singleton_index) =
-        GetBrowserAndTabForDisposition(*params);
-  }
+  web_app::AppNavigationResult app_navigation_result =
+      web_app::MaybeHandleAppNavigation(*params);
+  std::tie(params->browser, singleton_index) =
+      app_navigation_result.browser_tab_override().has_value()
+          ? *app_navigation_result.browser_tab_override()
+          : GetBrowserAndTabForDisposition(*params);
+#else  // !BUILDFLAG(IS_ANDROID)
+  std::tie(params->browser, singleton_index) =
+      GetBrowserAndTabForDisposition(*params);
+#endif
 
   if (!params->browser) {
     return nullptr;
@@ -990,72 +1023,28 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
 // At this point, the `params->navigated_or_inserted_contents` is guaranteed to
 // be non null, so perform tasks if the navigation has been captured by a web
 // app, like enqueueing launch params.
-// The `params->browser` might change as a result of a navigation, so obtain the
-// `source_app_id` from the source browser, which retains a reference.
 #if !BUILDFLAG(IS_ANDROID)
-  // TODO(crbug.com/336371044): Accessing the app_id from the WebAppTabHelper
-  // does not work here. Investigate why to support apps that open in a new tab.
-  std::optional<webapps::AppId> source_app_id;
-  if (source_browser && source_browser->app_controller()) {
-    source_app_id = source_browser->app_controller()->app_id();
-  }
   web_app::OnWebAppNavigationAfterWebContentsCreation(
-      std::move(app_navigation_result), *params, navigation_handle,
-      original_disposition, source_app_id);
+      std::move(app_navigation_result), *params, navigation_handle);
 #endif  // !BUILDFLAG(IS_ANDROID)
   return navigation_handle;
 }
 
-bool IsHostAllowedInIncognito(const GURL& url) {
-  std::string scheme = url.scheme();
-  std::string_view host = url.host_piece();
-  if (scheme != content::kChromeUIScheme) {
-    return true;
-  }
-
-  if (host == chrome::kChromeUIChromeSigninHost) {
-#if BUILDFLAG(IS_WIN)
-    // Allow incognito mode for the chrome-signin url if we only want to
-    // retrieve the login scope token without touching any profiles. This
-    // option is only available on Windows for use with Google Credential
-    // Provider for Windows.
-    return signin::GetSigninReasonForEmbeddedPromoURL(url) ==
-           signin_metrics::Reason::kFetchLstOnly;
-#else
-    return false;
-#endif  // BUILDFLAG(IS_WIN)
-  }
-
-  // Most URLs are allowed in incognito; the following are exceptions.
-  // chrome://extensions is on the list because it redirects to
-  // chrome://settings.
-  return host != chrome::kChromeUIAppLauncherPageHost &&
-         host != chrome::kChromeUISettingsHost &&
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-         host != chrome::kChromeUIOSSettingsHost &&
-#endif
-         host != chrome::kChromeUIHelpHost &&
-         host != chrome::kChromeUIHistoryHost &&
-         host != chrome::kChromeUIExtensionsHost &&
-         host != chrome::kChromeUIBookmarksHost &&
-         host != password_manager::kChromeUIPasswordManagerHost;
-}
-
-bool IsURLAllowedInIncognito(const GURL& url,
-                             content::BrowserContext* browser_context) {
+bool IsURLAllowedInIncognito(const GURL& url) {
   if (url.scheme() == content::kViewSourceScheme) {
     // A view-source URL is allowed in incognito mode only if the URL itself
     // is allowed in incognito mode. Remove the "view-source:" from the start
     // of the URL and validate the rest.
-    std::string stripped_spec = url.spec();
-    DCHECK_GT(stripped_spec.size(), strlen(content::kViewSourceScheme));
-    stripped_spec.erase(0, strlen(content::kViewSourceScheme) + 1);
-    GURL stripped_url(stripped_spec);
+    const size_t scheme_len = strlen(content::kViewSourceScheme);
+    CHECK_GT(url.spec().size(), scheme_len);
+    std::string_view stripped_url_str(url.spec());
+    // Adding +1 for ':' character.
+    stripped_url_str.remove_prefix(scheme_len + 1);
+    const GURL stripped_url(stripped_url_str);
     if (stripped_url.is_empty()) {
       return true;
     }
-    return stripped_url.is_valid() &&
-           IsURLAllowedInIncognito(stripped_url, browser_context);
+    return stripped_url.is_valid() && IsURLAllowedInIncognito(stripped_url);
   }
 
   return IsHostAllowedInIncognito(url);

@@ -202,10 +202,10 @@ class HistoryEmbeddingsService : public KeyedService,
   // Submit quality logging data after user selects an item from search result.
   // Note, the `result` contains a log entry that will be consumed by this call.
   void SendQualityLog(SearchResult& result,
-                      optimization_guide::proto::UserFeedback user_feedback,
                       std::set<size_t> selections,
                       size_t num_entered_characters,
-                      bool from_omnibox_history_scope);
+                      optimization_guide::proto::UserFeedback user_feedback,
+                      optimization_guide::proto::UiSurface ui_surface);
 
   // KeyedService:
   void Shutdown() override;
@@ -213,6 +213,9 @@ class HistoryEmbeddingsService : public KeyedService,
   // history::HistoryServiceObserver:
   void OnHistoryDeletions(history::HistoryService* history_service,
                           const history::DeletionInfo& deletion_info) override;
+
+  // This can be overridden to gate answer generation for some accounts.
+  virtual bool IsAnswererUseAllowed() const;
 
  private:
   friend class HistoryEmbeddingsBrowserTest;
@@ -341,7 +344,8 @@ class HistoryEmbeddingsService : public KeyedService,
   // Called after the answerer finishes computing an answer. Combines
   // the `answer_result` into `search_result` and invokes `callback`
   // with new search result complete with answer.
-  void OnAnswerComputed(SearchResultCallback callback,
+  void OnAnswerComputed(base::Time start_time,
+                        SearchResultCallback callback,
                         SearchResult search_result,
                         AnswererResult answerer_result);
 
@@ -391,7 +395,7 @@ class HistoryEmbeddingsService : public KeyedService,
   std::unique_ptr<Embedder> embedder_;
 
   // The answerer used to answer queries with context. May be nullptr if
-  // the kEnableAnswers parameter is false.
+  // the kHistoryEmbeddingsAnswers feature is disabled.
   std::unique_ptr<Answerer> answerer_;
 
   // The intent classifier used to determine query intent and answerability.

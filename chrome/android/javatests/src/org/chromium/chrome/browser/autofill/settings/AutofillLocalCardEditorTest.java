@@ -29,7 +29,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
@@ -55,6 +56,7 @@ import org.chromium.ui.test.util.modaldialog.FakeModalDialogManager;
 /** Instrumentation tests for AutofillLocalCardEditor. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 public class AutofillLocalCardEditorTest {
+    @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
     @Rule public final AutofillTestRule rule = new AutofillTestRule();
 
     @Rule
@@ -99,7 +101,9 @@ public class AutofillLocalCardEditorTest {
                     /* productDescription= */ "",
                     /* cardNameForAutofillDisplay= */ "",
                     /* obfuscatedLastFourDigits= */ "",
-                    /* cvc= */ "123");
+                    /* cvc= */ "123",
+                    /* issuerId= */ "",
+                    /* productTermsUrl= */ null);
     private static final CreditCard SAMPLE_AMEX_CARD_WITH_CVC =
             new CreditCard(
                     /* guid= */ "",
@@ -124,7 +128,9 @@ public class AutofillLocalCardEditorTest {
                     /* productDescription= */ "",
                     /* cardNameForAutofillDisplay= */ "",
                     /* obfuscatedLastFourDigits= */ "",
-                    /* cvc= */ "1234");
+                    /* cvc= */ "1234",
+                    /* issuerId= */ "",
+                    /* productTermsUrl= */ null);
 
     private static final CreditCard SAMPLE_MASKED_SERVER_CARD =
             new CreditCard(
@@ -149,7 +155,9 @@ public class AutofillLocalCardEditorTest {
                     /* productDescription= */ "",
                     /* cardNameForAutofillDisplay= */ "",
                     /* obfuscatedLastFourDigits= */ "• • • • 1111",
-                    /* cvc= */ "");
+                    /* cvc= */ "",
+                    /* issuerId= */ "",
+                    /* productTermsUrl= */ null);
 
     private static final String AMEX_CARD_NUMBER = "378282246310005";
     private static final String AMEX_CARD_NUMBER_PREFIX = "37";
@@ -163,7 +171,6 @@ public class AutofillLocalCardEditorTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         mAutofillTestHelper = new AutofillTestHelper();
         mActionTester = new UserActionTester();
     }
@@ -928,6 +935,20 @@ public class AutofillLocalCardEditorTest {
         Assert.assertTrue(
                 "User action should be logged.",
                 mActionTester.getActions().contains("AutofillCreditCardsEditedAndCvcWasUnchanged"));
+    }
+
+    @Test
+    @MediumTest
+    public void testRecordHistogram_whenAddCardFlowStarted() throws Exception {
+        // Expect histogram to record add card flow.
+        HistogramWatcher addCardFlowHistogram =
+                HistogramWatcher.newBuilder()
+                        .expectBooleanRecord(AutofillLocalCardEditor.ADD_CARD_FLOW_HISTOGRAM, true)
+                        .build();
+
+        SettingsActivity activity = mSettingsActivityTestRule.startSettingsActivity();
+
+        addCardFlowHistogram.assertExpected();
     }
 
     private void openDeletePaymentMethodConfirmationDialog(

@@ -45,6 +45,11 @@ inline constexpr char kBrowserLockdownModeEnabled[] =
 // to load them.
 inline constexpr char kProfileInfoCache[] = "profile.info_cache";
 
+// The name of the profile that's used as the "personal" profile (used for
+// consumer accounts), as opposed to managed profiles (linked to a managed aka
+// Enterprise account).
+inline constexpr char kPersonalProfileName[] = "profile.personal";
+
 // Name of the last used profile.
 // TODO(crbug.com/325921947): Remove use of this key, kLastActiveProfiles
 // should be used.
@@ -567,6 +572,14 @@ inline constexpr char kPushNotificationAuthorizationStatus[] =
 inline constexpr char kIncognitoAuthenticationSetting[] =
     "ios.settings.incognito_authentication_enabled";
 
+// Bool used for the incognito soft lock setting.
+inline constexpr char kIncognitoSoftLockSetting[] =
+    "ios.settings.incognito_soft_lock_enabled";
+
+// Timestamp tracking the time in which Chrome was last backgrounded for the
+// purposes of locking incognito content.
+inline constexpr char kLastBackgroundedTime[] = "ios.last_backgrounded_time";
+
 // Timestamp set when a user signs in. It is used for policies that clear data
 // on sign-out only for the duration the user was signed in. It is also used for
 // user policies that should clear data only from the time of sign-in and not
@@ -661,6 +674,8 @@ inline constexpr char kHomeCustomizationMagicStackTabResumptionEnabled[] =
     "ios.home_customization.magic_stack.tab_resumption.enabled";
 inline constexpr char kHomeCustomizationMagicStackParcelTrackingEnabled[] =
     "ios.home_customization.magic_stack.parcel_tracking.enabled";
+inline constexpr char kHomeCustomizationMagicStackTipsEnabled[] =
+    "ios.home_customization.magic_stack.tips.enabled";
 
 // List preference that stores the positions in the Magic Stack where the Safety
 // Check module with the notifications opt-in button is shown.

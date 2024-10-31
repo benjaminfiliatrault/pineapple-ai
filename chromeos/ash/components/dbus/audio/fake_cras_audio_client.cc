@@ -234,6 +234,16 @@ void FakeCrasAudioClient::SetInputMute(bool mute_on) {
   }
 }
 
+void FakeCrasAudioClient::SetAudioEffectDlcsForTesting(
+    const std::string& audio_effect_dlcs) {
+  audio_effect_dlcs_ = audio_effect_dlcs;
+}
+
+void FakeCrasAudioClient::GetAudioEffectDlcs(
+    chromeos::DBusMethodCallback<std::string> callback) {
+  std::move(callback).Run(audio_effect_dlcs_);
+}
+
 void FakeCrasAudioClient::SetNoiseCancellationSupported(
     bool noise_cancellation_supported) {
   noise_cancellation_supported_ = noise_cancellation_supported;
@@ -523,6 +533,20 @@ void FakeCrasAudioClient::SetNumberOfArcStreams(int32_t streams) {
 void FakeCrasAudioClient::GetNumberOfArcStreams(
     chromeos::DBusMethodCallback<int32_t> callback) {
   std::move(callback).Run(number_arc_streams_);
+}
+
+void FakeCrasAudioClient::SetSpatialAudioSupported(
+    bool spatial_audio_supported) {
+  spatial_audio_supported_ = spatial_audio_supported;
+}
+
+void FakeCrasAudioClient::SetSpatialAudio(bool spatial_audio_enabled) {
+  spatial_audio_enabled_ = spatial_audio_enabled;
+}
+
+void FakeCrasAudioClient::GetSpatialAudioSupported(
+    chromeos::DBusMethodCallback<bool> callback) {
+  std::move(callback).Run(spatial_audio_supported_);
 }
 
 }  // namespace ash

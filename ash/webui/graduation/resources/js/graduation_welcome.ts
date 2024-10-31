@@ -5,15 +5,14 @@
 import 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/ash/common/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/ash/common/cr_elements/cros_color_overrides.css.js';
-import '../strings.m.js';
+import '/strings.m.js';
 
 import {convertImageSequenceToPng} from 'chrome://resources/ash/common/cr_picture/png.js';
 import {getImage} from 'chrome://resources/js/icon.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {GraduationUiHandler} from '../mojom/graduation_ui.mojom-webui.js';
-
 import {ScreenSwitchEvents} from './graduation_app.js';
+import {getGraduationUiHandler} from './graduation_ui_handler.js';
 import {getTemplate} from './graduation_welcome.html.js';
 
 export class GraduationWelcome extends PolymerElement {
@@ -49,8 +48,7 @@ export class GraduationWelcome extends PolymerElement {
   }
 
   private async getProfileInfo(): Promise<void> {
-    const {profileInfo} =
-        await GraduationUiHandler.getRemote().getProfileInfo();
+    const {profileInfo} = await getGraduationUiHandler().getProfileInfo();
     this.profileEmail = profileInfo.email;
 
     const photoUrl = profileInfo.photoUrl;

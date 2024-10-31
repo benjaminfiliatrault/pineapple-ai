@@ -13,6 +13,7 @@
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/containers/span.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -27,6 +28,7 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_storage_location.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_version.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolation_data.h"
+#include "chrome/browser/web_applications/isolated_web_apps/update_manifest/update_manifest.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom-shared.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_manager.h"
@@ -43,15 +45,18 @@
 #include "chrome/browser/web_applications/web_app_proto_utils.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
+#include "chrome/common/chrome_features.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
 #include "components/services/app_service/public/cpp/share_target.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/time.h"
+#include "components/sync/model/data_type_store.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/metadata_change_list.h"
 #include "components/sync/model/model_error.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
+#include "components/webapps/common/web_app_id.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
@@ -251,6 +256,8 @@ WebAppManagement::Type ProtoToWebAppManagement(WebAppManagementProto type) {
       return WebAppManagement::Type::kWebAppStore;
     case WebAppManagementProto::SYNC:
       return WebAppManagement::Type::kSync;
+    case WebAppManagementProto::USER_INSTALLED:
+      return WebAppManagement::Type::kUserInstalled;
     case WebAppManagementProto::DEFAULT:
       return WebAppManagement::Type::kDefault;
     case WebAppManagementProto::IWA_SHIMLESS_RMA:
@@ -282,6 +289,8 @@ WebAppManagementProto WebAppManagementToProto(WebAppManagement::Type type) {
       return WebAppManagementProto::WEBAPPSTORE;
     case WebAppManagement::Type::kSync:
       return WebAppManagementProto::SYNC;
+    case WebAppManagement::Type::kUserInstalled:
+      return WebAppManagementProto::USER_INSTALLED;
     case WebAppManagement::Type::kDefault:
       return WebAppManagementProto::DEFAULT;
     case WebAppManagement::Type::kIwaShimlessRma:
@@ -478,6 +487,8 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
       web_app.sources_.Has(WebAppManagement::kWebAppStore));
   local_data->mutable_sources()->set_sync(
       web_app.sources_.Has(WebAppManagement::kSync));
+  local_data->mutable_sources()->set_user_installed(
+      web_app.sources_.Has(WebAppManagement::kUserInstalled));
   local_data->mutable_sources()->set_default_(
       web_app.sources_.Has(WebAppManagement::kDefault));
   local_data->mutable_sources()->set_sub_app(
@@ -900,6 +911,10 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
             isolation_data.update_manifest_url()) {
       mutable_data->set_update_manifest_url(update_manifest_url->spec());
     }
+
+    if (const auto& update_channel = isolation_data.update_channel()) {
+      mutable_data->set_update_channel(update_channel->ToString());
+    }
   }
 
   local_data->set_user_link_capturing_preference(
@@ -995,6 +1010,8 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   sources.PutOrRemove(WebAppManagement::kWebAppStore,
                       local_data.sources().web_app_store());
   sources.PutOrRemove(WebAppManagement::kSync, local_data.sources().sync());
+  sources.PutOrRemove(WebAppManagement::kUserInstalled,
+                      local_data.sources().user_installed());
   sources.PutOrRemove(WebAppManagement::kDefault,
                       local_data.sources().default_());
   sources.PutOrRemove(WebAppManagement::kOem, local_data.sources().oem());
@@ -1733,6 +1750,18 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
       isolation_data_builder.SetUpdateManifestUrl(
           std::move(update_manifest_url));
     }
+
+    if (local_data.isolation_data().has_update_channel()) {
+      auto update_channel =
+          UpdateChannel::Create(local_data.isolation_data().update_channel());
+      if (!update_channel.has_value()) {
+        DLOG(ERROR)
+            << "WebApp proto isolation_data.update_channel is not valid.";
+        return nullptr;
+      }
+      isolation_data_builder.SetUpdateChannel(std::move(*update_channel));
+    }
+
     web_app->SetIsolationData(std::move(isolation_data_builder).Build());
   }
 
@@ -1769,6 +1798,129 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   return web_app;
 }
 
+// static
+int WebAppDatabase::GetCurrentDatabaseVersion() {
+  if (base::FeatureList::IsEnabled(
+          features::kWebAppDontAddExistingAppsToSync)) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+WebAppDatabase::ProtobufState::ProtobufState() = default;
+WebAppDatabase::ProtobufState::~ProtobufState() = default;
+WebAppDatabase::ProtobufState::ProtobufState(ProtobufState&&) = default;
+WebAppDatabase::ProtobufState& WebAppDatabase::ProtobufState::operator=(
+    ProtobufState&&) = default;
+
+WebAppDatabase::ProtobufState WebAppDatabase::ParseProtobufs(
+    const syncer::DataTypeStore::RecordList& data_records) const {
+  ProtobufState state;
+  for (const syncer::DataTypeStore::Record& record : data_records) {
+    if (record.id == kDatabaseMetadataKey) {
+      bool success = state.metadata.ParseFromString(record.value);
+      if (!success) {
+        DLOG(ERROR)
+            << "WebApps LevelDB parse error: can't parse metadata proto.";
+        // TODO: Consider logging a histogram
+      }
+      continue;
+    }
+
+    WebAppProto app_proto;
+    bool success = app_proto.ParseFromString(record.value);
+    if (!success) {
+      DLOG(ERROR) << "WebApps LevelDB parse error: can't parse app proto.";
+      // TODO: Consider logging a histogram
+    }
+    state.apps.emplace(record.id, std::move(app_proto));
+  }
+  return state;
+}
+
+void WebAppDatabase::MigrateDatabase(ProtobufState& state) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Migration should happen when we have gotten a `store_`, but haven't
+  // finished opening the database yet.
+  CHECK(store_);
+  CHECK(!opened_);
+
+  bool did_change_metadata = false;
+  std::set<webapps::AppId> changed_apps;
+
+  // Downgrade from version 1 to version 0, i.e. remove any UserInstalled
+  // sources. This can be removed when the kWebAppDontAddExistingAppsToSync
+  // feature has shipped by default and is being removed.
+  if (state.metadata.version() == 1 && GetCurrentDatabaseVersion() == 0) {
+    DCHECK(!base::FeatureList::IsEnabled(
+        features::kWebAppDontAddExistingAppsToSync));
+    MigrateInstallSourceRemoveUserInstalled(state, changed_apps);
+    state.metadata.set_version(0);
+    did_change_metadata = true;
+  }
+
+  // Upgrade from version 0 to version 1. This migrates the kSync source to
+  // a combination of kSync and kUserInstalled.
+  if (state.metadata.version() == 0 && GetCurrentDatabaseVersion() >= 1) {
+    DCHECK(base::FeatureList::IsEnabled(
+        features::kWebAppDontAddExistingAppsToSync));
+    MigrateInstallSourceAddUserInstalled(state, changed_apps);
+    state.metadata.set_version(1);
+    did_change_metadata = true;
+  }
+
+  CHECK_EQ(state.metadata.version(), GetCurrentDatabaseVersion());
+
+  if (did_change_metadata || !changed_apps.empty()) {
+    std::unique_ptr<syncer::DataTypeStore::WriteBatch> write_batch =
+        store_->CreateWriteBatch();
+    if (did_change_metadata) {
+      write_batch->WriteData(std::string(kDatabaseMetadataKey),
+                             state.metadata.SerializeAsString());
+    }
+    for (const auto& app_id : changed_apps) {
+      write_batch->WriteData(app_id, state.apps[app_id].SerializeAsString());
+    }
+
+    store_->CommitWriteBatch(
+        std::move(write_batch),
+        base::BindOnce(&WebAppDatabase::OnDataWritten,
+                       weak_ptr_factory_.GetWeakPtr(), base::DoNothing()));
+  }
+}
+
+void WebAppDatabase::MigrateInstallSourceAddUserInstalled(
+    ProtobufState& state,
+    std::set<webapps::AppId>& changed_apps) {
+  // Migrating from version 0 to version 1.
+  CHECK_LT(state.metadata.version(), 1);
+  const bool is_syncing_apps = database_factory_->IsSyncingApps();
+  for (auto& [app_id, app_proto] : state.apps) {
+    if (app_proto.sources().sync()) {
+      app_proto.mutable_sources()->set_user_installed(true);
+      if (!is_syncing_apps) {
+        app_proto.mutable_sources()->set_sync(false);
+      }
+      changed_apps.insert(app_id);
+    }
+  }
+}
+
+void WebAppDatabase::MigrateInstallSourceRemoveUserInstalled(
+    ProtobufState& state,
+    std::set<webapps::AppId>& changed_apps) {
+  // Migration from version 1 to version 0.
+  CHECK_GT(state.metadata.version(), 0);
+  for (auto& [app_id, app_proto] : state.apps) {
+    if (app_proto.sources().user_installed()) {
+      app_proto.mutable_sources()->set_sync(true);
+      app_proto.mutable_sources()->set_user_installed(false);
+      changed_apps.insert(app_id);
+    }
+  }
+}
+
 void WebAppDatabase::OnDatabaseOpened(
     RegistryOpenedCallback callback,
     const std::optional<syncer::ModelError>& error,
@@ -1799,12 +1951,23 @@ void WebAppDatabase::OnAllDataAndMetadataRead(
     return;
   }
 
+  ProtobufState state = ParseProtobufs(*data_records);
+  MigrateDatabase(state);
+
   Registry registry;
-  for (const syncer::DataTypeStore::Record& record : *data_records) {
-    const webapps::AppId app_id = record.id;
-    std::unique_ptr<WebApp> web_app = ParseWebApp(app_id, record.value);
-    if (web_app)
-      registry.emplace(app_id, std::move(web_app));
+  for (const auto& [app_id, app_proto] : state.apps) {
+    std::unique_ptr<WebApp> web_app = CreateWebApp(app_proto);
+    if (!web_app) {
+      continue;
+    }
+
+    if (web_app->app_id() != app_id) {
+      DLOG(ERROR) << "WebApps LevelDB error: app_id doesn't match storage key "
+                  << app_id << " vs " << web_app->app_id() << ", from "
+                  << web_app->manifest_id();
+      continue;
+    }
+    registry.emplace(app_id, std::move(web_app));
   }
 
   opened_ = true;

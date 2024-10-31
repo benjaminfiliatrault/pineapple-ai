@@ -19,10 +19,9 @@ source_set("mahi") {
 
   deps = [
     "//base",
-    "//chrome/browser/chromeos/mahi",
+    "//chrome/browser/ui/ash/read_write_cards",
     "//chrome/browser/ui/chromeos/magic_boost",
     "//chrome/browser/ui/chromeos/magic_boost:magic_boost_constants",
-    "//chrome/browser/ui/chromeos/read_write_cards",
     "//chrome/browser/ui/views/editor_menu:utils",
     "//chromeos/components/magic_boost/public/cpp",
     "//chromeos/components/magic_boost/public/cpp/views",
@@ -30,6 +29,7 @@ source_set("mahi") {
     "//chromeos/constants:constants",
     "//chromeos/strings:strings_grit",
     "//chromeos/ui/vector_icons",
+    "//ui/accessibility:ax_base",
     "//ui/color",
     "//ui/display",
     "//ui/gfx",

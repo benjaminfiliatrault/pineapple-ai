@@ -18,6 +18,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/containers/contains.h"
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
@@ -37,7 +38,7 @@ namespace {
 
 using base::BindOnce;
 
-std::string Redact(const std::string_view s) {
+std::string Redact(std::string_view s) {
   return LOG_IS_ON(INFO) ? base::StrCat({"'", s, "'"}) : "(redacted)";
 }
 
@@ -68,9 +69,7 @@ std::string FormatFileSystemTypeToString(FormatFileSystemType filesystem) {
     case FormatFileSystemType::kNtfs:
       return "ntfs";
   }
-  NOTREACHED_IN_MIGRATION()
-      << "Unknown filesystem type " << static_cast<int>(filesystem);
-  return "";
+  NOTREACHED() << "Unknown filesystem type " << static_cast<int>(filesystem);
 }
 
 // The DiskMountManager implementation.
@@ -84,6 +83,7 @@ class DiskMountManagerImpl : public DiskMountManager,
 
   ~DiskMountManagerImpl() override { cros_disks_client_->RemoveObserver(this); }
 
+ private:
   using DiskMountManager::Observer;
 
   // DiskMountManager override.
@@ -143,6 +143,28 @@ class DiskMountManagerImpl : public DiskMountManager,
                    UnmountPathCallback callback) override {
     UnmountChildMounts(mount_path);
     VLOG(1) << "Unmounting '" << mount_path << "'...";
+
+    const base::FilePath mount_file_path(mount_path);
+    if (arc_delegate_ &&
+        cros_disks_client_->GetRemovableDiskMountPoint().IsParent(
+            mount_file_path)) {
+      VLOG(1) << "Dropping ARC caches for " << Redact(mount_path);
+      arc_delegate_->DropArcCaches(
+          mount_file_path, BindOnce(&DiskMountManagerImpl::UnmountPathContinue,
+                                    weak_ptr_factory_.GetWeakPtr(), mount_path,
+                                    std::move(callback)));
+      return;
+    }
+
+    UnmountPathContinue(mount_path, std::move(callback), true /* success */);
+  }
+
+  void UnmountPathContinue(const std::string& mount_path,
+                           UnmountPathCallback callback,
+                           bool success) {
+    if (!success) {
+      LOG(ERROR) << "Cannot drop ARC caches for " << Redact(mount_path);
+    }
     cros_disks_client_->Unmount(mount_path,
                                 BindOnce(&DiskMountManagerImpl::OnUnmountPath,
                                          weak_ptr_factory_.GetWeakPtr(),
@@ -368,7 +390,6 @@ class DiskMountManagerImpl : public DiskMountManager,
     return ok;
   }
 
- private:
   // A struct to represent information about a format changes.
   struct FormatChange {
     // new file system type
@@ -550,11 +571,11 @@ class DiskMountManagerImpl : public DiskMountManager,
         it != mount_callbacks_.end()) {
       DCHECK_EQ(it->first, entry.source_path);
       VLOG(1) << "Calling mount callback for '" << entry.source_path
-              << "' with error = " << entry.mount_error;
+              << "' with result = " << entry.mount_error;
       std::move(it->second).Run(entry.mount_error, mount_info);
       mount_callbacks_.erase(std::move(it));
     } else {
-      LOG(ERROR) << "No mount callback for " << Redact(entry.source_path);
+      VLOG(1) << "No mount callback for " << Redact(entry.source_path);
     }
 
     NotifyMountStatusUpdate(MOUNTING, entry.mount_error, mount_info);

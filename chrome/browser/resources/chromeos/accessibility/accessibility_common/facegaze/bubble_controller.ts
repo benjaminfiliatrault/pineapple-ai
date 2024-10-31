@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Macro} from '/common/action_fulfillment/macros/macro.js';
+import {KeyPressMacro} from '/common/action_fulfillment/macros/key_press_macro.js';
+import {Macro, ToggleDirection} from '/common/action_fulfillment/macros/macro.js';
 import {MacroName} from '/common/action_fulfillment/macros/macro_names.js';
 import {TestImportManager} from '/common/testing/test_import_manager.js';
 
@@ -26,7 +27,7 @@ export class BubbleController {
   private setResetBubbleTimeout_(): void {
     this.clearTimeout_();
     this.resetBubbleTimeoutId_ = setTimeout(
-        () => this.resetBubble_(), BubbleController.RESET_BUBBLE_TIMEOUT_MS);
+        () => this.resetBubble(), BubbleController.RESET_BUBBLE_TIMEOUT_MS);
   }
 
   private clearTimeout_(): void {
@@ -36,109 +37,185 @@ export class BubbleController {
     }
   }
 
-  private resetBubble_(): void {
+  resetBubble(): void {
     this.baseText_ = [];
-    const {paused, scrollModeActive} = this.getState_();
-    // TODO(b/341770655): Localize these strings.
+    const {paused, scrollModeActive, longClickActive, dictationActive} =
+        this.getState_();
     if (paused) {
-      this.baseText_.push('FaceGaze paused');
+      this.baseText_.push(chrome.i18n.getMessage('facegaze_state_paused'));
     }
     if (scrollModeActive) {
-      this.baseText_.push('Scroll mode active');
+      this.baseText_.push(
+          chrome.i18n.getMessage('facegaze_state_scroll_active'));
+    }
+    if (longClickActive) {
+      this.baseText_.push(
+          chrome.i18n.getMessage('facegaze_state_long_click_active'));
+    }
+    if (dictationActive) {
+      this.baseText_.push(
+          chrome.i18n.getMessage('facegaze_state_dictation_active'));
     }
 
     chrome.accessibilityPrivate.updateFaceGazeBubble(this.baseText_.join(', '));
   }
 
   static getDisplayText(gesture: FacialGesture, macro: Macro): string {
-    // TODO(b:341770655): Localize this string.
-    return `${BubbleController.getDisplayTextForMacro_(macro)} (${
-        BubbleController.getDisplayTextForGesture_(gesture)})`;
+    return chrome.i18n.getMessage('facegaze_display_text', [
+      BubbleController.getDisplayTextForMacro_(macro),
+      BubbleController.getDisplayTextForGesture_(gesture)
+    ]);
   }
 
   private static getDisplayTextForMacro_(macro: Macro): string {
-    // TODO(b:341770655): Localize these strings.
-    switch (macro.getName()) {
+    const macroName = macro.getName();
+    switch (macroName) {
       case MacroName.CUSTOM_KEY_COMBINATION:
-        return 'Perform a custom key combination';
+        return chrome.i18n.getMessage(
+            'facegaze_macro_text_custom_key_combo',
+            this.getDisplayTextForKeyCombo_(macro as KeyPressMacro));
       case MacroName.KEY_PRESS_DOWN:
-        return 'Press the down arrow key';
+        return chrome.i18n.getMessage('facegaze_macro_text_key_press_down');
       case MacroName.KEY_PRESS_LEFT:
-        return 'Press the left arrow key';
+        return chrome.i18n.getMessage('facegaze_macro_text_key_press_left');
       case MacroName.KEY_PRESS_MEDIA_PLAY_PAUSE:
-        return 'Play or pause media';
+        return chrome.i18n.getMessage('facegaze_macro_text_media_play_pause');
       case MacroName.KEY_PRESS_RIGHT:
-        return 'Press the right arrow key';
+        return chrome.i18n.getMessage('facegaze_macro_text_key_press_right');
+      case MacroName.KEY_PRESS_SCREENSHOT:
+        return chrome.i18n.getMessage('facegaze_macro_text_screenshot');
       case MacroName.KEY_PRESS_SPACE:
-        return 'Press the space key';
+        return chrome.i18n.getMessage('facegaze_macro_text_key_press_space');
       case MacroName.KEY_PRESS_TOGGLE_OVERVIEW:
-        return 'Open overview of windows';
+        return chrome.i18n.getMessage('facegaze_macro_text_toggle_overview');
       case MacroName.KEY_PRESS_UP:
-        return 'Press the up arrow key';
+        return chrome.i18n.getMessage('facegaze_macro_text_key_press_up');
       case MacroName.MOUSE_CLICK_LEFT:
-        return 'Left-click the mouse';
+        return chrome.i18n.getMessage('facegaze_macro_text_mouse_click_left');
       case MacroName.MOUSE_CLICK_LEFT_DOUBLE:
-        return 'Double click the mouse';
+        return chrome.i18n.getMessage(
+            'facegaze_macro_text_mouse_click_left_double');
       case MacroName.MOUSE_CLICK_RIGHT:
-        return 'Right-click the mouse';
+        return chrome.i18n.getMessage('facegaze_macro_text_mouse_click_right');
       case MacroName.MOUSE_LONG_CLICK_LEFT:
-        return 'Drag and drop';
+        return macro.getToggleDirection() === ToggleDirection.ON ?
+            chrome.i18n.getMessage(
+                'facegaze_macro_text_mouse_long_click_left_on') :
+            chrome.i18n.getMessage(
+                'facegaze_macro_text_mouse_long_click_left_off');
       case MacroName.RESET_CURSOR:
-        return 'Reset cursor to center';
+        return chrome.i18n.getMessage('facegaze_macro_text_reset_cursor');
       case MacroName.TOGGLE_DICTATION:
-        return 'Start or stop dictation';
+        return macro.getToggleDirection() === ToggleDirection.ON ?
+            chrome.i18n.getMessage('facegaze_macro_text_toggle_dictation_on') :
+            chrome.i18n.getMessage('facegaze_macro_text_toggle_dictation_off');
       case MacroName.TOGGLE_FACEGAZE:
-        return 'Pause or resume face control';
+        return macro.getToggleDirection() === ToggleDirection.ON ?
+            chrome.i18n.getMessage('facegaze_macro_text_toggle_facegaze_on') :
+            chrome.i18n.getMessage('facegaze_macro_text_toggle_facegaze_off');
       case MacroName.TOGGLE_SCROLL_MODE:
-        return 'Toggle scroll mode';
+        return macro.getToggleDirection() === ToggleDirection.ON ?
+            chrome.i18n.getMessage(
+                'facegaze_macro_text_toggle_scroll_mode_on') :
+            chrome.i18n.getMessage(
+                'facegaze_macro_text_toggle_scroll_mode_off');
       case MacroName.TOGGLE_VIRTUAL_KEYBOARD:
-        return 'Show or hide the virtual keyboard';
+        return chrome.i18n.getMessage(
+            'facegaze_macro_text_toggle_virtual_keyboard');
       default:
         console.error(
-            'Display text requested for unsupported macro ' + macro.getName());
+            `Display text requested for unsupported macro ${macroName}`);
         return '';
     }
   }
 
+  private static getDisplayTextForKeyCombo_(macro: KeyPressMacro): string {
+    const keyCombo = macro.getKeyCombination();
+
+    // Pre-defined key press macros, like for MEDIA_PLAY_PAUSE and SNAPSHOT,
+    // should not request display text for their key combinations.
+    if (!keyCombo || !keyCombo.keyDisplay) {
+      console.error(
+          `Key combo text requested for unsupported macro ${macro.getName()}`);
+      return '';
+    }
+
+    const keys: string[] = [];
+
+    if (keyCombo.modifiers?.ctrl) {
+      keys.push(chrome.i18n.getMessage('facegaze_macro_text_key_ctrl'));
+    }
+    if (keyCombo.modifiers?.alt) {
+      keys.push(chrome.i18n.getMessage('facegaze_macro_text_key_alt'));
+    }
+    if (keyCombo.modifiers?.shift) {
+      keys.push(chrome.i18n.getMessage('facegaze_macro_text_key_shift'));
+    }
+    if (keyCombo.modifiers?.search) {
+      keys.push(chrome.i18n.getMessage('facegaze_macro_text_key_search'));
+    }
+
+    keys.push(keyCombo.keyDisplay);
+
+    switch (keys.length) {
+      case 2:
+        return chrome.i18n.getMessage(
+            'facegaze_macro_text_keyboard_combo_one_modifier', keys);
+      case 3:
+        return chrome.i18n.getMessage(
+            'facegaze_macro_text_keyboard_combo_two_modifiers', keys);
+      case 4:
+        return chrome.i18n.getMessage(
+            'facegaze_macro_text_keyboard_combo_three_modifiers', keys);
+      case 5:
+        return chrome.i18n.getMessage(
+            'facegaze_macro_text_keyboard_combo_four_modifiers', keys);
+      default:
+        // keyDisplay comes directly from the original KeyEvent and should be
+        // preserved as-is since keys may appear differently on keyboards
+        // depending on locale and layout.
+        return keyCombo.keyDisplay;
+    }
+  }
+
   private static getDisplayTextForGesture_(gesture: FacialGesture): string {
-    // TODO(b:341770655): Localize these strings.
     switch (gesture) {
       case FacialGesture.BROW_INNER_UP:
-        return 'Raise eyebrows';
+        return chrome.i18n.getMessage('facegaze_gesture_text_brow_inner_up');
       case FacialGesture.BROWS_DOWN:
-        return 'Lower eyebrows';
+        return chrome.i18n.getMessage('facegaze_gesture_text_brows_down');
       case FacialGesture.EYE_SQUINT_LEFT:
-        return 'Squint left eye';
+        return chrome.i18n.getMessage('facegaze_gesture_text_eye_squint_left');
       case FacialGesture.EYE_SQUINT_RIGHT:
-        return 'Squint right eye';
+        return chrome.i18n.getMessage('facegaze_gesture_text_eye_squint_right');
       case FacialGesture.EYES_BLINK:
-        return 'Blink both eyes';
+        return chrome.i18n.getMessage('facegaze_gesture_text_eyes_blink');
       case FacialGesture.EYES_LOOK_DOWN:
-        return 'Look down';
+        return chrome.i18n.getMessage('facegaze_gesture_text_eyes_look_down');
       case FacialGesture.EYES_LOOK_LEFT:
-        return 'Look left';
+        return chrome.i18n.getMessage('facegaze_gesture_text_eyes_look_left');
       case FacialGesture.EYES_LOOK_RIGHT:
-        return 'Look right';
+        return chrome.i18n.getMessage('facegaze_gesture_text_eyes_look_right');
       case FacialGesture.EYES_LOOK_UP:
-        return 'Look up';
+        return chrome.i18n.getMessage('facegaze_gesture_text_eyes_look_up');
       case FacialGesture.JAW_LEFT:
-        return 'Shift jaw left';
+        return chrome.i18n.getMessage('facegaze_gesture_text_jaw_left');
       case FacialGesture.JAW_OPEN:
-        return 'Open your mouth wide';
+        return chrome.i18n.getMessage('facegaze_gesture_text_jaw_open');
       case FacialGesture.JAW_RIGHT:
-        return 'Shift jaw right';
+        return chrome.i18n.getMessage('facegaze_gesture_text_jaw_right');
       case FacialGesture.MOUTH_FUNNEL:
-        return 'Make a circle with your lips';
+        return chrome.i18n.getMessage('facegaze_gesture_text_mouth_funnel');
       case FacialGesture.MOUTH_LEFT:
-        return 'Stretch left corner of your mouth';
+        return chrome.i18n.getMessage('facegaze_gesture_text_mouth_left');
       case FacialGesture.MOUTH_PUCKER:
-        return 'Pucker by squeezing lips together';
+        return chrome.i18n.getMessage('facegaze_gesture_text_mouth_pucker');
       case FacialGesture.MOUTH_RIGHT:
-        return 'Stretch right corner of your mouth';
+        return chrome.i18n.getMessage('facegaze_gesture_text_mouth_right');
       case FacialGesture.MOUTH_SMILE:
-        return 'Smile';
+        return chrome.i18n.getMessage('facegaze_gesture_text_mouth_smile');
       case FacialGesture.MOUTH_UPPER_UP:
-        return 'Wrinkle your nose';
+        return chrome.i18n.getMessage('facegaze_gesture_text_mouth_upper_up');
       default:
         console.error(
             'Display text requested for unsupported FacialGesture ' + gesture);
@@ -148,11 +225,13 @@ export class BubbleController {
 }
 
 export namespace BubbleController {
-  export const RESET_BUBBLE_TIMEOUT_MS = 5000;
+  export const RESET_BUBBLE_TIMEOUT_MS = 2500;
 
   export interface GetStateResult {
     paused: boolean;
     scrollModeActive: boolean;
+    longClickActive: boolean;
+    dictationActive: boolean;
   }
 }
 

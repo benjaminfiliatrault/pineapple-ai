@@ -111,13 +111,6 @@ bool IsShortcutCustomizationEnabled() {
   return base::FeatureList::IsEnabled(kShortcutCustomization);
 }
 
-// Share the resource file with ash-chrome. This feature reduces the memory
-// consumption while the disk usage slightly increases.
-// https://crbug.com/1253280.
-BASE_FEATURE(kLacrosResourcesFileSharing,
-             "LacrosResourcesFileSharing",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables settings that allow users to remap the F11 and F12 keys in the
 // "Customize keyboard keys" page.
 BASE_FEATURE(kSupportF11AndF12KeyShortcuts,
@@ -150,6 +143,11 @@ BASE_FEATURE(kOzoneBubblesUsePlatformWidgets,
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
+
+// Controls whether support for Wayland's linux-drm-syncobj is enabled.
+BASE_FEATURE(kWaylandLinuxDrmSyncobj,
+             "WaylandLinuxDrmSyncobj",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls whether support for Wayland's per-surface scaling is enabled.
 BASE_FEATURE(kWaylandPerSurfaceScale,
@@ -241,8 +239,9 @@ BASE_FEATURE(kSystemKeyboardLock,
 // Enables GPU rasterization for all UI drawing (where not blocklisted).
 BASE_FEATURE(kUiGpuRasterization,
              "UiGpuRasterization",
-#if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_CHROMEOS_ASH) || \
-    BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_CHROMEOS_ASH) ||      \
+    BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_CHROMEOS_LACROS) || \
+    BUILDFLAG(IS_WIN)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
@@ -283,6 +282,8 @@ BASE_FEATURE(kExperimentalFlingAnimation,
 BASE_FEATURE(kClipboardFiles,
              "ClipboardFiles",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kDragDropEmpty, "DragDropEmpty", base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDragDropFiles, "DragDropFiles", base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -495,15 +496,6 @@ bool IsVariableRefreshRateAlwaysOn() {
   return base::FeatureList::IsEnabled(kEnableVariableRefreshRateAlwaysOn);
 }
 
-// Enables chrome color management wayland protocol for lacros.
-BASE_FEATURE(kLacrosColorManagement,
-             "LacrosColorManagement",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsLacrosColorManagementEnabled() {
-  return base::FeatureList::IsEnabled(kLacrosColorManagement);
-}
-
 BASE_FEATURE(kBubbleMetricsApi,
              "BubbleMetricsApi",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -522,7 +514,7 @@ BASE_FEATURE(kUseGammaContrastRegistrySettings,
              base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kIncreaseWindowsTextContrast,
              "IncreaseWindowsTextContrast",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
 
 BASE_FEATURE(kBubbleFrameViewTitleIsHeading,
@@ -535,6 +527,11 @@ BASE_FEATURE(kEnableGestureBeginEndTypes,
 
 BASE_FEATURE(kUseUtf8EncodingForSvgImage,
              "UseUtf8EncodingForSvgImage",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables copy bookmark and writes url format to clipboard with empty title.
+BASE_FEATURE(kWriteBookmarkWithoutTitle,
+             "WriteBookmarkWithoutTitle",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, fullscreen window state is updated asynchronously.

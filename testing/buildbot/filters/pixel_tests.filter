@@ -29,11 +29,13 @@ OldCookieControlsBubbleViewTest.*
 *CreatePopupRowViewWithNoUserEducationRateLimitTest.*
 CryptoModulePasswordDialogTest.*
 *DataControlsDialogUiTest.*
+*DataSharingChromeNativeUiPixelTest*
 DeepScanningFailureModalDialogTest.*
 *DiceWebSigninInterceptionBubblePixelTest.InvokeUi_*
 *DiceWebSigninInterceptionBubbleV1SyncPromoPixelTest.InvokeUi_*
 *DiceWebSigninInterceptionBubbleV2PixelTest.InvokeUi_*
 DeleteAddressProfileDialogControllerImplTest.InvokeUi_*
+DesktopMediaPickerViewsBrowserTest.*
 DesktopPaymentsWindowManagerInteractiveUiTest*
 DocumentPictureInPicturePixelTest.*
 EditAddressProfileDialogControllerImplTest.InvokeUi_*
@@ -67,7 +69,7 @@ LocalCardMigrationBrowserUiTest.*
 *MemorySaverChipInteractiveTest.*
 *MemorySaverFaviconTreatmentTest.*
 *MemorySaverImprovedFaviconTreatmentTest.*
-MoveBookmarksToAccountDialogTest*
+BookmarkAccountStorageMoveDialogPixelTest*
 NewTabPageTest.*
 OfferNotificationBubbleViewPixelBrowserTest.*
 OutdatedUpgradeBubbleTest.*
@@ -93,10 +95,12 @@ PermissionRequestChipBrowserUiTest.*
 *PermissionPromptBubble*View*BrowserTest.InvokeUi_*
 PermissionPromptPreviewBrowserTest.InvokeUi_*
 *PlusAddressCreationDialogUiVariationsTest*
-*PlusAddressCreationDialogUiVariationsOnboardingErrorStatesTest*
+*PlusAddressCreationDialogUiVariationsOnboardingTest*
 PlusAddressCreationDialogWithNoticeTest.ShowNoticeAndCancel
 *PopupViewViewsBrowsertest*
+*PopupViewViewsPlusAddressSuggestionBrowsertest*
 PrivacySandboxDialogViewBrowserTest.*
+PrivacySandboxDialogViewPrivacyPolicyBrowserTest.*
 PrivacySandboxNoticeBubbleBrowserTest.*
 PrivacySandboxSettingsTopicsInteractiveTest.*
 ProfileMenuViewPixelTest.*

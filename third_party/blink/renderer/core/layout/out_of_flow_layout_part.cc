@@ -206,8 +206,8 @@ class OOFCandidateStyleIterator {
           CSSPropertyName(CSSPropertyID::kPositionArea),
           *ComputedStyleUtils::ValueForPositionArea(
               fallback.GetPositionArea()));
-      return ImmutableCSSPropertyValueSet::Create(&declaration, /* length */ 1u,
-                                                  kHTMLStandardMode);
+      return ImmutableCSSPropertyValueSet::Create(
+          base::span_from_ref(declaration), kHTMLStandardMode);
     } else if (const ScopedCSSName* name = fallback.GetPositionTryName()) {
       if (const StyleRulePositionTry* rule = GetPositionTryRule(*name)) {
         return &rule->Properties();
@@ -2151,6 +2151,9 @@ OutOfFlowLayoutPart::TryCalculateOffset(
                                    /* is_new_fc */ true);
     builder.SetAvailableSize(container_rect.size);
     builder.SetPercentageResolutionSize(container_rect.size);
+    if (node_info.is_hidden_for_paint) {
+      builder.SetIsHiddenForPaint(true);
+    }
 
     if (container_builder_->IsInitialColumnBalancingPass()) {
       // The |fragmentainer_offset_delta| will not make a difference in the

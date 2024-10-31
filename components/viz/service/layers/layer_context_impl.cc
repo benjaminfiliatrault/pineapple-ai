@@ -934,7 +934,9 @@ void LayerContextImpl::NotifyImageDecodeRequestFinished(int request_id,
                                                         bool decode_succeeded) {
 }
 
-void LayerContextImpl::NotifyTransitionRequestFinished(uint32_t sequence_id) {}
+void LayerContextImpl::NotifyTransitionRequestFinished(
+    uint32_t sequence_id,
+    const ViewTransitionElementResourceRects&) {}
 
 void LayerContextImpl::DidPresentCompositorFrameOnImplThread(
     uint32_t frame_token,
@@ -1109,6 +1111,10 @@ base::expected<void, std::string> LayerContextImpl::DoUpdateDisplayTree(
     return base::unexpected("Invalid device scale factor");
   }
   layers.SetDeviceScaleFactor(update->device_scale_factor);
+  if (update->painted_device_scale_factor <= 0) {
+    return base::unexpected("Invalid painted device scale factor");
+  }
+  layers.set_painted_device_scale_factor(update->painted_device_scale_factor);
   if (update->local_surface_id_from_parent) {
     layers.SetLocalSurfaceIdFromParent(*update->local_surface_id_from_parent);
   }

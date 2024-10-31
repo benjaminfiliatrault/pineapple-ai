@@ -19,10 +19,6 @@ namespace data_sharing {
 
 namespace {
 
-base::FilePath GetGroupDataStoreDBPath(const base::FilePath& profile_dir) {
-  return profile_dir.Append(FILE_PATH_LITERAL("DataSharingDB"));
-}
-
 VersionToken ComputeVersionToken(
     const sync_pb::CollaborationGroupSpecifics& specifics) {
   return VersionToken(base::NumberToString(
@@ -32,10 +28,10 @@ VersionToken ComputeVersionToken(
 }  // namespace
 
 GroupDataModel::GroupDataModel(
-    const base::FilePath& profile_dir,
+    const base::FilePath& data_sharing_dir,
     CollaborationGroupSyncBridge* collaboration_group_sync_bridge,
     DataSharingSDKDelegate* sdk_delegate)
-    : group_data_store_(GetGroupDataStoreDBPath(profile_dir),
+    : group_data_store_(data_sharing_dir,
                         base::BindOnce(&GroupDataModel::OnGroupDataStoreLoaded,
                                        base::Unretained(this))),
       collaboration_group_sync_bridge_(collaboration_group_sync_bridge),
@@ -111,11 +107,14 @@ void GroupDataModel::OnGroupsUpdated(
   std::vector<GroupId> added_or_updated_groups = added_group_ids;
   std::copy(updated_group_ids.begin(), updated_group_ids.end(),
             std::back_inserter(added_or_updated_groups));
-  // Observers will be notified once groups are actually fetched from the SDK.
-  FetchGroupsFromSDK(added_or_updated_groups);
+
+  if (!added_or_updated_groups.empty()) {
+    // Observers will be notified once groups are actually fetched from the SDK.
+    FetchGroupsFromSDK(added_or_updated_groups);
+  }
 }
 
-void GroupDataModel::OnDataLoaded() {
+void GroupDataModel::OnCollaborationGroupSyncDataLoaded() {
   is_collaboration_group_bridge_loaded_ = true;
   if (IsModelLoaded()) {
     // Don't notify observers about data being loaded yet - let's process
@@ -181,7 +180,9 @@ void GroupDataModel::ProcessInitialData() {
     }
   }
 
-  FetchGroupsFromSDK(added_or_updated_group_ids);
+  if (!added_or_updated_group_ids.empty()) {
+    FetchGroupsFromSDK(added_or_updated_group_ids);
+  }
 }
 
 void GroupDataModel::FetchGroupsFromSDK(

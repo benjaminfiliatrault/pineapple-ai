@@ -220,17 +220,17 @@ base::span<const PageInfoUI::PermissionUIInfo> GetContentSettingsUIInfo() {
       {ContentSettingsType::AUTOMATIC_FULLSCREEN,
        IDS_SITE_SETTINGS_TYPE_AUTOMATIC_FULLSCREEN,
        IDS_SITE_SETTINGS_TYPE_AUTOMATIC_FULLSCREEN_MID_SENTENCE},
+      {ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
+       IDS_SITE_SETTINGS_TYPE_FILE_SYSTEM_ACCESS_WRITE,
+       IDS_SITE_SETTINGS_TYPE_FILE_SYSTEM_ACCESS_WRITE_MID_SENTENCE},
 #if !BUILDFLAG(IS_ANDROID)
       // Page Info Permissions that are not defined in Android.
       {ContentSettingsType::AUTO_PICTURE_IN_PICTURE,
        IDS_SITE_SETTINGS_TYPE_AUTO_PICTURE_IN_PICTURE,
        IDS_SITE_SETTINGS_TYPE_AUTO_PICTURE_IN_PICTURE_MID_SENTENCE},
       {ContentSettingsType::CAPTURED_SURFACE_CONTROL,
-       IDS_SITE_SETTINGS_TYPE_CAPTURED_SURFACE_CONTROL,
+       IDS_SITE_SETTINGS_TYPE_CAPTURED_SURFACE_CONTROL_SHARED_TABS,
        IDS_SITE_SETTINGS_TYPE_CAPTURED_SURFACE_CONTROL_MID_SENTENCE},
-      {ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
-       IDS_SITE_SETTINGS_TYPE_FILE_SYSTEM_ACCESS_WRITE,
-       IDS_SITE_SETTINGS_TYPE_FILE_SYSTEM_ACCESS_WRITE_MID_SENTENCE},
       {ContentSettingsType::KEYBOARD_LOCK, IDS_SITE_SETTINGS_TYPE_KEYBOARD_LOCK,
        IDS_SITE_SETTINGS_TYPE_KEYBOARD_LOCK_MID_SENTENCE},
       {ContentSettingsType::LOCAL_FONTS, IDS_SITE_SETTINGS_TYPE_FONT_ACCESS,
@@ -291,7 +291,7 @@ CreateSecurityDescriptionForSafetyTip(
   return security_description;
 }
 
-// Gets the actual setting for a ContentSettingType, taking into account what
+// Gets the actual setting for a ContentSettingsType, taking into account what
 // the default setting value is and whether Html5ByDefault is enabled.
 ContentSetting GetEffectiveSetting(ContentSettingsType type,
                                    ContentSetting setting,
@@ -873,7 +873,7 @@ std::u16string PageInfoUI::PermissionAutoBlockedToUIString(
         PermissionStatus::ASK, content::PermissionStatusSource::UNSPECIFIED);
     if (permissions::PermissionUtil::IsPermission(permission.type)) {
       blink::PermissionType permission_type =
-          permissions::PermissionUtil::ContentSettingTypeToPermissionType(
+          permissions::PermissionUtil::ContentSettingsTypeToPermissionType(
               permission.type);
       permission_result = delegate->GetPermissionResult(permission_type);
     } else if (permission.type == ContentSettingsType::FEDERATED_IDENTITY_API) {

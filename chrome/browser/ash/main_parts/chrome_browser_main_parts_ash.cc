@@ -66,9 +66,8 @@
 #include "chrome/browser/ash/certs/system_token_cert_db_initializer.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
-#include "chrome/browser/ash/crosapi/lacros_availability_policy_observer.h"
-#include "chrome/browser/ash/crosapi/lacros_data_backward_migration_mode_policy_observer.h"
 #include "chrome/browser/ash/crostini/crostini_unsupported_action_notifier.h"
+#include "chrome/browser/ash/dbus/arc_crosh_service_provider.h"
 #include "chrome/browser/ash/dbus/arc_tracing_service_provider.h"
 #include "chrome/browser/ash/dbus/ash_dbus_helper.h"
 #include "chrome/browser/ash/dbus/chrome_features_service_provider.h"
@@ -120,6 +119,7 @@
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/users/avatar/user_image_manager_registry.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
+#include "chrome/browser/ash/mahi/web_contents/mahi_web_contents_manager_impl.h"
 #include "chrome/browser/ash/mojo_service_manager/connection_helper.h"
 #include "chrome/browser/ash/net/apn_migrator.h"
 #include "chrome/browser/ash/net/bluetooth_pref_state_observer.h"
@@ -136,6 +136,7 @@
 #include "chrome/browser/ash/notifications/multi_capture_notifications.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash_factory.h"
 #include "chrome/browser/ash/pcie_peripheral/ash_usb_detector.h"
+#include "chrome/browser/ash/performance/doze_mode_power_status_scheduler.h"
 #include "chrome/browser/ash/platform_keys/key_permissions/key_permissions_manager_impl.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
@@ -165,7 +166,6 @@
 #include "chrome/browser/ash/video_conference/video_conference_ash_feature_client.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_ash.h"
-#include "chrome/browser/chromeos/mahi/mahi_web_contents_manager.h"
 #include "chrome/browser/chromeos/printing/print_preview/print_preview_webcontents_manager.h"
 #include "chrome/browser/chromeos/video_conference/video_conference_manager_client.h"
 #include "chrome/browser/component_updater/cros_component_installer_chromeos.h"
@@ -234,7 +234,6 @@
 #include "chromeos/ash/components/report/device_metrics/use_case/real_psm_client_manager.h"
 #include "chromeos/ash/components/report/device_metrics/use_case/use_case.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
-#include "chromeos/ash/components/standalone_browser/migrator_util.h"
 #include "chromeos/ash/components/system/statistics_provider.h"
 #include "chromeos/ash/components/tpm/tpm_token_loader.h"
 #include "chromeos/ash/components/wifi_p2p/wifi_p2p_controller.h"
@@ -521,6 +520,12 @@ class DBusServices {
               std::make_unique<LibvdaServiceProvider>()));
     }
 
+    arc_crosh_service_ = CrosDBusService::Create(
+        system_bus, arc::crosh::kArcCroshServiceName,
+        dbus::ObjectPath(arc::crosh::kArcCroshServicePath),
+        CrosDBusService::CreateServiceProviderList(
+            std::make_unique<ArcCroshServiceProvider>()));
+
     // Initialize PowerDataCollector after DBusThreadManager is initialized.
     PowerDataCollector::Initialize();
 
@@ -590,6 +595,7 @@ class DBusServices {
     lock_to_single_user_service_.reset();
     fusebox_service_.reset();
     mojo_connection_service_.reset();
+    arc_crosh_service_.reset();
     PowerDataCollector::Shutdown();
     chromeos::PowerPolicyController::Shutdown();
     device::BluetoothAdapterFactory::Shutdown();
@@ -625,6 +631,7 @@ class DBusServices {
   std::unique_ptr<CrosDBusService> mojo_connection_service_;
   std::unique_ptr<CrosDBusService> dlp_files_policy_service_;
   std::unique_ptr<CrosDBusService> arc_tracing_service_;
+  std::unique_ptr<CrosDBusService> arc_crosh_service_;
 };
 
 }  // namespace internal
@@ -716,6 +723,12 @@ int ChromeBrowserMainPartsAsh::PreEarlyInitialization() {
     base::FilePath user_data_dir;
     base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
     FakeUserDataAuthClient::Get()->SetUserDataDir(std::move(user_data_dir));
+    // Set a default password factor when `--login-manager` is used in
+    // non-testing mode.
+    if (command_line->HasSwitch(switches::kLoginManager) &&
+        !is_integration_test()) {
+      FakeUserDataAuthClient::Get()->set_add_default_password_factor(true);
+    }
 
     // If we're not running on a device, i.e. either in a test or in ash Chrome
     // on linux, fake dbus calls that would result in a shutdown of Chrome by
@@ -821,6 +834,11 @@ int ChromeBrowserMainPartsAsh::PreMainMessageLoopRun() {
   g_browser_process->platform_part()->InitializeSchedulerConfigurationManager();
   arc_service_launcher_ = std::make_unique<arc::ArcServiceLauncher>(
       g_browser_process->platform_part()->scheduler_configuration_manager());
+
+  // This should be created after ArcServiceLauncher creation.
+  doze_mode_power_status_scheduler_ =
+      std::make_unique<DozeModePowerStatusScheduler>(
+          g_browser_process->local_state());
 
   session_termination_manager_ = std::make_unique<SessionTerminationManager>();
 
@@ -1028,10 +1046,6 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
   browser_manager_ = std::make_unique<crosapi::BrowserManager>(
       g_browser_process->platform_part()->component_manager_ash());
   browser_manager_->AddObserver(SessionControllerClientImpl::Get());
-  lacros_availability_policy_observer_ =
-      std::make_unique<crosapi::LacrosAvailabilityPolicyObserver>();
-  lacros_data_backward_migration_mode_policy_observer_ = std::make_unique<
-      crosapi::LacrosDataBackwardMigrationModePolicyObserver>();
 
   chromeos::machine_learning::ServiceConnection::GetInstance()->Initialize();
 
@@ -1476,7 +1490,8 @@ void ChromeBrowserMainPartsAsh::PostBrowserStart() {
       NetworkHandler::Get()->network_state_handler());
 
   if (chromeos::features::IsMahiEnabled()) {
-    mahi::MahiWebContentsManager::Get()->Initialize();
+    mahi_web_contents_manager_ =
+        std::make_unique<mahi::MahiWebContentsManagerImpl>();
   }
 
   if (base::FeatureList::IsEnabled(::features::kPrintPreviewCrosPrimary)) {
@@ -1621,16 +1636,7 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
   // Let the UserManager unregister itself as an observer of the CrosSettings
   // singleton before it is destroyed. This also ensures that the UserManager
   // has no URLRequest pending (see http://crbug.com/276659).
-  if (auto* user_image_manager_registry =
-          ash::UserImageManagerRegistry::Get()) {
-    user_image_manager_registry->Shutdown();
-  }
-  if (g_browser_process->platform_part()->user_manager()) {
-    g_browser_process->platform_part()
-        ->browser_policy_connector_ash()
-        ->OnUserManagerShutdown();
-    g_browser_process->platform_part()->user_manager()->Shutdown();
-  }
+  g_browser_process->platform_part()->ShutdownUserManager();
 
   // Let the DeviceDisablingManager unregister itself as an observer of the
   // CrosSettings singleton before it is destroyed.
@@ -1692,18 +1698,16 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
   // Cleans up dbus services depending on ash.
   dbus_services_->PreAshShutdown();
 
-  // LacrosAvailabilityPolicyObserver and
-  // LacrosDataBackwardMigrationModePolicyObserver have the dependency to
-  // ProfileManager, so they need to be destroyed before ProfileManager
-  // destruction, which happens inside PostMainMessageLoopRun below.
-  lacros_availability_policy_observer_.reset();
-  lacros_data_backward_migration_mode_policy_observer_.reset();
-
   multi_capture_notifications_.reset();
 
   // vc_app_service_client_ has to be destructed before PostMainMessageLoopRun.
   vc_app_service_client_.reset();
   vc_ash_feature_client_.reset();
+
+  // This need to be called before `Shell` and |arc_service_launcher_| is
+  // destroyed, and also before |ShutdownDBus()| is called (where
+  // chromeos::PowerManagerClient is destroyed).
+  doze_mode_power_status_scheduler_.reset();
 
   // NOTE: Closes ash and destroys `Shell`.
   ChromeBrowserMainPartsLinux::PostMainMessageLoopRun();

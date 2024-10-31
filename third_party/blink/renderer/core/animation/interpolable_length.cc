@@ -93,8 +93,10 @@ CSSValueID InterpolableLength::LengthTypeToCSSValueID(Length::Type lt) {
       return CSSValueID::kMaxContent;
     case Length::Type::kFitContent:
       return CSSValueID::kFitContent;
-    case Length::Type::kFillAvailable:
-      return CSSValueID::kWebkitFillAvailable;
+    case Length::Type::kStretch:
+      return RuntimeEnabledFeatures::LayoutStretchEnabled()
+                 ? CSSValueID::kStretch
+                 : CSSValueID::kWebkitFillAvailable;
     case Length::Type::kContent:  // only valid for flex-basis.
       return CSSValueID::kContent;
     default:
@@ -115,8 +117,9 @@ Length::Type InterpolableLength::CSSValueIDToLengthType(CSSValueID id) {
     case CSSValueID::kFitContent:
     case CSSValueID::kWebkitFitContent:
       return Length::Type::kFitContent;
+    case CSSValueID::kStretch:
     case CSSValueID::kWebkitFillAvailable:
-      return Length::Type::kFillAvailable;
+      return Length::Type::kStretch;
     case CSSValueID::kContent:  // only valid for flex-basis.
       return Length::Type::kContent;
     default:
@@ -413,6 +416,10 @@ void InterpolableLength::SubtractFromOneHundredPercent() {
   SetExpression(
       *CSSMathExpressionOperation::CreateArithmeticOperationAndSimplifyCalcSize(
           hundred_percent, expression_, CSSMathOperator::kSubtract));
+}
+
+bool InterpolableLength::IsNeutralValue() const {
+  return IsLengthArray() && length_array_.type_flags.none();
 }
 
 static double ClampToRange(double x, Length::ValueRange range) {

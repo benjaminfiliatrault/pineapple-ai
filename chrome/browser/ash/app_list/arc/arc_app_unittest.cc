@@ -609,14 +609,14 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
   }
 
   void ValidateHaveShortcuts(
-      const std::vector<arc::mojom::ShortcutInfo> shortcuts) {
+      const std::vector<arc::mojom::ShortcutInfo>& shortcuts) {
     ValidateHaveAppsAndShortcuts(std::vector<arc::mojom::AppInfoPtr>(),
                                  shortcuts);
   }
 
   void ValidateHaveAppsAndShortcuts(
       const std::vector<arc::mojom::AppInfoPtr>& apps,
-      const std::vector<arc::mojom::ShortcutInfo> shortcuts) {
+      const std::vector<arc::mojom::ShortcutInfo>& shortcuts) {
     ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_.get());
     ASSERT_NE(nullptr, prefs);
     const std::vector<std::string> ids = prefs->GetAppIds();
@@ -735,7 +735,7 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
 
   // Validate that requested shortcuts have required ready state
   void ValidateShortcutReadyState(
-      const std::vector<arc::mojom::ShortcutInfo> shortcuts,
+      const std::vector<arc::mojom::ShortcutInfo>& shortcuts,
       bool ready) {
     ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_.get());
     ASSERT_NE(nullptr, prefs);
@@ -1256,16 +1256,12 @@ class ArcDefaultAppTest : public ArcAppModelBuilderRecreate {
       base::FilePath file_path = file_paths[scale_factor];
       ASSERT_TRUE(base::PathExists(file_path));
 
-      std::string unsafe_icon_data;
-      ASSERT_TRUE(base::ReadFileToString(file_path, &unsafe_icon_data));
+      std::optional<std::vector<uint8_t>> unsafe_icon_data =
+          base::ReadFileToBytes(file_path);
+      ASSERT_TRUE(unsafe_icon_data);
+      SkBitmap bitmap = gfx::PNGCodec::Decode(unsafe_icon_data.value());
 
       float scale = ui::GetScaleForResourceScaleFactor(scale_factor);
-
-      SkBitmap bitmap;
-      gfx::PNGCodec::Decode(
-          reinterpret_cast<const unsigned char*>(&unsafe_icon_data.front()),
-          unsafe_icon_data.length(), &bitmap);
-
       if (bitmap.width() != roundf(size_in_dip * scale) ||
           bitmap.height() != roundf(size_in_dip * scale)) {
         SkBitmap dst;

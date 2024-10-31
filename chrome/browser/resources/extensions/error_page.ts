@@ -6,7 +6,7 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_collapse/cr_collapse.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_icon/cr_icon.js';
-import 'chrome://resources/cr_elements/icons_lit.html.js';
+import 'chrome://resources/cr_elements/icons.html.js';
 import './code_section.js';
 import './shared_style.css.js';
 
@@ -20,7 +20,7 @@ import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 import {getCss} from './error_page.css.js';
 import {getHtml} from './error_page.html.js';
 import type {ItemDelegate} from './item.js';
-import {ItemMixinLit} from './item_mixin_lit.js';
+import {ItemMixin} from './item_mixin.js';
 import {navigation, Page} from './navigation_helper.js';
 
 type ManifestError = chrome.developerPrivate.ManifestError;
@@ -74,7 +74,7 @@ export interface ExtensionsErrorPageElement {
   };
 }
 
-const ExtensionsErrorPageElementBase = ItemMixinLit(CrLitElement);
+const ExtensionsErrorPageElementBase = ItemMixin(CrLitElement);
 
 export class ExtensionsErrorPageElement extends ExtensionsErrorPageElementBase {
   static get is() {

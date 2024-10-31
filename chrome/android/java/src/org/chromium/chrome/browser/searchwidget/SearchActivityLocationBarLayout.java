@@ -5,7 +5,9 @@
 package org.chromium.chrome.browser.searchwidget;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -23,6 +25,7 @@ import org.chromium.chrome.browser.omnibox.UrlBarCoordinator;
 import org.chromium.chrome.browser.omnibox.UrlBarCoordinator.SelectionState;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
+import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.toolbar.top.ToolbarPhone;
@@ -54,6 +57,7 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
                 urlCoordinator,
                 statusCoordinator,
                 locationBarDataProvider);
+
         mPendingSearchPromoDecision = LocaleManager.getInstance().needToCheckForSearchEnginePromo();
         mAutocompleteCoordinator.setShouldPreventOmniboxAutocomplete(mPendingSearchPromoDecision);
         findViewById(R.id.url_action_container).setVisibility(View.VISIBLE);
@@ -67,11 +71,19 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
                 getResources()
                         .getDimensionPixelSize(R.dimen.omnibox_suggestion_bg_round_corner_radius));
 
-        setBackground(backgroundDrawable);
+        // Replicate LocationBarBackground bounds from ToolbarPhone.
+        int verticalInsets =
+                getResources().getDimensionPixelSize(R.dimen.location_bar_vertical_margin)
+                        - OmniboxResourceProvider.getToolbarOnFocusHeightIncrease(getContext()) / 2;
+        LayerDrawable layerDrawable = new LayerDrawable(new Drawable[] {backgroundDrawable});
+        layerDrawable.setLayerInset(0, 0, verticalInsets, 0, verticalInsets); // Adjust padding
+
+        setBackground(layerDrawable);
 
         // Expand status view's left and right space, and expand the vertical padding of the
         // location bar to match the expanded interface on the regular omnibox.
         setUrlFocusChangePercent(1f, 1f, /* isUrlFocusChangeInProgress= */ false);
+        requestOmniboxFocus();
     }
 
     @Override
@@ -149,7 +161,6 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
         } else if (searchType == SearchType.LENS) {
             runGoogleLens();
         }
-        requestOmniboxFocus();
         mInteractionFromWidget = false;
     }
 
@@ -179,21 +190,12 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
         }
     }
 
-    /** Focus the Omnibox and present the cached suggestions. */
     void requestOmniboxFocus() {
-        mUrlBar.post(
-                () -> {
-                    if (mUrlCoordinator == null || mAutocompleteCoordinator == null) {
-                        return;
-                    }
-
-                    mUrlBar.requestFocus();
-                    mUrlCoordinator.setKeyboardVisibility(true, false);
-                });
+        mUrlBar.requestFocus();
     }
 
     void clearOmniboxFocus() {
-        mUrlBar.post(() -> mUrlBar.clearFocus());
+        mUrlBar.clearFocus();
     }
 
     @Override

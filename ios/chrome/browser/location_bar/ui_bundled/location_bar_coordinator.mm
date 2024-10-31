@@ -282,8 +282,8 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
                                     OverlayModality::kWebContentArea);
   self.steadyViewMediator.consumer = self;
   self.steadyViewMediator.tracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
+      feature_engagement::TrackerFactory::GetForProfile(
+          self.browser->GetProfile());
 
   _omniboxFullscreenUIUpdater = std::make_unique<FullscreenUIUpdater>(
       fullscreenController, self.viewController);
@@ -454,9 +454,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
 - (void)locationBarCopyTapped {
   StoreURLInPasteboard(self.webState->GetVisibleURL());
-  id<HelpCommands> helpHandler =
-      HandlerForProtocol(self.browser->GetCommandDispatcher(), HelpCommands);
-  [helpHandler presentInProductHelpWithType:InProductHelpType::kShareButton];
 }
 
 - (void)locationBarRequestScribbleTargetFocus {
@@ -525,6 +522,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   [self.omniboxCoordinator updateOmniboxState];
   [self.viewController updateLocationText:text clipTail:clipTail];
   [self.viewController updateForNTP:NO];
+  [self.mediator locationUpdated];
 }
 
 - (void)updateLocationIcon:(UIImage*)icon
@@ -542,6 +540,10 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
 - (void)attemptShowingLensOverlayIPH {
   [self.viewController attemptShowingLensOverlayIPH];
+}
+
+- (void)recordLensOverlayAvailability {
+  [self.viewController recordLensOverlayAvailability];
 }
 
 #pragma mark - URLDragDataSource

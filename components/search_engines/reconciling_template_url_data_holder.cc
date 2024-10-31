@@ -24,7 +24,19 @@ std::pair<std::u16string, bool>
 ReconcilingTemplateURLDataHolder::GetOrComputeKeyword() const {
   std::u16string keyword = search_engine_->keyword();
 
-  if (!search_engine_->created_from_play_api || keyword != u"yahoo.com") {
+  if (!search_engine_->created_from_play_api) {
+    return {std::move(keyword), false};
+  }
+
+  // Old Play API 'seznam.cz' and 'seznam.sk' have been consolidated to
+  // 'seznam'.
+  if (keyword.starts_with(u"seznam.")) {
+    return {u"seznam", true};
+  }
+
+  // Old Play API 'yahoo.com' entries are reconciled with country-specific
+  // definitions.
+  if (keyword != u"yahoo.com") {
     return {std::move(keyword), false};
   }
 
@@ -58,7 +70,7 @@ ReconcilingTemplateURLDataHolder::FindMatchingBuiltInDefinitionsByKeyword(
     result = std::move(*engine_iter);
   } else if (switches::kReconcileWithAllKnownEngines.Get()) {
     auto all_engines = TemplateURLPrepopulateData::GetAllPrepopulatedEngines();
-    for (auto engine : all_engines) {
+    for (const auto* engine : all_engines) {
       if (engine->keyword == keyword) {
         result = TemplateURLDataFromPrepopulatedEngine(*engine);
         break;
@@ -84,7 +96,7 @@ ReconcilingTemplateURLDataHolder::FindMatchingBuiltInDefinitionsById(
     result = std::move(*engine_iter);
   } else if (switches::kReconcileWithAllKnownEngines.Get()) {
     auto all_engines = TemplateURLPrepopulateData::GetAllPrepopulatedEngines();
-    for (auto engine : all_engines) {
+    for (const auto* engine : all_engines) {
       if (engine->id == prepopulate_id) {
         result = TemplateURLDataFromPrepopulatedEngine(*engine);
         break;

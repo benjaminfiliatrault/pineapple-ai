@@ -49,6 +49,21 @@ export interface HistoryEmbeddingsElement {
   };
 }
 
+export type HistoryEmbeddingsResultClickEvent = CustomEvent<{
+  item: SearchResultItem,
+  middleButton: boolean,
+  altKey: boolean,
+  ctrlKey: boolean,
+  metaKey: boolean,
+  shiftKey: boolean,
+}>;
+
+export type HistoryEmbeddingsResultContextMenuEvent = CustomEvent<{
+  item: SearchResultItem,
+  x: number,
+  y: number,
+}>;
+
 export type HistoryEmbeddingsMoreActionsClickEvent =
     CustomEvent<SearchResultItem>;
 
@@ -106,6 +121,13 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
         computed: 'computeAnswerSource_(loadingAnswer_, searchResult_.items)',
         value: null,
       },
+      showMoreFromSiteMenuOption: {
+        type: Boolean,
+        value: false,
+      },
+      showRelativeTimes: {type: Boolean, value: false},
+      otherHistoryResultClicked: {type: Boolean, value: false},
+      inSidePanel: {type: Boolean, value: false},
     };
   }
 
@@ -117,6 +139,7 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
 
   private actionMenuItem_: SearchResultItem|null = null;
   private answerSource_: SearchResultItem|null = null;
+  private answerLinkClicked_: boolean = false;
   private browserProxy_ = HistoryEmbeddingsBrowserProxyImpl.getInstance();
   private clickedIndices_: Set<number> = new Set();
   private enableAnswers_: boolean;
@@ -125,7 +148,7 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
   private loadingResults_ = false;
   private loadingStateMinimumMs_ = LOADING_STATE_MINIMUM_MS;
   private queryResultMinAge_ = QUERY_RESULT_MINIMUM_AGE;
-  private searchResult_: SearchResult;
+  private searchResult_: SearchResult|null = null;
   private searchTimestamp_: number = 0;
   /**
    * When this is non-null, that means there's a SearchResult that's pending
@@ -142,6 +165,17 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
   searchQuery: string;
   timeRangeStart?: Date;
   private searchResultChangedId_: number|null = null;
+  /**
+   * A promise of a setTimeout for the first set of search results to come back
+   * from a search. The loading state has a minimum time it needs to be on the
+   * screen before showing the first set of search results, and any subsequent
+   * search result for the same query is queued after it.
+   */
+  private searchResultPromise_: Promise<void>|null = null;
+  showRelativeTimes: boolean = false;
+  showMoreFromSiteMenuOption: boolean = false;
+  otherHistoryResultClicked: boolean = false;
+  inSidePanel: boolean = false;
 
   override connectedCallback() {
     super.connectedCallback();
@@ -150,6 +184,15 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
       // closing the tab or navigating to another URL.
       this.flushDebouncedUserMetrics_(/* forceFlush= */ true);
     });
+    if (this.inSidePanel) {
+      // Side panel UI does not fire 'beforeunload' events. Instead, the
+      // visibilityState is changed when the side panel is closed.
+      this.eventTracker_.add(document, 'visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          this.flushDebouncedUserMetrics_();
+        }
+      });
+    }
     this.searchResultChangedId_ =
         this.browserProxy_.callbackRouter.searchResultChanged.addListener(
             this.searchResultChanged_.bind(this));
@@ -181,23 +224,43 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
   }
 
   private getAnswerOrError_(): string|undefined {
-    // TODO(b/348689167): Move strings into a grdp file.
+    if (!this.searchResult_) {
+      return undefined;
+    }
+
     switch (this.searchResult_.answerStatus) {
       case AnswerStatus.kUnspecified:
       case AnswerStatus.kLoading:
-        // Still loading or in an undefined state.
+      case AnswerStatus.kExecutionCanceled:
+      case AnswerStatus.kUnanswerable:
+      case AnswerStatus.kFiltered:
+        // Still loading or answer section is not displayed.
         return undefined;
       case AnswerStatus.kSuccess:
         return this.searchResult_.answer;
-      case AnswerStatus.kUnanswerable:
-        return 'Sorry, can\'t help you with that.';
       case AnswerStatus.kModelUnavailable:
+        return this.i18n('historyEmbeddingsAnswererErrorModelUnavailable');
       case AnswerStatus.kExecutionFailure:
-      case AnswerStatus.kExecutionCanceled:
-        return 'Something went wrong. Please try again later.';
+        return this.i18n('historyEmbeddingsAnswererErrorTryAgain');
       default:
         assertNotReached();
     }
+  }
+
+  private getAnswerSourceUrl_(): string|undefined {
+    if (!this.answerSource_) {
+      return undefined;
+    }
+    const sourceUrl = new URL(this.answerSource_.url.url);
+    const textDirectives = this.answerSource_.answerData?.answerTextDirectives;
+    if (textDirectives && textDirectives.length > 0) {
+      // Only the first directive is used for now until there's a way to show
+      // multiple links in the UI. If the directive contains a comma, it is
+      // intended to be part of the start,end syntax and should not be encoded.
+      sourceUrl.hash = `:~:text=${
+          textDirectives[0].split(',').map(encodeURIComponent).join(',')}`;
+    }
+    return sourceUrl.toString();
   }
 
   private getFavicon_(item: SearchResultItem|undefined): string {
@@ -209,7 +272,39 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
     if (this.loadingResults_) {
       return this.i18n('historyEmbeddingsHeadingLoading', this.searchQuery);
     }
+
+    if (this.enableAnswers_) {
+      return this.i18n('historyEmbeddingsWithAnswersResultsHeading');
+    }
+
     return this.i18n('historyEmbeddingsHeading', this.searchQuery);
+  }
+
+  private getHeadingTextForAnswerSection_(): string {
+    if (this.loadingAnswer_) {
+      return this.i18n('historyEmbeddingsAnswerLoadingHeading');
+    }
+
+    return this.i18n('historyEmbeddingsAnswerHeading');
+  }
+
+  private getAnswerDateTime_(): string {
+    if (!this.answerSource_) {
+      return '';
+    }
+    const dateTime = this.getDateTime_(this.answerSource_);
+    return this.i18n('historyEmbeddingsAnswerSourceDate', dateTime);
+  }
+
+  private getDateTime_(item: SearchResultItem|undefined): string {
+    if (!item) {
+      return '';
+    }
+
+    if (this.showRelativeTimes) {
+      return item.relativeTime;
+    }
+    return item.shortDateTime;
   }
 
   private hasAnswer_(): boolean {
@@ -217,6 +312,15 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
       return false;
     }
     return this.searchResult_?.answer !== '';
+  }
+
+  private isAnswerErrorState_(): boolean {
+    if (!this.searchResult_) {
+      return false;
+    }
+
+    return this.searchResult_.answerStatus === AnswerStatus.kModelUnavailable ||
+        this.searchResult_.answerStatus === AnswerStatus.kExecutionFailure;
   }
 
   private onFeedbackSelectedOptionChanged_(
@@ -234,6 +338,30 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
         this.browserProxy_.setUserFeedback(UserFeedback.kUserFeedbackNegative);
         return;
     }
+  }
+
+  private onAnswerLinkContextMenu_(e: MouseEvent) {
+    this.dispatchEvent(new CustomEvent('answer-context-menu', {
+      detail: {
+        item: this.answerSource_,
+        x: e.clientX,
+        y: e.clientY,
+      },
+    }));
+  }
+
+  private onAnswerLinkClick_(e: MouseEvent) {
+    this.answerLinkClicked_ = true;
+    this.dispatchEvent(new CustomEvent('answer-click', {
+      detail: {
+        item: this.answerSource_,
+        middleButton: e.button === 1,
+        altKey: e.altKey,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        shiftKey: e.shiftKey,
+      },
+    }));
   }
 
   private onMoreActionsClick_(e: DomRepeatEvent<SearchResultItem>) {
@@ -255,6 +383,7 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
   }
 
   private onRemoveFromHistoryClick_() {
+    assert(this.searchResult_);
     assert(this.actionMenuItem_);
     this.splice(
         'searchResult_.items',
@@ -265,8 +394,28 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
     this.$.sharedMenu.get().close();
   }
 
-  private onResultClick_(e: DomRepeatEvent<SearchResultItem>) {
-    this.dispatchEvent(new CustomEvent('result-click', {detail: e.model.item}));
+  private onResultContextMenu_(
+      e: DomRepeatEvent<SearchResultItem, MouseEvent>) {
+    this.dispatchEvent(new CustomEvent('result-context-menu', {
+      detail: {
+        item: e.model.item,
+        x: e.clientX,
+        y: e.clientY,
+      },
+    }));
+  }
+
+  private onResultClick_(e: DomRepeatEvent<SearchResultItem, MouseEvent>) {
+    this.dispatchEvent(new CustomEvent('result-click', {
+      detail: {
+        item: e.model.item,
+        middleButton: e.button === 1,
+        altKey: e.altKey,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        shiftKey: e.shiftKey,
+      },
+    }));
 
     this.dispatchEvent(new CustomEvent('record-history-link-click', {
       bubbles: true,
@@ -278,21 +427,29 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
     }));
 
     this.clickedIndices_.add(e.model.index);
-    this.browserProxy_.recordSearchResultsMetrics(true, true);
+    this.browserProxy_.recordSearchResultsMetrics(
+        /* nonEmptyResults= */ true, /* userClickedResult= */ true,
+        /* answerShown= */ this.hasAnswer_(),
+        /* answerCitationClicked= */ this.answerLinkClicked_,
+        /* otherHistoryResultClicked= */ this.otherHistoryResultClicked,
+        /* queryWordCount= */ this.searchQuery.split(' ').length);
   }
 
   private onSearchQueryChanged_() {
     // Flush any old results metrics before overwriting the member variable.
     this.flushDebouncedUserMetrics_();
     this.clickedIndices_.clear();
+    this.answerLinkClicked_ = false;
 
     // Cache the amount of characters that the user typed for this query so
     // that it can be sent with the quality log since `numCharsForQuery` will
     // immediately change when a new query is performed.
     this.numCharsForLastResultQuery_ = this.numCharsForQuery;
 
+    this.searchResultPromise_ = null;
     this.loadingResults_ = true;
     this.loadingAnswer_ = false;
+
     const query: SearchQuery = {
       query: this.searchQuery,
       timeRangeStart:
@@ -303,15 +460,26 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
   }
 
   private searchResultChanged_(result: SearchResult) {
-    // Artificial delay for UX. Note, timeout is always used for consistency,
-    // and this can affect test behavior, so don't change to direct calls
-    // even if no additional delay is necessary.
-    setTimeout(
-        this.searchResultChangedImpl_.bind(this, result),
-        Math.max(
-            0,
-            this.searchTimestamp_ + this.loadingStateMinimumMs_ -
-                performance.now()));
+    if (this.searchResultPromise_) {
+      // If there is already a search result waiting to be processed, chain
+      // this result to it so that it immediately runs after the previous
+      // result was processed.
+      this.searchResultPromise_ = this.searchResultPromise_.then(
+          () => this.searchResultChangedImpl_(result));
+    } else {
+      // Artificial delay of loadingStateMinimumMs_ for UX.
+      this.searchResultPromise_ = new Promise((resolve) => {
+        setTimeout(
+            () => {
+              this.searchResultChangedImpl_(result);
+              resolve();
+            },
+            Math.max(
+                0,
+                this.searchTimestamp_ + this.loadingStateMinimumMs_ -
+                    performance.now()));
+      });
+    }
   }
 
   private searchResultChangedImpl_(result: SearchResult) {
@@ -330,10 +498,20 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
   }
 
   private showAnswerSection_(): boolean {
-    // Intent has not been computed yet. Anything related to the answer should
-    // only be shown when intent computation has at least determined the query
-    // is answerable.
-    return this.searchResult_?.answerStatus !== AnswerStatus.kUnspecified;
+    if (!this.searchResult_) {
+      // If there is no search result yet, the search has just started and it
+      // is not yet known if an answer is being attempted.
+      return false;
+    } else if (this.searchResult_.query !== this.searchQuery) {
+      // The current search result and its answer is outdated.
+      return false;
+    } else {
+      // These answer statuses indicate there is no answer to show and no
+      // loading state to show.
+      return this.searchResult_.answerStatus !== AnswerStatus.kUnspecified &&
+          this.searchResult_.answerStatus !== AnswerStatus.kUnanswerable &&
+          this.searchResult_.answerStatus !== AnswerStatus.kFiltered;
+    }
   }
 
   /**
@@ -355,9 +533,14 @@ export class HistoryEmbeddingsElement extends HistoryEmbeddingsElementBase {
 
     // Record a metric if a user did not click any results.
     if (canLog && !userClickedResult) {
-      const nonEmptyResults: boolean =
+      const nonEmptyResults: boolean = !!this.searchResult_ &&
           this.searchResult_.items && this.searchResult_.items.length > 0;
-      this.browserProxy_.recordSearchResultsMetrics(nonEmptyResults, false);
+      this.browserProxy_.recordSearchResultsMetrics(
+          nonEmptyResults, /* userClickedResult= */ false,
+          /* answerShown= */ this.hasAnswer_(),
+          /* answerCitationClicked= */ this.answerLinkClicked_,
+          /* otherHistoryResultClicked= */ this.otherHistoryResultClicked,
+          /* queryWordCount= */ this.searchQuery.split(' ').length);
     }
 
     if (!this.forceSuppressLogging && canLog) {

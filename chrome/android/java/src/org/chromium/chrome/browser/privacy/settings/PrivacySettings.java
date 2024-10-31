@@ -9,9 +9,11 @@ import static org.chromium.components.content_settings.PrefNames.COOKIE_CONTROLS
 import android.os.Build;
 import android.os.Bundle;
 import android.text.SpannableString;
+import android.text.style.ClickableSpan;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.View;
 
 import androidx.annotation.VisibleForTesting;
 import androidx.preference.Preference;
@@ -37,7 +39,7 @@ import org.chromium.chrome.browser.safe_browsing.metrics.SettingsAccessPoint;
 import org.chromium.chrome.browser.safe_browsing.settings.SafeBrowsingSettingsFragment;
 import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
-import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
+import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.settings.GoogleServicesSettings;
 import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
@@ -49,7 +51,6 @@ import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
 import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.user_prefs.UserPrefs;
-import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 
 /** Fragment to keep track of the all the privacy related preferences. */
@@ -85,10 +86,10 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
         SettingsUtils.addPreferencesFromResource(this, R.xml.privacy_preferences);
 
         Preference fpProtectionPreference = findPreference(PREF_FP_PROTECTION);
-        fpProtectionPreference.setVisible(shouldShowFpProtectionUI());
+        fpProtectionPreference.setVisible(shouldShowFpProtectionUi());
 
         Preference ipProtectionPreference = findPreference(PREF_IP_PROTECTION);
-        ipProtectionPreference.setVisible(shouldShowIpProtectionUI());
+        ipProtectionPreference.setVisible(shouldShowIpProtectionUi());
         ipProtectionPreference.setOnPreferenceClickListener(
                 preference -> {
                     RecordUserAction.record("Settings.IpProtection.OpenedFromPrivacyPage");
@@ -189,7 +190,6 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
         if (new SafeBrowsingBridge(getProfile()).isUnderAdvancedProtection()) {
             httpsFirstModePref.setSummary(
                     getContext()
-                            .getResources()
                             .getString(
                                     R.string
                                             .settings_https_first_mode_with_advanced_protection_summary));
@@ -199,7 +199,7 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
         syncAndServicesLink.setSummary(buildFooterString());
 
         Preference thirdPartyCookies = findPreference(PREF_THIRD_PARTY_COOKIES);
-        if (showTrackingProtectionUI()) {
+        if (showTrackingProtectionUi()) {
             if (thirdPartyCookies != null) thirdPartyCookies.setVisible(false);
             Preference trackingProtection = findPreference(PREF_TRACKING_PROTECTION);
             trackingProtection.setVisible(true);
@@ -237,24 +237,26 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
     }
 
     private SpannableString buildFooterString() {
-        NoUnderlineClickableSpan servicesLink =
-                new NoUnderlineClickableSpan(
-                        getContext(),
-                        v -> {
-                            SettingsLauncherFactory.createSettingsLauncher()
-                                    .launchSettingsActivity(
-                                            getActivity(), GoogleServicesSettings.class);
-                        });
-        NoUnderlineClickableSpan accountSettingsLink =
-                new NoUnderlineClickableSpan(
-                        getContext(),
-                        v -> {
-                            SettingsLauncherFactory.createSettingsLauncher()
-                                    .launchSettingsActivity(
-                                            getActivity(),
-                                            ManageSyncSettings.class,
-                                            ManageSyncSettings.createArguments(false));
-                        });
+        ClickableSpan servicesLink =
+                new ClickableSpan() {
+                    @Override
+                    public void onClick(View view) {
+                        SettingsNavigationFactory.createSettingsNavigation()
+                                .startSettings(getActivity(), GoogleServicesSettings.class);
+                    }
+                };
+
+        ClickableSpan accountSettingsLink =
+                new ClickableSpan() {
+                    @Override
+                    public void onClick(View view) {
+                        SettingsNavigationFactory.createSettingsNavigation()
+                                .startSettings(
+                                        getActivity(),
+                                        ManageSyncSettings.class,
+                                        ManageSyncSettings.createArguments(false));
+                    }
+                };
         if (ChromeFeatureList.isEnabled(
                 ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)) {
             if (IdentityServicesProvider.get()
@@ -402,18 +404,18 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
         }
     }
 
-    private boolean showTrackingProtectionUI() {
+    private boolean showTrackingProtectionUi() {
         return UserPrefs.get(getProfile()).getBoolean(Pref.TRACKING_PROTECTION3PCD_ENABLED)
                 || ChromeFeatureList.isEnabled(ChromeFeatureList.TRACKING_PROTECTION_3PCD);
     }
 
-    private boolean shouldShowIpProtectionUI() {
-        return !showTrackingProtectionUI()
+    private boolean shouldShowIpProtectionUi() {
+        return !showTrackingProtectionUi()
                 && ChromeFeatureList.isEnabled(ChromeFeatureList.IP_PROTECTION_UX);
     }
 
-    private boolean shouldShowFpProtectionUI() {
-        return !showTrackingProtectionUI()
+    private boolean shouldShowFpProtectionUi() {
+        return !showTrackingProtectionUi()
                 && ChromeFeatureList.isEnabled(ChromeFeatureList.FINGERPRINTING_PROTECTION_UX);
     }
 

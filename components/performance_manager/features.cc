@@ -142,11 +142,26 @@ BASE_FEATURE(kUrgentPageDiscarding,
 
 BASE_FEATURE(kCPUMeasurementInFreezingPolicy,
              "CPUMeasurementInFreezingPolicy",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kMemoryMeasurementInFreezingPolicy,
+             "MemoryMeasurementInFreezingPolicy",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kDiscardFrozenBrowsingInstancesWithGrowingPMF,
+             "DiscardFrozenBrowsingInstancesWithGrowingPMF",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Note: These params are associated with `kCPUMeasurementInFreezingPolicy`
-// instead of `kFreezingOnBatterySaver`, to allow retrieving the value without
-// activating the `kFreezingOnBatterySaver` feature.
+// instead of `kFreezingOnBatterySaver` or
+// `kDiscardFrozenBrowsingInstancesWithGrowingPMF`, to allow retrieving the
+// value without activating these two features.
+BASE_FEATURE_PARAM(int,
+                   kFreezingMemoryGrowthThresholdToDiscardKb,
+                   &kCPUMeasurementInFreezingPolicy,
+                   "freezing_memory_growth_threshold_to_discard_kb",
+                   /* 100 MB */ 100 * 1024);
+
 BASE_FEATURE_PARAM(double,
                    kFreezingHighCPUProportion,
                    &kCPUMeasurementInFreezingPolicy,
@@ -173,7 +188,7 @@ BASE_FEATURE(kFreezingOnBatterySaverForTesting,
 
 BASE_FEATURE(kResourceAttributionIncludeOrigins,
              "ResourceAttributionIncludeOrigins",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSeamlessRenderFrameSwap,
              "SeamlessRenderFrameSwap",
@@ -181,6 +196,14 @@ BASE_FEATURE(kSeamlessRenderFrameSwap,
 
 BASE_FEATURE(kUnimportantFramesPriority,
              "UnimportantFramesPriority",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kThrottleUnimportantFrameRate,
+             "ThrottleUnimportantFrameRate",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kLoadingPerformanceScenario,
+             "LoadingPerformanceScenario",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace performance_manager::features

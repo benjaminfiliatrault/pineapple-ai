@@ -71,33 +71,34 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
 import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.toolbar.top.tab_strip.TabStripTransitionCoordinator.TabStripTransitionDelegate;
-import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderState;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderUtils;
-import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvider;
-import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvider.AppHeaderObserver;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
+import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
+import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateProvider;
+import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateProvider.AppHeaderObserver;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.scrim.ScrimProperties;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.dragdrop.DragAndDropDelegate;
 import org.chromium.ui.dragdrop.DragDropGlobalState;
 import org.chromium.ui.interpolators.Interpolators;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.url.GURL;
@@ -408,12 +409,12 @@ public class StripLayoutHelperManager
      * @param lifecycleDispatcher The ActivityLifecycleDispatcher for registering this class to
      *     lifecycle events.
      * @param multiInstanceManager MultiInstanceManager passed to TabDragSource for drag and drop.
-     * @param dragDropDelegate @DragAndDropDelegate passed to @TabDragSource to initiate tab drag
-     *     and drop.
+     * @param dragDropDelegate DragAndDropDelegate passed to TabDragSource to initiate tab drag and
+     *     drop.
      * @param toolbarContainerView View passed to TabDragSource for drag and drop.
      * @param tabHoverCardViewStub The ViewStub representing the strip tab hover card.
      * @param tabContentManagerSupplier Supplier of the TabContentManager instance.
-     * @param browserControlsStateProvider @BrowserControlsStateProvider for drag drop.
+     * @param browserControlsStateProvider BrowserControlsStateProvider for drag drop.
      * @param toolbarManager The ToolbarManager instance.
      * @param desktopWindowStateProvider The DesktopWindowStateProvider for the app header.
      */
@@ -437,6 +438,7 @@ public class StripLayoutHelperManager
             @NonNull ToolbarManager toolbarManager,
             @Nullable DesktopWindowStateProvider desktopWindowStateProvider,
             ActionConfirmationManager actionConfirmationManager,
+            ModalDialogManager modalDialogManager,
             DataSharingTabManager dataSharingTabManager) {
         Resources res = context.getResources();
         mUpdateHost = updateHost;
@@ -512,6 +514,7 @@ public class StripLayoutHelperManager
                         toolbarContainerView,
                         windowAndroid,
                         actionConfirmationManager,
+                        modalDialogManager,
                         dataSharingTabManager,
                         toolbarManager.getTabStripHeightSupplier().get(),
                         () ->
@@ -530,6 +533,7 @@ public class StripLayoutHelperManager
                         toolbarContainerView,
                         windowAndroid,
                         actionConfirmationManager,
+                        modalDialogManager,
                         dataSharingTabManager,
                         toolbarManager.getTabStripHeightSupplier().get(),
                         () ->
@@ -661,10 +665,8 @@ public class StripLayoutHelperManager
         mModelSelectorButton.setClickSlop(MODEL_SELECTOR_BUTTON_CLICK_SLOP_DP);
 
         mModelSelectorButton.setAccessibilityDescription(
-                context.getResources()
-                        .getString(R.string.accessibility_tabstrip_btn_incognito_toggle_standard),
-                context.getResources()
-                        .getString(R.string.accessibility_tabstrip_btn_incognito_toggle_incognito));
+                context.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_standard),
+                context.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_incognito));
     }
 
     /** Cleans up internal state. */
@@ -676,8 +678,8 @@ public class StripLayoutHelperManager
         mLifecycleDispatcher.unregister(this);
         if (mTabModelSelector != null) {
             mTabModelSelector
-                    .getTabModelFilterProvider()
-                    .removeTabModelFilterObserver(mTabModelObserver);
+                    .getTabGroupModelFilterProvider()
+                    .removeTabGroupModelFilterObserver(mTabModelObserver);
 
             mTabModelSelector.getCurrentTabModelSupplier().removeObserver(mCurrentTabModelObserver);
             mTabModelSelectorTabModelObserver.destroy();
@@ -760,7 +762,8 @@ public class StripLayoutHelperManager
                     getStripTransitionScrimColor(), mStripTransitionScrimOpacity);
 
             yOffset = 0;
-        } else if (ChromeFeatureList.sBrowserControlsInViz.isEnabled()
+        } else if (ToolbarFeatures.isBrowserControlsInVizEnabled(
+                        DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext))
                 && mIsVerticalScrollInProgress) {
             // With bciv, we don't want anything else controlling the offset while scrolling.
             // Tabstrip currently has no min height, so setting to 0 is ok.
@@ -1185,7 +1188,9 @@ public class StripLayoutHelperManager
                         updateTitleForTab(tab);
                     }
                 };
-        modelSelector.getTabModelFilterProvider().addTabModelFilterObserver(mTabModelObserver);
+        modelSelector
+                .getTabGroupModelFilterProvider()
+                .addTabGroupModelFilterObserver(mTabModelObserver);
 
         mTabModelSelector = modelSelector;
 
@@ -1216,11 +1221,9 @@ public class StripLayoutHelperManager
                 mTabModelSelector.getModel(true),
                 tabCreatorManager.getTabCreator(true),
                 tabStateInitialized);
-        TabModelFilterProvider provider = mTabModelSelector.getTabModelFilterProvider();
-        mNormalHelper.setTabGroupModelFilter(
-                (TabGroupModelFilter) provider.getTabModelFilter(false));
-        mIncognitoHelper.setTabGroupModelFilter(
-                (TabGroupModelFilter) provider.getTabModelFilter(true));
+        TabGroupModelFilterProvider provider = mTabModelSelector.getTabGroupModelFilterProvider();
+        mNormalHelper.setTabGroupModelFilter(provider.getTabGroupModelFilter(false));
+        mIncognitoHelper.setTabGroupModelFilter(provider.getTabGroupModelFilter(true));
         tabModelSwitched(mTabModelSelector.isIncognitoSelected());
 
         mTabModelSelectorTabModelObserver =
@@ -1364,9 +1367,12 @@ public class StripLayoutHelperManager
                             BrowserControlsOffsetTagsInfo oldOffsetTagsInfo,
                             BrowserControlsOffsetTagsInfo offsetTagsInfo,
                             @BrowserControlsState int constraints) {
-                        if (ChromeFeatureList.sBrowserControlsInViz.isEnabled()) {
+                        if (ToolbarFeatures.isBrowserControlsInVizEnabled(
+                                DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext))) {
+                            // Use the content OffsetTag here, because the tab strip and content
+                            // are part of the same subtree and move together with the same offset.
                             mTabStripTreeProvider.updateOffsetTag(
-                                    offsetTagsInfo.getTopControlsOffsetTag());
+                                    offsetTagsInfo.getContentOffsetTag());
                         }
                     }
 

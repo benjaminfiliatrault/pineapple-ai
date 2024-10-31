@@ -28,13 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/frame/frame_serializer.h"
 
+#include <optional>
+
+#include "services/network/public/cpp/resource_request.h"
 #include "third_party/blink/public/web/web_frame_serializer.h"
 #include "third_party/blink/renderer/core/css/css_font_face_rule.h"
 #include "third_party/blink/renderer/core/css/css_font_face_src_value.h"
@@ -58,6 +56,8 @@
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html/custom/custom_element.h"
+#include "third_party/blink/renderer/core/html/custom/custom_element_registry.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
@@ -89,8 +89,12 @@
 #include "third_party/blink/renderer/core/style/style_image.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
+#include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
+#include "third_party/blink/renderer/platform/loader/fetch/raw_resource.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/mhtml/mhtml_parser.h"
 #include "third_party/blink/renderer/platform/mhtml/serialized_resource.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -103,6 +107,33 @@
 
 namespace blink {
 
+namespace internal {
+// TODO(crbug.com/363289333): Try to add this functionality to wtf::String.
+String ReplaceAllCaseInsensitive(
+    String source,
+    const String& from,
+    base::FunctionRef<String(const String&)> transform) {
+  size_t offset = 0;
+  size_t pos;
+  StringBuilder builder;
+  for (;;) {
+    pos = source.Find(from, offset,
+                      TextCaseSensitivity::kTextCaseASCIIInsensitive);
+    if (pos == kNotFound) {
+      break;
+    }
+    builder.Append(source.Substring(offset, pos - offset));
+    builder.Append(transform(source.Substring(pos, from.length())));
+    offset = pos + from.length();
+  }
+  if (builder.empty()) {
+    return source;
+  }
+  builder.Append(source.Substring(offset));
+  return builder.ToString();
+}
+}  // namespace internal
+
 namespace {
 
 const int kPopupOverlayZIndexThreshold = 50;
@@ -114,30 +145,73 @@ const char kShadowDelegatesFocusAttributeName[] = "shadowdelegatesfocus";
 
 using mojom::blink::FormControlType;
 
-KURL MakePseudoCSSUrl() {
+KURL MakePseudoUrl(StringView type) {
   StringBuilder pseudo_sheet_url_builder;
-  pseudo_sheet_url_builder.Append("cid:css-");
+  pseudo_sheet_url_builder.Append("cid:");
+  pseudo_sheet_url_builder.Append(type);
+  pseudo_sheet_url_builder.Append("-");
   pseudo_sheet_url_builder.Append(WTF::CreateCanonicalUUIDString());
   pseudo_sheet_url_builder.Append("@mhtml.blink");
   return KURL(pseudo_sheet_url_builder.ToString());
 }
 
+KURL MakePseudoCSSUrl() {
+  return MakePseudoUrl("css");
+}
+
 void AppendLinkElement(StringBuilder& markup, const KURL& url) {
-  markup.Append(R"html(<link rel="stylesheet" type="text/css" href=")html");
+  markup.Append(R"(<link rel="stylesheet" type="text/css" href=")");
   markup.Append(url.GetString());
   markup.Append("\" />");
 }
 
-}  // namespace
+// There are several improvements being added behind this flag. So far, it
+// covers:
+// * Serialize adopted stylesheets
+// * Serialize styleSheets on shadow roots
+// * Retain stylesheet order, previously order of stylesheets
+//   was sometimes wrong.
+// * Serialize <style> nodes as <style> nodes instead of <link> nodes.
+// * Leave <style> nodes alone if their stylesheet is unmodified.
+// * Injects a script into the serialized HTML to define custom elements to
+//   ensure the same custom element names are defined.
+// * Fonts are fetched.
+bool MHTMLImprovementsEnabled() {
+  return base::FeatureList::IsEnabled(blink::features::kMHTML_Improvements);
+}
+
+class MultiResourcePacker;
+
+// A `RawResourceClient` that waits for the resource to load.
+class ResourceWaiter : public GarbageCollected<ResourceWaiter>,
+                       public RawResourceClient {
+ public:
+  explicit ResourceWaiter(MultiResourcePacker* packer) : packer_(packer) {}
+
+  void NotifyFinished(Resource* resource) override;
+
+  void Trace(Visitor* visitor) const override;
+
+  std::optional<SerializedResource> TakeResource() {
+    return std::move(serialized_resource_);
+  }
+
+  String DebugName() const override { return "FrameSerializerResourceWaiter"; }
+
+ private:
+  Member<MultiResourcePacker> packer_;
+  std::optional<SerializedResource> serialized_resource_;
+};
 
 // Stores the list of serialized resources which constitute the frame. The
 // first resource should be the frame's content (usually HTML).
-class MultiResourcePacker {
+class MultiResourcePacker : public GarbageCollected<MultiResourcePacker> {
  public:
-  MultiResourcePacker(
-      Deque<SerializedResource>* resources,
+  explicit MultiResourcePacker(
       WebFrameSerializer::MHTMLPartsGenerationDelegate* web_delegate)
-      : resources_(resources), web_delegate_(web_delegate) {}
+      : web_delegate_(web_delegate) {}
+
+  void Trace(Visitor* visitor) const { visitor->Trace(resource_waiters_); }
 
   bool HasResource(const KURL& url) const {
     return resource_urls_.Contains(url);
@@ -148,7 +222,12 @@ class MultiResourcePacker {
                        const KURL& url) {
     // The main resource must be first.
     // We do not call `ShouldAddURL()` for the main resource.
-    resources_->push_front(SerializedResource(url, mime_type, std::move(data)));
+    resources_.emplace_front(
+        SerializedResource(url, mime_type, std::move(data)));
+  }
+
+  void AddToResources(SerializedResource serialized_resource) {
+    resources_.push_back(std::move(serialized_resource));
   }
 
   void AddToResources(const String& mime_type,
@@ -160,7 +239,8 @@ class MultiResourcePacker {
     }
     CHECK(resource_urls_.Contains(url))
         << "ShouldAddURL() not called before AddToResources";
-    resources_->push_back(SerializedResource(url, mime_type, std::move(data)));
+    resources_.emplace_front(
+        SerializedResource(url, mime_type, std::move(data)));
   }
 
   void AddImageToResources(ImageResourceContent* image, const KURL& url) {
@@ -192,7 +272,7 @@ class MultiResourcePacker {
     return should_add;
   }
 
-  void AddFontToResources(FontResource& font) {
+  void OldAddFontToResources(FontResource& font) {
     if (!font.IsLoaded() || !font.ResourceBuffer()) {
       return;
     }
@@ -204,13 +284,116 @@ class MultiResourcePacker {
                    font.Url());
   }
 
+  void AddFontToResources(Document& document, FontResource& font) {
+    if (!MHTMLImprovementsEnabled()) {
+      OldAddFontToResources(font);
+      return;
+    }
+
+    // Check if the font is loaded. Loaded fonts may not have raw resource data,
+    // so we ignore `font.ResourceBuffer()`.
+    if (!font.GetCustomFontData()) {
+      return;
+    }
+
+    if (!ShouldAddURL(font.Url())) {
+      return;
+    }
+
+    // Add a resource entry pointing to the new `ResourceWaiter`.
+    ResourceEntry entry;
+    entry.waiter_index = resource_waiters_.size();
+    resources_.push_back(std::move(entry));
+
+    // Start fetching the font data.
+    ResourceLoaderOptions loader_options(
+        document.GetExecutionContext()->GetCurrentWorld());
+    loader_options.synchronous_policy =
+        SynchronousPolicy::kRequestAsynchronously;
+    ResourceRequest request(font.Url());
+    // MHTML serialization is run frequently on Android Chrome to save pages
+    // after they are loaded, so that they can be restored later without an
+    // internet connection. `kForceCache` avoids adding additional network
+    // requests that could impact performance. If a font isn't cached, the
+    // fallback font is typically usable.
+    request.SetCacheMode(mojom::blink::FetchCacheMode::kForceCache);
+    request.SetRequestContext(mojom::blink::RequestContextType::FONT);
+    FetchParameters fetch_params(std::move(request), loader_options);
+    auto* waiter = MakeGarbageCollected<ResourceWaiter>(this);
+    RawResource::Fetch(fetch_params, document.Fetcher(), waiter);
+
+    resource_waiters_.push_back(waiter);
+  }
+
+  void Finish(base::OnceCallback<void(Deque<SerializedResource>)>
+                  resources_ready_callback) {
+    resources_ready_callback_ = std::move(resources_ready_callback);
+    finished_ = true;
+    CallReadyIfFinished();
+  }
+
+  void ResourceFetchComplete() {
+    ++resource_done_count_;
+    CallReadyIfFinished();
+  }
+
  private:
+  struct ResourceEntry {
+    ResourceEntry() = default;
+    explicit ResourceEntry(std::optional<SerializedResource> r)
+        : resource(std::move(r)) {}
+
+    // The serialized resource. May be nullopt for resources loaded
+    // asynchronously.
+    std::optional<SerializedResource> resource;
+    // For asynchronously loaded resources, this is the index into
+    // `resource_waiters_`.
+    std::optional<wtf_size_t> waiter_index;
+  };
+
+  void CallReadyIfFinished() {
+    if (finished_ && resource_done_count_ == resource_waiters_.size()) {
+      Deque<SerializedResource> resources;
+      for (ResourceEntry& entry : resources_) {
+        if (entry.waiter_index) {
+          entry.resource =
+              resource_waiters_[*entry.waiter_index]->TakeResource();
+        }
+        if (entry.resource) {
+          resources.push_back(std::move(*entry.resource));
+        }
+      }
+      resources_.clear();
+      std::move(resources_ready_callback_).Run(std::move(resources));
+    }
+  }
+
   // This hashset is only used for de-duplicating resources to be serialized.
   HashSet<KURL> resource_urls_;
-
-  Deque<SerializedResource>* resources_;
+  Deque<ResourceEntry> resources_;
   WebFrameSerializer::MHTMLPartsGenerationDelegate* web_delegate_;
+  // Whether `Finish()` has been called.
+  bool finished_ = false;
+  // Number of `ResourceWaiter`s that have completed.
+  wtf_size_t resource_done_count_ = 0;
+  HeapVector<Member<ResourceWaiter>> resource_waiters_;
+  base::OnceCallback<void(Deque<SerializedResource>)> resources_ready_callback_;
 };
+
+void ResourceWaiter::Trace(Visitor* visitor) const {
+  RawResourceClient::Trace(visitor);
+  visitor->Trace(packer_);
+}
+
+void ResourceWaiter::NotifyFinished(Resource* resource) {
+  if (!resource->ErrorOccurred() && resource->ResourceBuffer()) {
+    serialized_resource_ =
+        SerializedResource(resource->Url(), resource->GetResponse().MimeType(),
+                           resource->ResourceBuffer());
+  }
+  packer_->ResourceFetchComplete();
+  resource->RemoveClient(this);
+}
 
 class SerializerMarkupAccumulator : public MarkupAccumulator {
   STACK_ALLOCATED();
@@ -303,8 +486,9 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
     return true;
   }
 
-  EmitChoice WillProcessAttribute(const Element& element,
-                                  const Attribute& attribute) const override {
+  EmitAttributeChoice WillProcessAttribute(
+      const Element& element,
+      const Attribute& attribute) const override {
     // TODO(fgorski): Presence of srcset attribute causes MHTML to not display
     // images, as only the value of src is pulled into the archive. Discarding
     // srcset prevents the problem. Long term we should make sure to MHTML plays
@@ -312,7 +496,7 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
     if (IsA<HTMLImageElement>(element) &&
         (attribute.LocalName() == html_names::kSrcsetAttr ||
          attribute.LocalName() == html_names::kSizesAttr)) {
-      return EmitChoice::kIgnore;
+      return EmitAttributeChoice::kIgnore;
     }
 
     // Do not save ping attribute since anyway the ping will be blocked from
@@ -320,7 +504,7 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
     // TODO(crbug.com/369219144): Should this be IsA<HTMLAnchorElementBase>?
     if (IsA<HTMLAnchorElement>(element) &&
         attribute.LocalName() == html_names::kPingAttr) {
-      return EmitChoice::kIgnore;
+      return EmitAttributeChoice::kIgnore;
     }
 
     // The special attribute in a template element to denote the shadow DOM
@@ -330,7 +514,7 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
         (attribute.LocalName() == kShadowModeAttributeName ||
          attribute.LocalName() == kShadowDelegatesFocusAttributeName) &&
         !shadow_template_elements_.Contains(&element)) {
-      return EmitChoice::kIgnore;
+      return EmitAttributeChoice::kIgnore;
     }
 
     // If srcdoc attribute for frame elements will be rewritten as src attribute
@@ -341,22 +525,22 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
     String new_link_for_the_element;
     if (is_src_doc_attribute &&
         RewriteLink(element, new_link_for_the_element)) {
-      return EmitChoice::kEmit;
+      return EmitAttributeChoice::kEmit;
     }
 
     //  Drop integrity attribute for those links with subresource loaded.
     auto* html_link_element = DynamicTo<HTMLLinkElement>(element);
     if (attribute.LocalName() == html_names::kIntegrityAttr &&
         html_link_element && html_link_element->sheet()) {
-      return EmitChoice::kIgnore;
+      return EmitAttributeChoice::kIgnore;
     }
 
     // Do not include attributes that contain javascript. This is because the
     // script will not be executed when a MHTML page is being loaded.
     if (element.IsScriptingAttribute(attribute)) {
-      return EmitChoice::kIgnore;
+      return EmitAttributeChoice::kIgnore;
     }
-    return EmitChoice::kEmit;
+    return EmitAttributeChoice::kEmit;
   }
 
   bool RewriteLink(const Element& element, String& rewritten_link) const {
@@ -370,8 +554,8 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
       return false;
     }
 
-    WebString content_id = FrameSerializer::GetContentID(frame);
-    KURL cid_uri = MHTMLParser::ConvertContentIDToURI(content_id);
+    KURL cid_uri = MHTMLParser::ConvertContentIDToURI(
+        FrameSerializer::GetContentID(frame));
     DCHECK(cid_uri.IsValid());
     rewritten_link = cid_uri.GetString();
     return true;
@@ -459,16 +643,16 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
     }
   }
 
-  EmitChoice WillProcessElement(const Element& element) override {
+  EmitElementChoice WillProcessElement(const Element& element) override {
     if (IsA<HTMLScriptElement>(element)) {
-      return EmitChoice::kIgnore;
+      return EmitElementChoice::kIgnore;
     }
     if (IsA<HTMLNoScriptElement>(element)) {
-      return EmitChoice::kIgnore;
+      return EmitElementChoice::kIgnore;
     }
     auto* meta = DynamicTo<HTMLMetaElement>(element);
     if (meta && meta->ComputeEncoding().IsValid()) {
-      return EmitChoice::kIgnore;
+      return EmitElementChoice::kIgnore;
     }
 
     if (MHTMLImprovementsEnabled()) {
@@ -478,33 +662,43 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
               DynamicTo<HTMLStyleElement>(element)) {
         CSSStyleSheet* sheet = style_element->sheet();
         if (sheet) {
-          AppendStylesheet(*sheet);
-          return EmitChoice::kIgnore;
+          // JS may update styles programmatically for a <style> node. We detect
+          // whether this has happened, and serialize the stylesheet if it has.
+          // Otherwise, we leave the <style> node unmodified. Because CSS
+          // serialization isn't perfect, it's better to leave the original
+          // <style> element if possible.
+          SerializeCSSResources(*sheet);
+          if (!sheet->Contents()->IsMutable()) {
+            return EmitElementChoice::kEmit;
+          } else {
+            style_elements_to_replace_contents_.insert(style_element);
+            return EmitElementChoice::kEmitButIgnoreChildren;
+          }
         }
       }
     } else {
       // A <link> element is inserted in `AppendExtraForHeadElement()` as a
       // substitute for this element.
       if (IsA<HTMLStyleElement>(element)) {
-        return EmitChoice::kIgnore;
+        return EmitElementChoice::kIgnore;
       }
     }
 
     if (ShouldIgnoreHiddenElement(element)) {
-      return EmitChoice::kIgnore;
+      return EmitElementChoice::kIgnore;
     }
     if (ShouldIgnoreMetaElement(element)) {
-      return EmitChoice::kIgnore;
+      return EmitElementChoice::kIgnore;
     }
     if (web_delegate_->RemovePopupOverlay() &&
         ShouldIgnorePopupOverlayElement(element)) {
-      return EmitChoice::kIgnore;
+      return EmitElementChoice::kIgnore;
     }
     // Remove <link> for stylesheets that do not load.
     auto* html_link_element = DynamicTo<HTMLLinkElement>(element);
     if (html_link_element && html_link_element->RelAttribute().IsStyleSheet() &&
         !html_link_element->sheet()) {
-      return EmitChoice::kIgnore;
+      return EmitElementChoice::kIgnore;
     }
     return MarkupAccumulator::WillProcessElement(element);
   }
@@ -537,6 +731,14 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
       if (IsA<HTMLHtmlElement>(element)) {
         AppendAdoptedStyleSheets(document_);
       }
+
+      if (const HTMLStyleElement* style_element =
+              DynamicTo<HTMLStyleElement>(element)) {
+        if (style_elements_to_replace_contents_.Contains(style_element)) {
+          CSSStyleSheet* sheet = style_element->sheet();
+          markup_.Append(SerializeInlineCSSStyleSheet(*sheet));
+        }
+      }
     }
     MarkupAccumulator::AppendEndTag(element, prefix);
   }
@@ -565,6 +767,99 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
     if (!MHTMLImprovementsEnabled()) {
       AppendStylesheets(document_->StyleSheets(), true /*style_element_only*/);
     }
+
+    if (MHTMLImprovementsEnabled()) {
+      markup_.Append("<script src=\"");
+      KURL script_url = MakePseudoUrl("js");
+      markup_.Append(script_url.GetString());
+      markup_.Append("\"></script>");
+      AddScriptResource(*document_, script_url);
+    }
+  }
+
+  // Adds a script resource to restore some functionality to the serialized
+  // HTML. We're including this self-contained blob of JS in the MHTML file
+  // instead of compiling it into Chromium because it requires additional
+  // information about custom elements, and packaging the metadata in another
+  // format would require versioning, whereas JS allows it to be all
+  // encapsulated.
+  void AddScriptResource(Document& document, const KURL& script_url) {
+    // Currently, the embedded JS here has one job. It restores the custom
+    // element registry when loading the saved page, to enough fidelity to
+    // ensure the CSS 'defined' selector works.
+    // https://html.spec.whatwg.org/multipage/semantics-other.html#selector-defined.
+    // Note that we do not need to actually restore any other functionality to
+    // the custom elements because we are already saving a snapshot of the
+    // element's shadow DOM, and our goal is to save a static snapshot of the
+    // page.
+    auto metadata = std::make_unique<JSONObject>();
+    auto custom_elements = std::make_unique<JSONArray>();
+    CustomElementRegistry* custom_registry = CustomElement::Registry(document);
+    if (custom_registry) {
+      for (const AtomicString& name : custom_registry->DefinedNames()) {
+        CustomElementDefinition* definition =
+            custom_registry->DefinitionForName(name);
+        auto saved_definition = std::make_unique<JSONObject>();
+        // There are two types of custom elements.
+        // 1. autonomous elements, which always extend HTMLElement.
+        // 2. customized built-in elements, which can extend standard HTML
+        // elements. Here, "local_name" is the name of the extended element,
+        // i.e. HTMLParagraphElement.
+        saved_definition->SetString("name", name);
+        saved_definition->SetBoolean("is_autonomous",
+                                     definition->Descriptor().IsAutonomous());
+        if (!definition->Descriptor().IsAutonomous()) {
+          saved_definition->SetString("local_name",
+                                      definition->Descriptor().LocalName());
+        }
+        custom_elements->PushObject(std::move(saved_definition));
+      }
+    }
+    metadata->SetArray("custom_elements", std::move(custom_elements));
+
+    // Note that we try/catch for addCustomElement below because it's possible
+    // but not expected for it to fail, i.e. if standard HTML element type is
+    // removed.
+    StringView main_script = R"js(
+function addCustomElement(def) {
+  if (def.is_autonomous) {
+      window.customElements.define(def.name, class extends HTMLElement{});
+  } else {
+    const templateElement = document.createElement(def.local_name);
+    const baseName = Object.getPrototypeOf(templateElement).constructor.name;
+    const ElementBase = window[baseName];
+    window.customElements.define(def.name, class extends ElementBase {},
+      {extends: def.local_name});
+  }
+}
+
+function addCustomElements(metadata) {
+  for (const def of metadata.custom_elements) {
+    try {
+      addCustomElement(def);
+    } catch (e) {
+      console.log(e);
+    }
+  }
+}
+
+function main(metadata) {
+  addCustomElements(metadata);
+}
+)js";
+
+    StringBuilder builder;
+    builder.Append("(()=>{");
+    {
+      builder.Append(main_script);
+      builder.Append("main(");
+      metadata->WriteJSON(&builder);
+      builder.Append(");");
+    }
+    builder.Append("})();");
+    resource_serializer_->AddToResources(SerializedResource(
+        script_url, "text/javascript",
+        SharedBuffer::Create(builder.ToString().RawByteSpan())));
   }
 
   // Add `sheet` as a new resource and emit a <link> element to load it.
@@ -738,6 +1033,44 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
     }
   }
 
+  // Serializes `style_sheet` as text that can be added to an inline <style>
+  // tag. Ensures the style sheet does not include the </style> end tag.
+  String SerializeInlineCSSStyleSheet(CSSStyleSheet& style_sheet) {
+    StringBuilder css_text;
+    for (unsigned i = 0; i < style_sheet.length(); ++i) {
+      CSSRule* rule = style_sheet.ItemInternal(i);
+      String item_text = rule->cssText();
+      if (!item_text.empty()) {
+        css_text.Append(item_text);
+        if (i < style_sheet.length() - 1) {
+          css_text.Append("\n\n");
+        }
+      }
+    }
+
+    // `css_text` is the text that has already been parsed from the <style> tag,
+    // so it does not retain escape sequences. The only time we would need to
+    // emit an escape sequence is if the </style> tag appears within `css_text`.
+    // Parsing <style> contents is described in
+    // https://html.spec.whatwg.org/multipage/parsing.html#rawtext-state.
+    // Note that when replacing the "style" text. HTML tags are case
+    // insensitive, but this is escaped, so it's not not actually an HTML end
+    // tag.
+    return blink::internal::ReplaceAllCaseInsensitive(
+        css_text.ToString(), "</style", [](const String& text) {
+          StringBuilder builder;
+          builder.Append("\\3C/");  // \3C = '<'.
+          builder.Append(text.Substring(2));
+          return builder.ReleaseString();
+        });
+  }
+
+  // Attempts to serialize a stylesheet, if necessary. Does a couple things:
+  // 1. If `url` is valid and not a data URL, and we haven't already serialized
+  // this url, then serialize the stylesheet into a new resource. Note that this
+  // process is lossy, and may not perfectly reflect the intended style.
+  // 2. Even if `url` is invalid or a data URL, serialize the resources within
+  // `style_sheet`.
   void SerializeCSSStyleSheet(CSSStyleSheet& style_sheet, const KURL& url) {
     // If the URL is invalid or if it is a data URL this means that this CSS is
     // defined inline, respectively in a <style> tag or in the data URL itself.
@@ -796,12 +1129,17 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
 
     // Sub resources need to be serialized even if the CSS definition doesn't
     // need to be.
+    SerializeCSSResources(style_sheet);
+  }
+
+  // Serializes resources referred to by `style_sheet`.
+  void SerializeCSSResources(CSSStyleSheet& style_sheet) {
     for (unsigned i = 0; i < style_sheet.length(); ++i) {
-      SerializeCSSRule(style_sheet.ItemInternal(i));
+      SerializeCSSRuleResources(style_sheet.ItemInternal(i));
     }
   }
 
-  void SerializeCSSRule(CSSRule* rule) {
+  void SerializeCSSRuleResources(CSSRule* rule) {
     DCHECK(rule->parentStyleSheet()->OwnerDocument());
     Document& document = *rule->parentStyleSheet()->OwnerDocument();
 
@@ -817,6 +1155,9 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
         DCHECK(sheet_base_url.IsValid());
         KURL import_url = KURL(sheet_base_url, import_rule->href());
         if (import_rule->styleSheet()) {
+          // TODO(crbug.com/363289333): When MHTMLImprovementsEnabled(), we
+          // should avoid serializing the imported stylesheet, and instead fetch
+          // the raw CSS resource.
           SerializeCSSStyleSheet(*import_rule->styleSheet(), import_url);
         }
         break;
@@ -832,7 +1173,7 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
       case CSSRule::kStartingStyleRule: {
         CSSRuleList* rule_list = rule->cssRules();
         for (unsigned i = 0; i < rule_list->length(); ++i) {
-          SerializeCSSRule(rule_list->item(i));
+          SerializeCSSRuleResources(rule_list->item(i));
         }
         break;
       }
@@ -912,6 +1253,7 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
       }
 
       resource_serializer_->AddFontToResources(
+          document,
           font_face_src_value->Fetch(document.GetExecutionContext(), nullptr));
     } else if (const auto* css_value_list =
                    DynamicTo<CSSValueList>(css_value)) {
@@ -919,16 +1261,6 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
         RetrieveResourcesForCSSValue(css_value_list->Item(i), document);
       }
     }
-  }
-
-  // There are several improvements being added behind this flag. So far, it
-  // covers:
-  // * Serialize adopted stylesheets
-  // * Serialize styleSheets on shadow roots
-  // * Retain stylesheet order, previously order of stylesheets
-  //   was sometimes wrong.
-  bool MHTMLImprovementsEnabled() const {
-    return base::FeatureList::IsEnabled(blink::features::kMHTML_Improvements);
   }
 
   MultiResourcePacker* resource_serializer_;
@@ -943,7 +1275,14 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
   // Adopted stylesheets can be reused. This stores the set of stylesheets
   // already serialized as resources, along with their URL.
   HeapHashMap<Member<blink::CSSStyleSheet>, KURL> stylesheet_pseudo_urls_;
+
+  // Style elements whose contents will be serialized just before inserting
+  // </style>.
+  HeapHashSet<Member<const HTMLStyleElement>>
+      style_elements_to_replace_contents_;
 };
+
+}  // namespace
 
 // TODO(tiger): Right now there is no support for rewriting URLs inside CSS
 // documents which leads to bugs like <https://crbug.com/251898>. Not being
@@ -954,32 +1293,37 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
 
 // static
 void FrameSerializer::SerializeFrame(
-    Deque<SerializedResource>& resources,
     WebFrameSerializer::MHTMLPartsGenerationDelegate& web_delegate,
-    const LocalFrame& frame) {
+    LocalFrame& frame,
+    base::OnceCallback<void(Deque<SerializedResource>)> done_callback) {
   TRACE_EVENT0("page-serialization", "FrameSerializer::serializeFrame");
   DCHECK(frame.GetDocument());
   Document& document = *frame.GetDocument();
   KURL url = document.Url();
-  MultiResourcePacker resource_serializer(&resources, &web_delegate);
+  auto* resource_serializer =
+      MakeGarbageCollected<MultiResourcePacker>(&web_delegate);
+  auto callback = std::move(done_callback);
   // If frame is an image document, add the image and don't continue
   if (auto* image_document = DynamicTo<ImageDocument>(document)) {
-    resource_serializer.AddImageToResources(image_document->CachedImage(), url);
+    resource_serializer->AddImageToResources(image_document->CachedImage(),
+                                             url);
+    resource_serializer->Finish(std::move(callback));
     return;
   }
 
   {
     TRACE_EVENT0("page-serialization", "FrameSerializer::serializeFrame HTML");
-    SerializerMarkupAccumulator accumulator(&resource_serializer, &web_delegate,
+    SerializerMarkupAccumulator accumulator(resource_serializer, &web_delegate,
                                             document);
     String text =
         accumulator.SerializeNodes<EditingStrategy>(document, kIncludeNode);
 
     std::string frame_html =
         document.Encoding().Encode(text, WTF::kEntitiesForUnencodables);
-    resource_serializer.AddMainResource(
+    resource_serializer->AddMainResource(
         document.SuggestedMIMEType(),
         SharedBuffer::Create(frame_html.c_str(), frame_html.length()), url);
+    resource_serializer->Finish(std::move(callback));
   }
 }
 
@@ -990,9 +1334,7 @@ void FrameSerializer::SerializeFrame(
 String FrameSerializer::MarkOfTheWebDeclaration(const KURL& url) {
   StringBuilder builder;
   bool emits_minus = false;
-  std::string orignal_url = url.GetString().Ascii();
-  for (const char* string = orignal_url.c_str(); *string; ++string) {
-    const char ch = *string;
+  for (const char ch : url.GetString().Ascii()) {
     if (ch == '-' && emits_minus) {
       builder.Append("%2D");
       emits_minus = false;

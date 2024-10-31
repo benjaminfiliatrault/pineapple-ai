@@ -9,7 +9,7 @@ import {BrowserProxyImpl} from 'chrome-untrusted://lens-overlay/browser_proxy.js
 import {CenterRotatedBox_CoordinateType} from 'chrome-untrusted://lens-overlay/geometry.mojom-webui.js';
 import type {CenterRotatedBox} from 'chrome-untrusted://lens-overlay/geometry.mojom-webui.js';
 import type {LensPageRemote} from 'chrome-untrusted://lens-overlay/lens.mojom-webui.js';
-import {UserAction} from 'chrome-untrusted://lens-overlay/lens.mojom-webui.js';
+import {SemanticEvent, UserAction} from 'chrome-untrusted://lens-overlay/lens.mojom-webui.js';
 import type {OverlayObject} from 'chrome-untrusted://lens-overlay/overlay_object.mojom-webui.js';
 import {ScreenshotBitmapBrowserProxyImpl} from 'chrome-untrusted://lens-overlay/screenshot_bitmap_browser_proxy.js';
 import type {SelectionOverlayElement} from 'chrome-untrusted://lens-overlay/selection_overlay.js';
@@ -101,6 +101,10 @@ suite('SelectionOverlay', function() {
       ]),
     ]);
     callbackRouterRemote.textReceived(text);
+    const semanticEventArgs = await testBrowserProxy.handler.getArgs(
+        'recordLensOverlaySemanticEvent');
+    const semanticEvent = semanticEventArgs[semanticEventArgs.length - 1];
+    assertEquals(SemanticEvent.kTextGleamsViewStart, semanticEvent);
     await waitAfterNextRender(selectionOverlayElement);
   }
 
@@ -179,6 +183,20 @@ suite('SelectionOverlay', function() {
     await waitAfterNextRender(selectionOverlayElement);
     await waitAfterNextRender(selectionOverlayElement);
   }
+
+  test(
+      'verify that adding words twice sends a end text view event.',
+      async () => {
+        await addWords();
+        await addWords();
+
+        const semanticEventArgs = await testBrowserProxy.handler.getArgs(
+            'recordLensOverlaySemanticEvent');
+        const penultimateSemanticEvent =
+            semanticEventArgs[semanticEventArgs.length - 2];
+        assertEquals(
+            SemanticEvent.kTextGleamsViewEnd, penultimateSemanticEvent);
+      });
 
   // <if expr="not chromeos_lacros">
   test(
@@ -1288,6 +1306,91 @@ suite('SelectionOverlay', function() {
         postSelectionRenderer.$.postSelection.getBoundingClientRect();
     assertNotEquals(postSelectionBounds.x, newPostSelectionBounds.x);
     assertNotEquals(postSelectionBounds.y, newPostSelectionBounds.y);
+  });
+
+  test('NoTextSelectionIfLanguagePickersOpen', async () => {
+    await addWordsWithTranslations();
+
+    dispatchTranslateStateEvent(
+        selectionOverlayElement.$.textSelectionLayer, true, 'es');
+    await waitAfterNextRender(selectionOverlayElement);
+
+    selectionOverlayElement.setLanguagePickersOpenForTesting(true);
+    let wordEl = selectionOverlayElement.$.textSelectionLayer
+                     .getTranslatedWordNodesForTesting()[0]!;
+    await simulateClick(selectionOverlayElement, {
+      x: wordEl.getBoundingClientRect().left,
+      y: wordEl.getBoundingClientRect().top,
+    });
+    assertEquals(
+        0,
+        metrics.count(
+            'Lens.Overlay.Overlay.UserAction',
+            UserAction.kTranslateTextSelection));
+    assertEquals(
+        0,
+        metrics.count(
+            'Lens.Overlay.Overlay.ByInvocationSource.AppMenu.UserAction',
+            UserAction.kTranslateTextSelection));
+
+    selectionOverlayElement.setLanguagePickersOpenForTesting(false);
+    wordEl = selectionOverlayElement.$.textSelectionLayer
+                 .getTranslatedWordNodesForTesting()[0]!;
+    await simulateClick(selectionOverlayElement, {
+      x: wordEl.getBoundingClientRect().left,
+      y: wordEl.getBoundingClientRect().top,
+    });
+    const textQuery =
+        await testBrowserProxy.handler.whenCalled('issueTextSelectionRequest');
+    assertDeepEquals('wow', textQuery);
+    assertEquals(
+        0, testBrowserProxy.handler.getCallCount('issueLensRegionRequest'));
+    assertEquals(
+        1,
+        metrics.count(
+            'Lens.Overlay.Overlay.UserAction',
+            UserAction.kTranslateTextSelection));
+    assertEquals(
+        1,
+        metrics.count(
+            'Lens.Overlay.Overlay.ByInvocationSource.AppMenu.UserAction',
+            UserAction.kTranslateTextSelection));
+  });
+
+  test('TextSelectionDragIfLanguagePickersOpen', async () => {
+    await addWordsWithTranslations();
+
+    dispatchTranslateStateEvent(
+        selectionOverlayElement.$.textSelectionLayer, true, 'es');
+    await waitAfterNextRender(selectionOverlayElement);
+    selectionOverlayElement.setLanguagePickersOpenForTesting(true);
+
+    const wordEl = selectionOverlayElement.$.textSelectionLayer
+                       .getTranslatedWordNodesForTesting()[0]!;
+    await simulateDrag(
+        selectionOverlayElement, {
+          x: wordEl.getBoundingClientRect().left,
+          y: wordEl.getBoundingClientRect().top,
+        },
+        {x: 80, y: 40});
+
+    const textQuery =
+        await testBrowserProxy.handler.whenCalled('issueTextSelectionRequest');
+    assertDeepEquals('wow a translation no', textQuery);
+    assertEquals(
+        0, testBrowserProxy.handler.getCallCount('issueLensRegionRequest'));
+    assertFalse(
+        selectionOverlayElement.getShowSelectedRegionContextMenuForTesting());
+    assertEquals(
+        1,
+        metrics.count(
+            'Lens.Overlay.Overlay.UserAction',
+            UserAction.kTranslateTextSelection));
+    assertEquals(
+        1,
+        metrics.count(
+            'Lens.Overlay.Overlay.ByInvocationSource.AppMenu.UserAction',
+            UserAction.kTranslateTextSelection));
   });
 
   suite('InvocationSourceContextMenuImage', function() {

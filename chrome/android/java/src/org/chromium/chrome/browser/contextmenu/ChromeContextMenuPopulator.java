@@ -94,7 +94,6 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     private final Supplier<ShareDelegate> mShareDelegateSupplier;
     private final ExternalAuthUtils mExternalAuthUtils;
     private final ContextMenuParams mParams;
-    private @Nullable UkmRecorder.Bridge mUkmRecorderBridge;
     private ContextMenuNativeDelegate mNativeDelegate;
     private static final String LENS_SUPPORT_STATUS_HISTOGRAM_NAME =
             "ContextMenu.LensSupportStatus";
@@ -384,8 +383,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                 if (checkSupportsGoogleSearchByImage(isSrcDownloadableScheme)) {
                     // Determine which image search menu item would be shown.
                     boolean shouldShowSearchImageWithLens =
-                            shouldShowSearchWithLensAndRecordMetrics(
-                                    mParams.getPageUrl(), mItemDelegate.isIncognito());
+                            shouldShowSearchWithLensAndRecordMetrics(mItemDelegate.isIncognito());
                     if (shouldShowSearchImageWithLens) {
                         imageGroup.add(createListItem(Item.SEARCH_WITH_GOOGLE_LENS, true));
                         maybeRecordUkmLensShown();
@@ -662,10 +660,10 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             mItemDelegate.onOpenInChrome(mParams.getUrl(), mParams.getPageUrl());
         } else if (itemId == R.id.contextmenu_open_in_new_chrome_tab) {
             recordContextMenuSelection(ContextMenuUma.Action.OPEN_IN_NEW_CHROME_TAB);
-            mItemDelegate.onOpenInNewChromeTabFromCCT(mParams.getUrl(), false);
+            mItemDelegate.onOpenInNewChromeTabFromCct(mParams.getUrl(), false);
         } else if (itemId == R.id.contextmenu_open_in_chrome_incognito_tab) {
             recordContextMenuSelection(ContextMenuUma.Action.OPEN_IN_CHROME_INCOGNITO_TAB);
-            mItemDelegate.onOpenInNewChromeTabFromCCT(mParams.getUrl(), true);
+            mItemDelegate.onOpenInNewChromeTabFromCct(mParams.getUrl(), true);
         } else if (itemId == R.id.contextmenu_open_in_browser_id) {
             recordContextMenuSelection(ContextMenuUma.Action.OPEN_IN_BROWSER);
             mItemDelegate.onOpenInDefaultBrowser(mParams.getUrl());
@@ -868,16 +866,14 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     }
 
     /**
-     * Whether the lens menu items should be shown based on a set of application
-     * compatibility checks.
+     * Whether the lens menu items should be shown based on a set of application compatibility
+     * checks.
      *
-     * @param pageUrl The Url associated with the main frame of the page that triggered the context
-     *         menu.
      * @param isIncognito Whether the user is incognito.
      * @return A boolean. True if "Search image with Google Lens" should be enabled, otherwise
-     *         False.
+     *     False.
      */
-    private boolean shouldShowSearchWithLensAndRecordMetrics(GURL pageUrl, boolean isIncognito) {
+    private boolean shouldShowSearchWithLensAndRecordMetrics(boolean isIncognito) {
         // If Google Lens feature is not supported, show search by image menu item.
         if (!LensUtils.isGoogleLensFeatureEnabled(isIncognito)) {
             return false;
@@ -1004,41 +1000,33 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         maybeRecordBooleanUkm("ContextMenuAndroid.Shown", actionName);
     }
 
-    /** Initialize the bridge if not yet created. */
-    private void initializeUkmRecorderBridge() {
-        if (mUkmRecorderBridge == null) {
-            mUkmRecorderBridge = new UkmRecorder.Bridge();
-        }
-    }
-
     /**
      * Record a boolean UKM if the lens feature is enabled.
+     *
      * @param eventName The name of the UKM event to record.
      * @param metricName The name of the UKM metric to record.
      */
     private void maybeRecordBooleanUkm(String eventName, String metricName) {
         // Disable UKM reporting when incognito.
         if (mItemDelegate.isIncognito()) return;
-        initializeUkmRecorderBridge();
         WebContents webContents = mItemDelegate.getWebContents();
         if (webContents != null) {
-            mUkmRecorderBridge.recordEventWithBooleanMetric(webContents, eventName, metricName);
+            new UkmRecorder(webContents, eventName).addBooleanMetric(metricName).record();
         }
     }
 
     /**
      * Record a UKM for a menu action if the lens feature is enabled.
+     *
      * @param eventName The name of the boolean UKM event to record.
      * @param actionId The id of the action corresponding the ContextMenuUma.Action enum.
      */
     private void maybeRecordActionUkm(String eventName, int actionId) {
         // Disable UKM reporting when incognito.
         if (mItemDelegate.isIncognito()) return;
-        initializeUkmRecorderBridge();
         WebContents webContents = mItemDelegate.getWebContents();
         if (webContents != null) {
-            mUkmRecorderBridge.recordEventWithIntegerMetric(
-                    webContents, eventName, "Action", actionId);
+            new UkmRecorder(webContents, eventName).addMetric("Action", actionId).record();
         }
     }
 

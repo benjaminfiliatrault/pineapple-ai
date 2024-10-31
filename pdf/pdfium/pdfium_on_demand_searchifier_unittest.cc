@@ -4,6 +4,7 @@
 
 #include "pdf/pdfium/pdfium_on_demand_searchifier.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -14,15 +15,22 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
+#include "pdf/accessibility_structs.h"
 #include "pdf/pdf_features.h"
 #include "pdf/pdfium/pdfium_range.h"
 #include "pdf/pdfium/pdfium_test_base.h"
 #include "pdf/test/test_client.h"
 #include "services/screen_ai/public/mojom/screen_ai_service.mojom.h"
 
+namespace chrome_pdf {
+
 namespace {
 
-void WaitUntilIdle(chrome_pdf::PDFiumOnDemandSearchifier* searchifier,
+using VisualAnnotationPtr = screen_ai::mojom::VisualAnnotationPtr;
+
+constexpr base::TimeDelta kOcrDelay = base::Milliseconds(100);
+
+void WaitUntilIdle(PDFiumOnDemandSearchifier* searchifier,
                    base::OnceClosure callback) {
   if (searchifier->IsIdleForTesting()) {
     std::move(callback).Run();
@@ -32,10 +40,10 @@ void WaitUntilIdle(chrome_pdf::PDFiumOnDemandSearchifier* searchifier,
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&WaitUntilIdle, searchifier, std::move(callback)),
-      base::Milliseconds(100));
+      kOcrDelay);
 }
 
-void WaitUntilFailure(chrome_pdf::PDFiumOnDemandSearchifier* searchifier,
+void WaitUntilFailure(PDFiumOnDemandSearchifier* searchifier,
                       base::OnceClosure callback) {
   if (searchifier->HasFailed()) {
     std::move(callback).Run();
@@ -45,11 +53,20 @@ void WaitUntilFailure(chrome_pdf::PDFiumOnDemandSearchifier* searchifier,
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&WaitUntilFailure, searchifier, std::move(callback)),
-      base::Milliseconds(100));
+      kOcrDelay);
 }
 
-screen_ai::mojom::VisualAnnotationPtr CreateDummyAnnotation(int call_number) {
-  auto annotation = screen_ai::mojom::VisualAnnotation::New();
+void WaitForOneTimingCycle(base::OnceClosure callback) {
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE, std::move(callback), kOcrDelay);
+}
+
+VisualAnnotationPtr CreateEmptyAnnotation() {
+  return screen_ai::mojom::VisualAnnotation::New();
+}
+
+VisualAnnotationPtr CreateSampleAnnotation(int call_number) {
+  auto annotation = CreateEmptyAnnotation();
   auto line_box = screen_ai::mojom::LineBox::New();
   line_box->baseline_box = gfx::Rect(0, 0, 100, 100);
   line_box->baseline_box_angle = 0;
@@ -65,8 +82,6 @@ screen_ai::mojom::VisualAnnotationPtr CreateDummyAnnotation(int call_number) {
 }
 
 }  // namespace
-
-namespace chrome_pdf {
 
 class PDFiumOnDemandSearchifierTest : public PDFiumTestBase {
  public:
@@ -87,36 +102,30 @@ class PDFiumOnDemandSearchifierTest : public PDFiumTestBase {
     PDFiumTestBase::TearDown();
   }
 
-  void StartSearchify() {
+  void StartSearchify(bool empty_results) {
     // `engine_` is owned by this class, safe to use as unretained.
     engine_->StartSearchify(
         base::BindRepeating(&PDFiumOnDemandSearchifierTest::MockPerformOcr,
-                            base::Unretained(this)));
+                            base::Unretained(this), empty_results));
   }
 
-  void MockPerformOcr(
-      const SkBitmap& image,
-      base::OnceCallback<void(screen_ai::mojom::VisualAnnotationPtr)>
-          callback) {
+  void MockPerformOcr(bool empty_results,
+                      const SkBitmap& /*image*/,
+                      base::OnceCallback<void(VisualAnnotationPtr)> callback) {
+    VisualAnnotationPtr results = empty_results
+                                      ? CreateEmptyAnnotation()
+                                      : CreateSampleAnnotation(performed_ocrs_);
     // Reply with delay, as done through mojo connection to the OCR service.
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(
-            [](base::OnceCallback<void(screen_ai::mojom::VisualAnnotationPtr)>
-                   callback,
-               int call_number) {
-              std::move(callback).Run(CreateDummyAnnotation(call_number));
-            },
-            std::move(callback), performed_ocrs_),
+        FROM_HERE, base::BindOnce(std::move(callback), std::move(results)),
         base::Milliseconds(100));
 
     performed_ocrs_++;
   }
 
   // Returns all characters in the page.
-  std::string GetPageText(chrome_pdf::PDFiumPage* page) {
-    return base::UTF16ToUTF8(
-        chrome_pdf::PDFiumRange::AllTextOnPage(page).GetText());
+  std::string GetPageText(PDFiumPage& page) {
+    return base::UTF16ToUTF8(PDFiumRange::AllTextOnPage(&page).GetText());
   }
 
   int performed_ocrs() const { return performed_ocrs_; }
@@ -132,9 +141,12 @@ class PDFiumOnDemandSearchifierTest : public PDFiumTestBase {
 TEST_P(PDFiumOnDemandSearchifierTest, NoImage) {
   CreateEngine(FILE_PATH_LITERAL("hello_world2.pdf"));
 
+  PDFiumPage& page = GetPDFiumPageForTest(*engine(), 0);
+
   // Load the page to trigger searchify checking.
-  engine()->GetPage(0)->GetPage();
+  page.GetPage();
   ASSERT_FALSE(engine()->PageNeedsSearchify(0));
+  EXPECT_FALSE(page.IsPageSearchified());
 
   // Searchifier should not be created as it's not needed yet.
   ASSERT_FALSE(engine()->GetSearchifierForTesting());
@@ -143,8 +155,10 @@ TEST_P(PDFiumOnDemandSearchifierTest, NoImage) {
 TEST_P(PDFiumOnDemandSearchifierTest, OnePageWithImages) {
   CreateEngine(FILE_PATH_LITERAL("image_alt_text.pdf"));
 
+  PDFiumPage& page = GetPDFiumPageForTest(*engine(), 0);
+
   // Load the page to trigger searchify checking.
-  engine()->GetPage(0)->GetPage();
+  page.GetPage();
   ASSERT_TRUE(engine()->PageNeedsSearchify(0));
 
   PDFiumOnDemandSearchifier* searchifier = engine()->GetSearchifierForTesting();
@@ -152,16 +166,42 @@ TEST_P(PDFiumOnDemandSearchifierTest, OnePageWithImages) {
 
   ASSERT_TRUE(searchifier->IsPageScheduled(0));
 
-  StartSearchify();
+  StartSearchify(/*empty_results=*/false);
+
+  base::test::TestFuture<void> future;
+  WaitUntilIdle(searchifier, future.GetCallback());
+  ASSERT_TRUE(future.Wait());
+
+  // The page has 2 images, so the text contains 2 fake OCR results.
+  ASSERT_EQ(performed_ocrs(), 2);
+  EXPECT_TRUE(page.IsPageSearchified());
+  ASSERT_EQ(GetPageText(page), "OCR Text 0\r\nOCR Text 1");
+}
+
+TEST_P(PDFiumOnDemandSearchifierTest, PageWithImagesNoRecognizableText) {
+  CreateEngine(FILE_PATH_LITERAL("image_alt_text.pdf"));
+
+  PDFiumPage& page = GetPDFiumPageForTest(*engine(), 0);
+
+  // Load the page to trigger searchify checking.
+  page.GetPage();
+  ASSERT_TRUE(engine()->PageNeedsSearchify(0));
+
+  PDFiumOnDemandSearchifier* searchifier = engine()->GetSearchifierForTesting();
+  ASSERT_TRUE(searchifier);
+
+  ASSERT_TRUE(searchifier->IsPageScheduled(0));
+
+  StartSearchify(/*empty_results=*/true);
 
   base::test::TestFuture<void> future;
   WaitUntilIdle(searchifier, future.GetCallback());
   ASSERT_TRUE(future.Wait());
   ASSERT_EQ(performed_ocrs(), 2);
+  EXPECT_TRUE(page.IsPageSearchified());
 
-  // The page has two images.
-  std::string page_text = GetPageText(engine()->GetPage(0));
-  ASSERT_EQ(page_text, "OCR Text 0\r\nOCR Text 1");
+  // The page has two images, but no recognizable text.
+  EXPECT_TRUE(GetPageText(page).empty());
 }
 
 TEST_P(PDFiumOnDemandSearchifierTest, MultiplePagesWithImages) {
@@ -170,7 +210,7 @@ TEST_P(PDFiumOnDemandSearchifierTest, MultiplePagesWithImages) {
 
   // Trigger page load and verify needing searchify.
   for (int page = 0; page < kPageCount; page++) {
-    engine()->GetPage(page)->GetPage();
+    GetPDFiumPageForTest(*engine(), page).GetPage();
     ASSERT_TRUE(engine()->PageNeedsSearchify(page));
   }
 
@@ -182,16 +222,66 @@ TEST_P(PDFiumOnDemandSearchifierTest, MultiplePagesWithImages) {
     ASSERT_TRUE(searchifier->IsPageScheduled(page)) << page;
   }
 
-  StartSearchify();
+  StartSearchify(/*empty_results=*/false);
 
   base::test::TestFuture<void> future;
   WaitUntilIdle(searchifier, future.GetCallback());
   ASSERT_TRUE(future.Wait());
   ASSERT_EQ(performed_ocrs(), 4);
-  EXPECT_EQ(GetPageText(engine()->GetPage(0)), "OCR Text 0");
-  EXPECT_EQ(GetPageText(engine()->GetPage(1)), "OCR Text 1");
-  EXPECT_EQ(GetPageText(engine()->GetPage(2)), "OCR Text 2");
-  EXPECT_EQ(GetPageText(engine()->GetPage(3)), "OCR Text 3");
+  EXPECT_EQ(GetPageText(GetPDFiumPageForTest(*engine(), 0)), "OCR Text 0");
+  EXPECT_EQ(GetPageText(GetPDFiumPageForTest(*engine(), 1)), "OCR Text 1");
+  EXPECT_EQ(GetPageText(GetPDFiumPageForTest(*engine(), 2)), "OCR Text 2");
+  EXPECT_EQ(GetPageText(GetPDFiumPageForTest(*engine(), 3)), "OCR Text 3");
+}
+
+TEST_P(PDFiumOnDemandSearchifierTest, MultipleImagesWithUnload) {
+  CreateEngine(FILE_PATH_LITERAL("image_alt_text.pdf"));
+
+  PDFiumPage& page = GetPDFiumPageForTest(*engine(), 0);
+
+  // Load the page to trigger searchify checking.
+  page.GetPage();
+  ASSERT_TRUE(engine()->PageNeedsSearchify(0));
+
+  PDFiumOnDemandSearchifier* searchifier = engine()->GetSearchifierForTesting();
+  ASSERT_TRUE(searchifier);
+
+  ASSERT_TRUE(searchifier->IsPageScheduled(0));
+
+  ASSERT_EQ(performed_ocrs(), 0);
+  StartSearchify(/*empty_results=*/false);
+  ASSERT_EQ(performed_ocrs(), 1);
+
+  // Check the partially Searchified state after performing 1 of 2 OCRs. There
+  // is no text, considering the OCR result has not arrived yet.
+  EXPECT_FALSE(page.IsPageSearchified());
+  ASSERT_EQ(GetPageText(page), "");
+
+  {
+    // Wait for the first OCR result to arrive.
+    base::test::TestFuture<void> future;
+    WaitForOneTimingCycle(future.GetCallback());
+    ASSERT_TRUE(future.Wait());
+  }
+
+  // OCR result arrived, but the second OCR has not finished, so there is still
+  // nothing added to the page.
+  EXPECT_FALSE(page.IsPageSearchified());
+  ASSERT_EQ(GetPageText(page), "");
+
+  // Unloading the page, resulting in canceling the task in `searchifier`.
+  page.Unload();
+  ASSERT_FALSE(searchifier->IsPageScheduled(0));
+
+  // Let `searchifier` finish.
+  base::test::TestFuture<void> future;
+  WaitUntilIdle(searchifier, future.GetCallback());
+  ASSERT_TRUE(future.Wait());
+
+  // Searchify finished, but OCR results are not added to the page.
+  ASSERT_EQ(performed_ocrs(), 2);
+  EXPECT_FALSE(page.IsPageSearchified());
+  ASSERT_EQ(GetPageText(page), "");
 }
 
 TEST_P(PDFiumOnDemandSearchifierTest, MultiplePagesWithUnload) {
@@ -200,30 +290,65 @@ TEST_P(PDFiumOnDemandSearchifierTest, MultiplePagesWithUnload) {
 
   // Trigger page load for all.
   for (int page = 0; page < kPageCount; page++) {
-    ASSERT_TRUE(engine()->GetPage(page)->GetPage());
+    ASSERT_TRUE(GetPDFiumPageForTest(*engine(), page).GetPage());
   }
 
-  engine()->GetPage(0)->Unload();
+  PDFiumPage& page0 = GetPDFiumPageForTest(*engine(), 0);
+  page0.Unload();
 
   PDFiumOnDemandSearchifier* searchifier = engine()->GetSearchifierForTesting();
   ASSERT_TRUE(searchifier);
   ASSERT_FALSE(searchifier->IsPageScheduled(0));
 
-  StartSearchify();
+  StartSearchify(/*empty_results=*/false);
 
   base::test::TestFuture<void> future;
   WaitUntilIdle(searchifier, future.GetCallback());
   ASSERT_TRUE(future.Wait());
   ASSERT_EQ(performed_ocrs(), kPageCount - 1);
 
-  // First page is not searchified.
-  std::string page_text = GetPageText(engine()->GetPage(0));
-  EXPECT_TRUE(page_text.empty());
+  // First page is not Searchified.
+  EXPECT_TRUE(GetPageText(page0).empty());
+  EXPECT_FALSE(page0.IsPageSearchified());
+  EXPECT_FALSE(page0.GetTextRunInfo(0).has_value());
 
-  // Other pages are searchified.
-  EXPECT_EQ(GetPageText(engine()->GetPage(1)), "OCR Text 0");
-  EXPECT_EQ(GetPageText(engine()->GetPage(2)), "OCR Text 1");
-  EXPECT_EQ(GetPageText(engine()->GetPage(3)), "OCR Text 2");
+  // Other pages are Searchified.
+  PDFiumPage& page1 = GetPDFiumPageForTest(*engine(), 1);
+  EXPECT_EQ(GetPageText(page1), "OCR Text 0");
+  EXPECT_TRUE(page1.IsPageSearchified());
+  std::optional<AccessibilityTextRunInfo> page1_info = page1.GetTextRunInfo(0);
+  ASSERT_TRUE(page1_info.has_value());
+  EXPECT_TRUE(page1_info.value().is_searchified);
+
+  PDFiumPage& page2 = GetPDFiumPageForTest(*engine(), 2);
+  EXPECT_EQ(GetPageText(page2), "OCR Text 1");
+  EXPECT_TRUE(page2.IsPageSearchified());
+  std::optional<AccessibilityTextRunInfo> page2_info = page2.GetTextRunInfo(0);
+  ASSERT_TRUE(page2_info.has_value());
+  EXPECT_TRUE(page2_info.value().is_searchified);
+
+  PDFiumPage& page3 = GetPDFiumPageForTest(*engine(), 3);
+  EXPECT_EQ(GetPageText(page3), "OCR Text 2");
+  EXPECT_TRUE(page3.IsPageSearchified());
+  std::optional<AccessibilityTextRunInfo> page3_info = page3.GetTextRunInfo(0);
+  ASSERT_TRUE(page3_info.has_value());
+  EXPECT_TRUE(page3_info.value().is_searchified);
+
+  // Unload a Searchified page.
+  page3.Unload();
+
+  // Get the text from the page, which reloads the page. It still has the
+  // Searchified text because OCR finished and the text has been committed into
+  // the page.
+  EXPECT_EQ(GetPageText(page3), "OCR Text 2");
+  EXPECT_TRUE(page3.IsPageSearchified());
+
+  // Fetch `page3_info` again.
+  page3_info = page3.GetTextRunInfo(0);
+  ASSERT_TRUE(page3_info.has_value());
+  // TODO(crbug.com/376304020): Figure out how to properly track Searchified
+  // text, so this returns true.
+  EXPECT_FALSE(page3_info.value().is_searchified);
 }
 
 TEST_P(PDFiumOnDemandSearchifierTest, OcrCancellation) {
@@ -232,10 +357,10 @@ TEST_P(PDFiumOnDemandSearchifierTest, OcrCancellation) {
 
   // Trigger page load for all.
   for (int page = 0; page < kPageCount; page++) {
-    ASSERT_TRUE(engine()->GetPage(page)->GetPage());
+    ASSERT_TRUE(GetPDFiumPageForTest(*engine(), page).GetPage());
   }
 
-  StartSearchify();
+  StartSearchify(/*empty_results=*/false);
   engine()->GetOcrDisconnectHandler().Run();
 
   base::test::TestFuture<void> future;

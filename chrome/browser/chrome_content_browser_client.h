@@ -17,7 +17,6 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
-#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
@@ -225,6 +224,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool IsHandledURL(const GURL& url) override;
   bool HasCustomSchemeHandler(content::BrowserContext* browser_context,
                               const std::string& scheme) override;
+  bool HasWebRequestAPIProxy(content::BrowserContext* browser_context) override;
   bool CanCommitURL(content::RenderProcessHost* process_host,
                     const GURL& url) override;
   void OverrideNavigationParams(
@@ -342,7 +342,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const url::Origin& requesting_origin,
       const url::Origin& embedding_origin) override;
   std::string GetWebBluetoothBlocklist() override;
-  bool IsInterestGroupAPIAllowed(content::RenderFrameHost* render_frame_host,
+  bool IsInterestGroupAPIAllowed(content::BrowserContext* browser_context,
+                                 content::RenderFrameHost* render_frame_host,
                                  InterestGroupApiOperation operation,
                                  const url::Origin& top_frame_origin,
                                  const url::Origin& api_origin) override;
@@ -370,6 +371,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       content::RenderFrameHost* rfh,
       const url::Origin& context_origin,
       const url::Origin& reporting_origin) override;
+  // TODO(crbug.com/369436599): Remove the default arguments in virtual methods.
   bool IsSharedStorageAllowed(
       content::BrowserContext* browser_context,
       content::RenderFrameHost* rfh,
@@ -383,6 +385,11 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const url::Origin& accessing_origin,
       std::string* out_debug_message = nullptr,
       bool* out_block_is_site_setting_specific = nullptr) override;
+  bool IsFencedFramesLocalUnpartitionedDataAccessAllowed(
+      content::BrowserContext* browser_context,
+      content::RenderFrameHost* rfh,
+      const url::Origin& top_frame_origin,
+      const url::Origin& accessing_origin) override;
   bool IsPrivateAggregationAllowed(
       content::BrowserContext* browser_context,
       const url::Origin& top_frame_origin,
@@ -601,10 +608,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                                content::WebContents* web_contents) override;
   void RemovePresentationObserver(content::PresentationObserver* observer,
                                   content::WebContents* web_contents) override;
-  bool AddPrivacySandboxAttestationsObserver(
-      content::PrivacySandboxAttestationsObserver* observer) override;
-  void RemovePrivacySandboxAttestationsObserver(
-      content::PrivacySandboxAttestationsObserver* observer) override;
   std::vector<std::unique_ptr<content::NavigationThrottle>>
   CreateThrottlesForNavigation(content::NavigationHandle* handle) override;
   std::vector<std::unique_ptr<content::CommitDeferringCondition>>
@@ -767,7 +770,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       content::WebContents* web_contents,
       content::BrowserContext* browser_context,
       const content::GlobalRequestID& request_id,
-      bool is_request_for_primary_main_frame,
+      bool is_request_for_primary_main_frame_navigation,
+      bool is_request_for_navigation,
       const GURL& url,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
       bool first_auth_attempt,
@@ -1088,10 +1092,9 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void OnUiaProviderRequested(bool uia_provider_enabled) override;
 #endif
 
-  base::ReadOnlySharedMemoryRegion GetPerformanceScenarioRegionForProcess(
-      content::RenderProcessHost* process_host) override;
-  base::ReadOnlySharedMemoryRegion GetGlobalPerformanceScenarioRegion()
-      override;
+  bool ShouldDispatchPagehideDuringCommit(
+      content::BrowserContext* browser_context,
+      const GURL& destination_url) override;
 
   void SetSamplingProfiler(
       std::unique_ptr<MainThreadStackSamplingProfiler> sampling_profiler);
@@ -1180,7 +1183,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   // server for admins.
   void ReportLegacyTechEvent(
       content::RenderFrameHost* render_frame_host,
-      const std::string type,
+      const std::string& type,
       const GURL& url,
       const GURL& frame_url,
       const std::string& filename,

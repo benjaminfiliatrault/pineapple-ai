@@ -24,6 +24,7 @@
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/owned_window_anchor.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/display/display.h"
@@ -883,7 +884,7 @@ void MenuController::OnMouseReleased(SubmenuView* source,
 
     if (menu) {
       if (ShowContextMenu(menu, ConvertToScreen(*source, event.location()),
-                          ui::MENU_SOURCE_MOUSE)) {
+                          ui::mojom::MenuSourceType::kMouse)) {
         return;
       }
     }
@@ -1035,7 +1036,7 @@ void MenuController::OnGestureEvent(SubmenuView* source,
     if (part.type == MenuPartType::kMenuItem && part.menu) {
       if (ShowContextMenu(part.menu,
                           ConvertToScreen(*source, event->location()),
-                          ui::MENU_SOURCE_TOUCH)) {
+                          ui::mojom::MenuSourceType::kTouch)) {
         event->StopPropagation();
       }
     }
@@ -1780,7 +1781,7 @@ bool MenuController::OnKeyPressed(const ui::KeyEvent& event) {
       Button* hot_view = GetFirstHotTrackedView(pending_state_.item);
       if (hot_view) {
         hot_view->ShowContextMenu(hot_view->GetKeyboardContextMenuLocation(),
-                                  ui::MENU_SOURCE_KEYBOARD);
+                                  ui::mojom::MenuSourceType::kKeyboard);
       } else if (pending_state_.item->GetEnabled() &&
                  pending_state_.item->GetRootMenuItem() !=
                      pending_state_.item) {
@@ -1791,7 +1792,7 @@ bool MenuController::OnKeyPressed(const ui::KeyEvent& event) {
         // and invisible item doesn't make sense.
         ShowContextMenu(pending_state_.item,
                         pending_state_.item->GetKeyboardContextMenuLocation(),
-                        ui::MENU_SOURCE_KEYBOARD);
+                        ui::mojom::MenuSourceType::kKeyboard);
       }
       break;
     }
@@ -2007,7 +2008,7 @@ bool MenuController::ShowSiblingMenu(SubmenuView* source,
 
 bool MenuController::ShowContextMenu(MenuItemView* menu_item,
                                      const gfx::Point& screen_location,
-                                     ui::MenuSourceType source_type) {
+                                     ui::mojom::MenuSourceType source_type) {
   // Set the selection immediately, making sure the submenu is only open
   // if it already was.
   int selection_types = SELECTION_UPDATE_IMMEDIATELY;
@@ -2613,6 +2614,22 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(
     if (!monitor_bounds.IsEmpty()) {
       int max_width = monitor_bounds.width() + border_insets.width();
       int max_height = monitor_bounds.height() + border_insets.height();
+      if (!state_.context_menu) {
+        // In case of bubbles, the maximum width is limited by the space
+        // between the display corner and the target area + the tip size.
+        const bool is_bubble_menu =
+            menu_config.use_bubble_border && corner_radius;
+        if (is_anchored_bubble || is_bubble_menu ||
+            item->actual_menu_position() == MenuPosition::kAboveBounds) {
+          // menu_size is expected to include not just the content size
+          // but also the (border and shadow) insets, which can go offscreen.
+          max_height =
+              std::max(anchor_bounds.y() - monitor_bounds.y(),
+                       monitor_bounds.bottom() - anchor_bounds.bottom()) -
+              (is_bubble_menu ? 0 : menu_config.touchable_anchor_offset) +
+              border_insets.height();
+        }
+      }
       // The menu should always have a non-empty available area.
       DCHECK_GE(max_width, kBubbleTipSizeLeftRight);
       DCHECK_GE(max_height, kBubbleTipSizeTopBottom);
@@ -3557,7 +3574,7 @@ void MenuController::SetChildMenuOpenDirectionAtDepth(
   } else if (index < child_menu_open_direction_.size()) {
     child_menu_open_direction_[index] = direction;
   } else {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 }
 

@@ -14,6 +14,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/lens_server_proto/lens_overlay_knowledge_intent_query.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_knowledge_query.pb.h"
+#include "third_party/lens_server_proto/lens_overlay_selection_type.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_stickiness_signals.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_translate_stickiness_signals.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_video_context_input_params.pb.h"
@@ -118,7 +119,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURL) {
                 /*page_url=*/std::nullopt,
                 /*page_title=*/std::nullopt, additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -135,7 +136,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLForLensTextSelection) {
                 /*page_url=*/std::nullopt,
                 /*page_title=*/std::nullopt, additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kLensTextSelection,
+                lens::LensOverlaySelectionType::SELECT_TEXT_HIGHLIGHT,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -167,7 +168,7 @@ TEST_F(LensOverlayUrlBuilderTest,
                 text_query, std::make_optional<GURL>(kPageUrl),
                 std::make_optional<std::string>(kPageTitle), additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -188,7 +189,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLWithPageUrlAndTitle) {
                 text_query, std::make_optional<GURL>(kPageUrl),
                 std::make_optional<std::string>(kPageTitle), additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -209,7 +210,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLWithPageUrl) {
                 text_query, std::make_optional<GURL>(kPageUrl),
                 /*page_title=*/std::nullopt, additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -226,7 +227,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLEmpty) {
                 /*page_url=*/std::nullopt,
                 /*page_title=*/std::nullopt, additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -245,7 +246,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLPunctuation) {
                 /*page_url=*/std::nullopt,
                 /*page_title=*/std::nullopt, additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -264,7 +265,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLWhitespace) {
                 /*page_url=*/std::nullopt,
                 /*page_title=*/std::nullopt, additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -690,6 +691,15 @@ TEST_F(LensOverlayUrlBuilderTest, GetSearchResultsUrlFromRedirectUrl) {
                          escaped_relative_search_url.c_str());
   EXPECT_EQ(lens::GetSearchResultsUrlFromRedirectUrl(GURL(initial_url)),
             GURL(search_url));
+}
+
+TEST_F(LensOverlayUrlBuilderTest, IsLensTextSelectionType) {
+  EXPECT_TRUE(IsLensTextSelectionType(lens::SELECT_TEXT_HIGHLIGHT));
+  EXPECT_TRUE(IsLensTextSelectionType(lens::SELECT_TRANSLATED_TEXT));
+  EXPECT_TRUE(IsLensTextSelectionType(lens::TRANSLATE_CHIP));
+  EXPECT_FALSE(IsLensTextSelectionType(lens::REGION_SEARCH));
+  EXPECT_FALSE(IsLensTextSelectionType(lens::TAP_ON_OBJECT));
+  EXPECT_FALSE(IsLensTextSelectionType(lens::MULTIMODAL_SEARCH));
 }
 
 }  // namespace lens

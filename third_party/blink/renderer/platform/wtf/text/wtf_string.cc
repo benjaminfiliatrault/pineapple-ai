@@ -75,22 +75,11 @@ String::String(const UChar* str) {
 String::String(base::span<const LChar> latin1_data)
     : impl_(latin1_data.data() ? StringImpl::Create(latin1_data) : nullptr) {}
 
-String::String(const LChar* characters, unsigned length)
-    : impl_(characters ? StringImpl::Create(characters, length) : nullptr) {}
-
 String::String(const char* characters, unsigned length)
     : impl_(characters
                 ? StringImpl::Create(reinterpret_cast<const LChar*>(characters),
                                      length)
                 : nullptr) {}
-
-#if defined(ARCH_CPU_64_BITS)
-String::String(const UChar* characters, size_t length)
-    : String(characters, base::checked_cast<unsigned>(length)) {}
-
-String::String(const char* characters, size_t length)
-    : String(characters, base::checked_cast<unsigned>(length)) {}
-#endif  // defined(ARCH_CPU_64_BITS)
 
 int CodeUnitCompare(const String& a, const String& b) {
   return CodeUnitCompare(a.Impl(), b.Impl());
@@ -253,8 +242,8 @@ String String::Format(const char* format, ...) {
     va_end(args);
   }
 
-  CHECK_LT(static_cast<unsigned>(length), buffer.size());
-  return String(reinterpret_cast<const LChar*>(buffer.data()), length);
+  return String(base::as_bytes(
+      base::span(buffer).first(base::checked_cast<size_t>(length))));
 }
 
 String String::EncodeForDebugging() const {
@@ -481,7 +470,11 @@ String String::Make16BitFrom8BitSource(base::span<const LChar> source) {
   return result;
 }
 
-String String::FromUTF8(const LChar* string_start, size_t string_length) {
+String String::FromUTF8(base::span<const uint8_t> bytes) {
+  return FromUTF8(bytes.data(), bytes.size());
+}
+
+String String::FromUTF8(const uint8_t* string_start, size_t string_length) {
   wtf_size_t length = base::checked_cast<wtf_size_t>(string_length);
 
   if (!string_start)
@@ -511,25 +504,22 @@ String String::FromUTF8(const LChar* string_start, size_t string_length) {
   return StringImpl::Create(buffer_start, utf16_length);
 }
 
-String String::FromUTF8(const LChar* string) {
-  if (!string)
+String String::FromUTF8WithLatin1Fallback(base::span<const uint8_t> bytes) {
+  return FromUTF8WithLatin1Fallback(bytes.data(), bytes.size());
+}
+
+String String::FromUTF8(const char* s) {
+  if (!s) {
     return String();
-  return FromUTF8(string, strlen(reinterpret_cast<const char*>(string)));
+  }
+  return FromUTF8(std::string_view(s));
 }
 
-String String::FromUTF8(std::string_view s) {
-  return FromUTF8(reinterpret_cast<const LChar*>(s.data()), s.size());
-}
-
-String String::FromUTF8WithLatin1Fallback(const LChar* string, size_t size) {
+String String::FromUTF8WithLatin1Fallback(const uint8_t* string, size_t size) {
   String utf8 = FromUTF8(string, size);
   if (!utf8)
-    return String(string, base::checked_cast<wtf_size_t>(size));
+    return String(base::span(string, size));
   return utf8;
-}
-
-String String::FromUTF8WithLatin1Fallback(std::string_view s) {
-  return FromUTF8WithLatin1Fallback(s.data(), s.size());
 }
 
 std::ostream& operator<<(std::ostream& out, const String& string) {

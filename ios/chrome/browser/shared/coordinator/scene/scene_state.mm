@@ -58,6 +58,7 @@ ContentVisibility ContentVisibilityForIncognito(BOOL isIncognito) {
 @implementation SceneState {
   ContentVisibility _contentVisibility;
   NSString* _sceneSessionID;
+  AppState* _appState;
 }
 
 - (instancetype)initWithAppState:(AppState*)appState {
@@ -227,7 +228,16 @@ ContentVisibility ContentVisibilityForIncognito(BOOL isIncognito) {
   }
 }
 
+- (void)setProfileState:(ProfileState*)profileState {
+  _profileState = profileState;
+  [self.observers sceneState:self profileStateConnected:_profileState];
+}
+
 #pragma mark - UIBlockerTarget
+
+- (BOOL)isUIBlocked {
+  return _presentingModalOverlay;
+}
 
 - (id<UIBlockerManager>)uiBlockerManager {
   return _appState;
@@ -248,7 +258,7 @@ ContentVisibility ContentVisibilityForIncognito(BOOL isIncognito) {
                        errorHandler:^(NSError* error) {
                          LOG(ERROR) << base::SysNSStringToUTF8(
                              error.localizedDescription);
-                         NOTREACHED_IN_MIGRATION();
+                         NOTREACHED();
                        }];
 }
 

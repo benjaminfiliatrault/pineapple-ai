@@ -119,6 +119,7 @@
 #include "chrome/browser/ash/guest_os/public/guest_os_mount_provider.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_mount_provider_registry.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_service.h"
+#include "chrome/browser/ash/guest_os/public/guest_os_service_factory.h"
 #include "chrome/browser/ash/guest_os/public/types.h"
 #include "chrome/browser/ash/smb_client/smb_errors.h"
 #include "chrome/browser/ash/smb_client/smb_service.h"
@@ -1231,7 +1232,7 @@ class DownloadsTestVolume : public LocalTestVolume {
   // rolled out.
   base::FilePath base_path() const { return root_path().Append("Downloads"); }
 
-  base::FilePath GetFilePath(const std::string relative_path) const {
+  base::FilePath GetFilePath(std::string_view relative_path) const {
     return base_path().Append(relative_path);
   }
 
@@ -1894,11 +1895,9 @@ class DocumentsProviderTestVolume : public TestVolume {
       return 0;
     }
 
-    int64_t file_size = 0;
     const base::FilePath source_path =
         TestVolume::GetTestDataFilePath(entry.source_file_name);
-    bool success = base::GetFileSize(source_path, &file_size);
-    return success ? file_size : 0;
+    return base::GetFileSize(source_path).value_or(0);
   }
 
   std::string GetMimeType(const AddEntriesMessage::TestEntryInfo& entry) {
@@ -4172,7 +4171,7 @@ bool FileManagerBrowserTestBase::HandleGuestOsCommands(
     // TODO(davidmunro): Merge with in-constructor derivation.
     // auto id = guest_os::GuestId(guest_os::VmType::UNKNOWN, *displayName,
     // *displayName);
-    auto* registry = guest_os::GuestOsService::GetForProfile(profile())
+    auto* registry = guest_os::GuestOsServiceFactory::GetForProfile(profile())
                          ->MountProviderRegistry();
     auto id = registry->Register(std::make_unique<MockGuestOsMountProvider>(
         profile()->GetOriginalProfile(), *displayName,
@@ -4196,7 +4195,7 @@ bool FileManagerBrowserTestBase::HandleGuestOsCommands(
     const std::string* str = value.FindString("guestId");
     CHECK(str != nullptr);
     CHECK(base::StringToInt(*str, &id));
-    auto* registry = guest_os::GuestOsService::GetForProfile(profile())
+    auto* registry = guest_os::GuestOsServiceFactory::GetForProfile(profile())
                          ->MountProviderRegistry();
     registry->Unregister(id);
     return true;
@@ -4206,7 +4205,7 @@ bool FileManagerBrowserTestBase::HandleGuestOsCommands(
     const std::string* str = value.FindString("guestId");
     CHECK(str != nullptr);
     CHECK(base::StringToInt(*str, &id));
-    auto* registry = guest_os::GuestOsService::GetForProfile(profile())
+    auto* registry = guest_os::GuestOsServiceFactory::GetForProfile(profile())
                          ->MountProviderRegistry();
     registry->Get(id)->Unmount();
     return true;

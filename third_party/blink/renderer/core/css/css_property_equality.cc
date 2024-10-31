@@ -289,6 +289,8 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return a.BufferedRendering() == b.BufferedRendering();
     case CSSPropertyID::kCaptionSide:
       return a.CaptionSide() == b.CaptionSide();
+    case CSSPropertyID::kCaretAnimation:
+      return a.CaretAnimation() == b.CaretAnimation();
     case CSSPropertyID::kCaretColor:
       return a.CaretColor() == b.CaretColor() &&
              a.InternalVisitedCaretColor() == b.InternalVisitedCaretColor();
@@ -768,6 +770,8 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return a.ViewTransitionGroup() == b.ViewTransitionGroup();
     case CSSPropertyID::kViewTransitionName:
       return a.ViewTransitionName() == b.ViewTransitionName();
+    case CSSPropertyID::kViewTransitionCaptureMode:
+      return a.ViewTransitionCaptureMode() == b.ViewTransitionCaptureMode();
     case CSSPropertyID::kVisibility:
       return a.Visibility() == b.Visibility();
     case CSSPropertyID::kWebkitBorderHorizontalSpacing:
@@ -920,7 +924,6 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return a.Zoom() == b.Zoom();
     case CSSPropertyID::kPositionTryOrder:
       return a.PositionTryOrder() == b.PositionTryOrder();
-    case CSSPropertyID::kPositionTryOptions:
     case CSSPropertyID::kPositionTryFallbacks:
       return base::ValuesEquivalent(a.GetPositionTryFallbacks(),
                                     b.GetPositionTryFallbacks());
@@ -1249,7 +1252,6 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kPlaceItems:
     case CSSPropertyID::kPlaceSelf:
     case CSSPropertyID::kPositionTry:
-    case CSSPropertyID::kAlternativePositionTry:
     case CSSPropertyID::kScrollMargin:
     case CSSPropertyID::kScrollPadding:
     case CSSPropertyID::kScrollStart:

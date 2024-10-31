@@ -14,8 +14,9 @@
 #include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_side_panel_controller.h"
 #include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_prefs.h"
-#include "chrome/common/accessibility/read_anything.mojom.h"
-#include "chrome/common/accessibility/read_anything_constants.h"
+#include "chrome/common/read_anything/read_anything.mojom-forward.h"
+#include "chrome/common/read_anything/read_anything.mojom.h"
+#include "chrome/common/read_anything/read_anything_constants.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/prefs/pref_value_map.h"
 #include "content/public/test/test_web_ui.h"
@@ -26,7 +27,6 @@
 #include "ui/accessibility/ax_node_id_forward.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/mojom/ax_event.mojom.h"
-#include "ui/accessibility/mojom/ax_location_changes.mojom.h"
 #include "ui/accessibility/mojom/ax_tree_id.mojom.h"
 #include "ui/accessibility/mojom/ax_tree_update.mojom.h"
 #include "ui/gfx/geometry/size.h"
@@ -51,7 +51,12 @@ class MockPage : public read_anything::mojom::UntrustedPage {
                     const std::vector<ui::AXEvent>& events));
   MOCK_METHOD(void,
               AccessibilityLocationChangesReceived,
-              (const std::vector<ui::AXLocationChanges>& details));
+              (const ui::AXTreeID& tree_id,
+               ui::AXLocationAndScrollUpdates& details));
+  MOCK_METHOD(void,
+              AccessibilityLocationChangesReceived,
+              (const ui::AXTreeID& tree_id,
+               const ui::AXLocationAndScrollUpdates& details));
   MOCK_METHOD(void,
               OnSettingsRestoredFromPrefs,
               (read_anything::mojom::LineSpacing line_spacing,
@@ -76,6 +81,9 @@ class MockPage : public read_anything::mojom::UntrustedPage {
   MOCK_METHOD(void, SetLanguageCode, (const std::string&));
   MOCK_METHOD(void, SetDefaultLanguageCode, (const std::string&));
   MOCK_METHOD(void, ScreenAIServiceReady, ());
+  MOCK_METHOD(void,
+              OnGetVoicePackInfo,
+              (read_anything::mojom::VoicePackInfoPtr voice_pack_info));
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   MOCK_METHOD(void, OnDeviceLocked, ());
 #endif
@@ -92,7 +100,8 @@ class TestReadAnythingUntrustedPageHandler
       : ReadAnythingUntrustedPageHandler(
             std::move(page),
             mojo::PendingReceiver<read_anything::mojom::UntrustedPageHandler>(),
-            test_web_ui) {}
+            test_web_ui,
+            /*use_screen_ai_service=*/false) {}
 
   void OnImageDataRequested(const ui::AXTreeID& target_tree_id,
                             ui::AXNodeID target_node_id) override {
@@ -112,9 +121,10 @@ class TestReadAnythingUntrustedPageHandler
 class ReadAnythingUntrustedPageHandlerTest : public BrowserWithTestWindowTest {
  public:
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kReadAnythingReadAloud},
-        {features::kReadAnythingWithScreen2x, features::kPdfOcr});
+    // `TestReadAnythingUntrustedPageHandler` disables ScreenAI service, which
+    // disables using ReadAnythingWithScreen2x and PdfOcr.
+    scoped_feature_list_.InitAndEnableFeature(
+        {features::kReadAnythingReadAloud});
     BrowserWithTestWindowTest::SetUp();
     AddTab(browser(), GURL(url::kAboutBlankURL));
     web_contents_ = content::WebContents::Create(

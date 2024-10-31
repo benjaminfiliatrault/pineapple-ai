@@ -12,7 +12,6 @@
 #include <memory>
 #include <string>
 
-#include "base/check.h"
 #include "base/check_op.h"
 #include "base/logging.h"
 #include "base/notreached.h"
@@ -400,7 +399,7 @@ void ProgressWnd::OnDownloading(
 
 void ProgressWnd::OnWaitingRetryDownload(const std::string& app_id,
                                          const std::u16string& app_name,
-                                         const base::Time& next_retry_time) {
+                                         base::Time next_retry_time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!IsWindow()) {
     return;

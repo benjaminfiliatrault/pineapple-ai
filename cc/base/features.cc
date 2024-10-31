@@ -12,6 +12,13 @@
 
 namespace features {
 
+// When enabled, this forces composited textures for SurfaceLayerImpls to be
+// aligned to the pixel grid. Lack of alignment can lead to blur, noticeably so
+// in text. https://crbug.com/359279545
+BASE_FEATURE(kAlignSurfaceLayerImplToPixelGrid,
+             "AlignSurfaceLayerImplToPixelGrid",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Uses the Resume method instead of the Catch-up method for animated images.
 // - Catch-up behavior tries to keep animated images in pace with wall-clock
 //   time. This might require decoding several animation frames if the
@@ -91,10 +98,6 @@ BASE_FEATURE(kUseDMSAAForTiles,
 BASE_FEATURE(kUseDMSAAForTilesAndroidGL,
              "UseDMSAAForTilesAndroidGL",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kAndroidNoSurfaceSyncForBrowserControls,
-             "AndroidNoSurfaceSyncForBrowserControls",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 BASE_FEATURE(kUpdateBrowserControlsWithoutProxy,
@@ -172,7 +175,7 @@ BASE_FEATURE(kMetricsBackfillAdjustmentHoldback,
 
 BASE_FEATURE(kWaitForLateScrollEvents,
              "WaitForLateScrollEvents",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const base::FeatureParam<double> kWaitForLateScrollEventsDeadlineRatio{
     &kWaitForLateScrollEvents, "deadline_ratio", 0.333};
@@ -183,7 +186,7 @@ BASE_FEATURE(kNonBatchedCopySharedImage,
 
 BASE_FEATURE(kDontAlwaysPushPictureLayerImpls,
              "DontAlwaysPushPictureLayerImpls",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kWarmUpCompositor,
              "WarmUpCompositor",
@@ -196,16 +199,16 @@ bool IsCCSlimmingEnabled() {
   return enabled;
 }
 
-const base::FeatureParam<std::string> kScrollEventDispatchMode(
-    &kWaitForLateScrollEvents,
-    "mode",
-    "EnqueueScrollEvents");
 constexpr const char kScrollEventDispatchModeDispatchScrollEventsImmediately[] =
     "DispatchScrollEventsImmediately";
 constexpr const char kScrollEventDispatchModeUseScrollPredictorForEmptyQueue[] =
     "UseScrollPredictorForEmptyQueue";
 constexpr const char kScrollEventDispatchModeUseScrollPredictorForDeadline[] =
     "UseScrollPredictorForDeadline";
+const base::FeatureParam<std::string> kScrollEventDispatchMode(
+    &kWaitForLateScrollEvents,
+    "mode",
+    kScrollEventDispatchModeDispatchScrollEventsImmediately);
 
 BASE_FEATURE(kVizLayers, "VizLayers", base::FEATURE_DISABLED_BY_DEFAULT);
 
@@ -215,6 +218,10 @@ BASE_FEATURE(kSendExplicitDecodeRequestsImmediately,
 
 BASE_FEATURE(kThrottleFrameRateOnManyDidNotProduceFrame,
              "ThrottleFrameRateOnManyDidNotProduceFrame",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kNewContentForCheckerboardedScrolls,
+             "NewContentForCheckerboardedScrolls",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // By default, frame rate starts being throttled when 4 consecutive "did not
@@ -231,5 +238,9 @@ bool MultiImplOnlyScrollAnimationsSupported() {
   return base::FeatureList::IsEnabled(
       features::kMultipleImplOnlyScrollAnimations);
 }
+
+BASE_FEATURE(kPreventDuplicateImageDecodes,
+             "PreventDuplicateImageDecodes",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features

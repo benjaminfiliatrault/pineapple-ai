@@ -21,9 +21,10 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/translate/partial_translate_bubble_model.h"
+#include "chrome/browser/ui/webui/tab_search/tab_search.mojom.h"
 #include "chrome/common/buildflags.h"
-#include "components/user_education/common/feature_promo_controller.h"
-#include "components/user_education/common/new_badge_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_controller.h"
+#include "components/user_education/common/new_badge/new_badge_controller.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/mojom/window_show_state.mojom-forward.h"
 
@@ -217,6 +218,7 @@ class TestBrowserWindow : public BrowserWindow {
       override;
   void ShowAvatarBubbleFromAvatarButton(bool is_source_keyboard) override {}
   void MaybeShowProfileSwitchIPH() override {}
+  void MaybeShowSupervisedUserProfileSignInIPH() override {}
 
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || \
     BUILDFLAG(IS_LINUX)
@@ -247,7 +249,8 @@ class TestBrowserWindow : public BrowserWindow {
   void SetCloseCallback(base::OnceClosure close_callback);
 
   void CreateTabSearchBubble(
-      int tab_index = -1,
+      tab_search::mojom::TabSearchSection section =
+          tab_search::mojom::TabSearchSection::kNone,
       tab_search::mojom::TabOrganizationFeature feature =
           tab_search::mojom::TabOrganizationFeature::kNone) override {}
   void CloseTabSearchBubble() override {}
@@ -259,15 +262,16 @@ class TestBrowserWindow : public BrowserWindow {
       user_education::FeaturePromoParams params) override;
   bool MaybeShowStartupFeaturePromo(
       user_education::FeaturePromoParams params) override;
-  bool EndFeaturePromo(
-      const base::Feature& iph_feature,
-      user_education::EndFeaturePromoReason close_reason) override;
+  bool AbortFeaturePromo(const base::Feature& iph_feature) override;
   user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
       const base::Feature& iph_feature) override;
-  void NotifyFeatureEngagementEvent(const char* event_name) override;
-  void NotifyPromoFeatureUsed(const base::Feature& feature) override;
+  bool NotifyFeaturePromoFeatureUsed(
+      const base::Feature& feature,
+      FeaturePromoFeatureUsedAction action) override;
+  void NotifyAdditionalConditionEvent(const char* event_name) override;
   user_education::DisplayNewBadge MaybeShowNewBadgeFor(
       const base::Feature& new_badge_feature) override;
+  void NotifyNewBadgeFeatureUsed(const base::Feature& feature) override;
 
   // Sets the controller returned by GetFeaturePromoController().
   // Deletes the existing one, if any.

@@ -239,6 +239,7 @@ if (host_toolchain == "") {
 _default_toolchain = ""
 
 if (target_os == "android") {
+  # Targeting android on Mac is best-effort and not guaranteed to work.
   assert(host_os == "linux", "Android builds are only supported on Linux.")
   _default_toolchain = "//build/toolchain/android:android_clang_$target_cpu"
 } else if (target_os == "chromeos" || target_os == "linux") {
@@ -348,6 +349,7 @@ default_compiler_configs = [
   "//build/config/compiler:default_optimization",
   "//build/config/compiler:default_stack_frames",
   "//build/config/compiler:default_symbols",
+  "//build/config/compiler:disallow_unstable_features",
   "//build/config/compiler:libcxx_hardening",
   "//build/config/compiler:libcxx_module",
   "//build/config/compiler:no_exceptions",

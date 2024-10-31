@@ -303,6 +303,12 @@ chromium-metrics-reviews@google.com.
       label="Histogram active sample wrapped 2^31 during accumulation."/>
 </enum>
 
+<enum name="OptionalBoolRecord">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="False"/>
+  <int value="2" label="True"/>
+</enum>
+
 <enum name="PersistentAllocatorErrors">
   <int value="1" label="Allocator memory is corrupt (set only once)"/>
 </enum>

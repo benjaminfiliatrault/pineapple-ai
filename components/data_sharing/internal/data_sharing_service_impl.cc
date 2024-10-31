@@ -4,6 +4,8 @@
 
 #include "components/data_sharing/internal/data_sharing_service_impl.h"
 
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/notimplemented.h"
@@ -30,8 +32,10 @@ namespace data_sharing {
 
 namespace {
 
-const char kGroupIdKey[] = "group_id";
-const char kTokenBlobKey[] = "token_blob";
+constexpr char kGroupIdKey[] = "group_id";
+constexpr char kTokenBlobKey[] = "token_blob";
+constexpr base::FilePath::CharType kDataSharingDir[] =
+    FILE_PATH_LITERAL("DataSharing");
 
 // Should not be called with kOk StatusCode, unless SDK delegate misbehaves by
 // passing it as an error value.
@@ -82,6 +86,7 @@ DataSharingService::PeopleGroupActionOutcome StatusToPeopleGroupActionOutcome(
 }  // namespace
 
 DataSharingServiceImpl::DataSharingServiceImpl(
+    const base::FilePath& profile_dir,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     signin::IdentityManager* identity_manager,
     syncer::OnceDataTypeStoreFactory data_type_store_factory,
@@ -103,9 +108,15 @@ DataSharingServiceImpl::DataSharingServiceImpl(
   collaboration_group_sync_bridge_ =
       std::make_unique<CollaborationGroupSyncBridge>(
           std::move(change_processor), std::move(data_type_store_factory));
-  collaboration_group_sync_bridge_->AddObserver(this);
+
   if (sdk_delegate_) {
     sdk_delegate_->Initialize(data_sharing_network_loader_.get());
+
+    const base::FilePath data_sharing_dir = profile_dir.Append(kDataSharingDir);
+    group_data_model_ = std::make_unique<GroupDataModel>(
+        data_sharing_dir, collaboration_group_sync_bridge_.get(),
+        sdk_delegate_.get());
+    group_data_model_->AddObserver(this);
   }
 
   // Initialize ServiceStatus.
@@ -122,7 +133,9 @@ DataSharingServiceImpl::DataSharingServiceImpl(
 }
 
 DataSharingServiceImpl::~DataSharingServiceImpl() {
-  collaboration_group_sync_bridge_->RemoveObserver(this);
+  if (group_data_model_) {
+    group_data_model_->RemoveObserver(this);
+  }
 }
 
 bool DataSharingServiceImpl::IsEmptyService() {
@@ -150,10 +163,28 @@ DataSharingServiceImpl::GetCollaborationGroupControllerDelegate() {
       ->GetControllerDelegate();
 }
 
+bool DataSharingServiceImpl::IsGroupDataModelLoaded() {
+  return group_data_model_ && group_data_model_->IsModelLoaded();
+}
+
+std::optional<GroupData> DataSharingServiceImpl::ReadGroup(
+    const GroupId& group_id) {
+  if (!group_data_model_) {
+    return std::nullopt;
+  }
+  return group_data_model_->GetGroup(group_id);
+}
+
+std::set<GroupData> DataSharingServiceImpl::ReadAllGroups() {
+  if (!group_data_model_) {
+    return std::set<GroupData>();
+  }
+  return group_data_model_->GetAllGroups();
+}
+
 void DataSharingServiceImpl::ReadAllGroups(
     base::OnceCallback<void(const GroupsDataSetOrFailureOutcome&)> callback) {
-  // TODO(crbug.com/301390275): this method should read data from the cache
-  // instead of SDK.
+  // TODO(crbug.com/370897286): this method should be deleted.
   if (!sdk_delegate_) {
     // Reply in a posted task to avoid reentrance on the calling side.
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -185,8 +216,7 @@ void DataSharingServiceImpl::ReadAllGroups(
 void DataSharingServiceImpl::ReadGroup(
     const GroupId& group_id,
     base::OnceCallback<void(const GroupDataOrFailureOutcome&)> callback) {
-  // TODO(crbug.com/301390275): this method should read data from the cache
-  // instead of SDK.
+  // TODO(crbug.com/370897286): this method should be deleted.
   if (!sdk_delegate_) {
     // Reply in a posted task to avoid reentrance on the calling side.
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -312,77 +342,56 @@ void DataSharingServiceImpl::RemoveMember(
           weak_ptr_factory_.GetWeakPtr(), group_id, std::move(callback)));
 }
 
-void DataSharingServiceImpl::OnGroupsUpdated(
-    const std::vector<GroupId>& added_group_ids,
-    const std::vector<GroupId>& updated_group_ids,
-    const std::vector<GroupId>& deleted_group_ids) {
-  // TODO(crbug.com/301390275): get rid of this method and corresponding
-  // asynchronous logic. Once caching is supported, observers should be
-  // notified upon cache updates instead.
+void DataSharingServiceImpl::LeaveGroup(
+    const GroupId& group_id,
+    base::OnceCallback<void(PeopleGroupActionOutcome)> callback) {
   if (!sdk_delegate_) {
+    // Reply in a posted task to avoid reentrance on the calling side.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback),
+                       PeopleGroupActionOutcome::kPersistentFailure));
     return;
   }
 
-  // Deletions could be notified immediately.
-  for (const GroupId& group_id : deleted_group_ids) {
-    for (auto& observer : observers_) {
-      observer.OnGroupRemoved(group_id);
-    }
-  }
-
-  // Fetch added and updated groups.
-  data_sharing_pb::ReadGroupsParams params;
-  for (const GroupId& group_id : added_group_ids) {
-    params.add_group_ids(group_id.value());
-  }
-  for (const GroupId& group_id : updated_group_ids) {
-    params.add_group_ids(group_id.value());
-  }
-  if (params.group_ids().empty()) {
-    // No groups to read.
-    return;
-  }
-
-  sdk_delegate_->ReadGroups(
+  data_sharing_pb::LeaveGroupParams params;
+  params.set_group_id(group_id.value());
+  sdk_delegate_->LeaveGroup(
       params,
-      base::BindOnce(
-          &DataSharingServiceImpl::OnReadGroupsToNotifyObserversCompleted,
-          weak_ptr_factory_.GetWeakPtr(),
-          /*added_group_ids=*/
-          std::set<GroupId>(added_group_ids.begin(), added_group_ids.end()),
-          /*updated_group_ids=*/
-          std::set<GroupId>(updated_group_ids.begin(),
-                            updated_group_ids.end())));
+      base::BindOnce(&DataSharingServiceImpl::OnSimpleGroupActionCompleted,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void DataSharingServiceImpl::OnDataLoaded() {
-  // TODO(crbug.com/301390275): once caching is supported, this method should
-  // be removed and ReadAllGroups() should read cached groups instead. Right
-  // now it will read no groups before collaboration group data is loaded and
-  // we need to issue another read afterwards and notify observers.
-  if (!sdk_delegate_) {
-    return;
+void DataSharingServiceImpl::OnModelLoaded() {
+  for (auto& observer : observers_) {
+    observer.OnGroupDataModelLoaded();
   }
+}
 
-  data_sharing_pb::ReadGroupsParams params;
-  std::vector<GroupId> group_ids =
-      collaboration_group_sync_bridge_->GetCollaborationGroupIds();
-  for (const GroupId& group_id : group_ids) {
-    params.add_group_ids(group_id.value());
+void DataSharingServiceImpl::OnGroupAdded(const GroupId& group_id) {
+  CHECK(group_data_model_);
+
+  std::optional<GroupData> group_data = group_data_model_->GetGroup(group_id);
+  CHECK(group_data);
+  for (auto& observer : observers_) {
+    observer.OnGroupAdded(*group_data);
   }
+}
 
-  if (params.group_ids().empty()) {
-    // No groups to read.
-    return;
+void DataSharingServiceImpl::OnGroupUpdated(const GroupId& group_id) {
+  CHECK(group_data_model_);
+
+  std::optional<GroupData> group_data = group_data_model_->GetGroup(group_id);
+  CHECK(group_data);
+  for (auto& observer : observers_) {
+    observer.OnGroupChanged(*group_data);
   }
+}
 
-  sdk_delegate_->ReadGroups(
-      params,
-      base::BindOnce(
-          &DataSharingServiceImpl::OnReadGroupsToNotifyObserversCompleted,
-          weak_ptr_factory_.GetWeakPtr(), /*added_group_ids=*/
-          std::set<GroupId>(group_ids.begin(), group_ids.end()),
-          /*updated_group_ids=*/std::set<GroupId>()));
+void DataSharingServiceImpl::OnGroupDeleted(const GroupId& group_id) {
+  for (auto& observer : observers_) {
+    observer.OnGroupRemoved(group_id);
+  }
 }
 
 void DataSharingServiceImpl::Shutdown() {
@@ -481,35 +490,6 @@ void DataSharingServiceImpl::OnGaiaIdLookupForRemoveMemberCompleted(
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void DataSharingServiceImpl::OnReadGroupsToNotifyObserversCompleted(
-    const std::set<GroupId>& added_group_ids,
-    const std::set<GroupId>& updated_group_ids,
-    const base::expected<data_sharing_pb::ReadGroupsResult, absl::Status>&
-        read_groups_result) {
-  if (!read_groups_result.has_value()) {
-    // TODO(crbug.com/301390275): remove this method or add error handling
-    // (retries).
-    return;
-  }
-
-  for (const data_sharing_pb::GroupData& group_data_proto :
-       read_groups_result.value().group_data()) {
-    GroupData group_data = GroupDataFromProto(group_data_proto);
-
-    if (added_group_ids.count(group_data.group_token.group_id) > 0) {
-      for (auto& observer : observers_) {
-        observer.OnGroupAdded(group_data);
-      }
-    }
-
-    if (updated_group_ids.count(group_data.group_token.group_id) > 0) {
-      for (auto& observer : observers_) {
-        observer.OnGroupChanged(group_data);
-      }
-    }
-  }
-}
-
 void DataSharingServiceImpl::OnSimpleGroupActionCompleted(
     base::OnceCallback<void(PeopleGroupActionOutcome)> callback,
     const absl::Status& status) {
@@ -527,11 +507,12 @@ bool DataSharingServiceImpl::ShouldInterceptNavigationForShareURL(
 }
 
 void DataSharingServiceImpl::HandleShareURLNavigationIntercepted(
-    const GURL& url) {
+    const GURL& url,
+    std::unique_ptr<ShareURLInterceptionContext> context) {
   if (!ui_delegate_) {
     return;
   }
-  ui_delegate_->HandleShareURLIntercepted(url);
+  ui_delegate_->HandleShareURLIntercepted(url, std::move(context));
 }
 
 std::unique_ptr<GURL> DataSharingServiceImpl::GetDataSharingURL(
@@ -597,6 +578,11 @@ void DataSharingServiceImpl::GetSharedEntitiesPreview(
     base::OnceCallback<void(const SharedDataPreviewOrFailureOutcome&)>
         callback) {
   preview_server_proxy_->GetSharedDataPreview(group_token, std::move(callback));
+}
+
+void DataSharingServiceImpl::SetUIDelegate(
+    std::unique_ptr<DataSharingUIDelegate> ui_delegate) {
+  ui_delegate_ = std::move(ui_delegate);
 }
 
 DataSharingUIDelegate* DataSharingServiceImpl::GetUIDelegate() {

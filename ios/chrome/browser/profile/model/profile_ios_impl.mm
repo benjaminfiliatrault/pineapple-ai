@@ -36,8 +36,8 @@
 #import "components/user_prefs/user_prefs.h"
 #import "ios/chrome/browser/content_settings/model/host_content_settings_map_factory.h"
 #import "ios/chrome/browser/policy/model/browser_policy_connector_ios.h"
-#import "ios/chrome/browser/policy/model/browser_state_policy_connector.h"
-#import "ios/chrome/browser/policy/model/browser_state_policy_connector_factory.h"
+#import "ios/chrome/browser/policy/model/profile_policy_connector.h"
+#import "ios/chrome/browser/policy/model/profile_policy_connector_factory.h"
 #import "ios/chrome/browser/policy/model/schema_registry_factory.h"
 #import "ios/chrome/browser/prefs/model/ios_chrome_pref_service_factory.h"
 #import "ios/chrome/browser/profile/model/constants.h"
@@ -89,8 +89,8 @@ BrowserStateDirectoryBuilder::Result
 BrowserStateDirectoryBuilder::CreateDirectories(
     const base::FilePath& state_path,
     const base::FilePath& otr_path) {
-  // Create the browser state directory synchronously otherwise we would need to
-  // sequence every otherwise independent I/O operation inside the browser state
+  // Create the profile directory synchronously otherwise we would need to
+  // sequence every otherwise independent I/O operation inside the profile
   // directory with this operation. base::CreateDirectory() should be a
   // lightweight I/O operation and avoiding the headache of sequencing all
   // otherwise unrelated I/O after this one justifies running it on the main
@@ -106,7 +106,7 @@ BrowserStateDirectoryBuilder::CreateDirectories(
   }
 
   // Create the directory for the OTR stash state now, even though it won't
-  // necessarily be needed: the OTR browser state itself is created
+  // necessarily be needed: the OTR profile itself is created
   // synchronously on an as-needed basis on the UI thread, so creation of its
   // stash state directory cannot easily be done at that point.
   if (!base::PathExists(otr_path)) {
@@ -187,8 +187,8 @@ ProfileIOSImpl::ProfileIOSImpl(
                           base::Unretained(GetApplicationContext())));
 
   policy_connector_ =
-      BuildBrowserStatePolicyConnector(policy_schema_registry_.get(), connector,
-                                       user_cloud_policy_manager_.get());
+      BuildProfilePolicyConnector(policy_schema_registry_.get(), connector,
+                                  user_cloud_policy_manager_.get());
 
   // Register Profile preferences.
   RegisterProfilePrefs(pref_registry_.get());
@@ -229,9 +229,9 @@ ProfileIOSImpl::ProfileIOSImpl(
       std::make_unique<supervised_user::SupervisedUserContentSettingsProvider>(
           supervised_user_settings);
 
-  ios::HostContentSettingsMapFactory::GetForBrowserState(this)
-      ->RegisterProvider(content_settings::ProviderType::kSupervisedProvider,
-                         std::move(supervised_provider));
+  ios::HostContentSettingsMapFactory::GetForProfile(this)->RegisterProvider(
+      content_settings::ProviderType::kSupervisedProvider,
+      std::move(supervised_provider));
 
   base::FilePath cookie_path = state_path.Append(kIOSChromeCookieFilename);
   base::FilePath cache_path = directories_creation_result.cache_path;
@@ -266,28 +266,20 @@ ProfileIOSImpl::~ProfileIOSImpl() {
     pref_proxy_config_tracker_->DetachFromPrefService();
   }
 
-  // Here, (1) the browser state services may
-  // depend on `policy_connector_` and `user_cloud_policy_manager_`, and (2)
-  // `policy_connector_` depends on `user_cloud_policy_manager_`. The
-  // dependencies have to be shut down backward.
+  // Here, (1) the profile services may depend on `policy_connector_` and
+  // `user_cloud_policy_manager_`, and (2) `policy_connector_` depends on
+  // `user_cloud_policy_manager_`. The dependencies have to be shut down
+  // backward.
   policy_connector_->Shutdown();
   if (user_cloud_policy_manager_) {
     user_cloud_policy_manager_->Shutdown();
   }
 
-  DestroyOffTheRecordChromeBrowserState();
-}
-
-ProfileIOS* ProfileIOSImpl::GetOriginalChromeBrowserState() {
-  return GetOriginalProfile();
+  DestroyOffTheRecordProfile();
 }
 
 ProfileIOS* ProfileIOSImpl::GetOriginalProfile() {
   return this;
-}
-
-ProfileIOS* ProfileIOSImpl::GetOffTheRecordChromeBrowserState() {
-  return GetOffTheRecordProfile();
 }
 
 ProfileIOS* ProfileIOSImpl::GetOffTheRecordProfile() {
@@ -299,16 +291,8 @@ ProfileIOS* ProfileIOSImpl::GetOffTheRecordProfile() {
   return otr_state_.get();
 }
 
-bool ProfileIOSImpl::HasOffTheRecordChromeBrowserState() const {
-  return HasOffTheRecordProfile();
-}
-
 bool ProfileIOSImpl::HasOffTheRecordProfile() const {
   return !!otr_state_;
-}
-
-void ProfileIOSImpl::DestroyOffTheRecordChromeBrowserState() {
-  return DestroyOffTheRecordProfile();
 }
 
 void ProfileIOSImpl::DestroyOffTheRecordProfile() {
@@ -316,7 +300,7 @@ void ProfileIOSImpl::DestroyOffTheRecordProfile() {
   otr_state_.reset();
 }
 
-BrowserStatePolicyConnector* ProfileIOSImpl::GetPolicyConnector() {
+ProfilePolicyConnector* ProfileIOSImpl::GetPolicyConnector() {
   return policy_connector_.get();
 }
 

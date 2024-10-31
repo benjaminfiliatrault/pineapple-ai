@@ -60,8 +60,9 @@ class DOMException;
 class ExceptionState;
 class IDBCursor;
 class IDBValue;
-class V8UnionIDBCursorOrIDBIndexOrIDBObjectStore;
 class ScriptState;
+class V8IDBRequestReadyState;
+class V8UnionIDBCursorOrIDBIndexOrIDBObjectStore;
 
 class MODULES_EXPORT IDBRequest : public EventTarget,
                                   public ActiveScriptWrappable<IDBRequest>,
@@ -237,7 +238,7 @@ class MODULES_EXPORT IDBRequest : public EventTarget,
   // Defined in the IDL
   enum ReadyState { PENDING = 1, DONE = 2, kEarlyDeath = 3 };
 
-  const String& readyState() const;
+  V8IDBRequestReadyState readyState() const;
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(success, kSuccess)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(error, kError)
@@ -297,7 +298,7 @@ class MODULES_EXPORT IDBRequest : public EventTarget,
   void OnPut(mojom::blink::IDBTransactionPutResultPtr result);
   void OnGet(mojom::blink::IDBDatabaseGetResultPtr result);
   void OnGetAll(
-      bool key_only,
+      mojom::blink::IDBGetAllResultType result_type,
       mojo::PendingAssociatedReceiver<mojom::blink::IDBDatabaseGetAllResultSink>
           receiver);
   void OnOpenCursor(mojom::blink::IDBDatabaseOpenCursorResultPtr result);
@@ -321,21 +322,6 @@ class MODULES_EXPORT IDBRequest : public EventTarget,
   void TransactionDidFinishAndDispatch();
 
   IDBCursor* GetResultCursor() const;
-
-  // Used to hang onto Blobs until the browser process handles the request.
-  //
-  // Blobs are ref-counted on the browser side, and BlobDataHandles manage
-  // references from renderers. When a BlobDataHandle gets destroyed, the
-  // browser-side Blob gets derefenced, which might cause it to be destroyed as
-  // well.
-  //
-  // After script uses a Blob in a put() request, the Blink-side Blob object
-  // (which hangs onto the BlobDataHandle) may get garbage-collected. IDBRequest
-  // needs to hang onto the BlobDataHandle as well, to avoid having the
-  // browser-side Blob get destroyed before the IndexedDB request is processed.
-  inline Vector<scoped_refptr<BlobDataHandle>>& transit_blob_handles() {
-    return transit_blob_handles_;
-  }
 
 #if DCHECK_IS_ON()
   inline bool TransactionHasQueuedResults() const {
@@ -424,8 +410,6 @@ class MODULES_EXPORT IDBRequest : public EventTarget,
   std::unique_ptr<IDBKey> cursor_key_;
   std::unique_ptr<IDBKey> cursor_primary_key_;
   std::unique_ptr<IDBValue> cursor_value_;
-
-  Vector<scoped_refptr<BlobDataHandle>> transit_blob_handles_;
 
   bool did_fire_upgrade_needed_event_ = false;
   bool prevent_propagation_ = false;

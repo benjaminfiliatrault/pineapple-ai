@@ -8,7 +8,7 @@
  * security settings.
  */
 import '/shared/settings/prefs/prefs.js';
-import 'chrome://resources/cr_elements/icons_lit.html.js';
+import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
@@ -218,6 +218,11 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         value: () => loadTimeData.getBoolean('capturedSurfaceControlEnabled'),
       },
 
+      enableAiSettingsPageRefresh_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableAiSettingsPageRefresh'),
+      },
+
       enableComposeProactiveNudge_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('enableComposeProactiveNudge'),
@@ -233,12 +238,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         value: function() {
           return loadTimeData.getBoolean('showPersistentPermissions');
         },
-      },
-
-      isProactiveTopicsBlockingEnabled_: {
-        type: Boolean,
-        value: () =>
-            loadTimeData.getBoolean('isProactiveTopicsBlockingEnabled'),
       },
 
       enableAutomaticFullscreenContentSetting_: {
@@ -374,12 +373,12 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private showNotificationPermissionsReview_: boolean;
   private isPrivacySandboxRestricted_: boolean;
   private isPrivacySandboxRestrictedNoticeEnabled_: boolean;
-  private isProactiveTopicsBlockingEnabled_: boolean;
   private enableAutomaticFullscreenContentSetting_: boolean;
   private is3pcdRedesignEnabled_: boolean;
   private privateStateTokensEnabled_: boolean;
   private autoPictureInPictureEnabled_: boolean;
   private capturedSurfaceControlEnabled_: boolean;
+  private enableAiSettingsPageRefresh_: boolean;
   private enableComposeProactiveNudge_: boolean;
   private enableSafetyHub_: boolean;
   private enableWebAppInstallation_: boolean;
@@ -639,9 +638,9 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         this.isPrivacySandboxRestrictedNoticeEnabled_;
   }
 
-  private shouldShowManageTopics_(): boolean {
-    return this.isProactiveTopicsBlockingEnabled_ &&
-        !this.isPrivacySandboxRestricted_;
+  private shouldShowComposeProactiveNudge_(): boolean {
+    return this.enableComposeProactiveNudge_ &&
+        !this.enableAiSettingsPageRefresh_;
   }
 
   private onSafetyHubButtonClick_() {

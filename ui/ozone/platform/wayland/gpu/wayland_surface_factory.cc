@@ -203,6 +203,10 @@ WaylandSurfaceFactory::CreateCanvasForWidget(gfx::AcceleratedWidget widget) {
   return std::make_unique<WaylandCanvasSurface>(buffer_manager_, widget);
 }
 
+bool WaylandSurfaceFactory::SupportsOverlays() {
+  return buffer_manager_->supports_overlays();
+}
+
 std::vector<gl::GLImplementationParts>
 WaylandSurfaceFactory::GetAllowedGLImplementations() {
   std::vector<gl::GLImplementationParts> impls;
@@ -234,6 +238,9 @@ GLOzone* WaylandSurfaceFactory::GetGLOzone(
 std::unique_ptr<gpu::VulkanImplementation>
 WaylandSurfaceFactory::CreateVulkanImplementation(bool use_swiftshader,
                                                   bool allow_protected_memory) {
+  LOG_IF(ERROR, !use_swiftshader)
+      << "'--ozone-platform=wayland' is not compatible with Vulkan. "
+         "Consider switching to '--ozone-platform=x11' or disabling Vulkan";
   return std::make_unique<VulkanImplementationWayland>(use_swiftshader);
 }
 #endif

@@ -70,20 +70,30 @@ class IwaInternalsHandler {
   void RotateKey(const std::string& web_bundle_id,
                  const std::optional<std::vector<uint8_t>>& public_key);
 
+  void UpdateManifestInstalledIsolatedWebApp(
+      const webapps::AppId& app_id,
+      Handler::UpdateManifestInstalledIsolatedWebAppCallback callback);
+
+  void SetUpdateChannelForIsolatedWebApp(
+      const webapps::AppId& app_id,
+      const std::string& update_channel,
+      Handler::SetUpdateChannelForIsolatedWebAppCallback callback);
+
  private:
   class IsolatedWebAppDevBundleSelectListener;
+  class IwaManifestInstallUpdateHandler;
   friend class web_app::WebAppInternalsIwaInstallationBrowserTest;
 
   Profile* profile() { return &profile_.get(); }
 
   void DownloadWebBundleToFile(
       const GURL& web_bundle_url,
-      const GURL& update_manifest_url,
+      ::mojom::UpdateInfoPtr update_info,
       Handler::InstallIsolatedWebAppFromBundleUrlCallback callback,
       web_app::ScopedTempWebBundleFile file);
 
   void OnWebBundleDownloaded(
-      const GURL& update_manifest_url,
+      ::mojom::UpdateInfoPtr update_info,
       Handler::InstallIsolatedWebAppFromBundleUrlCallback callback,
       web_app::ScopedTempWebBundleFile bundle,
       int32_t result);
@@ -103,7 +113,7 @@ class IwaInternalsHandler {
       base::expected<InstallIsolatedWebAppCommandSuccess, std::string> result);
 
   void OnInstalledIsolatedWebAppInDevModeFromWebBundle(
-      const GURL& update_manifest_url,
+      ::mojom::UpdateInfoPtr update_info,
       base::OnceCallback<void(::mojom::InstallIsolatedWebAppResultPtr)>
           callback,
       base::expected<InstallIsolatedWebAppCommandSuccess, std::string> result);
@@ -118,6 +128,11 @@ class IwaInternalsHandler {
 
   const raw_ref<content::WebUI> web_ui_;
   const raw_ref<Profile> profile_;
+
+  // Runs updates for manifest-installed dev-mode apps.
+  // Will be nullptr if WebAppProvider is not available for the current
+  // `profile_`.
+  std::unique_ptr<IwaManifestInstallUpdateHandler> update_handler_;
 
   base::WeakPtrFactory<IwaInternalsHandler> weak_ptr_factory_{this};
 };

@@ -15,7 +15,6 @@
 #include "ash/components/arc/metrics/arc_metrics_service.h"
 #include "ash/components/arc/metrics/stability_metrics_manager.h"
 #include "ash/components/arc/session/arc_data_remover.h"
-#include "ash/components/arc/session/arc_dlc_installer.h"
 #include "ash/components/arc/session/arc_instance_mode.h"
 #include "ash/components/arc/session/arc_management_transition.h"
 #include "ash/components/arc/session/arc_session.h"
@@ -53,6 +52,7 @@
 #include "chrome/browser/ash/arc/session/arc_provisioning_result.h"
 #include "chrome/browser/ash/arc/session/arc_reven_hardware_checker.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_service.h"
+#include "chrome/browser/ash/guest_os/public/guest_os_service_factory.h"
 #include "chrome/browser/ash/login/demo_mode/demo_components.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -65,6 +65,7 @@
 #include "chrome/browser/ui/webui/ash/diagnostics_dialog/diagnostics_dialog.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "chromeos/ash/components/memory/swap_configuration.h"
 #include "components/account_id/account_id.h"
 #include "components/exo/wm_helper.h"
@@ -375,14 +376,6 @@ ArcSessionManager::ExpansionResult ReadSaltInternal() {
   return ArcSessionManager::ExpansionResult{std::move(*salt), true};
 }
 
-// Checks whether ARC DLCs needs to be installed/uninstalled. Currently,
-// "houdini-rvc-dlc" is the only enabled DLC, so we only need to check
-// for the presence of kEnableHoudiniDlc flag in the command line.
-bool IsDlcRequired() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      ash::switches::kEnableHoudiniDlc);
-}
-
 // Inform ArcMetricsServices about the starting time of ARC provisioning.
 void ReportProvisioningStartTime(const base::TimeTicks& start_time,
                                  Profile* profile) {
@@ -534,12 +527,10 @@ ArcSessionManager::ArcSessionManager(
   }
   ResetStabilityMetrics();
   ash::ConciergeClient::Get()->AddVmObserver(this);
-  arc_dlc_installer_ = std::make_unique<ArcDlcInstaller>();
 }
 
 ArcSessionManager::~ArcSessionManager() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  arc_dlc_installer_.reset();
 
   ash::ConciergeClient::Get()->RemoveVmObserver(this);
 
@@ -600,10 +591,6 @@ void ArcSessionManager::OnSessionStopped(ArcStopReason reason,
   }
 
   MaybeStartArcDataRemoval();
-
-  if (!enable_requested_ && IsDlcRequired()) {
-    arc_dlc_installer_->RequestDisable();
-  }
 }
 
 void ArcSessionManager::OnSessionRestarting() {
@@ -905,6 +892,9 @@ void ArcSessionManager::Shutdown() {
     scoped_opt_in_tracker_->TrackShutdown();
     scoped_opt_in_tracker_.reset();
   }
+  for (auto& observer : observer_list_) {
+    observer.OnShutdown();
+  }
 }
 
 void ArcSessionManager::ShutdownSession() {
@@ -1023,10 +1013,6 @@ void ArcSessionManager::RequestEnable() {
 
   VLOG(1) << "ARC opt-in. Starting ARC session.";
 
-  if (IsDlcRequired()) {
-    arc_dlc_installer_->RequestEnable();
-  }
-
   // |skipped_terms_of_service_negotiation_| is reset only in case terms are shown.
   // In all other cases it is conidered as skipped.
   skipped_terms_of_service_negotiation_ = true;
@@ -1125,13 +1111,13 @@ void ArcSessionManager::OnVmStarted(
       // called (due to concierge crash etc.). Unregister the old instance
       // before registering a new one to prevent multiple registration like
       // b/279378611.
-      guest_os::GuestOsService::GetForProfile(profile())
+      guest_os::GuestOsServiceFactory::GetForProfile(profile())
           ->MountProviderRegistry()
           ->Unregister(*arcvm_mount_provider_id_);
     }
     arcvm_mount_provider_id_ =
         std::optional<guest_os::GuestOsMountProviderRegistry::Id>(
-            guest_os::GuestOsService::GetForProfile(profile())
+            guest_os::GuestOsServiceFactory::GetForProfile(profile())
                 ->MountProviderRegistry()
                 ->Register(std::make_unique<ArcMountProvider>(
                     profile(), vm_signal.vm_info().cid())));
@@ -1143,7 +1129,7 @@ void ArcSessionManager::OnVmStopped(
   // When ARCVM stops, unregister GuestOsMountProvider for Play files.
   if (vm_signal.name() == kArcVmName) {
     if (arcvm_mount_provider_id_.has_value()) {
-      guest_os::GuestOsService::GetForProfile(profile())
+      guest_os::GuestOsServiceFactory::GetForProfile(profile())
           ->MountProviderRegistry()
           ->Unregister(*arcvm_mount_provider_id_);
       arcvm_mount_provider_id_.reset();
@@ -1966,16 +1952,26 @@ void ArcSessionManager::ExpandPropertyFilesAndReadSalt() {
               {std::string("IS_ARCVM=") + (is_arcvm ? "1" : "0")}},
   };
 
-  if (arc::IsArcVmDlcEnabled()) {
+  if (!arc::IsArcVmDlcEnabled()) {
+    ConfigureUpstartJobs(
+        std::move(jobs),
+        base::BindOnce(&ArcSessionManager::OnExpandPropertyFiles,
+                       weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+
+  // Only the reven board can install arcvm images from DLC. Other boards can
+  // implement their own checking logic after supporting DLC installation later.
+  if (ash::switches::IsRevenBranding() &&
+      ash::InstallAttributes::Get()->IsEnterpriseManaged()) {
     // Check if the Reven device is compatible for ARC.
     hardware_checker_->IsRevenDeviceCompatibleForArc(
         base::BindOnce(&ArcSessionManager::OnEnableArcOnReven,
                        weak_ptr_factory_.GetWeakPtr(), std::move(jobs)));
   } else {
-    ConfigureUpstartJobs(
-        std::move(jobs),
-        base::BindOnce(&ArcSessionManager::OnExpandPropertyFiles,
-                       weak_ptr_factory_.GetWeakPtr()));
+    VLOG(1) << "Reven device is not managed and cannot install arcvm images.";
+    OnExpandPropertyFilesAndReadSalt(
+        ArcSessionManager::ExpansionResult{{}, false});
   }
 }
 

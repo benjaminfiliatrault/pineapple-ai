@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.omnibox.status;
 
 import android.content.Context;
-import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.text.TextUtils;
@@ -90,7 +89,6 @@ public class StatusMediator
     private @StringRes int mSecurityIconDescriptionRes;
     private @ColorRes int mNavigationIconTintRes;
 
-    private Resources mResources;
     private Context mContext;
 
     private LocationBarDataProvider mLocationBarDataProvider;
@@ -100,7 +98,7 @@ public class StatusMediator
     private final Handler mPermissionTaskHandler = new Handler();
     private final Handler mStoreIconHandler = new Handler();
     private @ContentSettingsType.EnumType int mLastPermission = ContentSettingsType.DEFAULT;
-    private final PageInfoIPHController mPageInfoIPHController;
+    private final PageInfoIphController mPageInfoIphController;
     private final WindowAndroid mWindowAndroid;
 
     private boolean mUrlBarTextIsSearch = true;
@@ -120,7 +118,6 @@ public class StatusMediator
 
     /**
      * @param model The {@link PropertyModel} for this mediator.
-     * @param resources Used to load resources.
      * @param context The {@link Context} for this Status component.
      * @param urlBarEditingTextStateProvider Provides url bar text state.
      * @param isTablet Whether the current device is a tablet.
@@ -128,7 +125,7 @@ public class StatusMediator
      * @param permissionDialogController Controls showing permission dialogs.
      * @param templateUrlServiceSupplier Supplies the {@link TemplateUrlService}.
      * @param profileSupplier Supplies the current {@link Profile}.
-     * @param pageInfoIPHController Manages when an IPH bubble for PageInfo is shown.
+     * @param pageInfoIphController Manages when an IPH bubble for PageInfo is shown.
      * @param windowAndroid The current {@link WindowAndroid}.
      * @param merchantTrustSignalsCoordinatorSupplier Supplier of {@link
      *     MerchantTrustSignalsCoordinator}. Can be null if a store icon shouldn't be shown, such as
@@ -136,7 +133,6 @@ public class StatusMediator
      */
     public StatusMediator(
             PropertyModel model,
-            Resources resources,
             Context context,
             UrlBarEditingTextStateProvider urlBarEditingTextStateProvider,
             boolean isTablet,
@@ -144,7 +140,7 @@ public class StatusMediator
             PermissionDialogController permissionDialogController,
             OneshotSupplier<TemplateUrlService> templateUrlServiceSupplier,
             Supplier<Profile> profileSupplier,
-            PageInfoIPHController pageInfoIPHController,
+            PageInfoIphController pageInfoIphController,
             WindowAndroid windowAndroid,
             @Nullable
                     Supplier<MerchantTrustSignalsCoordinator>
@@ -159,10 +155,9 @@ public class StatusMediator
                 });
 
         mProfileSupplier = profileSupplier;
-        mResources = resources;
         mContext = context;
         mUrlBarEditingTextStateProvider = urlBarEditingTextStateProvider;
-        mPageInfoIPHController = pageInfoIPHController;
+        mPageInfoIphController = pageInfoIphController;
         mWindowAndroid = windowAndroid;
         mMerchantTrustSignalsCoordinatorSupplier = merchantTrustSignalsCoordinatorSupplier;
 
@@ -634,7 +629,7 @@ public class StatusMediator
         // We only want to notify the IPH controller after the icon transition is finished.
         // IPH is controlled by the FeatureEngagement system through finch with a field trial
         // testing configuration.
-        permissionIconResource.setAnimationFinishedCallback(this::startIPH);
+        permissionIconResource.setAnimationFinishedCallback(this::startIph);
         // Set the timer to switch the icon back afterwards.
         mPermissionTaskHandler.removeCallbacksAndMessages(null);
         mModel.set(StatusProperties.STATUS_ICON_RESOURCE, permissionIconResource);
@@ -649,8 +644,8 @@ public class StatusMediator
             animateCookieControlsIcon(
                     () -> {
                         if (mBlockingStatus3pcd == CookieBlocking3pcdStatus.NOT_IN3PCD) {
-                            mPageInfoIPHController.showCookieControlsIPH(
-                                    getIPHTimeout(), R.string.cookie_controls_iph_message);
+                            mPageInfoIphController.showCookieControlsIph(
+                                    getIphTimeout(), R.string.cookie_controls_iph_message);
                         }
                     });
         }
@@ -704,9 +699,9 @@ public class StatusMediator
                 mPermissionIconDisplayTimeoutMs);
     }
 
-    private void startIPH() {
+    private void startIph() {
         if (!mProfileSupplier.hasValue()) return;
-        mPageInfoIPHController.onPermissionDialogShown(mProfileSupplier.get(), getIPHTimeout());
+        mPageInfoIphController.onPermissionDialogShown(mProfileSupplier.get(), getIphTimeout());
     }
 
     void setStoreIconController() {
@@ -737,7 +732,7 @@ public class StatusMediator
         storeIconResource.setAnimationFinishedCallback(
                 () -> {
                     if (canShowIph) {
-                        mPageInfoIPHController.showStoreIconIPH(getIPHTimeout(), stringId);
+                        mPageInfoIphController.showStoreIconIph(getIphTimeout(), stringId);
                     }
                 });
         mModel.set(StatusProperties.STATUS_ICON_RESOURCE, storeIconResource);
@@ -762,7 +757,7 @@ public class StatusMediator
      * @return A timeout for the IPH bubble. The bubble is shown after the permission icon animation
      *     finishes and should disappear when it animates out.
      */
-    private int getIPHTimeout() {
+    private int getIphTimeout() {
         return mPermissionIconDisplayTimeoutMs - (2 * StatusView.ICON_ROTATION_DURATION_MS);
     }
 
@@ -854,5 +849,9 @@ public class StatusMediator
 
     public void onTabCrashed() {
         mCurrentTabCrashed = true;
+    }
+
+    void setShowStatusView(boolean show) {
+        mModel.set(StatusProperties.SHOW_STATUS_VIEW, show);
     }
 }

@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -22,7 +23,7 @@
 #include "net/base/schemeful_site.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/blink/public/common/shared_storage/shared_storage_utils.h"
-#include "third_party/blink/public/mojom/origin_trial_feature/origin_trial_feature.mojom-shared.h"
+#include "third_party/blink/public/mojom/origin_trials/origin_trial_feature.mojom-shared.h"
 #include "third_party/blink/public/mojom/shared_storage/shared_storage.mojom.h"
 #include "third_party/blink/public/mojom/shared_storage/shared_storage_worklet_service.mojom.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-forward.h"
@@ -90,6 +91,7 @@ class CONTENT_EXPORT SharedStorageWorkletHost
       blink::CloneableMessage serialized_data,
       bool keep_alive_after_operation,
       blink::mojom::PrivateAggregationConfigPtr private_aggregation_config,
+      const std::u16string& saved_query_name,
       SelectURLCallback callback) override;
   void Run(const std::string& name,
            blink::CloneableMessage serialized_data,
@@ -106,16 +108,8 @@ class CONTENT_EXPORT SharedStorageWorkletHost
   void EnterKeepAliveOnDocumentDestroyed(KeepAliveFinishedCallback callback);
 
   // blink::mojom::SharedStorageWorkletServiceClient:
-  void SharedStorageSet(const std::u16string& key,
-                        const std::u16string& value,
-                        bool ignore_if_present,
-                        SharedStorageSetCallback callback) override;
-  void SharedStorageAppend(const std::u16string& key,
-                           const std::u16string& value,
-                           SharedStorageAppendCallback callback) override;
-  void SharedStorageDelete(const std::u16string& key,
-                           SharedStorageDeleteCallback callback) override;
-  void SharedStorageClear(SharedStorageClearCallback callback) override;
+  void SharedStorageUpdate(blink::mojom::SharedStorageModifierMethodPtr method,
+                           SharedStorageUpdateCallback callback) override;
   void SharedStorageGet(const std::u16string& key,
                         SharedStorageGetCallback callback) override;
   void SharedStorageKeys(
@@ -127,10 +121,14 @@ class CONTENT_EXPORT SharedStorageWorkletHost
   void SharedStorageLength(SharedStorageLengthCallback callback) override;
   void SharedStorageRemainingBudget(
       SharedStorageRemainingBudgetCallback callback) override;
+  void GetInterestGroups(GetInterestGroupsCallback callback) override;
   void DidAddMessageToConsole(blink::mojom::ConsoleMessageLevel level,
                               const std::string& message) override;
   void RecordUseCounters(
       const std::vector<blink::mojom::WebFeature>& features) override;
+
+  void GetLockManager(
+      mojo::PendingReceiver<blink::mojom::LockManager> receiver);
 
   void ReportNoBinderForInterface(const std::string& error);
 
@@ -162,9 +160,12 @@ class CONTENT_EXPORT SharedStorageWorkletHost
   virtual void OnRunURLSelectionOperationOnWorkletFinished(
       const GURL& urn_uuid,
       base::TimeTicks start_time,
+      const std::string& operation_name,
+      const std::u16string& saved_query_name_to_cache,
       bool script_execution_succeeded,
       const std::string& script_execution_error_message,
       uint32_t index,
+      bool use_page_budgets,
       BudgetResult budget_result);
 
   // Called if `keep_alive_after_operation_` is false, `IsInKeepAlivePhase()` is
@@ -187,9 +188,16 @@ class CONTENT_EXPORT SharedStorageWorkletHost
   void OnRunURLSelectionOperationOnWorkletScriptExecutionFinished(
       const GURL& urn_uuid,
       base::TimeTicks start_time,
+      const std::string& operation_name,
+      const std::u16string& saved_query_name_to_cache,
       bool success,
       const std::string& error_message,
       uint32_t index);
+
+  void OnSelectURLSavedQueryFound(const GURL& urn_uuid,
+                                  base::TimeTicks start_time,
+                                  const std::string& operation_name,
+                                  uint32_t index);
 
   // Run `keep_alive_finished_callback_` to destroy `this`. Called when the last
   // pending operation has finished, or when a timeout is reached after entering
@@ -283,6 +291,9 @@ class CONTENT_EXPORT SharedStorageWorkletHost
   // Whether `shared_storage_origin_` is same origin with the creator context's
   // origin.
   bool is_same_origin_worklet_;
+
+  // Whether saved queries are supported.
+  const bool saved_queries_enabled_;
 
   // A map of unresolved URNs to the candidate URL with metadata vector. Inside
   // `RunURLSelectionOperationOnWorklet()` a new URN is generated and is

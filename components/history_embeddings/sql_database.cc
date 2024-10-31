@@ -10,6 +10,7 @@
 #include "base/files/file_path.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/sequence_checker.h"
+#include "components/history/core/browser/history_backend.h"
 #include "components/history_embeddings/history_embeddings_features.h"
 #include "components/history_embeddings/passages_util.h"
 #include "components/history_embeddings/proto/history_embeddings.pb.h"
@@ -163,6 +164,13 @@ sql::InitStatus SqlDatabase::InitInternal(const base::FilePath& storage_dir,
     return sql::INIT_FAILURE;
   }
 
+  // Delete passages and embeddings for visits that are beyond the data
+  // retention window. The history system automatically expires data while
+  // Chrome is running, but it's possible to miss events or start Chrome after
+  // some down time, so this prevents long term accidental retention edge cases.
+  DeleteExpiredData(/*expiration_time=*/base::Time::Now() -
+                    base::Days(history::HistoryBackend::kExpireDaysThreshold));
+
   // It's possible to get here without `embedder_metadata_` if forcing for
   // data deletion. In that case, don't check or change meta table.
   if (embedder_metadata_.has_value()) {
@@ -215,8 +223,30 @@ bool SqlDatabase::InsertOrReplacePassages(const UrlPassages& url_passages) {
     return false;
   }
   statement.BindBlob(3, blob);
+  bool result = statement.Run();
 
-  return statement.Run();
+  if (result) {
+    size_t ascii_passages_count = 0;
+    size_t non_ascii_passages_count = 0;
+    for (const std::string& passage : url_passages.passages.passages()) {
+      if (base::IsStringASCII(passage)) {
+        ascii_passages_count++;
+      } else {
+        non_ascii_passages_count++;
+      }
+    }
+    base::UmaHistogramCounts100(
+        "History.Embeddings.DatabaseStoredAsciiPassages", ascii_passages_count);
+    base::UmaHistogramCounts100(
+        "History.Embeddings.DatabaseStoredNonAsciiPassages",
+        non_ascii_passages_count);
+    base::UmaHistogramPercentage(
+        "History.Embeddings.DatabaseStoredNonAsciiPassageRatio",
+        100 * non_ascii_passages_count /
+            (ascii_passages_count + non_ascii_passages_count));
+  }
+
+  return result;
 }
 
 bool SqlDatabase::InsertOrReplaceEmbeddings(
@@ -636,6 +666,27 @@ void SqlDatabase::DatabaseErrorCallback(int extended_error,
   if (!sql::Database::IsExpectedSqliteError(extended_error)) {
     DLOG(FATAL) << db_.GetErrorMessage();
   }
+}
+
+void SqlDatabase::DeleteExpiredData(base::Time expiration_time) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  constexpr char kSqlDeleteExpiredPassages[] =
+      "DELETE FROM passages WHERE visit_time < ?;";
+  constexpr char kSqlDeleteExpiredEmbeddings[] =
+      "DELETE FROM embeddings WHERE visit_time < ?;";
+  DCHECK(db_.IsSQLValid(kSqlDeleteExpiredPassages));
+  DCHECK(db_.IsSQLValid(kSqlDeleteExpiredEmbeddings));
+
+  sql::Statement expire_passages(
+      db_.GetUniqueStatement(kSqlDeleteExpiredPassages));
+  expire_passages.BindTime(0, expiration_time);
+  expire_passages.Run();
+
+  sql::Statement expire_embeddings(
+      db_.GetUniqueStatement(kSqlDeleteExpiredEmbeddings));
+  expire_embeddings.BindTime(0, expiration_time);
+  expire_embeddings.Run();
 }
 
 }  // namespace history_embeddings

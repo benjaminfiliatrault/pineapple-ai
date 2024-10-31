@@ -13,6 +13,7 @@
 #include "net/http/http_util.h"
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -107,7 +108,7 @@ std::string HttpUtil::SpecForRequest(const GURL& url) {
 }
 
 // static
-void HttpUtil::ParseContentType(const std::string& content_type_str,
+void HttpUtil::ParseContentType(std::string_view content_type_str,
                                 std::string* mime_type,
                                 std::string* charset,
                                 bool* had_charset,
@@ -181,7 +182,7 @@ bool HttpUtil::ParseRangeHeader(const std::string& ranges_specifier,
       std::string_view(byte_range_set_begin, byte_range_set_end),
       /*delimiter=*/',');
   while (byte_range_set_iterator.GetNext()) {
-    std::string_view value = byte_range_set_iterator.value_piece();
+    std::string_view value = byte_range_set_iterator.value();
     size_t minus_char_offset = value.find('-');
     // If '-' character is not found, reports failure.
     if (minus_char_offset == std::string::npos)
@@ -399,7 +400,7 @@ bool HttpUtil::IsSafeHeader(std::string_view name, std::string_view value) {
   if (is_forbidden_header_fields_with_forbidden_method) {
     ValuesIterator method_iterator(value, ',');
     while (method_iterator.GetNext()) {
-      std::string_view method = method_iterator.value_piece();
+      std::string_view method = method_iterator.value();
       for (const char* forbidden_method : kForbiddenMethods) {
         if (base::EqualsCaseInsensitiveASCII(method, forbidden_method))
           return false;
@@ -797,55 +798,64 @@ std::string HttpUtil::GenerateAcceptLanguageHeader(
   return lang_list_with_q;
 }
 
-bool HttpUtil::HasStrongValidators(HttpVersion version,
-                                   const std::string& etag_header,
-                                   const std::string& last_modified_header,
-                                   const std::string& date_header) {
-  if (!HasValidators(version, etag_header, last_modified_header))
-    return false;
-
+bool HttpUtil::HasStrongValidators(
+    HttpVersion version,
+    std::optional<std::string_view> etag_header,
+    std::optional<std::string_view> last_modified_header,
+    std::optional<std::string_view> date_header) {
   if (version < HttpVersion(1, 1))
     return false;
 
-  if (!etag_header.empty()) {
-    size_t slash = etag_header.find('/');
-    if (slash == std::string::npos || slash == 0)
+  if (etag_header && !etag_header->empty()) {
+    size_t slash = etag_header->find('/');
+    if (slash == std::string_view::npos || slash == 0) {
       return true;
+    }
 
-    std::string::const_iterator i = etag_header.begin();
-    std::string::const_iterator j = etag_header.begin() + slash;
-    TrimLWS(&i, &j);
-    if (!base::EqualsCaseInsensitiveASCII(base::MakeStringPiece(i, j), "w"))
+    std::string_view trimmed_etag = TrimLWS(etag_header->substr(0, slash));
+    if (!base::EqualsCaseInsensitiveASCII(trimmed_etag, "w")) {
       return true;
+    }
   }
 
   base::Time last_modified;
-  if (!base::Time::FromString(last_modified_header.c_str(), &last_modified))
+  if (!last_modified_header ||
+      !base::Time::FromString(std::string(*last_modified_header).c_str(),
+                              &last_modified)) {
     return false;
+  }
 
   base::Time date;
-  if (!base::Time::FromString(date_header.c_str(), &date))
+  if (!date_header ||
+      !base::Time::FromString(std::string(*date_header).c_str(), &date)) {
     return false;
+  }
 
   // Last-Modified is implicitly weak unless it is at least 60 seconds before
   // the Date value.
   return ((date - last_modified).InSeconds() >= 60);
 }
 
-bool HttpUtil::HasValidators(HttpVersion version,
-                             const std::string& etag_header,
-                             const std::string& last_modified_header) {
+bool HttpUtil::HasValidators(
+    HttpVersion version,
+    std::optional<std::string_view> etag_header,
+    std::optional<std::string_view> last_modified_header) {
   if (version < HttpVersion(1, 0))
     return false;
 
   base::Time last_modified;
-  if (base::Time::FromString(last_modified_header.c_str(), &last_modified))
+  // Have to construct a C-style string here, since that's what
+  // base::Time::FromString requires.
+  if (last_modified_header &&
+      base::Time::FromString(std::string(*last_modified_header).c_str(),
+                             &last_modified)) {
     return true;
+  }
 
   // It is OK to consider an empty string in etag_header to be a missing header
   // since valid ETags are always quoted-strings (see RFC 2616 3.11) and thus
   // empty ETags aren't empty strings (i.e., an empty ETag might be "\"\"").
-  return version >= HttpVersion(1, 1) && !etag_header.empty();
+  return version >= HttpVersion(1, 1) && etag_header && !etag_header->empty();
 }
 
 // Functions for histogram initialization.  The code 0 is put in the map to
@@ -1000,7 +1010,7 @@ bool HttpUtil::NameValuePairsIterator::GetNext() {
   if (props_.GetNext()) {
     // State only becomes invalid if there's another element, but parsing it
     // fails.
-    valid_ = ParseNameValuePair(props_.value_piece());
+    valid_ = ParseNameValuePair(props_.value());
     if (valid_) {
       return true;
     }

@@ -90,10 +90,6 @@ const char* const kBadFlags[] = {
     switches::kIgnoreCertificateErrors,
     network::switches::kIgnoreCertificateErrorsSPKIList,
 
-    // This flag could prevent QuotaChange events from firing or cause the event
-    // to fire too often, potentially impacting web application behavior.
-    switches::kQuotaChangeEventInterval,
-
     // These flags change the URLs that handle PII.
     switches::kGaiaUrl,
     translate::switches::kTranslateScriptURL,
@@ -171,7 +167,7 @@ const char* const kBadFlags[] = {
     // This flag enables injecting synthetic input. It is meant to be used only
     // in tests and performance benchmarks. Using it could allow faking user
     // interaction across origins.
-    cc::switches::kEnableGpuBenchmarking,
+    switches::kEnableGpuBenchmarking,
 
     // This flag enables loading a developer-signed certificate for Cast
     // streaming receivers and should only be used for testing purposes.

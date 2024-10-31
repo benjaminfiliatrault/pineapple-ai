@@ -12,8 +12,11 @@
 #include "content/public/browser/render_frame_host.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/remote_set.h"
 #include "third_party/blink/public/mojom/ai/ai_assistant.mojom-forward.h"
+#include "third_party/blink/public/mojom/ai/ai_assistant.mojom.h"
 #include "third_party/blink/public/mojom/ai/ai_manager.mojom.h"
+#include "third_party/blink/public/mojom/ai/model_download_progress_observer.mojom.h"
 
 namespace content {
 
@@ -30,25 +33,20 @@ class EchoAIManagerImpl : public blink::mojom::AIManager {
 
   ~EchoAIManagerImpl() override;
 
-  static void Create(content::BrowserContext* browser_context,
-                     ReceiverContext context,
+  static void Create(ReceiverContext context,
                      mojo::PendingReceiver<blink::mojom::AIManager> receiver);
 
  private:
   friend base::NoDestructor<EchoAIManagerImpl>;
 
-  EchoAIManagerImpl(content::BrowserContext* browser_context,
-                    ReceiverContext context);
+  EchoAIManagerImpl();
 
   // `blink::mojom::AIManager` implementation.
   void CanCreateAssistant(CanCreateAssistantCallback callback) override;
 
   void CreateAssistant(
-      mojo::PendingReceiver<::blink::mojom::AIAssistant> receiver,
-      blink::mojom::AIAssistantSamplingParamsPtr sampling_params,
-      const std::optional<std::string>& system_prompt,
-      std::vector<blink::mojom::AIAssistantInitialPromptPtr> initial_prompts,
-      CreateAssistantCallback callback) override;
+      mojo::PendingRemote<blink::mojom::AIManagerCreateAssistantClient> client,
+      blink::mojom::AIAssistantCreateOptionsPtr options) override;
 
   void CanCreateSummarizer(CanCreateSummarizerCallback callback) override;
 
@@ -63,8 +61,21 @@ class EchoAIManagerImpl : public blink::mojom::AIManager {
   void CreateRewriter(
       mojo::PendingRemote<blink::mojom::AIManagerCreateRewriterClient> client,
       blink::mojom::AIRewriterCreateOptionsPtr options) override;
+  void AddModelDownloadProgressObserver(
+      mojo::PendingRemote<blink::mojom::ModelDownloadProgressObserver>
+          observer_remote) override;
+
+  void ReturnAIAssistantCreationResult(
+      mojo::Remote<blink::mojom::AIManagerCreateAssistantClient> client_remote);
+  void DoMockDownloadingAndReturn(
+      mojo::Remote<blink::mojom::AIManagerCreateAssistantClient> client_remote);
+
+  mojo::RemoteSet<blink::mojom::ModelDownloadProgressObserver>
+      download_progress_observers_;
 
   mojo::ReceiverSet<blink::mojom::AIManager, ReceiverContext> receivers_;
+
+  base::WeakPtrFactory<EchoAIManagerImpl> weak_ptr_factory_{this};
 };
 
 }  // namespace content

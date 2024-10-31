@@ -1041,7 +1041,8 @@ PseudoId CSSSelectorParser::ParsePseudoElement(const String& selector_string,
           /*has_arguments=*/false, parent ? &parent->GetDocument() : nullptr);
 
       PseudoId pseudo_id = CSSSelector::GetPseudoId(pseudo_type);
-      if (pseudo_id == kPseudoIdBefore || pseudo_id == kPseudoIdAfter ||
+      if (pseudo_id == kPseudoIdCheck || pseudo_id == kPseudoIdBefore ||
+          pseudo_id == kPseudoIdAfter || pseudo_id == kPseudoIdSelectArrow ||
           pseudo_id == kPseudoIdFirstLetter ||
           pseudo_id == kPseudoIdFirstLine) {
         return pseudo_id;
@@ -1166,6 +1167,9 @@ bool IsUserActionPseudoClass(CSSSelector::PseudoType pseudo) {
 bool IsPseudoClassValidAfterPseudoElement(
     CSSSelector::PseudoType pseudo_class,
     CSSSelector::PseudoType compound_pseudo_element) {
+  // NOTE: pseudo-class rules for ::part() and element-backed pseudo-elements
+  // do not need to be handled here; they should be handled in
+  // CSSSelector::IsAllowedAfterPart() instead.
   switch (compound_pseudo_element) {
     case CSSSelector::kPseudoResizer:
     case CSSSelector::kPseudoScrollbar:
@@ -1177,17 +1181,6 @@ bool IsPseudoClassValidAfterPseudoElement(
       return IsScrollbarPseudoClass(pseudo_class);
     case CSSSelector::kPseudoSelection:
       return pseudo_class == CSSSelector::kPseudoWindowInactive;
-    case CSSSelector::kPseudoPart:
-    // TODO(crbug.com/1511354): Add tests for the PseudoSelect cases here
-    case CSSSelector::kPseudoPicker:
-      // TODO(crbug.com/1511354): This separate case is only here to support
-      // kPseudoPopoverOpen. As part of the part-like pseudo-elements feature,
-      // kPseudoPopoverOpen may be supported by kPseudoPart, in which case this
-      // case could be combined with kPseudoPart.
-      return IsUserActionPseudoClass(pseudo_class) ||
-             pseudo_class == CSSSelector::kPseudoPopoverOpen ||
-             pseudo_class == CSSSelector::kPseudoState ||
-             pseudo_class == CSSSelector::kPseudoStateDeprecatedSyntax;
     case CSSSelector::kPseudoWebKitCustomElement:
     case CSSSelector::kPseudoBlinkInternalElement:
     case CSSSelector::kPseudoFileSelectorButton:
@@ -1220,8 +1213,10 @@ bool IsSimpleSelectorValidAfterPseudoElement(
              CSSSelector::kPseudoScrollMarker;
     case CSSSelector::kPseudoUnknown:
       return true;
+    case CSSSelector::kPseudoSelectArrow:
     case CSSSelector::kPseudoAfter:
     case CSSSelector::kPseudoBefore:
+    case CSSSelector::kPseudoCheck:
       if (simple_selector.GetPseudoType() == CSSSelector::kPseudoMarker &&
           RuntimeEnabledFeatures::CSSMarkerNestedPseudoElementEnabled()) {
         return true;
@@ -1229,13 +1224,13 @@ bool IsSimpleSelectorValidAfterPseudoElement(
       break;
     case CSSSelector::kPseudoSlotted:
       return simple_selector.IsTreeAbidingPseudoElement();
-    case CSSSelector::kPseudoPart:
-      if (simple_selector.IsAllowedAfterPart()) {
-        return true;
-      }
-      break;
     default:
       break;
+  }
+  if ((compound_pseudo_element == CSSSelector::kPseudoPart ||
+       CSSSelector::IsElementBackedPseudoElement(compound_pseudo_element)) &&
+      simple_selector.IsAllowedAfterPart()) {
+    return true;
   }
   if (simple_selector.Match() != CSSSelector::kPseudoClass) {
     return false;
@@ -1306,6 +1301,8 @@ base::span<CSSSelector> CSSSelectorParser::ConsumeCompoundSelector(
   wtf_size_t start_pos = output_.size();
   base::AutoReset<CSSSelector::PseudoType> reset_restricting(
       &restricting_pseudo_element_, restricting_pseudo_element_);
+  base::AutoReset<bool> reset_found_host_in_compound(&found_host_in_compound_,
+                                                     false);
 
   // See if the compound selector starts with a tag name, universal selector
   // or the likes (these can only be at the beginning). Note that we don't
@@ -1641,6 +1638,9 @@ bool CSSSelectorParser::ConsumePseudo(CSSParserTokenStream& stream) {
     if (selector.GetPseudoType() == CSSSelector::kPseudoUnknown) {
       return false;
     }
+    if (selector.GetPseudoType() == CSSSelector::kPseudoHost) {
+      found_host_in_compound_ = true;
+    }
     output_.push_back(std::move(selector));
     return true;
   }
@@ -1686,6 +1686,8 @@ bool CSSSelectorParser::ConsumePseudo(CSSParserTokenStream& stream) {
     }
     case CSSSelector::kPseudoHost:
     case CSSSelector::kPseudoHostContext:
+      found_host_in_compound_ = true;
+      [[fallthrough]];
     case CSSSelector::kPseudoAny:
     case CSSSelector::kPseudoCue: {
       DisallowPseudoElementsScope scope(this);
@@ -1735,6 +1737,9 @@ bool CSSSelectorParser::ConsumePseudo(CSSParserTokenStream& stream) {
       }
       if (found_complex_logical_combinations_in_has_argument_) {
         selector.SetContainsComplexLogicalCombinationsInsideHasPseudoClass();
+      }
+      if (found_host_in_compound_) {
+        selector.SetHasArgumentMatchInShadowTree();
       }
       output_.push_back(std::move(selector));
       return true;

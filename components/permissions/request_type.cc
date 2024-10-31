@@ -31,8 +31,6 @@ namespace {
 #if BUILDFLAG(IS_ANDROID)
 int GetIconIdAndroid(RequestType type) {
   switch (type) {
-    case RequestType::kAccessibilityEvents:
-      return IDR_ANDROID_INFOBAR_ACCESSIBILITY_EVENTS;
     case RequestType::kArSession:
     case RequestType::kVrSession:
       return IDR_ANDROID_INFOBAR_VR_HEADSET;
@@ -42,6 +40,8 @@ int GetIconIdAndroid(RequestType type) {
       return IDR_ANDROID_INFOBAR_CLIPBOARD;
     case RequestType::kDiskQuota:
       return IDR_ANDROID_INFOBAR_FOLDER;
+    case RequestType::kFileSystemAccess:
+      NOTREACHED();
     case RequestType::kGeolocation:
       return IDR_ANDROID_INFOBAR_GEOLOCATION;
     case RequestType::kHandTracking:
@@ -77,8 +77,6 @@ int GetIconIdAndroid(RequestType type) {
 // 2 - In a separate change, remove the refresh icons.
 const gfx::VectorIcon& GetIconIdDesktop(RequestType type) {
   switch (type) {
-    case RequestType::kAccessibilityEvents:
-      return kAccessibilityIcon;
     case RequestType::kArSession:
     case RequestType::kVrSession:
       return vector_icons::kVrHeadsetChromeRefreshIcon;
@@ -197,8 +195,6 @@ bool IsRequestablePermissionType(ContentSettingsType content_settings_type) {
 std::optional<RequestType> ContentSettingsTypeToRequestTypeIfExists(
     ContentSettingsType content_settings_type) {
   switch (content_settings_type) {
-    case ContentSettingsType::ACCESSIBILITY_EVENTS:
-      return RequestType::kAccessibilityEvents;
     case ContentSettingsType::AR:
       return RequestType::kArSession;
 #if !BUILDFLAG(IS_ANDROID)
@@ -253,10 +249,8 @@ std::optional<RequestType> ContentSettingsTypeToRequestTypeIfExists(
 #endif
     case ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS:
       return RequestType::kTopLevelStorageAccess;
-#if !BUILDFLAG(IS_ANDROID)
     case ContentSettingsType::FILE_SYSTEM_WRITE_GUARD:
       return RequestType::kFileSystemAccess;
-#endif
 #if BUILDFLAG(IS_CHROMEOS)
     case ContentSettingsType::SMART_CARD_DATA:
       return RequestType::kSmartCard;
@@ -283,8 +277,6 @@ RequestType ContentSettingsTypeToRequestType(
 std::optional<ContentSettingsType> RequestTypeToContentSettingsType(
     RequestType request_type) {
   switch (request_type) {
-    case RequestType::kAccessibilityEvents:
-      return ContentSettingsType::ACCESSIBILITY_EVENTS;
     case RequestType::kArSession:
       return ContentSettingsType::AR;
 #if !BUILDFLAG(IS_ANDROID)
@@ -390,8 +382,6 @@ IconId GetBlockedIconId(RequestType type) {
 
 const char* PermissionKeyForRequestType(permissions::RequestType request_type) {
   switch (request_type) {
-    case permissions::RequestType::kAccessibilityEvents:
-      return "accessibility_events";
     case permissions::RequestType::kArSession:
       return "ar_session";
 #if !BUILDFLAG(IS_ANDROID)
@@ -408,10 +398,8 @@ const char* PermissionKeyForRequestType(permissions::RequestType request_type) {
       return "clipboard";
     case permissions::RequestType::kDiskQuota:
       return "disk_quota";
-#if !BUILDFLAG(IS_ANDROID)
     case permissions::RequestType::kFileSystemAccess:
       return "file_system";
-#endif
     case permissions::RequestType::kGeolocation:
       return "geolocation";
     case permissions::RequestType::kHandTracking:

@@ -15,7 +15,7 @@
 #include "content/public/browser/frame_tree_node_id.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
-#include "third_party/blink/public/mojom/origin_trial_feature/origin_trial_feature.mojom-shared.h"
+#include "third_party/blink/public/mojom/origin_trials/origin_trial_feature.mojom-shared.h"
 #include "third_party/blink/public/mojom/shared_storage/shared_storage.mojom.h"
 #include "url/origin.h"
 
@@ -29,6 +29,10 @@ class RenderFrameHost;
 class SharedStorageWorkletHost;
 class SharedStorageWorkletHostManager;
 
+extern CONTENT_EXPORT const char
+    kFencedFrameLocalUnpartitionedDataAccessDisabledMessage[];
+extern CONTENT_EXPORT const char
+    kFencedFrameLocalUnpartitionedDataAccessWithoutRevokeNetworkMessage[];
 extern CONTENT_EXPORT const char kSharedStorageDisabledMessage[];
 extern CONTENT_EXPORT const char kSharedStorageSelectURLDisabledMessage[];
 extern CONTENT_EXPORT const char kSharedStorageAddModuleDisabledMessage[];
@@ -69,16 +73,8 @@ class CONTENT_EXPORT SharedStorageDocumentServiceImpl final
       CreateWorkletCallback callback) override;
   void SharedStorageGet(const std::u16string& key,
                         SharedStorageGetCallback callback) override;
-  void SharedStorageSet(const std::u16string& key,
-                        const std::u16string& value,
-                        bool ignore_if_present,
-                        SharedStorageSetCallback callback) override;
-  void SharedStorageAppend(const std::u16string& key,
-                           const std::u16string& value,
-                           SharedStorageAppendCallback callback) override;
-  void SharedStorageDelete(const std::u16string& key,
-                           SharedStorageDeleteCallback callback) override;
-  void SharedStorageClear(SharedStorageClearCallback callback) override;
+  void SharedStorageUpdate(blink::mojom::SharedStorageModifierMethodPtr method,
+                           SharedStorageUpdateCallback callback) override;
 
   base::WeakPtr<SharedStorageDocumentServiceImpl> GetWeakPtr();
 
@@ -107,6 +103,9 @@ class CONTENT_EXPORT SharedStorageDocumentServiceImpl final
   bool IsSharedStorageAllowedForOrigin(const url::Origin& accessing_origin,
                                        std::string* out_debug_message,
                                        bool* out_block_is_site_specific);
+
+  bool IsLocalUnpartitionedDataAccessAllowed(
+      const url::Origin& accessing_origin);
 
   bool IsSharedStorageAddModuleAllowedForOrigin(
       const url::Origin& accessing_origin,

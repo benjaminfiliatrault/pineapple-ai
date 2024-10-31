@@ -211,7 +211,7 @@ class IdpTestServer {
 
   std::string ConvertToJsonDictionary(
       const std::map<std::string, std::string>& data,
-      const std::vector<std::string> types) {
+      const std::vector<std::string>& types) {
     std::string out = "{";
     for (auto it : data) {
       out += "\"" + it.first + "\":\"" + it.second + "\",";
@@ -1759,6 +1759,45 @@ IN_PROC_BROWSER_TEST_F(WebIdBrowserTest,
   WebContentsConsoleObserver console_observer(shell()->web_contents());
   EXPECT_EQ(std::string(kToken), EvalJs(shell(), script));
   EXPECT_TRUE(console_observer.messages().empty());
+}
+
+class WebIdModeBrowserTest : public WebIdBrowserTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    scoped_feature_list_.InitAndEnableFeature(features::kFedCmButtonMode);
+    command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
+  }
+};
+
+// Verify that using mode: button in the API call logs to console.
+IN_PROC_BROWSER_TEST_F(WebIdModeBrowserTest, UseModeButtonInsteadOfActive) {
+  idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
+
+  std::string script = R"(
+        (async () => {
+          var x = (await navigator.credentials.get({
+            identity: {
+              providers: [{
+                configURL: ')" +
+                       BaseIdpUrl() + R"(',
+                clientId: 'client_id_1',
+                nonce: '12345',
+              }],
+              mode: 'button'
+            },
+          }));
+          return x.token;
+        }) ()
+    )";
+
+  WebContentsConsoleObserver console_observer(shell()->web_contents());
+  console_observer.SetPattern(
+      "The mode button/widget are renamed to active/passive respectively and "
+      "will be deprecated soon.");
+  EXPECT_EQ(std::string(kToken), EvalJs(shell(), script));
+  EXPECT_TRUE(base::MatchPattern(console_observer.GetMessageAt(0u),
+                                 "*The mode button*"));
+  ASSERT_TRUE(console_observer.Wait());
 }
 
 }  // namespace content

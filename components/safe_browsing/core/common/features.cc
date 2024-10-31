@@ -31,6 +31,10 @@ BASE_FEATURE(kAddWarningShownTSToClientSafeBrowsingReport,
              "AddWarningShownTSToClientSafeBrowsingReport",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kClientSideDetectionAcceptHCAllowlist,
+             "ClientSideDetectionAcceptHCAllowlist",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kClientSideDetectionKillswitch,
              "ClientSideDetectionKillswitch",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -50,6 +54,10 @@ BASE_FEATURE(kClientSideDetectionSamplePing,
 BASE_FEATURE(kClientSideDetectionVibrationApi,
              "ClientSideDetectionVibrationApi",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kConditionalImageResize,
+             "ConditionalImageResize",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kCreateNotificationsAcceptedClientSafeBrowsingReports,
              "CreateNotificationsAcceptedClientSafeBrowsingReports",
@@ -100,6 +108,14 @@ const base::FeatureParam<int> kDownloadWarningSurveyType{
 
 const base::FeatureParam<int> kDownloadWarningSurveyIgnoreDelaySeconds{
     &kDownloadWarningSurvey, "ignore_delay_seconds", 300};
+
+BASE_FEATURE(kEsbAiStringUpdate,
+             "EsbAiStringUpdate",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEsbAsASyncedSetting,
+             "EsbAsASyncedSetting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kExtendedReportingRemovePrefDependency,
              "ExtendedReportingRemovePrefDependency",
@@ -159,6 +175,10 @@ BASE_FEATURE(kExtensionTelemetryDisableOffstoreExtensions,
              "SafeBrowsingExtensionTelemetryDisableOffstoreExtensions",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kExternalAppRedirectTelemetry,
+             "SafeBrowsingExternalAppRedirectTelemetry",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kGooglePlayProtectInApkTelemetry,
              "SafeBrowsingGooglePlayProtectInApkTelemetry",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -197,13 +217,6 @@ BASE_FEATURE(kEnterprisePasswordReuseUiRefresh,
              "EnterprisePasswordReuseUiRefresh",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kHashDatabaseOffsetMap,
-             "SafeBrowsingHashDatabaseOffsetMap",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-constexpr base::FeatureParam<int> kHashDatabaseOffsetMapBytesPerOffset{
-    &kHashDatabaseOffsetMap, "HashDatabaseOffsetMapBytesPerOffset",
-    /*default_value=*/0};
-
 BASE_FEATURE(kLocalListsUseSBv5,
              "SafeBrowsingLocalListsUseSBv5",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -215,10 +228,6 @@ BASE_FEATURE(kLogAccountEnhancedProtectionStateInProtegoPings,
 BASE_FEATURE(kPasswordLeakToggleMove,
              "PasswordLeakToggleMove",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kRealTimeUrlFilteringCustomMessage,
-             "RealTimeUrlFilteringCustomMessage",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kRedWarningSurvey,
              "RedWarningSurvey",
@@ -310,7 +319,12 @@ BASE_FEATURE(kClientSideDetectionDebuggingMetadataCache,
 
 BASE_FEATURE(kEnhancedSafeBrowsingPromo,
              "EnhancedSafeBrowsingPromo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_IOS)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 constexpr base::FeatureParam<int> kSafeBrowsingDailyPhishingReportsLimitESB{
     &kSafeBrowsingDailyPhishingReportsLimit,
@@ -341,11 +355,11 @@ base::Value::List GetFeatureStatusList() {
       &kExtensionTelemetryTabsApiSignal,
       &kExtensionTelemetryTabsApiSignalCaptureVisibleTab,
       &kExtensionTelemetryTabsExecuteScriptSignal,
+      &kExternalAppRedirectTelemetry,
       &kHashPrefixRealTimeLookups,
       &kHashPrefixRealTimeLookupsFasterOhttpKeyRotation,
       &kLocalListsUseSBv5,
       &kLogAccountEnhancedProtectionStateInProtegoPings,
-      &kRealTimeUrlFilteringCustomMessage,
       &kSafeBrowsingAsyncRealTimeCheck,
       &kSafeBrowsingRemoveCookiesInAuthRequests,
       &kSafetyHubAbusiveNotificationRevocation,

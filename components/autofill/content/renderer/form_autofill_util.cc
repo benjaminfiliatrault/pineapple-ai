@@ -4,6 +4,7 @@
 
 #include "components/autofill/content/renderer/form_autofill_util.h"
 
+#include <algorithm>
 #include <limits>
 #include <map>
 #include <memory>
@@ -65,7 +66,6 @@
 #include "third_party/blink/public/web/web_option_element.h"
 #include "third_party/blink/public/web/web_remote_frame.h"
 #include "third_party/blink/public/web/web_select_element.h"
-#include "third_party/blink/public/web/web_select_list_element.h"
 #include "third_party/re2/src/re2/re2.h"
 
 using blink::WebAutofillState;
@@ -81,7 +81,6 @@ using blink::WebLocalFrame;
 using blink::WebNode;
 using blink::WebOptionElement;
 using blink::WebSelectElement;
-using blink::WebSelectListElement;
 using blink::WebString;
 using blink::WebVector;
 
@@ -256,15 +255,6 @@ bool IsTextInput(const WebInputElement& element) {
 bool IsSelectElement(const WebFormControlElement& element) {
   return element && element.FormControlTypeForAutofill() ==
                         blink::mojom::FormControlType::kSelectOne;
-}
-
-bool IsSelectListElement(const WebFormControlElement& element) {
-  return element && element.FormControlTypeForAutofill() ==
-                        blink::mojom::FormControlType::kSelectList;
-}
-
-bool IsSelectOrSelectListElement(const WebFormControlElement& element) {
-  return IsSelectElement(element) || IsSelectListElement(element);
 }
 
 bool IsTextInput(const WebFormControlElement& element) {
@@ -1035,6 +1025,44 @@ std::optional<InferredLabel> InferLabelFromAncestors(
   }
   return std::nullopt;
 }
+
+// The first <option> of <select> elements sometimes represents a default value
+// like <option>Select country</option> (with no value attribute). In this case,
+// the text of this <option> is a useful label.
+// `InferLabelFromDefaultSelectValue()` attempts to decide if this is the case,
+// by checking if only the first <option> is lacking a value.
+std::optional<InferredLabel> InferLabelFromDefaultSelectText(
+    const WebFormControlElement& element) {
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillInferLabelFromDefaultSelectText)) {
+    return std::nullopt;
+  }
+  CHECK(IsSelectElement(element));
+  std::vector<WebElement> options =
+      element.To<WebSelectElement>().GetListItems().ReleaseVector();
+  // `options` can contain other elements like <optgroup>.
+  std::erase_if(options, [](const WebElement& e) {
+    return !e.DynamicTo<WebOptionElement>();
+  });
+  auto has_non_empty_value_attribute = [](const WebElement& e) {
+    // If an <option>'s value is unspecified, it default to its text content.
+    // For this reason the `HasAttribute<>()` check is necessary.
+    if (!HasAttribute<kValue>(e)) {
+      return false;
+    }
+    std::u16string value = GetAttribute<kValue>(e).Utf16();
+    base::TrimWhitespace(value, base::TRIM_ALL, &value);
+    return !value.empty();
+  };
+  if (options.size() >= 2 && !has_non_empty_value_attribute(options[0]) &&
+      std::all_of(options.begin() + 1, options.end(),
+                  has_non_empty_value_attribute)) {
+    return InferredLabel::BuildIfValid(FindChildText(options[0]),
+                                       LabelSource::kDefaultSelectText);
+  }
+  return std::nullopt;
+}
+
 // Infers corresponding label for `element` from surrounding context in the DOM,
 // e.g. the contents of the preceding <p> tag or text element. Returns an empty
 // string if it could not find a label for `element`.
@@ -1064,6 +1092,11 @@ std::optional<InferredLabel> InferLabelForElement(
   // If we didn't find a label, check the `element`'s ancestors.
   if (auto r = InferLabelFromAncestors(element)) {
     return r;
+  }
+  if (IsSelectElement(element)) {
+    if (auto r = InferLabelFromDefaultSelectText(element)) {
+      return r;
+    }
   }
   // If we didn't find a label, check the value attr used as the placeholder.
   if (auto r = InferLabelFromValueAttribute(element)) {
@@ -1261,7 +1294,7 @@ bool ShouldSkipFillField(const FormFieldData::FillData& field,
     return true;
   }
   // Check if we should autofill/preview/clear a select element or leave it.
-  if (IsSelectOrSelectListElement(element) && element.UserHasEditedTheField() &&
+  if (IsSelectElement(element) && element.UserHasEditedTheField() &&
       !SanitizedFieldIsEmpty(current_element_value)) {
     base::UmaHistogramEnumeration(kSkipReasonHistogram,
                                   SkipReason::kUserEditedSelect);
@@ -1280,7 +1313,7 @@ void FillFormField(const FormFieldData::FillData& data,
   // Fill fields for text input, textarea and select fields.
   // Filling not supported for checkboxes and radio buttons.
   if (!IsTextInput(field) && !IsMonthInput(field) &&
-      !IsTextAreaElement(field) && !IsSelectOrSelectListElement(field)) {
+      !IsTextAreaElement(field) && !IsSelectElement(field)) {
     return;
   }
   WebAutofillState new_autofill_state = data.is_autofilled
@@ -1300,7 +1333,7 @@ void FillFormField(const FormFieldData::FillData& data,
     return;
   }
 
-  if (!is_initiating_node || IsSelectOrSelectListElement(field)) {
+  if (!is_initiating_node || IsSelectElement(field)) {
     return;
   }
   auto length = base::checked_cast<unsigned>(field.Value().length());
@@ -1321,7 +1354,7 @@ void PreviewFormField(const FormFieldData::FillData& data,
   // Preview text input, textarea and select fields.
   // Preview not supported for checkboxes and radio buttons.
   if (!IsTextInput(field) && !IsMonthInput(field) &&
-      !IsTextAreaElement(field) && !IsSelectOrSelectListElement(field)) {
+      !IsTextAreaElement(field) && !IsSelectElement(field)) {
     return;
   }
 
@@ -1676,7 +1709,7 @@ std::vector<WebElement> GetIframeElements(const WebDocument& document,
 
 // Returns if a script-modified username or credit card number is suitable to
 // store in Password Manager/Autofill given `typed_value`.
-bool ScriptModifiedUsernameOrCreditCardNumberAcceptable(
+bool IsScriptModifiedValueAcceptable(
     const std::u16string& value,
     const std::u16string& typed_value,
     const FieldDataManager& field_data_manager) {
@@ -1729,23 +1762,13 @@ uint64_t GetMaxLength(const WebFormControlElement& element) {
 // returns {{.value = "Foo", .text = "Bar"}, {.value = "Foo", .text = "Foo"}}.
 // For more details, see the documentation of `SelectOption`.
 std::vector<SelectOption> GetSelectOptions(
-    const WebFormControlElement& select_or_select_list_element) {
-  DCHECK(IsSelectOrSelectListElement(select_or_select_list_element));
-
-  WebVector<WebElement> maybe_option_elements;
-  if (auto select_element =
-          select_or_select_list_element.DynamicTo<WebSelectElement>()) {
-    maybe_option_elements = select_element.GetListItems();
-  } else if (auto select_list_element =
-                 select_or_select_list_element
-                     .DynamicTo<WebSelectListElement>()) {
-    maybe_option_elements = select_list_element.GetListItems();
-  }
+    const WebSelectElement& select_element) {
+  WebVector<WebElement> option_elements = select_element.GetListItems();
 
   // Constrain the maximum list length to prevent a malicious site from DOS'ing
   // the browser, without entirely breaking autocomplete for some extreme
   // legitimate sites: http://crbug.com/49332 and http://crbug.com/363094
-  if (maybe_option_elements.size() > kMaxListSize) {
+  if (option_elements.size() > kMaxListSize) {
     return {};
   }
 
@@ -1753,8 +1776,8 @@ std::vector<SelectOption> GetSelectOptions(
     return s.Utf16().substr(0, kMaxStringLength);
   };
   std::vector<SelectOption> options;
-  options.reserve(maybe_option_elements.size());
-  for (const auto& maybe_option_element : maybe_option_elements) {
+  options.reserve(option_elements.size());
+  for (const auto& maybe_option_element : option_elements) {
     if (auto option_element =
             maybe_option_element.DynamicTo<WebOptionElement>()) {
       std::u16string text = to_string(option_element.GetText());
@@ -1789,7 +1812,7 @@ std::vector<SelectOption> GetDataListOptions(const WebInputElement& element) {
   WebVector<WebOptionElement> option_elements =
       element.FilteredDataListOptions();
   std::vector<SelectOption> options;
-  options.reserve(std::max(option_elements.size(), kMaxListSize));
+  options.reserve(std::min(option_elements.size(), kMaxListSize));
   for (const WebOptionElement& option_element : option_elements) {
     if (options.size() > kMaxListSize) {
       break;
@@ -1967,8 +1990,8 @@ void WebFormControlElementToFormField(
     // Nothing more to do in this case.
   } else {
     // Set option strings on the field if available.
-    DCHECK(IsSelectOrSelectListElement(element));
-    field->set_options(GetSelectOptions(element));
+    DCHECK(IsSelectElement(element));
+    field->set_options(GetSelectOptions(element.To<WebSelectElement>()));
   }
   if (extract_options.contains(ExtractOption::kBounds)) {
     if (auto* local_frame = element.GetDocument().GetFrame()) {
@@ -1985,25 +2008,9 @@ void WebFormControlElementToFormField(
       element.SelectedText().Utf16().substr(0, kMaxSelectedTextLength));
   field->set_allows_writing_suggestions(element.WritingSuggestions());
 
-  // If the field was autofilled or the user typed into it, check the value
-  // stored in |field_data_manager| against the value property of the DOM
-  // element. If they differ, then the scripts on the website modified the
-  // value afterwards. Store the original value as the |typed_value|, unless
-  // this is one of recognised situations when the site-modified value is more
-  // useful for filling.
-  if (field_data_manager &&
-      field->properties_mask() & (FieldPropertiesFlags::kUserTyped |
-                                  FieldPropertiesFlags::kAutofilled)) {
-    // The typed value is preserved for all passwords. It is also preserved for
-    // potential usernames and credit cards, as long as the |value| is not
-    // deemed acceptable.
-    std::u16string user_input =
-        field_data_manager->GetUserInput(GetFieldRendererId(element));
-    if (field->form_control_type() == FormControlType::kInputPassword ||
-        !ScriptModifiedUsernameOrCreditCardNumberAcceptable(
-            field->value(), user_input, *field_data_manager)) {
-      field->set_user_input(std::move(user_input).substr(0, kMaxStringLength));
-    }
+  if (field_data_manager) {
+    MaybeUpdateUserInput(*field, GetFieldRendererId(element),
+                         *field_data_manager);
   }
 }
 
@@ -2013,6 +2020,9 @@ void WebFormControlElementToFormField(
 // change, e.g. adding a list of domains of captcha providers to be compared
 // with 'src' attribute.
 bool IsLikelyCaptchaIframe(const WebElement& element) {
+  if (!IsWebElementVisible(element)) {
+    return false;
+  }
   static constexpr std::string_view kCaptcha = "captcha";
   return GetAttribute<kSrc>(element).Find(kCaptcha) != std::string::npos ||
          GetAttribute<kTitle>(element).Find(kCaptcha) != std::string::npos ||
@@ -2222,8 +2232,8 @@ bool IsTextAreaElementOrTextInput(const WebFormControlElement& element) {
 bool IsAutofillableElement(const WebFormControlElement& element) {
   const WebInputElement input_element = element.DynamicTo<WebInputElement>();
   return IsTextInput(input_element) || IsMonthInput(input_element) ||
-         IsCheckableElement(input_element) ||
-         IsSelectOrSelectListElement(element) || IsTextAreaElement(element);
+         IsCheckableElement(input_element) || IsSelectElement(element) ||
+         IsTextAreaElement(element);
 }
 
 FormControlType ToAutofillFormControlType(blink::mojom::FormControlType type) {
@@ -2252,8 +2262,6 @@ FormControlType ToAutofillFormControlType(blink::mojom::FormControlType type) {
       return FormControlType::kSelectOne;
     case blink::mojom::FormControlType::kSelectMultiple:
       return FormControlType::kSelectMultiple;
-    case blink::mojom::FormControlType::kSelectList:
-      return FormControlType::kSelectList;
     case blink::mojom::FormControlType::kTextArea:
       return FormControlType::kTextArea;
     default:
@@ -2277,7 +2285,6 @@ bool IsCheckable(FormControlType form_control_type) {
     case FormControlType::kInputUrl:
     case FormControlType::kSelectOne:
     case FormControlType::kSelectMultiple:
-    case FormControlType::kSelectList:
     case FormControlType::kTextArea:
       return false;
   }
@@ -2295,10 +2302,7 @@ bool IsElementEditable(const WebInputElement& element) {
 }
 
 bool IsWebElementFocusableForAutofill(const WebElement& element) {
-  return element.IsFocusable() ||
-         // The <selectlist> shadow root is not focusable.
-         (IsSelectListElement(element.DynamicTo<WebFormControlElement>()) &&
-          element.To<WebSelectListElement>().HasFocusableChild());
+  return element.IsFocusable();
 }
 
 FormRendererId GetFormRendererId(const WebElement& e) {
@@ -2476,7 +2480,7 @@ FindFormAndFieldForFormControlElement(
   SCOPED_CRASH_KEYS_FOR_FORM(owng, owning_form);
 #undef FORM_CRASH_KEYS
   // clang-format on
-  NOTREACHED(base::NotFatalUntil::M131);
+  NOTREACHED(base::NotFatalUntil::M132);
   return std::nullopt;
 }
 
@@ -2653,21 +2657,8 @@ void ClearPreviewedElements(
   for (auto& [control_element, prior_autofill_state] : previewed_elements) {
     // We do not add null elements to `previewed_elements_` in AutofillAgent.
     DCHECK(control_element);
-
-    // Clear the suggested value.
     control_element.SetSuggestedValue(WebString());
     control_element.SetAutofillState(prior_autofill_state);
-
-    // Clearing the suggested value in the focused node can cause the selection
-    // to be lost. We force-set selection range in order to restore the text
-    // cursor.
-    if (control_element.Focused() &&
-        !base::FeatureList::IsEnabled(
-            features::kAutofillDontUpdateSelectionRangeOnPreviewClearing)) {
-      auto length =
-          base::checked_cast<unsigned>(control_element.Value().length());
-      control_element.SetSelectionRange(length, length);
-    }
   }
 }
 
@@ -2851,6 +2842,32 @@ void TraverseDomForFourDigitCombinations(
 
   std::move(potential_matches)
       .Run(std::vector<std::string>(matches.begin(), matches.end()));
+}
+
+void MaybeUpdateUserInput(FormFieldData& field,
+                          FieldRendererId element_id,
+                          const FieldDataManager& field_data_manager) {
+  // If the field was autofilled or the user typed into it, check the value
+  // stored in `field_data_manager` against the value property of the DOM
+  // `element`. If they differ, then the scripts on the website modified the
+  // value afterwards. Store the original value as the `user_input`, unless
+  // this is one of recognised situations when the site-modified value is more
+  // useful for filling.
+  if (FieldPropertiesMask properties_mask =
+          field_data_manager.HasFieldData(element_id)
+              ? field_data_manager.GetFieldPropertiesMask(element_id)
+              : FieldPropertiesMask();
+      properties_mask &
+      (FieldPropertiesFlags::kUserTyped | FieldPropertiesFlags::kAutofilled)) {
+    // The user input is preserved for all passwords. It is also preserved for
+    // other fields, as long as `value` is not acceptable.
+    std::u16string user_input = field_data_manager.GetUserInput(element_id);
+    if (field.form_control_type() == FormControlType::kInputPassword ||
+        !IsScriptModifiedValueAcceptable(field.value(), user_input,
+                                         field_data_manager)) {
+      field.set_user_input(std::move(user_input).substr(0, kMaxStringLength));
+    }
+  }
 }
 
 std::u16string GetAriaLabelForTesting(  // IN-TEST

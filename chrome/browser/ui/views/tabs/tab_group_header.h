@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/views/tabs/tab_slot_view.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/view_targeter_delegate.h"
@@ -43,6 +44,8 @@ class TabGroupHeader : public TabSlotView,
   TabGroupHeader& operator=(const TabGroupHeader&) = delete;
   ~TabGroupHeader() override;
 
+  void Init(const tab_groups::TabGroupId& group);
+
   // TabSlotView:
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
@@ -59,9 +62,10 @@ class TabGroupHeader : public TabSlotView,
   gfx::Rect GetAnchorBoundsInScreen() const override;
 
   // views::ContextMenuController:
-  void ShowContextMenuForViewImpl(views::View* source,
-                                  const gfx::Point& point,
-                                  ui::MenuSourceType source_type) override;
+  void ShowContextMenuForViewImpl(
+      views::View* source,
+      const gfx::Point& point,
+      ui::mojom::MenuSourceType source_type) override;
 
   // views::ViewTargeterDelegate:
   bool DoesIntersectRect(const views::View* target,
@@ -69,6 +73,8 @@ class TabGroupHeader : public TabSlotView,
 
   // Updates our visual state according to the tab_groups::TabGroupVisualData
   // for our group.
+  // TODO(crbug.com/372296676): Make TabGroupHeader observe the group for
+  // changes to cut down on the number of times we recalculate the view.
   void VisualsChanged();
 
   int GetCollapsedHeaderWidth() const;
@@ -85,6 +91,15 @@ class TabGroupHeader : public TabSlotView,
   bool ShouldShowSyncIcon() const;
 
   void UpdateIsCollapsed();
+
+  void UpdateTitleView();
+  void UpdateSyncIconView();
+
+  // Creates a squircle (cross between a square and a circle).
+  void CreateHeaderWithoutTitle();
+  // Creates a round rect, similar to the shape of a tab when hovered but not
+  // selected.
+  void CreateHeaderWithTitle();
 
   const raw_ref<TabSlotController> tab_slot_controller_;
 
@@ -103,6 +118,15 @@ class TabGroupHeader : public TabSlotView,
 
   const raw_ref<const TabGroupStyle> group_style_;
   const raw_ptr<const TabStyle> tab_style_;
+
+  // The current title of the group.
+  std::u16string group_title_;
+
+  // The current color of the group.
+  SkColor color_;
+
+  // Determines if we should show the sync icon in front of the title.
+  bool should_show_sync_icon_;
 
   // Local saved collapsed state. When this differs from
   // `TabSlotController::IsGroupCollapsed()`, then the collapsed state has

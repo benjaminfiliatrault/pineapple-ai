@@ -48,6 +48,7 @@ class CaptureModeBarView;
 class CaptureModeController;
 class CaptureModeSessionFocusCycler;
 class CaptureModeSettingsView;
+class CaptureRegionOverlayController;
 class CaptureWindowObserver;
 class CursorSetter;
 class RecordingTypeMenuView;
@@ -94,9 +95,6 @@ class ASH_EXPORT CaptureModeSession
   views::Widget* capture_label_widget() { return capture_label_widget_.get(); }
   views::Widget* capture_mode_settings_widget() {
     return capture_mode_settings_widget_.get();
-  }
-  views::Widget* search_results_panel_widget() {
-    return search_results_panel_widget_.get();
   }
   bool is_selecting_region() const { return is_selecting_region_; }
   CaptureModeToastController* capture_toast_controller() {
@@ -178,7 +176,10 @@ class ASH_EXPORT CaptureModeSession
   void MaybeChangeRoot(aura::Window* new_root,
                        bool root_window_will_shutdown) override;
   std::set<aura::Window*> GetWindowsToIgnoreFromWidgets() override;
-  void ShowSearchResultsPanel(const gfx::ImageSkia& image) override;
+  void AddActionButton(views::Button::PressedCallback callback,
+                       std::u16string text,
+                       const gfx::VectorIcon* icon,
+                       ActionButtonRank rank) override;
 
   // ui::LayerDelegate:
   void OnPaintLayer(const ui::PaintContext& context) override;
@@ -250,6 +251,10 @@ class ASH_EXPORT CaptureModeSession
   // record button in the capture label view.
   void DoPerformCapture();
 
+  // Called when the user clicks the Search button while in default capture mode
+  // session.
+  void DoPerformImageSearch();
+
   // Called when the drop-down button in the `capture_label_widget_` is pressed
   // which toggles the recording type menu on and off.
   void OnRecordingTypeDropDownButtonPressed(const ui::Event& event);
@@ -261,6 +266,10 @@ class ASH_EXPORT CaptureModeSession
 
   // Paints the current capture region depending on the current capture source.
   void PaintCaptureRegion(gfx::Canvas* canvas);
+
+  // Paints the capture region overlay onto `canvas` if supported by the
+  // behavior, otherwise does nothing.
+  void MaybePaintCaptureRegionOverlay(gfx::Canvas& canvas) const;
 
   // Helper to unify mouse/touch events. Forwards events to the three below
   // functions and they are located on |capture_button_widget_|. Blocks events
@@ -329,17 +338,6 @@ class ASH_EXPORT CaptureModeSession
   // child is visible.
   bool ShouldCaptureLabelHandleEvent(aura::Window* event_target);
 
-  // Creates the the action container widget if it wasn't previously created,
-  // and updates the widget's bounds.
-  void UpdateActionContainerWidget();
-
-  // Updates the action container widget's bounds.
-  void UpdateActionContainerWidgetBounds();
-
-  // Calculates the targeted action container widget bounds in screen
-  // coordinates.
-  gfx::Rect CalculateActionContainerWidgetBounds() const;
-
   // Updates |root_window_dimmers_| to dim the correct root windows.
   void UpdateRootWindowDimmers();
 
@@ -401,6 +399,21 @@ class ASH_EXPORT CaptureModeSession
   // capturable window at `screen_point`. Returns false otherwise.
   bool IsPointOverSelectedWindow(const gfx::Point& screen_point) const;
 
+  // Creates the the action container widget if it wasn't previously created,
+  // and updates the widget's bounds.
+  void UpdateActionContainerWidget();
+
+  // Updates the action container widget's bounds.
+  void UpdateActionContainerWidgetBounds();
+
+  // Calculates the targeted action container widget bounds in screen
+  // coordinates.
+  gfx::Rect CalculateActionContainerWidgetBounds() const;
+
+  // Removes any existing action buttons from `action_container_view_` if the
+  // `action_container_widget_` exists,
+  void RemoveAllActionButtons();
+
   // BaseCaptureModeSession:
   void InitInternal() override;
   void ShutdownInternal() override;
@@ -439,11 +452,6 @@ class ASH_EXPORT CaptureModeSession
   views::UniqueWidgetPtr recording_type_menu_widget_;
   raw_ptr<RecordingTypeMenuView, DanglingUntriaged> recording_type_menu_view_ =
       nullptr;
-
-  // Contains `SearchResultsPanel` as its contents view.
-  // TODO(b/362772923): Determine whether we need to move
-  // `search_results_panel_widget_` to `CaptureModeController`.
-  std::unique_ptr<views::Widget> search_results_panel_widget_;
 
   // Magnifier glass used during a region capture session.
   MagnifierGlass magnifier_glass_;
@@ -513,6 +521,11 @@ class ASH_EXPORT CaptureModeSession
   // True when we ask the DLP manager to check the screen content before we
   // perform the capture.
   bool is_waiting_for_dlp_confirmation_ = false;
+
+  // Controls the overlay shown on the capture region to indicate detected text,
+  // translations, etc.
+  std::unique_ptr<CaptureRegionOverlayController>
+      capture_region_overlay_controller_;
 
   // The object which handles tab focus while in a capture session.
   std::unique_ptr<CaptureModeSessionFocusCycler> focus_cycler_;

@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "gpu/config/gpu_control_list.h"
 
 #include <utility>
@@ -212,8 +207,7 @@ bool GpuControlList::Version::Contains(const std::string& version_string,
         return false;
       return Version::Compare(version, ref_version2, style) <= 0;
     default:
-      NOTREACHED_IN_MIGRATION();
-      return false;
+      NOTREACHED();
   }
 }
 
@@ -342,13 +336,12 @@ bool GpuControlList::GLStrings::Contains(const GPUInfo& gpu_info) const {
 }
 
 bool GpuControlList::MachineModelInfo::Contains(const GPUInfo& gpu_info) const {
-  if (machine_model_name_size > 0) {
+  if (machine_model_names.size() > 0) {
     if (gpu_info.machine_model_name.empty())
       return false;
     bool found_match = false;
-    for (size_t ii = 0; ii < machine_model_name_size; ++ii) {
-      if (RE2::FullMatch(gpu_info.machine_model_name,
-                         machine_model_names[ii])) {
+    for (auto* const machine_model_name : machine_model_names) {
+      if (RE2::FullMatch(gpu_info.machine_model_name, machine_model_name)) {
         found_match = true;
         break;
       }
@@ -378,7 +371,7 @@ bool GpuControlList::More::Contains(const GPUInfo& gpu_info) const {
     return false;
   }
   if (gpu_count.IsSpecified()) {
-    if (!gpu_count.Contains(std::to_string(gpu_info.GpuCount()))) {
+    if (!gpu_count.Contains(base::NumberToString(gpu_info.GpuCount()))) {
       return false;
     }
   }
@@ -417,6 +410,65 @@ bool GpuControlList::More::Contains(const GPUInfo& gpu_info) const {
   }
   return true;
 }
+
+bool GpuControlList::IntelConditions::Contains(
+    const std::vector<GPUInfo::GPUDevice>& candidates,
+    const GPUInfo& gpu_info) const {
+  if (intel_gpu_series_list.size() > 0) {
+    DCHECK(!intel_gpu_generation.IsSpecified());
+    for (auto& candidate : candidates) {
+      IntelGpuSeriesType candidate_series =
+          GetIntelGpuSeriesType(candidate.vendor_id, candidate.device_id);
+      if (candidate_series == IntelGpuSeriesType::kUnknown) {
+        continue;
+      }
+      for (auto intel_gpu_series : intel_gpu_series_list) {
+        if (candidate_series == intel_gpu_series) {
+          return true;
+        }
+      }
+    }
+  } else {
+    DCHECK(intel_gpu_generation.IsSpecified());
+    for (auto& candidate : candidates) {
+      std::string candidate_generation =
+          GetIntelGpuGeneration(candidate.vendor_id, candidate.device_id);
+      if (candidate_generation.empty()) {
+        continue;
+      }
+      if (intel_gpu_generation.Contains(candidate_generation)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+GpuControlList::Conditions::Conditions(
+    OsType os_type,
+    Version os_version,
+    uint32_t vendor_id,
+    base::span<const Device> devices,
+    MultiGpuCategory multi_gpu_category,
+    MultiGpuStyle multi_gpu_style,
+    const DriverInfo* driver_info,
+    const GLStrings* gl_strings,
+    const MachineModelInfo* machine_model_info,
+    const IntelConditions* intel_conditions,
+    const More* more)
+    : os_type(os_type),
+      os_version(os_version),
+      vendor_id(vendor_id),
+      devices(devices),
+      multi_gpu_category(multi_gpu_category),
+      multi_gpu_style(multi_gpu_style),
+      driver_info(driver_info),
+      gl_strings(gl_strings),
+      machine_model_info(machine_model_info),
+      intel_conditions(intel_conditions),
+      more(more) {}
+
+GpuControlList::Conditions::Conditions(const Conditions& other) = default;
 
 bool GpuControlList::Conditions::Contains(OsType target_os_type,
                                           const std::string& target_os_version,
@@ -457,35 +509,12 @@ bool GpuControlList::Conditions::Contains(OsType target_os_type,
         candidates.push_back(gpu_info.gpu);
   }
 
-  if (vendor_id != 0 || intel_gpu_series_list_size > 0 ||
-      intel_gpu_generation.IsSpecified()) {
+  if (vendor_id != 0 || intel_conditions) {
     bool found = false;
-    if (intel_gpu_series_list_size > 0) {
-      for (size_t ii = 0; !found && ii < candidates.size(); ++ii) {
-        IntelGpuSeriesType candidate_series = GetIntelGpuSeriesType(
-            candidates[ii].vendor_id, candidates[ii].device_id);
-        if (candidate_series == IntelGpuSeriesType::kUnknown)
-          continue;
-        for (size_t jj = 0; jj < intel_gpu_series_list_size; ++jj) {
-          if (candidate_series == intel_gpu_series_list[jj]) {
-            found = true;
-            break;
-          }
-        }
-      }
-    } else if (intel_gpu_generation.IsSpecified()) {
-      for (auto& candidate : candidates) {
-        std::string candidate_generation =
-            GetIntelGpuGeneration(candidate.vendor_id, candidate.device_id);
-        if (candidate_generation.empty())
-          continue;
-        if (intel_gpu_generation.Contains(candidate_generation)) {
-          found = true;
-          break;
-        }
-      }
+    if (intel_conditions) {
+      found = intel_conditions->Contains(candidates, gpu_info);
     } else {
-      if (device_size == 0) {
+      if (devices.size() == 0) {
         for (auto& candidate : candidates) {
           if (vendor_id == candidate.vendor_id) {
             found = true;
@@ -493,7 +522,7 @@ bool GpuControlList::Conditions::Contains(OsType target_os_type,
           }
         }
       } else {
-        for (size_t ii = 0; !found && ii < device_size; ++ii) {
+        for (size_t ii = 0; !found && ii < devices.size(); ++ii) {
           uint32_t device_id = devices[ii].device_id;
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
           uint32_t revision = devices[ii].revision;

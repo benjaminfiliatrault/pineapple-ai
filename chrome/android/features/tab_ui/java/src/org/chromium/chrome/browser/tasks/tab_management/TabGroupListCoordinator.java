@@ -31,14 +31,14 @@ import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeatures;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
 import org.chromium.chrome.browser.tab_ui.TabListFaviconProvider;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeControllerFactory;
-import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.components.data_sharing.DataSharingService;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.signin.identitymanager.IdentityManager;
@@ -98,9 +98,18 @@ public class TabGroupListCoordinator {
 
         ViewBuilder<TabGroupRowView> layoutBuilder =
                 new LayoutViewBuilder<>(R.layout.tab_group_row);
-        mSimpleRecyclerViewAdapter = new SimpleRecyclerViewAdapter(modelList);
+        mSimpleRecyclerViewAdapter =
+                new SimpleRecyclerViewAdapter(modelList) {
+                    @Override
+                    public void onViewRecycled(SimpleRecyclerViewAdapter.ViewHolder holder) {
+                        if (holder.getItemViewType() == RowType.TAB_GROUP) {
+                            TabGroupRowViewBinder.onViewRecycled((TabGroupRowView) holder.itemView);
+                        }
+                        super.onViewRecycled(holder);
+                    }
+                };
         mSimpleRecyclerViewAdapter.registerType(
-                RowType.TAB_GROUP, layoutBuilder, new TabGroupRowViewBinder());
+                RowType.TAB_GROUP, layoutBuilder, TabGroupRowViewBinder::bind);
 
         mView =
                 (TabGroupListView)

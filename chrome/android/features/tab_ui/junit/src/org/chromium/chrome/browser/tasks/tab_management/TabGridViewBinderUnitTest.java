@@ -30,9 +30,11 @@ import android.graphics.Matrix;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.util.Size;
+import android.view.ContextThemeWrapper;
 import android.view.View;
 import android.view.ViewGroup.LayoutParams;
 import android.view.ViewStub;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ImageView.ScaleType;
 
@@ -73,9 +75,11 @@ public final class TabGridViewBinderUnitTest {
     @Mock private TabGridView mViewGroup;
     @Mock private ThumbnailFetcher mFetcher;
     @Mock private TabThumbnailView mThumbnailView;
+    @Mock private FrameLayout mTabGroupColorViewContainer;
     @Mock private ImageView mFaviconView;
     @Mock private ViewStub mTabCardLabelStub;
     @Mock private TabCardLabelView mTabCardLabelView;
+    @Mock private ImageView mActionButton;
     @Mock private TypedArray mTypedArray;
     @Mock private TabFavicon mTabFavicon;
     @Mock private PriceCardView mPriceCardView;
@@ -94,7 +98,9 @@ public final class TabGridViewBinderUnitTest {
 
     @Before
     public void setUp() {
-        mContext = RuntimeEnvironment.application;
+        mContext =
+                new ContextThemeWrapper(
+                        RuntimeEnvironment.application, R.style.Theme_BrowserUI_DayNight);
 
         mModel =
                 new PropertyModel.Builder(TabProperties.ALL_KEYS_TAB_GRID)
@@ -105,9 +111,12 @@ public final class TabGridViewBinderUnitTest {
                         .with(TabProperties.GRID_CARD_SIZE, new Size(INIT_WIDTH, INIT_HEIGHT))
                         .build();
         when(mViewGroup.fastFindViewById(R.id.tab_thumbnail)).thenReturn(mThumbnailView);
+        when(mViewGroup.fastFindViewById(R.id.tab_group_color_view_container))
+                .thenReturn(mTabGroupColorViewContainer);
         when(mViewGroup.fastFindViewById(R.id.tab_favicon)).thenReturn(mFaviconView);
         when(mViewGroup.fastFindViewById(R.id.price_info_box_outer)).thenReturn(mPriceCardView);
         when(mViewGroup.fastFindViewById(R.id.tab_card_label_stub)).thenReturn(mTabCardLabelStub);
+        when(mViewGroup.fastFindViewById(R.id.action_button)).thenReturn(mActionButton);
         doAnswer(
                         (ignored) -> {
                             when(mViewGroup.fastFindViewById(R.id.tab_card_label_stub))
@@ -352,6 +361,12 @@ public final class TabGridViewBinderUnitTest {
         TabGridViewBinder.bindTab(mModel, mViewGroup, TabProperties.FAVICON_FETCHER);
 
         verify(mFaviconView).setImageDrawable(mDrawable);
+        verify(mFaviconView).setVisibility(View.VISIBLE);
+
+        mModel.set(TabProperties.FAVICON_FETCHER, null);
+        TabGridViewBinder.bindTab(mModel, mViewGroup, TabProperties.FAVICON_FETCHER);
+        verify(mFaviconView).setImageDrawable(null);
+        verify(mFaviconView).setVisibility(View.GONE);
     }
 
     @Test
@@ -438,6 +453,17 @@ public final class TabGridViewBinderUnitTest {
 
         verify(mThumbnailView).setImageDrawable(null);
         verify(mFetcher).cancel();
+
+        verify(mTabGroupColorViewContainer).removeAllViews();
+        verify(mTabGroupColorViewContainer).setVisibility(View.GONE);
+    }
+
+    @Test
+    public void bindClosableTab_actionButtonTint() {
+        mModel.set(TabProperties.IS_SELECTED, true);
+        TabGridViewBinder.bindTab(mModel, mViewGroup, TabProperties.TAB_ACTION_BUTTON_DATA);
+
+        verify(mViewGroup).setTabActionButtonTint(any());
     }
 
     private void assertImageMatrix(

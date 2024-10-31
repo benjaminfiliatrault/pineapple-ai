@@ -8,6 +8,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/plus_addresses/features.h"
+#import "components/plus_addresses/grit/plus_addresses_strings.h"
 #import "components/plus_addresses/plus_address_test_utils.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/autofill/ui_bundled/autofill_app_interface.h"
@@ -143,11 +144,11 @@ id<GREYMatcher> PlusAddressSelectActionMatcher() {
   [AutofillAppInterface saveExampleAccountProfile];
 }
 
-- (void)tearDown {
+- (void)tearDownHelper {
   [AutofillAppInterface clearProfilesStore];
   [SigninEarlGrey signOut];
 
-  [super tearDown];
+  [super tearDownHelper];
 }
 
 // Opens the expanded manual fill view for a given `dataType`. `fieldToFill` is

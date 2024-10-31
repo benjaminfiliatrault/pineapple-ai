@@ -4,15 +4,78 @@
 
 #include "ash/wm/coral/coral_controller.h"
 
+#include "ash/birch/coral_util.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/coral_delegate.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
+#include "ash/wm/coral/fake_coral_service.h"
 #include "ash/wm/desks/desks_controller.h"
+#include "ash/wm/desks/desks_histogram_enums.h"
+#include "ash/wm/mru_window_tracker.h"
+#include "base/command_line.h"
+#include "base/json/json_writer.h"
+#include "chromeos/ash/components/mojo_service_manager/connection.h"
+#include "chromeos/ash/services/coral/public/mojom/coral_service.mojom.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "third_party/cros_system_api/mojo/service_constants.h"
 
 namespace ash {
+
+namespace {
+
+constexpr int kMinItemsInGroup = 4;
+constexpr int kMaxItemsInGroup = 10;
+constexpr int kMaxGroupsToGenerate = 2;
+// Too many items in 1 request could result in poor performance.
+constexpr size_t kMaxItemsInRequest = 100;
+constexpr base::TimeDelta kRequestCoralServiceTimeout = base::Seconds(10);
+
+aura::Window* FindAppWindowOnActiveDesk(const std::string& app_id) {
+  for (const auto& window :
+       Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk)) {
+    // Skip invalid windows.
+    if (!coral_util::CanMoveToNewDesk(window)) {
+      continue;
+    }
+
+    const std::string* app_id_key = window->GetProperty(kAppIDKey);
+    if (app_id_key && *app_id_key == app_id) {
+      return window;
+    }
+  }
+
+  return nullptr;
+}
+
+}  // namespace
 
 CoralRequest::CoralRequest() = default;
 
 CoralRequest::~CoralRequest() = default;
+
+std::string CoralRequest::ToString() const {
+  auto list = base::Value::List();
+  for (const ContentItem& item : content_) {
+    auto item_value = base::Value::Dict();
+    if (item->is_tab()) {
+      item_value.Set("Tab", base::Value::Dict()
+                                .Set("Title", item->get_tab()->title)
+                                .Set("Url", item->get_tab()->url.spec()));
+    }
+    if (item->is_app()) {
+      item_value.Set("App", base::Value::Dict()
+                                .Set("Title", item->get_app()->title)
+                                .Set("Id", item->get_app()->id));
+    }
+    list.Append(std::move(item_value));
+  }
+
+  auto root = base::Value::Dict().Set("Coral request", std::move(list));
+  return base::WriteJsonWithOptions(root,
+                                    base::JSONWriter::OPTIONS_PRETTY_PRINT)
+      .value_or(std::string());
+}
 
 CoralResponse::CoralResponse() = default;
 
@@ -22,16 +85,121 @@ CoralController::CoralController() = default;
 
 CoralController::~CoralController() = default;
 
-void CoralController::GenerateContentGroups(const CoralRequest& request,
-                                            CoralResponseCallback callback) {
-  // Not implemented yet.
-  std::move(callback).Run(nullptr);
+void CoralController::PrepareResource() {
+  CoralService* coral_service = EnsureCoralService();
+  if (!coral_service) {
+    LOG(ERROR) << "Failed to connect to coral service.";
+    return;
+  }
+  coral_service->PrepareResource();
+}
+
+void CoralController::GenerateContentGroups(
+    const CoralRequest& request,
+    mojo::PendingRemote<coral::mojom::TitleObserver> title_observer,
+    CoralResponseCallback callback) {
+  // There couldn't be valid groups, skip generating and return an empty
+  // response.
+  if (request.content().size() < kMinItemsInGroup) {
+    std::move(callback).Run(std::make_unique<CoralResponse>());
+    return;
+  }
+
+  CoralService* coral_service = EnsureCoralService();
+  if (!coral_service) {
+    LOG(ERROR) << "Failed to connect to coral service.";
+    std::move(callback).Run(nullptr);
+    return;
+  }
+
+  auto group_request = coral::mojom::GroupRequest::New();
+  group_request->embedding_options = coral::mojom::EmbeddingOptions::New();
+  group_request->clustering_options = coral::mojom::ClusteringOptions::New();
+  group_request->clustering_options->min_items_in_cluster = kMinItemsInGroup;
+  group_request->clustering_options->max_items_in_cluster = kMaxItemsInGroup;
+  group_request->clustering_options->max_clusters = kMaxGroupsToGenerate;
+  group_request->title_generation_options =
+      coral::mojom::TitleGenerationOptions::New();
+  const size_t items_in_request =
+      std::min(request.content().size(), kMaxItemsInRequest);
+  for (size_t i = 0; i < items_in_request; i++) {
+    group_request->entities.push_back(request.content()[i]->Clone());
+  }
+  coral_service->Group(std::move(group_request), std::move(title_observer),
+                       base::BindOnce(&CoralController::HandleGroupResult,
+                                      weak_factory_.GetWeakPtr(),
+                                      request.source(), std::move(callback)));
 }
 
 void CoralController::CacheEmbeddings(const CoralRequest& request,
                                       base::OnceCallback<void(bool)> callback) {
-  // Not implemented yet.
-  std::move(callback).Run(false);
+  CoralService* coral_service = EnsureCoralService();
+  if (!coral_service) {
+    LOG(ERROR) << "Failed to connect to coral service.";
+    std::move(callback).Run(false);
+    return;
+  }
+
+  auto cache_embeddings_request = coral::mojom::CacheEmbeddingsRequest::New();
+  cache_embeddings_request->embedding_options =
+      coral::mojom::EmbeddingOptions::New();
+  for (const auto& entity : request.content()) {
+    cache_embeddings_request->entities.push_back(entity->Clone());
+  }
+
+  coral_service->CacheEmbeddings(
+      std::move(cache_embeddings_request),
+      base::BindOnce(&CoralController::HandleCacheEmbeddingsResult,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+CoralController::CoralService* CoralController::EnsureCoralService() {
+  // Generate a fake service if --force-birch-fake-coral-backend is enabled.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kForceBirchFakeCoralBackend)) {
+    if (!fake_service_) {
+      fake_service_ = std::make_unique<FakeCoralService>();
+    }
+    return fake_service_.get();
+  }
+
+  if (!coral_service_ && mojo_service_manager::IsServiceManagerBound()) {
+    auto pipe_handle = coral_service_.BindNewPipeAndPassReceiver().PassPipe();
+    coral_service_.reset_on_disconnect();
+    mojo_service_manager::GetServiceManagerProxy()->Request(
+        chromeos::mojo_services::kCrosCoralService, kRequestCoralServiceTimeout,
+        std::move(pipe_handle));
+  }
+  return coral_service_ ? coral_service_.get() : nullptr;
+}
+
+void CoralController::HandleGroupResult(CoralSource source,
+                                        CoralResponseCallback callback,
+                                        coral::mojom::GroupResultPtr result) {
+  if (result->is_error()) {
+    LOG(ERROR) << "Coral group request failed with CoralError code: "
+               << static_cast<int>(result->get_error());
+    std::move(callback).Run(nullptr);
+    return;
+  }
+  coral::mojom::GroupResponsePtr group_response =
+      std::move(result->get_response());
+  auto response = std::make_unique<CoralResponse>();
+  response->set_source(source);
+  response->set_groups(std::move(group_response->groups));
+  std::move(callback).Run(std::move(response));
+}
+
+void CoralController::HandleCacheEmbeddingsResult(
+    base::OnceCallback<void(bool)> callback,
+    coral::mojom::CacheEmbeddingsResultPtr result) {
+  if (result->is_error()) {
+    LOG(ERROR) << "Coral cache embeddings request failed with CoralError code: "
+               << static_cast<int>(result->get_error());
+    std::move(callback).Run(false);
+    return;
+  }
+  std::move(callback).Run(true);
 }
 
 void CoralController::OpenNewDeskWithGroup(CoralResponse::Group group) {
@@ -43,11 +211,27 @@ void CoralController::OpenNewDeskWithGroup(CoralResponse::Group group) {
   if (!desks_controller->CanCreateDesks()) {
     return;
   }
-  desks_controller->NewDesk(DesksCreationRemovalSource::kCoral,
-                            base::UTF8ToUTF16(group->title));
-  Shell::Get()->coral_delegate()->MoveTabsInGroupToNewDesk(std::move(group));
+  desks_controller->NewDesk(
+      DesksCreationRemovalSource::kCoral,
+      base::UTF8ToUTF16(group->title.value_or(std::string())));
+  const coral_util::TabsAndApps tabs_apps =
+      coral_util::SplitContentData(group->entities);
 
-  // TODO(zxdan): move the apps in group to the new desk.
+  // Move tabs to a browser on the new desk.
+  Shell::Get()->coral_delegate()->MoveTabsInGroupToNewDesk(tabs_apps.tabs);
+
+  // Move the apps to the new desk.
+  const int new_desk_idx = desks_controller->GetNumberOfDesks() - 1;
+  Desk* new_desk = desks_controller->GetDeskAtIndex(new_desk_idx);
+  for (const auto& app : tabs_apps.apps) {
+    auto* window = FindAppWindowOnActiveDesk(app.id);
+    if (window) {
+      desks_controller->MoveWindowFromActiveDeskTo(
+          window, new_desk, window->GetRootWindow(),
+          DesksMoveWindowFromActiveDeskSource::kCoral);
+    }
+  }
+
   desks_controller->ActivateDesk(desks_controller->desks().back().get(),
                                  DesksSwitchSource::kCoral);
 }

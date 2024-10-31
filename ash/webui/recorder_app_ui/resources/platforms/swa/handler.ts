@@ -14,6 +14,7 @@ import {
 } from
   'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import {mojoString16ToString} from 'chrome://resources/js/mojo_type_util.js';
 import {nothing} from 'chrome://resources/mwc/lit/index.js';
 
 import {NoArgStringName} from '../../core/i18n.js';
@@ -24,9 +25,16 @@ import {
   PlatformHandler as PlatformHandlerBase,
 } from '../../core/platform_handler.js';
 import {computed, Signal, signal} from '../../core/reactive/signal.js';
+import {LangPackInfo, LanguageCode} from '../../core/soda/language_info.js';
 import {SodaSession} from '../../core/soda/types.js';
-import {assertInstanceof} from '../../core/utils/assert.js';
+import {settings} from '../../core/state/settings.js';
+import {
+  assertExists,
+  assertInstanceof,
+  checkEnumVariant,
+} from '../../core/utils/assert.js';
 import {parseTopFrameInfo} from '../../core/utils/errors.js';
+import {lazyInit} from '../../core/utils/utils.js';
 
 import {EventsSender} from './metrics.js';
 import {
@@ -36,6 +44,7 @@ import {
 } from './on_device_model.js';
 import {MojoSodaSession} from './soda_session.js';
 import {
+  LangPackInfo as MojoLangPackInfo,
   ModelState as MojoModelState,
   ModelStateMonitorReceiver,
   PageHandler as MojoPageHandler,
@@ -49,7 +58,9 @@ const CRASH_SERVER_PRODUCT_NAME = 'ChromeOS_RecorderApp';
 export class PlatformHandler extends PlatformHandlerBase {
   private readonly remote = MojoPageHandler.getRemote();
 
-  override readonly sodaState = signal<ModelState>({kind: 'unavailable'});
+  private readonly sodaStates = new Map<LanguageCode, Signal<ModelState>>();
+
+  private readonly langPacks = new Map<LanguageCode, LangPackInfo>();
 
   override summaryModelLoader: SummaryModelLoader;
 
@@ -89,26 +100,54 @@ export class PlatformHandler extends PlatformHandlerBase {
     });
   }
 
+  private mojoLangPackInfoToLangPackInfo(
+    langPack: MojoLangPackInfo,
+  ): LangPackInfo|null {
+    const languageCode = checkEnumVariant(LanguageCode, langPack.languageCode);
+    if (languageCode === null) {
+      return null;
+    }
+    return {
+      languageCode: languageCode,
+      displayName: mojoString16ToString(langPack.displayName),
+      isGenAiSupported: langPack.isGenAiSupported,
+    };
+  }
+
   override async init(): Promise<void> {
     ColorChangeUpdater.forDocument().start();
 
     this.canUseSpeakerLabel.value =
-      (await this.remote.canUseSpeakerLabelForCurrentProfile()).supported;
+      (await this.remote.canUseSpeakerLabel()).supported;
 
     this.canCaptureSystemAudioWithLoopback.value =
       (await this.remote.canCaptureSystemAudioWithLoopback()).supported;
 
-    const update = (state: MojoModelState) => {
-      this.sodaState.value = mojoModelStateToModelState(state);
-    };
-    const monitor = new ModelStateMonitorReceiver({update});
-    // This should be relatively quick since in recorder_app_ui.cc we just
-    // return the cached state here, but we await here to avoid UI showing
-    // temporary unavailabe state.
-    const {state} = await this.remote.addSodaMonitor(
-      monitor.$.bindNewPipeAndPassRemote(),
-    );
-    update(state);
+    const mojoLangPacks = (await this.remote.getAvailableLangPacks()).langPacks;
+    for (const mojoLangPack of mojoLangPacks) {
+      const langPack = this.mojoLangPackInfoToLangPackInfo(mojoLangPack);
+      if (langPack === null) {
+        continue;
+      }
+      this.langPacks.set(langPack.languageCode, langPack);
+    }
+
+    for (const language of this.langPacks.keys()) {
+      const sodaState = signal<ModelState>({kind: 'unavailable'});
+      this.sodaStates.set(language, sodaState);
+      function update(state: MojoModelState) {
+        sodaState.value = mojoModelStateToModelState(state);
+      }
+      const monitor = new ModelStateMonitorReceiver({update});
+      // This should be relatively quick since in recorder_app_ui.cc we just
+      // return the cached state here, but we await here to avoid UI showing
+      // temporary unavailabe state.
+      const {state} = await this.remote.addSodaMonitor(
+        language,
+        monitor.$.bindNewPipeAndPassRemote(),
+      );
+      update(state);
+    }
 
     const quietModeMonitor = new QuietModeMonitorReceiver({
       update: (inQuietMode: boolean) => {
@@ -124,17 +163,48 @@ export class PlatformHandler extends PlatformHandlerBase {
     await this.titleSuggestionModelLoader.init();
   }
 
-  override installSoda(): void {
-    // We don't care about the returned promise as long as the request goes
-    // through. The install progress is separately tracked in `sodaState`.
-    void this.remote.installSoda();
+  override getLangPackList = lazyInit((): readonly LangPackInfo[] => {
+    return Array.from(this.langPacks.values());
+  });
+
+  override getLangPackInfo(language: LanguageCode): LangPackInfo {
+    return assertExists(this.langPacks.get(language));
   }
 
-  override async newSodaSession(): Promise<SodaSession> {
+  override installSoda(language: LanguageCode): void {
+    // We don't care about the returned promise as long as the request goes
+    // through. The install progress is separately tracked in `sodaState`.
+    void this.remote.installSoda(language);
+  }
+
+  override isSodaAvailable(): boolean {
+    for (const state of this.sodaStates.values()) {
+      if (state.value.kind !== 'unavailable') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  override getSodaState(language: LanguageCode): Signal<ModelState> {
+    // All language states should be initialized in `init`.
+    return assertExists(this.sodaStates.get(language));
+  }
+
+  override getSelectedLanguageState(): Signal<ModelState>|null {
+    const selectedLanguage = settings.value.transcriptionLanguage;
+    return selectedLanguage === null ? null :
+                                       this.getSodaState(selectedLanguage);
+  }
+
+  override async newSodaSession(
+    language: LanguageCode,
+  ): Promise<SodaSession> {
     const recognizer = new SodaRecognizerRemote();
     const session = new MojoSodaSession(recognizer);
     const client = new SodaClientReceiver(session);
     const {result} = await this.remote.loadSpeechRecognizer(
+      language,
       client.$.bindNewPipeAndPassRemote(),
       recognizer.$.bindNewPipeAndPassReceiver(),
     );
@@ -174,7 +244,10 @@ export class PlatformHandler extends PlatformHandlerBase {
         stackTrace: stackStr,
         columnNumber: colNo,
       },
-      /* callback= */ () => {}
+      /* callback= */
+      () => {
+        // Do nothing after error reported.
+      },
     );
   }
 

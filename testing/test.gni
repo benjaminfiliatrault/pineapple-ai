@@ -10,6 +10,7 @@ import("//build/config/chromeos/args.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/devtools.gni")
 import("//build/config/gclient_args.gni")
+import("//build/config/rts.gni")
 import("//build/rust/rust_static_library.gni")
 import("//build_overrides/build.gni")
 
@@ -149,7 +150,7 @@ template("mixed_test") {
   }
 
   _building_fuzztest_fuzzer =
-      defined(invoker.fuzztests) && use_fuzzing_engine && is_linux
+      defined(invoker.fuzztests) && use_fuzzing_engine && (is_linux || is_mac)
 
   # Fuzz tests are small fuzzers that do not require particularly-powerful
   # machines to run, so we do not build them when `high_end_fuzzer_targets`
@@ -188,7 +189,7 @@ template("mixed_test") {
           # The following target contains a static initializer which
           # will ensure that the code in base/test:test_support
           # ends up calling through to fuzztest::InitFuzzTest.
-          "//base/test:confirm_fuzztest_init",
+          "//testing/libfuzzer:confirm_fuzztest_init",
         ]
       }
     }
@@ -362,6 +363,17 @@ template("mixed_test") {
 #      This should be a list of the test names, for example
 #      fuzztests = [ "MyTestClass.MyTestName" ]
 template("test") {
+  # Ensures a test filter file exists and if not, creates a dummy file.
+  # The Regression Test Selection (rts) flag is passed in mb.py and used
+  # to filter out test cases. Flag ensures that a file exists.
+  if (use_rts) {
+    action("${target_name}__rts_filters") {
+      script = "//build/add_rts_filters.py"
+      rts_file = "${root_build_dir}/gen/rts/${invoker.target_name}.filter"
+      args = [ rebase_path(rts_file, root_build_dir) ]
+      outputs = [ rts_file ]
+    }
+  }
   testonly = true
   if (!is_ios) {
     assert(!defined(invoker.is_xctest) || !invoker.is_xctest,
@@ -460,6 +472,10 @@ template("test") {
 
         # Don't output to the root or else conflict with the group() below.
         output_name = rebase_path(_exec_output, root_out_dir)
+
+        if (use_rts) {
+          data_deps += [ ":${invoker.target_name}__rts_filters" ]
+        }
       }
 
       create_native_executable_dist(_dist_target) {
@@ -468,6 +484,12 @@ template("test") {
         deps = [ ":$_exec_target" ]
         if (defined(invoker.extra_dist_files)) {
           extra_files = invoker.extra_dist_files
+        }
+        if (use_rts) {
+          if (!defined(data_deps)) {
+            data_deps = []
+          }
+          data_deps += [ ":${invoker.target_name}__rts_filters" ]
         }
       }
     } else {
@@ -598,6 +620,10 @@ template("test") {
         if (defined(_unwind_table_asset_name)) {
           deps += [ ":${_unwind_table_asset_name}" ]
         }
+
+        if (use_rts) {
+          data_deps = [ ":${invoker.target_name}__rts_filters" ]
+        }
       }
     }
 
@@ -618,6 +644,9 @@ template("test") {
       test_name = _output_name
       test_suite = _output_name
       test_type = "gtest"
+      if (use_rts) {
+        data_deps += [ ":${invoker.target_name}__rts_filters" ]
+      }
     }
 
     # Create a wrapper script rather than using a group() in order to ensure
@@ -651,6 +680,9 @@ template("test") {
 
       if (tests_have_location_tags) {
         data = [ "//testing/location_tags.json" ]
+      }
+      if (use_rts) {
+        data_deps += [ ":${invoker.target_name}__rts_filters" ]
       }
     }
   } else if (is_fuchsia) {
@@ -928,15 +960,17 @@ template("test") {
       # Include the generate_wrapper as part of data_deps
       data_deps += [ ":${_wrapper_output_name}" ]
       write_runtime_deps = _runtime_deps_file
+      if (use_rts) {
+        data_deps += [ ":${invoker.target_name}__rts_filters" ]
+      }
       if (!defined(deps)) {
         deps = []
       }
     }
-  } else if ((is_chromeos_ash || (is_chromeos_lacros && is_chromeos_device)) &&
-             cros_board != "") {
+  } else if (is_chromeos && cros_board != "") {
     assert(!defined(invoker.use_xvfb) || !invoker.use_xvfb)
 
-    # Building for a cros board (ie: not linux-chromeos or linux-lacros).
+    # Building for a cros board (ie: not linux-chromeos).
 
     _gen_runner_target = "${target_name}__runner"
     _runtime_deps_file =
@@ -953,15 +987,11 @@ template("test") {
         test_exe = invoker.target_name
         runtime_deps_file = _runtime_deps_file
 
-        if (is_chromeos_lacros) {
-          # At build time, Lacros tests don't know whether they'll run on VM or
-          # HW, and instead, these flags are specified at runtime when invoking
-          # the generated runner script.
-          skip_generating_board_args = true
-        }
-
         if (tests_have_location_tags) {
           data = [ "//testing/location_tags.json" ]
+        }
+        if (use_rts) {
+          data_deps = [ ":${invoker.target_name}__rts_filters" ]
         }
       }
     }
@@ -989,93 +1019,8 @@ template("test") {
       }
 
       data_deps += [ "//testing:test_scripts_shared" ]
-    }
-  } else if (is_chromeos_lacros && !is_chromeos_device) {
-    _runtime_deps_file = "$root_out_dir/${target_name}.runtime_deps"
-    _executable = target_name
-    _gen_runner_target = "${target_name}__runner"
-
-    if (defined(invoker.use_xvfb)) {
-      _use_xvfb = invoker.use_xvfb
-    } else {
-      _use_xvfb = false
-    }
-
-    # When use_xvfb is set by the invoker, it indicates that running this test
-    # target requires a window, and in lacros build, ash-chrome serves as the
-    # display server. Note that even though the tests themselves do not require
-    # xvfb anymore, xvfb.py is still needed to invoke the lacros test runner
-    # because ash-chrome is based on x11.
-    _use_ash_chrome = _use_xvfb
-
-    generate_wrapper(_gen_runner_target) {
-      wrapper_script = "$root_build_dir/bin/run_" + _executable
-
-      data = []
-      data_deps = [ "//testing:test_scripts_shared" ]
-
-      if (_use_xvfb) {
-        executable = "//testing/xvfb.py"
-        data += [ "//.vpython3" ]
-      } else {
-        executable = "//testing/test_env.py"
-      }
-      if (tests_have_location_tags) {
-        data += [ "//testing/location_tags.json" ]
-      }
-
-      executable_args = [
-        "@WrappedPath(../../build/lacros/test_runner.py)",
-        "test",
-        "@WrappedPath(./${_executable})",
-        "--test-launcher-bot-mode",
-      ]
-
-      if (_use_ash_chrome) {
-        executable_args += [ "--ash-chrome-path" ]
-
-        # Can't use --ash-chrome-path=path because WrappedPath
-        # won't be expanded for that usage.
-        executable_args += [ "@WrappedPath(./ash_clang_x64/test_ash_chrome)" ]
-      }
-
-      if (is_asan) {
-        executable_args += [ "--asan=1" ]
-      }
-      if (is_msan) {
-        executable_args += [ "--msan=1" ]
-      }
-      if (is_tsan) {
-        executable_args += [ "--tsan=1" ]
-      }
-      if (use_cfi_diag) {
-        executable_args += [ "--cfi-diag=1" ]
-      }
-      if (fail_on_san_warnings) {
-        executable_args += [ "--fail-san=1" ]
-      }
-
-      data += [ "//build/lacros/test_runner.py" ]
-    }
-
-    mixed_test(target_name) {
-      target_type = "executable"
-      forward_variables_from(invoker, "*", TESTONLY_AND_VISIBILITY)
-      forward_variables_from(invoker, [ "visibility" ])
-      if (!defined(deps)) {
-        deps = []
-      }
-
-      if (!defined(data_deps)) {
-        data_deps = []
-      }
-
-      data_deps += [ "//testing:test_scripts_shared" ]
-
-      write_runtime_deps = _runtime_deps_file
-      deps += [ ":$_gen_runner_target" ]
-      if (_use_ash_chrome && also_build_ash_chrome) {
-        data_deps += [ "//chrome/test:test_ash_chrome(//build/toolchain/linux:ash_clang_x64)" ]
+      if (use_rts) {
+        data_deps += [ ":${invoker.target_name}__rts_filters" ]
       }
     }
   } else if (!is_nacl) {
@@ -1127,6 +1072,9 @@ template("test") {
       if (fail_on_san_warnings) {
         executable_args += [ "--fail-san=1" ]
       }
+      if (use_rts) {
+        data_deps += [ ":${invoker.target_name}__rts_filters" ]
+      }
     }
 
     mixed_test(target_name) {
@@ -1152,6 +1100,9 @@ template("test") {
       }
 
       data_deps += [ "//testing:test_scripts_shared" ]
+      if (use_rts) {
+        data_deps += [ ":${invoker.target_name}__rts_filters" ]
+      }
     }
   } else {
     # This is a catch-all clause for NaCl toolchains and other random
@@ -1172,6 +1123,9 @@ template("test") {
       }
 
       data_deps += [ "//testing:test_scripts_shared" ]
+      if (use_rts) {
+        data_deps += [ ":${invoker.target_name}__rts_filters" ]
+      }
     }
   }
 }
@@ -1202,9 +1156,18 @@ template("script_test") {
                            invoker.enable_android_wrapper && is_android
   _enable_cros_wrapper =
       defined(invoker.enable_cros_wrapper) && invoker.enable_cros_wrapper &&
-      is_chromeos_ash && is_chromeos_device
+      is_chromeos && is_chromeos_device
   assert(!(_enable_logdog_wrapper && _enable_cros_wrapper),
          "The logdog and cros_test wrappers are mutually exclusive")
+
+  if (use_rts) {
+    action("${target_name}__rts_filters") {
+      script = "//build/add_rts_filters.py"
+      rts_file = "${root_build_dir}/gen/rts/${invoker.target_name}.filter"
+      args = [ rebase_path(rts_file, root_build_dir) ]
+      outputs = [ rts_file ]
+    }
+  }
 
   _shared_data = [ invoker.script ]
   if (defined(invoker.data)) {
@@ -1295,6 +1258,7 @@ template("isolated_script_test") {
                            "*",
                            TESTONLY_AND_VISIBILITY + [
                                  "args",
+                                 "data",
                                  "deps",
                                  "script",
                                ])
@@ -1305,6 +1269,9 @@ template("isolated_script_test") {
     }
     script = "//testing/scripts/run_isolated_script_test.py"
     data = [ invoker.script ]
+    if (defined(invoker.data)) {
+      data += invoker.data
+    }
     args = [
       rebase_path(invoker.script, root_build_dir),
       "--script-type=bare",

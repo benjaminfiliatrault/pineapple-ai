@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ash/app_list/app_service/app_service_app_item.h"
+
 #include "ash/app_list/app_list_model_provider.h"
 #include "ash/app_list/model/app_list_item.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/web_app_id_constants.h"
 #include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/shelf_types.h"
@@ -18,7 +21,6 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/ash/app_list/app_list_client_impl.h"
-#include "chrome/browser/ash/app_list/app_service/app_service_app_item.h"
 #include "chrome/browser/ash/app_list/apps_collections_util.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/profiles/profile.h"
@@ -26,7 +28,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_process.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/account_id/account_id.h"
@@ -266,7 +267,7 @@ using AppServiceSystemWebAppItemBrowserTest = AppServiceAppItemBrowserTest;
 IN_PROC_BROWSER_TEST_F(AppServiceSystemWebAppItemBrowserTest, Activate) {
   Profile* const profile = browser()->profile();
   ash::SystemWebAppManager::GetForTest(profile)->InstallSystemAppsForTesting();
-  const webapps::AppId app_id = web_app::kHelpAppId;
+  const webapps::AppId app_id = ash::kHelpAppId;
 
   auto help_app = std::make_unique<apps::App>(apps::AppType::kWeb, app_id);
   apps::AppUpdate app_update(/*state=*/nullptr, /*delta=*/help_app.get(),

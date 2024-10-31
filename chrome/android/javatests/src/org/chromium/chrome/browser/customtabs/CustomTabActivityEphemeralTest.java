@@ -84,7 +84,7 @@ import java.util.concurrent.TimeoutException;
 @EnableFeatures(ChromeFeatureList.CCT_EPHEMERAL_MODE)
 @Batch(Batch.PER_CLASS)
 public class CustomTabActivityEphemeralTest {
-    private static final String HISTOGRAM_NAME = "CustomTabs.IncognitoCCTCallerId";
+    private static final String HISTOGRAM_NAME = "CustomTabs.IncognitoCctCallerId";
 
     private static final String TEST_PAGE = "/chrome/test/data/android/google.html";
     private String mTestPage;
@@ -192,12 +192,12 @@ public class CustomTabActivityEphemeralTest {
 
     @Test
     @MediumTest
-    public void testEphemeralTabLaunchesInOTRProfileWhenEnabled() {
+    public void testEphemeralTabLaunchesInOtrProfileWhenEnabled() {
         CustomTabActivity activity = launchEphemeralCustomTabActivity();
         Profile profile = activity.getActivityTab().getProfile();
         assertTrue(profile.isOffTheRecord());
         assertFalse(profile.isIncognitoBranded());
-        assertFalse(profile.isPrimaryOTRProfile());
+        assertFalse(profile.isPrimaryOtrProfile());
     }
 
     @Test
@@ -208,7 +208,7 @@ public class CustomTabActivityEphemeralTest {
         Profile profile = activity.getActivityTab().getProfile();
         assertFalse(profile.isOffTheRecord());
         assertFalse(profile.isIncognitoBranded());
-        assertFalse(profile.isPrimaryOTRProfile());
+        assertFalse(profile.isPrimaryOtrProfile());
     }
 
     @Test
@@ -325,7 +325,6 @@ public class CustomTabActivityEphemeralTest {
 
     @Test
     @MediumTest
-    @EnableFeatures(ChromeFeatureList.INCOGNITO_REAUTHENTICATION_FOR_ANDROID)
     public void testIncognitoReauthPageNotShown() throws Exception {
         IncognitoReauthManager.setIsIncognitoReauthFeatureAvailableForTesting(true);
         IncognitoReauthSettingUtils.setIsDeviceScreenLockEnabledForTesting(true);
@@ -398,7 +397,7 @@ public class CustomTabActivityEphemeralTest {
     public void recordsHistogramEphemeral() {
         HistogramWatcher histogramWatcher =
                 HistogramWatcher.newSingleRecordWatcher(
-                        HISTOGRAM_NAME, IntentHandler.IncognitoCCTCallerId.EPHEMERAL_TAB);
+                        HISTOGRAM_NAME, IntentHandler.IncognitoCctCallerId.EPHEMERAL_TAB);
         launchEphemeralCustomTabActivity();
         histogramWatcher.assertExpected();
     }

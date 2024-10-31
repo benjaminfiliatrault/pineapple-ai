@@ -10,15 +10,18 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/user_metrics.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/bookmarks/bookmark_merged_surface_service.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/bookmarks/bookmark_drag_drop.h"
+#include "chrome/browser/ui/bookmarks/bookmark_ui_operations_helper.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
 #include "chrome/browser/ui/browser.h"
@@ -30,6 +33,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
+#include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/prefs/pref_service.h"
@@ -42,13 +46,14 @@
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/image_model.h"
-#include "ui/base/models/simple_menu_model.h"
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/base/window_open_disposition_utils.h"
 #include "ui/color/color_id.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/menu_button.h"
@@ -106,13 +111,19 @@ class BookmarkModelDropObserver : public bookmarks::BaseBookmarkModelObserver {
 
   void Drop(const ui::DropTargetEvent& event,
             ui::mojom::DragOperation& output_drag_op) {
-    if (!bookmark_model_)  // Don't drop
+    if (!bookmark_model_) {  // Don't drop
       return;
+    }
 
     bool copy = event.source_operations() == ui::DragDropTypes::DRAG_COPY;
-    output_drag_op = chrome::DropBookmarks(
-        profile_, drop_data_, drop_parent_, index_to_drop_at_, copy,
-        chrome::BookmarkReorderDropTarget::kBookmarkMenu);
+    // TODO(crbug.com/369304373): Update to use
+    // `BookmarkUIOperationsHelperMergedSurfaces` once this class is migrated to
+    // use `BookmarkMergedSurfaceService`.
+    output_drag_op =
+        BookmarkUIOperationsHelperNonMergedSurfaces(bookmark_model_,
+                                                    drop_parent_)
+            .DropBookmarks(profile_, drop_data_, index_to_drop_at_, copy,
+                           chrome::BookmarkReorderDropTarget::kBookmarkMenu);
   }
 
  private:
@@ -133,6 +144,29 @@ class BookmarkModelDropObserver : public bookmarks::BaseBookmarkModelObserver {
   base::ScopedObservation<BookmarkModel, BaseBookmarkModelObserver>
       bookmark_model_observation_{this};
 };
+
+// TODO(crbug.com/364594278): Remove this when `BookmarkMenuDelegate`
+//  is migrated to use `BookmarkMergedSurfaceService`.
+BookmarkParentFolder GetBookmarkParentFolderForNode(
+    const BookmarkNode* parent_node) {
+  CHECK(parent_node->is_folder());
+  if (!parent_node->is_permanent_node()) {
+    return BookmarkParentFolder::FromNonPermanentNode(parent_node);
+  }
+  switch (parent_node->type()) {
+    case bookmarks::BookmarkNode::URL:
+      NOTREACHED();
+    case bookmarks::BookmarkNode::FOLDER:
+      return BookmarkParentFolder::ManagedFolder();
+    case bookmarks::BookmarkNode::BOOKMARK_BAR:
+      return BookmarkParentFolder::BookmarkBarFolder();
+    case bookmarks::BookmarkNode::OTHER_NODE:
+      return BookmarkParentFolder::OtherFolder();
+    case bookmarks::BookmarkNode::MOBILE:
+      return BookmarkParentFolder::MobileFolder();
+  }
+  NOTREACHED();
+}
 
 }  // namespace
 
@@ -373,7 +407,8 @@ ui::mojom::DragOperation BookmarkMenuDelegate::GetDropOperation(
   }
   DCHECK(drop_parent);
   return chrome::GetBookmarkDropOperation(
-      profile_, event, drop_data_, drop_parent, index_to_drop_at);
+      profile_, event, drop_data_, GetBookmarkParentFolderForNode(drop_parent),
+      index_to_drop_at);
 }
 
 views::View::DropCallback BookmarkMenuDelegate::GetDropCallback(
@@ -424,10 +459,11 @@ views::View::DropCallback BookmarkMenuDelegate::GetDropCallback(
       base::Owned(std::move(drop_observer)));
 }
 
-bool BookmarkMenuDelegate::ShowContextMenu(MenuItemView* source,
-                                           int id,
-                                           const gfx::Point& p,
-                                           ui::MenuSourceType source_type) {
+bool BookmarkMenuDelegate::ShowContextMenu(
+    MenuItemView* source,
+    int id,
+    const gfx::Point& p,
+    ui::mojom::MenuSourceType source_type) {
   // The IDC_SHOW_BOOKMARK_SIDE_PANEL menu item does not map to a bookmark node
   // and therefore no context menu for it should be shown.
   if (menu_id_to_node_map_.find(id) == menu_id_to_node_map_.end()) {

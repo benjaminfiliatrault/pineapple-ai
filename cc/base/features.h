@@ -14,6 +14,7 @@
 
 namespace features {
 
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kAlignSurfaceLayerImplToPixelGrid);
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kAnimatedImageResume);
 CC_BASE_EXPORT extern bool IsImpulseScrollAnimationEnabled();
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSynchronizedScrolling);
@@ -79,12 +80,6 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUseDMSAAForTiles);
 // Use DMSAA instead of MSAA for rastering tiles on Android GL backend. Note
 // that the above flag kUseDMSAAForTiles is used for Android Vulkan backend.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUseDMSAAForTilesAndroidGL);
-
-// Break synchronization of scrolling website content and browser controls in
-// android to see performance gains for moving browser controls to viz.
-// WARNING: Don't enable this feature! It should only be used to measure
-// performance on prestable channels.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kAndroidNoSurfaceSyncForBrowserControls);
 #endif
 
 // Updating browser controls state will IPC directly from browser main to the
@@ -223,9 +218,17 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kThrottleFrameRateOnManyDidNotProduceFrame);
 CC_BASE_EXPORT extern const base::FeatureParam<int>
     kNumDidNotProduceFrameBeforeThrottle;
 
+// When enabled, the CC tree priority will be switched to
+// NEW_CONTENT_TAKES_PRIORITY during long scroll that cause checkerboarding.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kNewContentForCheckerboardedScrolls);
+
 // When enabled, impl-only scroll animations may execute concurrently.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMultipleImplOnlyScrollAnimations);
 CC_BASE_EXPORT extern bool MultiImplOnlyScrollAnimationsSupported();
+
+// When enabled, and an image decode is requested by both a tile task and
+// explicitly via img.decode(), it will be decoded only once.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kPreventDuplicateImageDecodes);
 
 }  // namespace features
 

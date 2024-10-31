@@ -100,7 +100,7 @@ SocketApiFunction::ScopedWriteQuota::ScopedWriteQuota(SocketApiFunction* owner,
 
 SocketApiFunction::ScopedWriteQuota::~ScopedWriteQuota() {
   WriteQuotaChecker::Get(owner_->browser_context())
-      ->ReturnBytes(owner_->extension_id(), bytes_used_);
+      ->ReturnBytes(owner_->GetOriginId(), bytes_used_);
 }
 
 SocketApiFunction::SocketApiFunction() = default;
@@ -140,10 +140,7 @@ void SocketApiFunction::OpenFirewallHole(const std::string& address,
   if (!net::HostStringIsLocalhost(address)) {
     net::IPEndPoint local_address;
     if (!socket->GetLocalAddress(&local_address)) {
-      NOTREACHED_IN_MIGRATION()
-          << "Cannot get address of recently bound socket.";
-      Respond(ErrorWithCode(-1, kFirewallFailure));
-      return;
+      NOTREACHED() << "Cannot get address of recently bound socket.";
     }
 
     AppFirewallHoleManager* manager =
@@ -216,7 +213,7 @@ bool SocketApiFunction::CheckRequest(
 
 bool SocketApiFunction::TakeWriteQuota(size_t bytes_to_write) {
   if (!WriteQuotaChecker::Get(browser_context())
-           ->TakeBytes(extension_id(), bytes_to_write)) {
+           ->TakeBytes(GetOriginId(), bytes_to_write)) {
     return false;
   }
 
@@ -318,8 +315,7 @@ ExtensionFunction::ResponseAction SocketCreateFunction::Work() {
       break;
     }
     case extensions::api::socket::SocketType::kNone:
-      NOTREACHED_IN_MIGRATION();
-      return RespondNow(NoArguments());
+      NOTREACHED();
   }
 
   DCHECK(socket);
@@ -374,9 +370,7 @@ ExtensionFunction::ResponseAction SocketConnectFunction::Work() {
       operation_type = SocketPermissionRequest::UDP_SEND_TO;
       break;
     default:
-      NOTREACHED_IN_MIGRATION() << "Unknown socket type.";
-      operation_type = SocketPermissionRequest::NONE;
-      break;
+      NOTREACHED() << "Unknown socket type.";
   }
 
   SocketPermission::CheckParam param(operation_type, hostname_, port_);

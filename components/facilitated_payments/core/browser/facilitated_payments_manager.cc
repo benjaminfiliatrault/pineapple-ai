@@ -60,14 +60,11 @@ void FacilitatedPaymentsManager::OnPixCodeCopiedToClipboard(
   ukm_source_id_ = ukm_source_id;
   trigger_source_ = TriggerSource::kCopyEvent;
   // Check whether the domain for the render_frame_host_url is allowlisted.
-  auto decision = optimization_guide_decider_->CanApplyOptimization(
-      render_frame_host_url,
-      optimization_guide::proto::PIX_MERCHANT_ORIGINS_ALLOWLIST,
-      /*optimization_metadata=*/nullptr);
-  if (decision != optimization_guide::OptimizationGuideDecision::kTrue) {
+  if (!IsMerchantAllowlisted(render_frame_host_url)) {
     // The merchant is not part of the allowlist, ignore the copy event.
     return;
   }
+  LogPixCodeCopied();
   initiate_payment_request_details_->merchant_payment_page_hostname_ =
       render_frame_host_url.host();
   // Trigger Pix code validation.
@@ -79,21 +76,20 @@ void FacilitatedPaymentsManager::OnPixCodeCopiedToClipboard(
 
 void FacilitatedPaymentsManager::RegisterPixAllowlist() const {
   optimization_guide_decider_->RegisterOptimizationTypes(
-      {optimization_guide::proto::PIX_PAYMENT_MERCHANT_ALLOWLIST,
-       optimization_guide::proto::PIX_MERCHANT_ORIGINS_ALLOWLIST});
+      {optimization_guide::proto::PIX_MERCHANT_ORIGINS_ALLOWLIST});
 }
 
-optimization_guide::OptimizationGuideDecision
-FacilitatedPaymentsManager::GetAllowlistCheckResult(const GURL& url) const {
+bool FacilitatedPaymentsManager::IsMerchantAllowlisted(const GURL& url) const {
   // Since the optimization guide decider integration corresponding to PIX
   // merchant lists are allowlists for the question "Can this site be
   // optimized?", a match on the allowlist answers the question with "yes".
-  // Therefore, `kTrue` indicates that `url` is allowed for running PIX code
-  // detection. If the optimization type was not registered in time when we
+  // Therefore, `kTrue` indicates that `url` is allowed for detecting PIX code
+  // on copy events. If the optimization type was not registered in time when we
   // queried it, it will be `kUnknown`.
   return optimization_guide_decider_->CanApplyOptimization(
-      url, optimization_guide::proto::PIX_PAYMENT_MERCHANT_ALLOWLIST,
-      /*optimization_metadata=*/nullptr);
+             url, optimization_guide::proto::PIX_MERCHANT_ORIGINS_ALLOWLIST,
+             /*optimization_metadata=*/nullptr) ==
+         optimization_guide::OptimizationGuideDecision::kTrue;
 }
 
 void FacilitatedPaymentsManager::OnPixCodeValidated(
@@ -168,14 +164,11 @@ void FacilitatedPaymentsManager::OnApiAvailabilityReceived(
       autofill::payments::GetBillingCustomerId(
           client_->GetPaymentsDataManager());
 
-  bool promptShown = client_->ShowPixPaymentPrompt(
+  client_->ShowPixPaymentPrompt(
       client_->GetPaymentsDataManager()->GetMaskedBankAccounts(),
       base::BindOnce(&FacilitatedPaymentsManager::OnPixPaymentPromptResult,
                      weak_ptr_factory_.GetWeakPtr()));
-  LogFopSelectorShown(promptShown);
-  if (promptShown) {
-    fop_selector_shown_time_ = base::TimeTicks::Now();
-  }
+  fop_selector_shown_time_ = base::TimeTicks::Now();
 }
 
 void FacilitatedPaymentsManager::OnPixPaymentPromptResult(

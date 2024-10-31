@@ -12,7 +12,6 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/lens/lens_unified_side_panel_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry_observer.h"
-#include "chrome/browser/ui/views/side_panel/side_panel_view_state_observer.h"
 #include "components/omnibox/browser/favicon_cache.h"
 #include "components/search_engines/template_url_service_observer.h"
 #include "ui/gfx/image/image.h"
@@ -24,7 +23,6 @@ class SidePanelCoordinator;
 // LensUnifiedSidePanelEntry.
 class LensSidePanelCoordinator
     : public BrowserUserData<LensSidePanelCoordinator>,
-      public SidePanelViewStateObserver,
       public SidePanelEntryObserver,
       public TemplateURLServiceObserver {
  public:
@@ -83,9 +81,6 @@ class LensSidePanelCoordinator
 
   // TemplateURLServiceObserver
   void OnTemplateURLServiceChanged() override;
-
-  // SidePanelViewStateObserver
-  void OnSidePanelDidClose() override;
 
   std::unique_ptr<views::View> CreateLensWebView(
       const content::OpenURLParams& params);

@@ -7,6 +7,7 @@
 #include <queue>
 
 #include "base/ranges/algorithm.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/timer/elapsed_timer.h"
@@ -20,7 +21,17 @@ constexpr float kUnitLength = 1.0f;
 // Close enough to be considered near zero.
 constexpr float kEpsilon = 0.01f;
 
+// These delimiters separate queries and passages into tokens.
+constexpr char kTokenDelimiters[] = " .,;";
+
 namespace {
+
+// Reduces and returns `term_view` with common characters trimmed from
+// start and end.
+inline std::string_view TrimTermView(std::string_view term_view) {
+  return base::TrimString(term_view, ".?!,:;-()[]{}<>\"'/\\*&#~@^|%$`+=",
+                          base::TrimPositions::TRIM_ALL);
+}
 
 // Increases occurrence counts for each element of `query_terms` as they are
 // found in `passage`, ranging from zero up to `max_count` inclusive. The
@@ -31,7 +42,7 @@ namespace {
 // boost if we do text cleaning and folding of passages in advance.
 void CountTermsInPassage(std::vector<size_t>& term_counts,
                          const std::vector<std::string>& query_terms,
-                         const std::string_view passage,
+                         std::string_view passage,
                          const size_t max_count) {
   DCHECK_EQ(term_counts.size(), query_terms.size());
   DCHECK(base::IsStringASCII(passage));
@@ -44,9 +55,9 @@ void CountTermsInPassage(std::vector<size_t>& term_counts,
     return base::ToLowerASCII(term) == term;
   }));
 
-  base::StringViewTokenizer tokenizer(passage, ",;. ");
+  base::StringViewTokenizer tokenizer(passage, kTokenDelimiters);
   while (tokenizer.GetNext()) {
-    const std::string_view token = tokenizer.token();
+    const std::string_view token = TrimTermView(tokenizer.token());
     for (size_t term_index = 0; term_index < query_terms.size(); term_index++) {
       if (term_counts[term_index] >= max_count) {
         continue;
@@ -164,7 +175,20 @@ float UrlEmbeddings::BestScoreWith(SearchInfo& search_info,
                                    const Embedding& query_embedding,
                                    const proto::PassagesValue& passages,
                                    size_t min_passage_word_count) const {
-  std::vector<size_t> term_counts(search_params.query_terms.size(), 0);
+  float word_match_required_score =
+      search_params.word_match_minimum_embedding_score;
+  std::vector<size_t> term_counts;
+  if (search_params.query_terms.size() >
+      search_params.word_match_max_term_count) {
+    // Disable word match boosting for this long query.
+    word_match_required_score = std::numeric_limits<float>::max();
+  } else {
+    // Prepare to count terms by initializing all term counts to zero.
+    // These will continue to increase for each passage until we have
+    // the total for this URL's full passage set.
+    term_counts.assign(search_params.query_terms.size(), 0);
+  }
+
   float best = 0.0f;
   for (size_t i = 0; i < embeddings.size(); i++) {
     const Embedding& embedding = embeddings[i];
@@ -180,7 +204,7 @@ float UrlEmbeddings::BestScoreWith(SearchInfo& search_info,
                       ? 0.0f
                       : query_embedding.ScoreWith(embedding);
 
-    if (score >= search_params.word_match_minimum_embedding_score) {
+    if (score >= word_match_required_score) {
       // Since the ASCII check above processed the whole passage string, it is
       // likely ready in CPU cache. Scan text again to count terms in passage.
       base::ElapsedTimer timer;
@@ -194,16 +218,29 @@ float UrlEmbeddings::BestScoreWith(SearchInfo& search_info,
 
   // Calculate total boost from term counts across all passages.
   float word_match_boost = 0.0f;
-  for (size_t term_count : term_counts) {
-    float term_boost = search_params.word_match_score_boost_factor *
-                       term_count / search_params.word_match_limit;
-    // Boost factor is applied per term such that longer queries boost more.
-    word_match_boost += term_boost;
+  if (!term_counts.empty()) {
+    size_t terms_found = 0;
+    for (size_t term_count : term_counts) {
+      float term_boost = search_params.word_match_score_boost_factor *
+                         term_count / search_params.word_match_limit;
+      // Boost factor is applied per term such that longer queries boost more.
+      word_match_boost += term_boost;
+      if (term_count > 0) {
+        terms_found++;
+      }
+    }
+    if (static_cast<float>(terms_found) /
+            static_cast<float>(term_counts.size()) <
+        search_params.word_match_required_term_ratio) {
+      // Don't boost at all when not enough of the query terms were found.
+      word_match_boost = 0.0f;
+    } else {
+      // Normalize to avoid over-boosting long queries with many words.
+      word_match_boost /=
+          std::max<size_t>(1, search_params.query_terms.size() +
+                                  search_params.word_match_smoothing_factor);
+    }
   }
-  // Normalize to avoid over-boosting long queries with many words.
-  word_match_boost /=
-      std::max<size_t>(1, search_params.query_terms.size() +
-                              search_params.word_match_smoothing_factor);
 
   return best + word_match_boost;
 }
@@ -412,6 +449,27 @@ VectorDatabaseInMemory::MakeUrlDataIterator(
   }
 
   return std::make_unique<SimpleIterator>(data_, time_range_start);
+}
+
+std::vector<std::string> SplitQueryToTerms(
+    const std::unordered_set<uint32_t>& stop_words_hashes,
+    std::string_view raw_query,
+    size_t min_term_length) {
+  extern uint32_t HashString(std::string_view str);
+  std::string query = base::ToLowerASCII(raw_query);
+  std::string_view query_view(query);
+  std::vector<std::string> query_terms;
+
+  base::StringViewTokenizer tokenizer(query_view, kTokenDelimiters);
+  while (tokenizer.GetNext()) {
+    const std::string_view term_view = TrimTermView(tokenizer.token());
+    if (term_view.size() >= min_term_length &&
+        !stop_words_hashes.contains(HashString(term_view))) {
+      query_terms.emplace_back(term_view);
+    }
+  }
+
+  return query_terms;
 }
 
 }  // namespace history_embeddings

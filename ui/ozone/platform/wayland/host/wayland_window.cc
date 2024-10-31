@@ -488,8 +488,7 @@ void WaylandWindow::Close() {
 }
 
 bool WaylandWindow::IsVisible() const {
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 void WaylandWindow::PrepareForShutdown() {
@@ -739,8 +738,7 @@ EventTarget* WaylandWindow::GetParentTarget() {
 }
 
 std::unique_ptr<EventTargetIterator> WaylandWindow::GetChildIterator() const {
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 EventTargeter* WaylandWindow::GetEventTargeter() {
@@ -766,7 +764,7 @@ void WaylandWindow::OcclusionStateChanged(
 }
 
 void WaylandWindow::HandleSurfaceConfigure(uint32_t serial) {
-  NOTREACHED_IN_MIGRATION()
+  NOTREACHED()
       << "Only shell surfaces must receive HandleSurfaceConfigure calls.";
 }
 
@@ -843,7 +841,7 @@ std::string WaylandWindow::WindowStates::ToString() const {
 void WaylandWindow::HandleToplevelConfigure(int32_t widht,
                                             int32_t height,
                                             const WindowStates& window_states) {
-  NOTREACHED_IN_MIGRATION()
+  NOTREACHED()
       << "Only shell toplevels must receive HandleToplevelConfigure calls.";
 }
 
@@ -853,13 +851,12 @@ void WaylandWindow::HandleToplevelConfigureWithOrigin(
     int32_t width,
     int32_t height,
     const WindowStates& window_states) {
-  NOTREACHED_IN_MIGRATION()
+  NOTREACHED()
       << "Only shell toplevels must receive HandleAuraToplevelConfigure calls.";
 }
 
 void WaylandWindow::HandlePopupConfigure(const gfx::Rect& bounds_dip) {
-  NOTREACHED_IN_MIGRATION()
-      << "Only shell popups must receive HandlePopupConfigure calls.";
+  NOTREACHED() << "Only shell popups must receive HandlePopupConfigure calls.";
 }
 
 void WaylandWindow::OnCloseRequest() {
@@ -991,11 +988,10 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
   }
 
   // Properties contain DIP bounds, whose value is derived from the current
-  // window's DIP bounds, which is ui-scale'd. Thus, besides initializing
-  // ui scale with the current font scale, the pixel size must be scaled
-  // accordingly. Both scale and bounds might get updated later in the window
-  // configuration process.
-  state.ui_scale = connection_->window_manager()->font_scale();
+  // window's DIP bounds, which is ui-scale'd. Thus, besides initializing ui
+  // scale, the pixel size must be scaled accordingly. Both scale and bounds
+  // might get updated later in the window configuration process.
+  state.ui_scale = connection_->window_manager()->DetermineUiScale();
   state.size_px = gfx::ScaleToEnclosingRectIgnoringError(
                       gfx::Rect(state.bounds_dip.size()),
                       state.window_scale * state.ui_scale)
@@ -1442,14 +1438,11 @@ void WaylandWindow::RequestState(PlatformWindowDelegate::State state,
   }
 
   // ui_scale determines how the window content, ie: UI, will be laid out and
-  // sized. As of now, it is retrieved from the 'font scaling factor' system
-  // setting (aka: text scaling factor).
-  const float new_ui_scale = connection_->window_manager()->font_scale();
+  // sized. See WaylandWindowManager::DetermineUiScale docs for more details.
+  const float new_ui_scale = connection_->window_manager()->DetermineUiScale();
   state.bounds_dip = gfx::ScaleToEnclosingRectIgnoringError(
       state.bounds_dip, state.ui_scale / new_ui_scale);
   state.ui_scale = new_ui_scale;
-  CHECK(connection_->IsUiScaleEnabled() || state.ui_scale == 1.0f)
-      << state.ui_scale;
 
   // Adjust state values if necessary.
   state.bounds_dip = AdjustBoundsToConstraintsDIP(state.bounds_dip);

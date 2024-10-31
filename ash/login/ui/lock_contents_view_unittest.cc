@@ -75,6 +75,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
@@ -378,7 +379,7 @@ TEST_F(LockContentsViewUnitTest, AutoLayoutAfterRotation) {
     display_manager()->SetDisplayRotation(
         display.id(), display::Display::ROTATE_0,
         display::Display::RotationSource::ACTIVE);
-    widget->LayoutRootViewIfNecessary();
+    views::test::RunScheduledLayout(widget.get());
     int distance_0deg = calculate_distance();
     EXPECT_NE(distance_0deg, 0);
 
@@ -386,7 +387,7 @@ TEST_F(LockContentsViewUnitTest, AutoLayoutAfterRotation) {
     display_manager()->SetDisplayRotation(
         display.id(), display::Display::ROTATE_90,
         display::Display::RotationSource::ACTIVE);
-    widget->LayoutRootViewIfNecessary();
+    views::test::RunScheduledLayout(widget.get());
     int distance_90deg = calculate_distance();
     EXPECT_LT(distance_90deg, distance_0deg);
 
@@ -394,7 +395,7 @@ TEST_F(LockContentsViewUnitTest, AutoLayoutAfterRotation) {
     display_manager()->SetDisplayRotation(
         display.id(), display::Display::ROTATE_0,
         display::Display::RotationSource::ACTIVE);
-    widget->LayoutRootViewIfNecessary();
+    views::test::RunScheduledLayout(widget.get());
     int distance_0deg_2 = calculate_distance();
     EXPECT_EQ(distance_0deg_2, distance_0deg);
     EXPECT_NE(distance_0deg_2, distance_90deg);
@@ -714,6 +715,7 @@ TEST_F(LockContentsViewUnitTest, NoteActionButtonBounds) {
   // When the note action becomes available, the note action button should be
   // shown.
   DataDispatcher()->SetLockScreenNoteState(mojom::TrayActionState::kAvailable);
+  views::test::RunScheduledLayout(widget.get());
   EXPECT_TRUE(test_api.note_action()->GetVisible());
 
   // Verify the bounds of the note action button are as expected.
@@ -790,6 +792,7 @@ TEST_F(LockContentsViewUnitTest, SystemInfoViewBounds) {
   // the right to fill the empty space.
   DataDispatcher()->SetLockScreenNoteState(
       mojom::TrayActionState::kNotAvailable);
+  views::test::RunScheduledLayout(widget.get());
   EXPECT_FALSE(test_api.note_action()->GetVisible());
   EXPECT_LT(widget_bounds.right() -
                 test_api.system_info()->GetBoundsInScreen().right(),
@@ -822,6 +825,7 @@ TEST_F(LockContentsViewUnitTest, AltVTogglesHiddenSystemInfo) {
 
   // Alt-V shows hidden system info.
   PressAndReleaseKey(ui::KeyboardCode::VKEY_V, ui::EF_ALT_DOWN);
+  views::test::RunScheduledLayout(widget.get());
   EXPECT_TRUE(test_api.system_info()->GetVisible());
   // System info is not empty, ie, it is actually being displayed.
   EXPECT_FALSE(test_api.system_info()->bounds().IsEmpty());
@@ -3659,6 +3663,150 @@ TEST_F(LockContentsViewPinTimeoutUnitTest, PinDelayMessageCorrectness) {
 
   // Pin becomes available again.
   AdvanceClock(base::Hours(1));
+  EXPECT_TRUE(pin_view->GetVisible());
+  EXPECT_FALSE(pin_status_message_view->GetVisible());
+}
+
+TEST_F(LockContentsViewPinTimeoutUnitTest, TwoUsers) {
+  ASSERT_NO_FATAL_FAILURE(ShowLoginScreen());
+  AddUsers(2);
+
+  LockContentsView* contents =
+      LockScreen::TestApi(LockScreen::Get()).contents_view();
+  LockContentsViewTestApi contents_test_api(contents);
+
+  LoginBigUserView* primary_view = contents_test_api.primary_big_view();
+  LoginAuthUserView::TestApi primary_auth_test_api(primary_view->auth_user());
+  LoginPinView* primary_pin_view = primary_auth_test_api.pin_view();
+  PinStatusMessageView* primary_pin_status_message_view =
+      primary_auth_test_api.pin_status_message_view();
+
+  LoginBigUserView* secondary_view = contents_test_api.opt_secondary_big_view();
+  LoginAuthUserView::TestApi secondary_auth_test_api(
+      secondary_view->auth_user());
+  LoginPinView* secondary_pin_view = secondary_auth_test_api.pin_view();
+  PinStatusMessageView* secondary_pin_status_message_view =
+      secondary_auth_test_api.pin_status_message_view();
+
+  AccountId primary_user =
+      primary_view->GetCurrentUser().basic_user_info.account_id;
+  AccountId secondary_user =
+      secondary_view->GetCurrentUser().basic_user_info.account_id;
+  EXPECT_NE(primary_user, secondary_user);
+
+  // Enable pin for both users.
+  contents->OnPinEnabledForUserChanged(primary_user, true,
+                                       /*available_at*/ std::nullopt);
+  contents->OnPinEnabledForUserChanged(secondary_user, true,
+                                       /*available_at*/ std::nullopt);
+  EXPECT_TRUE(primary_pin_view->GetVisible());
+  EXPECT_FALSE(primary_pin_status_message_view->GetVisible());
+  EXPECT_FALSE(secondary_pin_view->GetVisible());
+  EXPECT_FALSE(secondary_pin_status_message_view->GetVisible());
+
+  // Primary user - lock pin for 30 seconds.
+  contents->OnPinEnabledForUserChanged(primary_user, false,
+                                       base::Time::Now() + base::Seconds(30));
+  EXPECT_FALSE(primary_pin_view->GetVisible());
+  EXPECT_TRUE(primary_pin_status_message_view->GetVisible());
+  EXPECT_EQ(GetExpectedPinStatusMessage(u"30 seconds"),
+            primary_auth_test_api.GetPinStatusMessageContent());
+
+  // Send event to swap users.
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->MoveMouseTo(
+      secondary_auth_test_api.user_view()->GetBoundsInScreen().CenterPoint());
+  generator->ClickLeftButton();
+
+  // Check the secondary user has pin enabled.
+  EXPECT_TRUE(secondary_pin_view->GetVisible());
+  EXPECT_FALSE(secondary_pin_status_message_view->GetVisible());
+  EXPECT_FALSE(primary_pin_view->GetVisible());
+  EXPECT_FALSE(primary_pin_status_message_view->GetVisible());
+
+  // Secondary user - lock pin for 1 minute.
+  contents->OnPinEnabledForUserChanged(secondary_user, false,
+                                       base::Time::Now() + base::Minutes(1));
+  EXPECT_FALSE(secondary_pin_view->GetVisible());
+  EXPECT_TRUE(secondary_pin_status_message_view->GetVisible());
+  EXPECT_EQ(GetExpectedPinStatusMessage(u"1 minute, 0 seconds"),
+            secondary_auth_test_api.GetPinStatusMessageContent());
+
+  // Check the secondary user has pin enabled after the lock out period.
+  AdvanceClock(base::Minutes(1));
+  EXPECT_TRUE(secondary_pin_view->GetVisible());
+  EXPECT_FALSE(secondary_pin_status_message_view->GetVisible());
+
+  // Swap the user back.
+  generator->MoveMouseTo(
+      primary_auth_test_api.user_view()->GetBoundsInScreen().CenterPoint());
+  generator->ClickLeftButton();
+
+  // Check the primary user has pin enabled again.
+  EXPECT_TRUE(primary_pin_view->GetVisible());
+  EXPECT_FALSE(primary_pin_status_message_view->GetVisible());
+  EXPECT_FALSE(secondary_pin_view->GetVisible());
+  EXPECT_FALSE(secondary_pin_status_message_view->GetVisible());
+}
+
+TEST_F(LockContentsViewPinTimeoutUnitTest, MultipleUsers) {
+  ASSERT_NO_FATAL_FAILURE(ShowLoginScreen());
+  AddUsers(3);
+
+  LockContentsView* contents =
+      LockScreen::TestApi(LockScreen::Get()).contents_view();
+  LockContentsViewTestApi contents_test_api(contents);
+  LoginBigUserView* big_view = contents_test_api.primary_big_view();
+  LoginAuthUserView::TestApi auth_test_api(big_view->auth_user());
+  LoginPinView* pin_view = auth_test_api.pin_view();
+  PinStatusMessageView* pin_status_message_view =
+      auth_test_api.pin_status_message_view();
+
+  // Enable pin for the primary user.
+  AccountId account_id = big_view->GetCurrentUser().basic_user_info.account_id;
+  contents->OnPinEnabledForUserChanged(account_id, true,
+                                       /*available_at*/ std::nullopt);
+  EXPECT_TRUE(pin_view->GetVisible());
+  EXPECT_FALSE(pin_status_message_view->GetVisible());
+
+  // Lock pin for 1 minute.
+  contents->OnPinEnabledForUserChanged(
+      account_id, false,
+      /*available_at*/ base::Time::Now() + base::Minutes(1));
+  EXPECT_FALSE(pin_view->GetVisible());
+  EXPECT_TRUE(pin_status_message_view->GetVisible());
+  EXPECT_EQ(GetExpectedPinStatusMessage(u"1 minute, 0 seconds"),
+            auth_test_api.GetPinStatusMessageContent());
+
+  // Send event to swap the primary big user with the first user on the user
+  // list.
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->MoveMouseTo(contents_test_api.users_list()
+                             ->user_view_at(0)
+                             ->GetBoundsInScreen()
+                             .CenterPoint());
+  generator->ClickLeftButton();
+
+  // Check the user is swapped and the swapped user does not have pin enabled.
+  EXPECT_NE(account_id, big_view->GetCurrentUser().basic_user_info.account_id);
+  EXPECT_FALSE(pin_view->GetVisible());
+  EXPECT_FALSE(pin_status_message_view->GetVisible());
+
+  // Check the swapped user still does not have pin enabled after the primary
+  // user pin timeout period.
+  AdvanceClock(base::Minutes(2));
+  EXPECT_FALSE(pin_view->GetVisible());
+  EXPECT_FALSE(pin_status_message_view->GetVisible());
+
+  // Swap the user back.
+  generator->MoveMouseTo(contents_test_api.users_list()
+                             ->user_view_at(0)
+                             ->GetBoundsInScreen()
+                             .CenterPoint());
+  generator->ClickLeftButton();
+
+  // Check the user is swapped and the primary user has pin enabled again.
+  EXPECT_EQ(account_id, big_view->GetCurrentUser().basic_user_info.account_id);
   EXPECT_TRUE(pin_view->GetVisible());
   EXPECT_FALSE(pin_status_message_view->GetVisible());
 }

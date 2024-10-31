@@ -321,6 +321,30 @@ void TtsControllerImpl::Resume() {
   }
 }
 
+void TtsControllerImpl::InstallLanguageRequest(BrowserContext* browser_context,
+                                               const std::string& lang,
+                                               const std::string& client_id,
+                                               int source) {
+  if (!engine_delegate_) {
+    return;
+  }
+
+  engine_delegate_->InstallLanguageRequest(browser_context, lang, client_id,
+                                           source);
+}
+
+void TtsControllerImpl::LanguageStatusRequest(BrowserContext* browser_context,
+                                              const std::string& lang,
+                                              const std::string& client_id,
+                                              int source) {
+  if (!engine_delegate_) {
+    return;
+  }
+
+  engine_delegate_->LanguageStatusRequest(browser_context, lang, client_id,
+                                          source);
+}
+
 void TtsControllerImpl::OnTtsEvent(int utterance_id,
                                    TtsEventType event_type,
                                    int char_index,
@@ -444,6 +468,29 @@ void TtsControllerImpl::GetVoicesInternal(BrowserContext* browser_context,
 bool TtsControllerImpl::IsSpeaking() {
   return current_utterance_ != nullptr ||
          (TtsPlatformReady() && GetTtsPlatform()->IsSpeaking());
+}
+
+void TtsControllerImpl::UpdateLanguageStatus(
+    const std::string& lang,
+    LanguageInstallStatus install_status,
+    const std::string& error) {
+  if (update_language_status_delegates_.empty()) {
+    return;
+  }
+
+  for (auto& delegate : update_language_status_delegates_) {
+    delegate.OnUpdateLanguageStatus(lang, install_status, error);
+  }
+}
+
+void TtsControllerImpl::AddUpdateLanguageStatusDelegate(
+    UpdateLanguageStatusDelegate* delegate) {
+  update_language_status_delegates_.AddObserver(delegate);
+}
+
+void TtsControllerImpl::RemoveUpdateLanguageStatusDelegate(
+    UpdateLanguageStatusDelegate* delegate) {
+  update_language_status_delegates_.RemoveObserver(delegate);
 }
 
 void TtsControllerImpl::VoicesChanged() {

@@ -11,12 +11,16 @@
 #include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_service.h"
+#include "chrome/browser/ash/bruschetta/bruschetta_service_factory.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_util.h"
 #include "chrome/browser/ash/crostini/crostini_disk.h"
+#include "chrome/browser/ash/crostini/crostini_export_import.h"
+#include "chrome/browser/ash/crostini/crostini_export_import_factory.h"
 #include "chrome/browser/ash/crostini/crostini_features.h"
 #include "chrome/browser/ash/crostini/crostini_installer.h"
 #include "chrome/browser/ash/crostini/crostini_installer_factory.h"
 #include "chrome/browser/ash/crostini/crostini_port_forwarder.h"
+#include "chrome/browser/ash/crostini/crostini_port_forwarder_factory.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/crostini/crostini_shared_devices.h"
 #include "chrome/browser/ash/crostini/crostini_shared_devices_factory.h"
@@ -24,6 +28,7 @@
 #include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/ash/guest_os/guest_os_pref_names.h"
 #include "chrome/browser/ash/guest_os/guest_os_session_tracker.h"
+#include "chrome/browser/ash/guest_os/guest_os_session_tracker_factory.h"
 #include "chrome/browser/ash/guest_os/guest_os_terminal.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -229,9 +234,11 @@ void CrostiniHandler::OnJavascriptAllowed() {
   crostini_manager->AddCrostiniDialogStatusObserver(this);
   crostini_manager->AddCrostiniContainerPropertiesObserver(this);
   crostini_manager->AddContainerShutdownObserver(this);
-  crostini::CrostiniExportImport::GetForProfile(profile_)->AddObserver(this);
-  crostini::CrostiniPortForwarder::GetForProfile(profile_)->AddObserver(this);
-  guest_os::GuestOsSessionTracker::GetForProfile(profile_)
+  crostini::CrostiniExportImportFactory::GetForProfile(profile_)->AddObserver(
+      this);
+  crostini::CrostiniPortForwarderFactory::GetForProfile(profile_)->AddObserver(
+      this);
+  guest_os::GuestOsSessionTrackerFactory::GetForProfile(profile_)
       ->AddContainerStartedObserver(this);
 
   // Observe ADB sideloading device policy and react to its changes
@@ -261,10 +268,11 @@ void CrostiniHandler::OnJavascriptDisallowed() {
   crostini_manager->RemoveCrostiniDialogStatusObserver(this);
   crostini_manager->RemoveCrostiniContainerPropertiesObserver(this);
   crostini_manager->RemoveContainerShutdownObserver(this);
-  crostini::CrostiniExportImport::GetForProfile(profile_)->RemoveObserver(this);
-  crostini::CrostiniPortForwarder::GetForProfile(profile_)->RemoveObserver(
-      this);
-  guest_os::GuestOsSessionTracker::GetForProfile(profile_)
+  crostini::CrostiniExportImportFactory::GetForProfile(profile_)
+      ->RemoveObserver(this);
+  crostini::CrostiniPortForwarderFactory::GetForProfile(profile_)
+      ->RemoveObserver(this);
+  guest_os::GuestOsSessionTrackerFactory::GetForProfile(profile_)
       ->RemoveContainerStartedObserver(this);
 
   adb_sideloading_device_policy_subscription_ = {};
@@ -319,8 +327,8 @@ void CrostiniHandler::HandleExportCrostiniContainer(
   guest_os::GuestId container_id(args[0]);
   VLOG(1) << "Exporting  = " << container_id;
 
-  crostini::CrostiniExportImport::GetForProfile(profile_)->ExportContainer(
-      container_id, web_ui()->GetWebContents());
+  crostini::CrostiniExportImportFactory::GetForProfile(profile_)
+      ->ExportContainer(container_id, web_ui()->GetWebContents());
 }
 
 void CrostiniHandler::HandleImportCrostiniContainer(
@@ -328,8 +336,8 @@ void CrostiniHandler::HandleImportCrostiniContainer(
   CHECK_EQ(1U, args.size());
   guest_os::GuestId container_id(args[0]);
   VLOG(1) << "Importing  = " << container_id;
-  crostini::CrostiniExportImport::GetForProfile(profile_)->ImportContainer(
-      container_id, web_ui()->GetWebContents());
+  crostini::CrostiniExportImportFactory::GetForProfile(profile_)
+      ->ImportContainer(container_id, web_ui()->GetWebContents());
 }
 
 void CrostiniHandler::HandleCrostiniInstallerStatusRequest(
@@ -345,8 +353,9 @@ void CrostiniHandler::HandleCrostiniExportImportOperationStatusRequest(
     const base::Value::List& args) {
   AllowJavascript();
   CHECK_EQ(0U, args.size());
-  bool in_progress = crostini::CrostiniExportImport::GetForProfile(profile_)
-                         ->GetExportImportOperationStatus();
+  bool in_progress =
+      crostini::CrostiniExportImportFactory::GetForProfile(profile_)
+          ->GetExportImportOperationStatus();
   OnCrostiniExportImportOperationStatusChanged(in_progress);
 }
 
@@ -551,7 +560,7 @@ void CrostiniHandler::HandleAddCrostiniPortForward(
     return;
   }
 
-  crostini::CrostiniPortForwarder::GetForProfile(profile_)->AddPort(
+  crostini::CrostiniPortForwarderFactory::GetForProfile(profile_)->AddPort(
       container_id, port_number,
       static_cast<crostini::CrostiniPortForwarder::Protocol>(protocol_type),
       std::move(label),
@@ -575,7 +584,7 @@ void CrostiniHandler::HandleRemoveCrostiniPortForward(
     return;
   }
 
-  crostini::CrostiniPortForwarder::GetForProfile(profile_)->RemovePort(
+  crostini::CrostiniPortForwarderFactory::GetForProfile(profile_)->RemovePort(
       container_id, port_number,
       static_cast<crostini::CrostiniPortForwarder::Protocol>(protocol_type),
       base::BindOnce(&CrostiniHandler::OnPortForwardComplete,
@@ -591,8 +600,8 @@ void CrostiniHandler::HandleRemoveAllCrostiniPortForwards(
     return;
   }
 
-  crostini::CrostiniPortForwarder::GetForProfile(profile_)->RemoveAllPorts(
-      guest_os::GuestId(args[0]));
+  crostini::CrostiniPortForwarderFactory::GetForProfile(profile_)
+      ->RemoveAllPorts(guest_os::GuestId(args[0]));
 }
 
 void CrostiniHandler::HandleActivateCrostiniPortForward(
@@ -610,7 +619,7 @@ void CrostiniHandler::HandleActivateCrostiniPortForward(
     return;
   }
 
-  crostini::CrostiniPortForwarder::GetForProfile(profile_)->ActivatePort(
+  crostini::CrostiniPortForwarderFactory::GetForProfile(profile_)->ActivatePort(
       container_id, port_number,
       static_cast<crostini::CrostiniPortForwarder::Protocol>(protocol_type),
       base::BindOnce(&CrostiniHandler::OnPortForwardComplete,
@@ -633,12 +642,13 @@ void CrostiniHandler::HandleDeactivateCrostiniPortForward(
     return;
   }
 
-  crostini::CrostiniPortForwarder::GetForProfile(profile_)->DeactivatePort(
-      container_id, port_number,
-      static_cast<crostini::CrostiniPortForwarder::Protocol>(protocol_type),
-      base::BindOnce(&CrostiniHandler::OnPortForwardComplete,
-                     callback_weak_ptr_factory_.GetWeakPtr(),
-                     std::move(callback_id)));
+  crostini::CrostiniPortForwarderFactory::GetForProfile(profile_)
+      ->DeactivatePort(
+          container_id, port_number,
+          static_cast<crostini::CrostiniPortForwarder::Protocol>(protocol_type),
+          base::BindOnce(&CrostiniHandler::OnPortForwardComplete,
+                         callback_weak_ptr_factory_.GetWeakPtr(),
+                         std::move(callback_id)));
 }
 
 void CrostiniHandler::OnPortForwardComplete(std::string callback_id,
@@ -694,7 +704,7 @@ void CrostiniHandler::HandleGetCrostiniActivePorts(
 
   ResolveJavascriptCallback(
       base::Value(callback_id),
-      crostini::CrostiniPortForwarder::GetForProfile(profile_)
+      crostini::CrostiniPortForwarderFactory::GetForProfile(profile_)
           ->GetActivePorts());
 }
 
@@ -706,7 +716,7 @@ void CrostiniHandler::HandleGetCrostiniActiveNetworkInfo(
   std::string callback_id = args[0].GetString();
   ResolveJavascriptCallback(
       base::Value(callback_id),
-      crostini::CrostiniPortForwarder::GetForProfile(profile_)
+      crostini::CrostiniPortForwarderFactory::GetForProfile(profile_)
           ->GetActiveNetworkInfo());
 }
 
@@ -767,7 +777,8 @@ void CrostiniHandler::HandleShutdownCrostini(const base::Value::List& args) {
 void CrostiniHandler::HandleShutdownBruschetta(const base::Value::List& args) {
   CHECK_EQ(0U, args.size());
 
-  bruschetta::BruschettaService::GetForProfile(profile_)->StopRunningVms();
+  bruschetta::BruschettaServiceFactory::GetForProfile(profile_)
+      ->StopRunningVms();
 }
 
 void CrostiniHandler::HandleCreateContainer(const base::Value::List& args) {
@@ -797,7 +808,7 @@ void CrostiniHandler::HandleCreateContainer(const base::Value::List& args) {
   if (isContainerBackupFile) {
     VLOG(1) << "backup_file = " << container_file
             << "will be used to create a new container.";
-    crostini::CrostiniExportImport::GetForProfile(profile_)
+    crostini::CrostiniExportImportFactory::GetForProfile(profile_)
         ->CreateContainerFromImport(
             container_id, container_file,
             base::BindOnce(&CrostiniHandler::OnContainerCreated,
@@ -889,9 +900,8 @@ void CrostiniHandler::HandleRequestContainerInfo(
        guest_os::GetContainers(profile_, guest_os::VmType::TERMINA)) {
     base::Value::Dict container_info_value;
     container_info_value.Set(kIdKey, container_id.ToDictValue());
-    auto info =
-        guest_os::GuestOsSessionTracker::GetForProfile(profile_)->GetInfo(
-            container_id);
+    auto info = guest_os::GuestOsSessionTrackerFactory::GetForProfile(profile_)
+                    ->GetInfo(container_id);
     if (info) {
       container_info_value.Set(kIpv4Key, info->ipv4_address);
     }

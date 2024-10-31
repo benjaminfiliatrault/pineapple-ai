@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.auxiliary_search;
 
+import android.content.Context;
+
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.profiles.Profile;
@@ -17,5 +20,7 @@ public interface AuxiliarySearchHooks {
     /** Create a AuxiliarySearchController. */
     @Nullable
     AuxiliarySearchController createAuxiliarySearchController(
-            Profile profile, TabModelSelector tabModelSelector);
+            @NonNull Context context,
+            @NonNull Profile profile,
+            @NonNull TabModelSelector tabModelSelector);
 }

@@ -29,12 +29,10 @@ import org.chromium.chrome.browser.fonts.FontPreloader;
 import org.chromium.chrome.browser.night_mode.SystemNightModeMonitor;
 import org.chromium.chrome.browser.notifications.chime.ChimeDelegate;
 import org.chromium.chrome.browser.profiles.ProfileResolver;
-import org.chromium.chrome.browser.webauthn.CredManUiRecommenderImpl;
 import org.chromium.components.browser_ui.util.BrowserUiUtilsCachedFlags;
 import org.chromium.components.browser_ui.util.GlobalDiscardableReferencePool;
 import org.chromium.components.embedder_support.browser_context.PartitionResolverSupplier;
 import org.chromium.components.module_installer.util.ModuleUtil;
-import org.chromium.components.webauthn.cred_man.CredManUiRecommenderProvider;
 import org.chromium.url.GURL;
 
 /**
@@ -65,9 +63,6 @@ public class ChromeApplicationImpl extends SplitCompatApplication.Impl {
 
             // TODO(crbug.com/40266922): Remove this after code changes allow for //components to
             // access cached flags.
-            BrowserUiUtilsCachedFlags.getInstance()
-                    .setVerticalAutomotiveBackButtonToolbarFlag(
-                            ChromeFeatureList.sVerticalAutomotiveBackButtonToolbar.isEnabled());
             BrowserUiUtilsCachedFlags.getInstance()
                     .setAsyncNotificationManagerFlag(
                             ChromeFeatureList.sAsyncNotificationManager.isEnabled());
@@ -103,10 +98,6 @@ public class ChromeApplicationImpl extends SplitCompatApplication.Impl {
             if (!BuildConfig.IS_CHROME_BRANDED) {
                 HierarchySnapshotter.initialize();
             }
-
-            // Provide the supplier for CredManUiRecommender. This is set only for Chrome.
-            CredManUiRecommenderProvider.getOrCreate()
-                    .setCredManUiRecommenderSupplier(() -> new CredManUiRecommenderImpl());
         }
     }
 

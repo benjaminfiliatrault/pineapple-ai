@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 
+#include "ash/birch/birch_coral_item.h"
 #include "ash/birch/birch_coral_provider.h"
 #include "ash/birch/birch_data_provider.h"
 #include "ash/birch/birch_icon_cache.h"
@@ -71,7 +72,7 @@ BirchModel::BirchModel()
   if (features::IsBirchWeatherEnabled()) {
     weather_provider_ = std::make_unique<BirchWeatherProvider>(this);
   }
-  if (features::IsBirchCoralEnabled()) {
+  if (features::IsCoralFeatureEnabled()) {
     coral_provider_ = std::make_unique<BirchCoralProvider>(this);
   }
   Shell::Get()->session_controller()->AddObserver(this);
@@ -471,7 +472,8 @@ std::vector<std::unique_ptr<BirchItem>> BirchModel::GetAllItems() {
           std::make_unique<BirchReleaseNotesItem>(release_notes_item));
     }
   }
-  if (prefs->GetBoolean(prefs::kBirchUseCoral)) {
+
+  if (prefs->GetBoolean(prefs::kBirchUseCoral) && coral_data_.is_fresh) {
     for (auto& coral_item : coral_data_.items) {
       all_items.push_back(std::make_unique<BirchCoralItem>(coral_item));
     }
@@ -538,9 +540,8 @@ void BirchModel::RemoveItem(BirchItem* item) {
     }
   }
   if (item->GetType() == BirchItemType::kCoral) {
-    auto* coral_item = static_cast<BirchCoralItem*>(item);
-    static_cast<BirchCoralProvider*>(coral_provider_.get())
-        ->RemoveGroup(coral_item->cluster_id());
+    BirchCoralProvider::Get()->RemoveGroup(
+        static_cast<BirchCoralItem*>(item)->group_id());
   }
 }
 

@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.os.Handler;
 import android.text.method.LinkMovementMethod;
+import android.text.style.ClickableSpan;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -26,7 +27,6 @@ import org.chromium.content_public.browser.LifecycleState;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.base.ActivityWindowAndroid;
-import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.ui.widget.ButtonCompat;
@@ -209,7 +209,6 @@ public class PrivacySandboxDialogConsentEEA extends ChromeDialog
                     R.string.privacy_sandbox_m1_consent_learn_more_expand_label);
             view.announceForAccessibility(
                     getContext()
-                            .getResources()
                             .getString(
                                     isDropdownExpanded()
                                             ? R.string.accessibility_expanded_group
@@ -231,14 +230,17 @@ public class PrivacySandboxDialogConsentEEA extends ChromeDialog
             mLearnMoreText.setText(
                     SpanApplier.applySpans(
                             getContext()
-                                    .getResources()
                                     .getString(
                                             R.string.privacy_sandbox_m1_notice_learn_more_v2_clank),
                             new SpanApplier.SpanInfo(
                                     "<link>",
                                     "</link>",
-                                    new NoUnderlineClickableSpan(
-                                            getContext(), this::onPrivacyPolicyClicked))));
+                                    new ClickableSpan() {
+                                        @Override
+                                        public void onClick(View view) {
+                                            onPrivacyPolicyClicked(view);
+                                        }
+                                    })));
             mLearnMoreText.setMovementMethod(LinkMovementMethod.getInstance());
             if (mThinWebView == null || mWebContents == null || mWebContents.isDestroyed()) {
                 String privacyPolicyUrl =
@@ -293,9 +295,9 @@ public class PrivacySandboxDialogConsentEEA extends ChromeDialog
      * Handles clicks on the Privacy Policy link. If a ThinWebView is available, loads and displays
      * the privacy policy within it, replacing the consent view.
      *
-     * @param view The View that was clicked (typically the TextView containing the link).
+     * @param unused_view The View that was clicked (typically the TextView containing the link).
      */
-    private void onPrivacyPolicyClicked(View view) {
+    private void onPrivacyPolicyClicked(View unused_view) {
         RecordUserAction.record("Settings.PrivacySandbox.Consent.PrivacyPolicyLinkClicked");
         mPrivacyPolicyClickedTimestamp = System.currentTimeMillis();
         mPrivacyPolicyContent.removeAllViews();

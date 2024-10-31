@@ -18,8 +18,10 @@
 
 #include "base/base64.h"
 #include "base/command_line.h"
+#include "base/containers/adapters.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
+#include "base/containers/to_vector.h"
 #include "base/feature_list.h"
 #include "base/i18n/case_conversion.h"
 #include "base/logging.h"
@@ -76,6 +78,7 @@
 #include "components/autofill/core/common/logging/log_buffer.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/autofill/core/common/unique_ids.h"
+#include "components/autofill_prediction_improvements/core/browser/autofill_prediction_improvements_features.h"
 #include "components/security_state/core/security_state.h"
 #include "components/version_info/version_info.h"
 #include "url/origin.h"
@@ -148,7 +151,12 @@ FormStructure::FormStructure(const FormData& form)
   form_signature_ = CalculateFormSignature(form);
   alternative_form_signature_ = CalculateAlternativeFormSignature(form);
   // Do further processing on the fields, as needed.
-  ProcessExtractedFields();
+  // Computes the `parseable_name_` of the fields by removing common affixes
+  // from their names.
+  ExtractParseableFieldNames();
+  // Computes the `parseable_label_` of the fields by splitting labels among
+  // consecutive fields by common separators.
+  ExtractParseableFieldLabels();
   SetFieldTypesFromAutocompleteAttribute();
   DetermineFieldRanks();
 }
@@ -185,7 +193,7 @@ void FormStructure::DetermineFieldRanks() {
 
 void FormStructure::DetermineHeuristicTypes(
     const GeoIpCountryCode& client_country,
-    AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
+    autofill_metrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
     LogManager* log_manager) {
   SCOPED_UMA_HISTOGRAM_TIMER("Autofill.Timing.DetermineHeuristicTypes");
 
@@ -253,7 +261,7 @@ void FormStructure::DetermineNonActiveHeuristicTypes(
     ParsingContext& context) {
 #if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
   if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableImprovedPredictionParser)) {
+          autofill_prediction_improvements::kAutofillPredictionImprovements)) {
     // Run the parser for the prediction improvements.
     context.pattern_file = PatternFile::kPredictionImprovements;
     AssignBestFieldTypes(ParseFieldTypesWithPatterns(context),
@@ -274,7 +282,7 @@ void FormStructure::DetermineNonActiveHeuristicTypes(
 
 // static
 std::vector<FormDataPredictions> FormStructure::GetFieldTypePredictions(
-    const std::vector<raw_ptr<FormStructure, VectorExperimental>>&
+    base::span<const raw_ptr<FormStructure, VectorExperimental>>
         form_structures) {
   std::vector<FormDataPredictions> forms;
   forms.reserve(form_structures.size());
@@ -300,6 +308,8 @@ std::vector<FormDataPredictions> FormStructure::GetFieldTypePredictions(
       annotated_field.overall_type = std::string(field->Type().ToStringView());
       annotated_field.parseable_name =
           base::UTF16ToUTF8(field->parseable_name());
+      annotated_field.parseable_label =
+          base::UTF16ToUTF8(field->parseable_label());
       annotated_field.section = field->section().ToString();
       annotated_field.rank = field->rank();
       annotated_field.rank_in_signature_group =
@@ -411,9 +421,8 @@ bool FormStructure::ShouldBeParsed(ShouldBeParsedParams params,
     return false;
   }
 
-  bool has_text_field = std::ranges::any_of(*this, [](const auto& field) {
-    return !field->IsSelectOrSelectListElement();
-  });
+  bool has_text_field = std::ranges::any_of(
+      *this, [](const auto& field) { return !field->IsSelectElement(); });
   if (!has_text_field) {
     LOG_AF(log_manager) << LoggingScope::kAbortParsing
                         << LogMessage::kAbortParsingFormHasNoTextfield << *this;
@@ -444,9 +453,12 @@ bool FormStructure::ShouldBeUploaded() const {
 void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
                                       RetrieveFromCacheReason reason) {
   // Build a table to lookup AutofillFields by their FieldGlobalId.
-  std::map<FieldGlobalId, const AutofillField*> cached_fields_by_id;
-  for (const std::unique_ptr<autofill::AutofillField>& field : cached_form)
-    cached_fields_by_id[field->global_id()] = field.get();
+  auto cached_fields_by_id =
+      base::MakeFlatMap<FieldGlobalId, const AutofillField*>(
+          cached_form.fields(), {},
+          [](const std::unique_ptr<AutofillField>& field) {
+            return std::make_pair(field->global_id(), field.get());
+          });
 
   // Lookup field by global_id in cached_fields_by_id.
   auto find_field_by_id = [&cached_fields_by_id](FieldGlobalId global_id) {
@@ -490,16 +502,17 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
 
     // TODO: crbug.com/40227496 - Simplify the `switch` statement once
     // kAutofillFixValueSemantics is launched.
-    // TODO: crbug.com/40227496 - Remove the IsSelectOrSelectListElement()
+    // TODO: crbug.com/40227496 - Remove the IsSelectElement()
     // checks once kAutofillFixValueSemantics is launched.
     // TODO: crbug.com/40227496 - Update the comments when the experiments are
     // launched.
     switch (reason) {
-      case RetrieveFromCacheReason::kFormParsing:
+      case RetrieveFromCacheReason::kFormCacheUpdateAfterParsing:
+      case RetrieveFromCacheReason::kFormCacheUpdateWithoutParsing:
         // If kAutofillFixValueSemantics is disabled: During form parsing (as in
         // "assigning field types to fields") the `value` represents the initial
         // value found at page load and needs to be preserved.
-        if (!field->IsSelectOrSelectListElement() ||
+        if (!field->IsSelectElement() ||
             base::FeatureList::IsEnabled(
                 features::kAutofillFixInitialValueOfSelect)) {
           field->set_initial_value(
@@ -507,9 +520,8 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
         }
         break;
       case RetrieveFromCacheReason::kFormImport:
-        // TODO: crbug.com/40227496 - Group IsSelectOrSelectListElement()
-        // checks.
-        if ((!field->IsSelectOrSelectListElement() ||
+        // TODO: crbug.com/40227496 - Group IsSelectElement() checks.
+        if ((!field->IsSelectElement() ||
              base::FeatureList::IsEnabled(
                  features::kAutofillFixInitialValueOfSelect)) &&
             base::FeatureList::IsEnabled(
@@ -530,7 +542,7 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
             cached_field->Type().GetStorableType() > FieldType::UNKNOWN_TYPE ||
             !cached_field->possible_types().empty();
         if (!cached_field->value(ValueSemantics::kInitial).empty() &&
-            (!field->IsSelectOrSelectListElement() ||
+            (!field->IsSelectElement() ||
              base::FeatureList::IsEnabled(
                  features::kAutofillFixInitialValueOfSelect)) &&
             had_type) {
@@ -544,7 +556,7 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
         const bool field_is_neither_state_nor_country =
             field->server_type() != ADDRESS_HOME_COUNTRY &&
             field->server_type() != ADDRESS_HOME_STATE;
-        if ((!field->IsSelectOrSelectListElement() &&
+        if ((!field->IsSelectElement() &&
              !base::FeatureList::IsEnabled(
                  features::kAutofillFixCurrentValueInImport)) &&
             same_value_as_on_page_load && field_is_neither_state_nor_country) {
@@ -556,7 +568,8 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
     field->set_server_predictions(cached_field->server_predictions());
 
     // Preserve state whether the field was autofilled before.
-    if (reason == RetrieveFromCacheReason::kFormParsing) {
+    if (reason == RetrieveFromCacheReason::kFormCacheUpdateWithoutParsing ||
+        reason == RetrieveFromCacheReason::kFormCacheUpdateAfterParsing) {
       field->set_is_autofilled(cached_field->is_autofilled());
     }
     field->set_autofill_source_profile_guid(
@@ -573,8 +586,10 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
     // and information derived from the autocomplete attribute as those are
     // either regenerated or copied from the form that the renderer sent.
     // During import, no parsing happens and we want to preserve the last field
-    // classification.
-    if (reason == RetrieveFromCacheReason::kFormImport) {
+    // classification. Similarly, if the renderer sends an update that does not
+    // trigger parsing, we want to preserve the last field classification
+    if (reason == RetrieveFromCacheReason::kFormCacheUpdateWithoutParsing ||
+        reason == RetrieveFromCacheReason::kFormImport) {
       // Transfer attributes of the cached AutofillField to the newly created
       // AutofillField.
       for (int i = 0; i <= static_cast<int>(HeuristicSource::kMaxValue); ++i) {
@@ -742,8 +757,7 @@ void FormStructure::AssignBestFieldTypes(
 
 const AutofillField* FormStructure::field(size_t index) const {
   if (index >= fields_.size()) {
-    NOTREACHED_IN_MIGRATION();
-    return nullptr;
+    NOTREACHED();
   }
   return fields_[index].get();
 }
@@ -802,24 +816,10 @@ FormData FormStructure::ToFormData() const {
   return data;
 }
 
-void FormStructure::ProcessExtractedFields() {
-  // Extracts the |parseable_name_| by removing common affixes from the
-  // field names.
-  ExtractParseableFieldNames();
-
-  // TODO(crbug.com/40741721): Remove once shared labels are launched.
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableSupportForParsingWithSharedLabels)) {
-    // Extracts the |parsable_label_| for each field.
-    ExtractParseableFieldLabels();
-  }
-}
-
 void FormStructure::ExtractParseableFieldLabels() {
   std::vector<std::u16string_view> field_labels;
   field_labels.reserve(field_count());
-  for (const auto& field : *this) {
-    // Skip fields that are not a text input or not visible.
+  for (const std::unique_ptr<AutofillField>& field : fields_) {
     if (!field->IsTextInputElement() || !field->IsFocusable()) {
       continue;
     }
@@ -827,37 +827,36 @@ void FormStructure::ExtractParseableFieldLabels() {
   }
 
   // Determine the parsable labels and write them back.
-  std::optional<std::vector<std::u16string>> parsable_labels =
-      GetParseableLabels(field_labels);
-  // If not single label was split, the function can return, because the
-  // |parsable_label_| is assigned to |label| by default.
-  if (!parsable_labels.has_value()) {
-    return;
-  }
-
-  size_t idx = 0;
-  for (auto& field : *this) {
+  std::vector<std::u16string_view> parsable_labels =
+      GetParseableLabels(std::move(field_labels));
+  // Iterating through the fields in reverse order is necessary for memory
+  // safety: `field_labels` contains string_views pointing to the labels of the
+  // `fields_`. By splitting shared labels, `field_labels[i]` might reference
+  // `field_labels[i-1]`, meaning that earlier labels need to be overwritten
+  // later.
+  auto it = parsable_labels.rbegin();
+  for (const std::unique_ptr<AutofillField>& field : base::Reversed(fields_)) {
     if (!field->IsTextInputElement() || !field->IsFocusable()) {
-      // For those fields, set the original label.
-      field->set_parseable_label(field->label());
       continue;
     }
-    DCHECK(idx < parsable_labels->size());
-    field->set_parseable_label(parsable_labels->at(idx++));
+    CHECK(it != parsable_labels.rend());
+    if (field->label() != *it &&
+        base::FeatureList::IsEnabled(
+            features::kAutofillEnableSupportForParsingWithSharedLabels)) {
+      field->set_parseable_label(std::u16string(*it));
+    }
+    it++;
   }
 }
 
 void FormStructure::ExtractParseableFieldNames() {
-  std::vector<std::u16string_view> names;
-  names.reserve(field_count());
-  for (const auto& field : *this)
-    names.emplace_back(field->name());
-
-  // Determine the parseable names and write them into the corresponding field.
+  std::vector<std::u16string_view> names = base::ToVector(
+      fields_, [](const auto& f) -> std::u16string_view { return f->name(); });
   ComputeParseableNames(names);
-  size_t idx = 0;
-  for (auto& field : *this)
-    field->set_parseable_name(std::u16string(names[idx++]));
+  auto names_it = names.begin();
+  for (const std::unique_ptr<AutofillField>& field : fields_) {
+    field->set_parseable_name(std::u16string(*names_it++));
+  }
 }
 
 DenseSet<FormType> FormStructure::GetFormTypes() const {
@@ -890,7 +889,7 @@ void FormStructure::RationalizePhoneNumbersInSection(const Section& section) {
 }
 
 void FormStructure::RationalizeFormStructure(
-    AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
+    autofill_metrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
     LogManager* log_manager) {
   FormStructureRationalizer rationalizer(&fields_);
   rationalizer.RationalizeContentEditables(log_manager);

@@ -134,6 +134,7 @@ android_library("java") {
     "//chrome/browser/notifications:java",
     "//chrome/browser/password_manager/android/access_loss:enums_java",
     "//chrome/browser/password_manager/android/access_loss:settings_dialog_java",
+    "//chrome/browser/password_manager/android/access_loss:utils_java",
     "//chrome/browser/preferences:java",
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/settings:java",
@@ -171,12 +172,15 @@ android_library("java") {
   public_deps = [
     ":backend_interface_java",
     ":password_manager_resource_provider_java",
+    "access_loss:enums_java",
   ]
 
   srcjar_deps = [ ":jni_headers" ]
   sources = [
+    "java/src/org/chromium/chrome/browser/password_manager/CctPasswordSavingMetricsRecorderBridge.java",
     "java/src/org/chromium/chrome/browser/password_manager/ConfirmationDialogHelper.java",
     "java/src/org/chromium/chrome/browser/password_manager/OutdatedGmsCoreDialog.java",
+    "java/src/org/chromium/chrome/browser/password_manager/PasswordAccessLossDialogHelper.java",
     "java/src/org/chromium/chrome/browser/password_manager/PasswordCheckupClientMetricsRecorder.java",
     "java/src/org/chromium/chrome/browser/password_manager/PasswordManagerAndroidBackendUtil.java",
     "java/src/org/chromium/chrome/browser/password_manager/PasswordManagerHelper.java",
@@ -228,6 +232,7 @@ generate_jni("jni_headers") {
     "//chrome/browser",
   ]
   sources = [
+    "java/src/org/chromium/chrome/browser/password_manager/CctPasswordSavingMetricsRecorderBridge.java",
     "java/src/org/chromium/chrome/browser/password_manager/PasswordManagerHelper.java",
     "java/src/org/chromium/chrome/browser/password_manager/PasswordManagerLifecycleHelper.java",
     "java/src/org/chromium/chrome/browser/password_manager/PasswordManagerUtilBridge.java",
@@ -260,6 +265,7 @@ java_group("javatests") {
   testonly = true
   deps = [
     "account_storage_notice:javatests",
+    "grouped_affiliations:javatests",
     "pwd_migration:javatests",
   ]
 }
@@ -268,6 +274,8 @@ robolectric_binary("password_manager_junit_tests") {
   testonly = true
 
   sources = [
+    "java/src/org/chromium/chrome/browser/password_manager/CctPasswordSavingMetricsRecorderBridgeTest.java",
+    "java/src/org/chromium/chrome/browser/password_manager/PasswordAccessLossDialogHelperTest.java",
     "java/src/org/chromium/chrome/browser/password_manager/settings/PasswordAccessLossExportDialogCoordinatorTest.java",
     "java/src/org/chromium/chrome/browser/password_manager/settings/PasswordAccessLossExportFlowCoordinatorTest.java",
     "java/src/org/chromium/chrome/browser/password_manager/settings/PasswordAccessLossImportDialogCoordinatorTest.java",
@@ -308,6 +316,7 @@ robolectric_binary("password_manager_junit_tests") {
     "account_storage_notice:junit",
     "add_username_dialog:junit",
     "bottom_sheet:junit",
+    "grouped_affiliations:junit",
     "pwd_migration:junit",
     "//base:base_java",
     "//base:base_java_test_support",
@@ -318,6 +327,7 @@ robolectric_binary("password_manager_junit_tests") {
     "//chrome/browser/loading_modal/android:java",
     "//chrome/browser/password_manager/android/access_loss:enums_java",
     "//chrome/browser/password_manager/android/access_loss:helper_java",
+    "//chrome/browser/password_manager/android/access_loss:utils_java",
     "//chrome/browser/password_manager/android/pwd_migration:java",
     "//chrome/browser/preferences:java",
     "//chrome/browser/profiles/android:java",
@@ -363,6 +373,7 @@ android_resources("java_resources") {
     "java/res/layout/password_access_loss_export_dialog_view.xml",
     "java/res/layout/passwords_error_dialog.xml",
     "java/res/layout/passwords_preference_error_widget.xml",
+    "java/res/layout/passwords_preference_info_widget.xml",
     "java/res/layout/passwords_progress_dialog.xml",
   ]
   deps = [
@@ -499,6 +510,8 @@ java_cpp_enum("java_enum_srcjar") {
 
 source_set("utils") {
   sources = [
+    "cct_password_saving_metrics_recorder_bridge.cc",
+    "cct_password_saving_metrics_recorder_bridge.h",
     "first_cct_page_load_marker.cc",
     "first_cct_page_load_marker.h",
     "password_generation_element_data.cc",
@@ -525,6 +538,7 @@ source_set("utils") {
     "//components/prefs:prefs",
     "//components/version_info/android:channel_getter",
     "//content/public/browser",
+    "//ui/android:android",
   ]
 }
 
@@ -581,6 +595,7 @@ source_set("unit_tests") {
     "//chrome/browser/keyboard_accessory/test_utils/android",
     "//chrome/browser/password_manager/android/access_loss:test_support",
     "//chrome/browser/password_manager/android/add_username_dialog:android",
+    "//chrome/browser/prefs",
     "//chrome/browser/sync",
     "//chrome/browser/touch_to_fill/password_manager/password_generation/android:public",
     "//chrome/browser/touch_to_fill/password_manager/password_generation/android:test_support",

@@ -264,8 +264,8 @@ static ImmutableCSSPropertyValueSet* CreateCSSPropertyValueSet(
     // Fast path for the situations where we can trivially detect that there can
     // be no collision between properties, and don't need to reorder, make
     // bitsets, or similar.
-    ImmutableCSSPropertyValueSet* result = ImmutableCSSPropertyValueSet::Create(
-        parsed_properties.data(), parsed_properties.size(), mode);
+    ImmutableCSSPropertyValueSet* result =
+        ImmutableCSSPropertyValueSet::Create(parsed_properties, mode);
     parsed_properties.clear();
     return result;
   }
@@ -309,8 +309,7 @@ static ImmutableCSSPropertyValueSet* CreateCSSPropertyValueSet(
   }
 
   ImmutableCSSPropertyValueSet* result = ImmutableCSSPropertyValueSet::Create(
-      results.data() + unused_entries, results.size() - unused_entries, mode,
-      count_cursor_hand);
+      base::span(results).subspan(unused_entries), mode, count_cursor_hand);
   parsed_properties.clear();
   return result;
 }
@@ -1271,7 +1270,7 @@ StyleRuleNestedDeclarations* CSSParserImpl::CreateNestedDeclarationsRule(
     wtf_size_t end_index) {
   DCHECK(RuntimeEnabledFeatures::CSSNestedDeclarationsEnabled());
   DCHECK(selector_list);
-  DCHECK_LT(start_index, end_index);
+  DCHECK_LE(start_index, end_index);
 
   // Create a nested declarations rule containing all declarations
   // in [start_index, end_index).
@@ -1324,8 +1323,15 @@ void CSSParserImpl::EmitNestedDeclarationsRuleIfNeeded(
     return;
   }
   wtf_size_t end_index = parsed_properties_.size();
-  if (start_index >= end_index) {
-    // No need to emit a rule with nothing in it.
+  if (start_index == kNotFound) {
+    return;
+  }
+  // The spec only allows creating non-empty rules, however, the inspector needs
+  // empty rules to appear as well. This has no effect on the styles seen by
+  // the page (the styles parsed with an `observer_` are for local use in the
+  // inspector only).
+  const bool emit_empty_rule = observer_;
+  if (start_index >= end_index && !emit_empty_rule) {
     return;
   }
 
@@ -1679,7 +1685,7 @@ StyleRuleFontFeature* CSSParserImpl::ConsumeFontFeatureRule(
     }
     stream.ConsumeWhitespace();
 
-    font_feature_rule->UpdateAlias(alias, parsed_numbers);
+    font_feature_rule->UpdateAlias(alias, std::move(parsed_numbers));
   }
 
   return font_feature_rule;
@@ -1777,8 +1783,8 @@ StyleRuleFontFeatureValues* CSSParserImpl::ConsumeFontFeatureValuesRule(
   }
 
   auto* feature_values_rule = MakeGarbageCollected<StyleRuleFontFeatureValues>(
-      families, stylistic, styleset, character_variant, swash, ornaments,
-      annotation);
+      std::move(families), stylistic, styleset, character_variant, swash,
+      ornaments, annotation);
 
   if (observer_) {
     observer_->EndRuleBody(stream.Offset());
@@ -2399,8 +2405,7 @@ StyleRuleFunction* CSSParserImpl::ConsumeFunctionRule(
         stream, /*allow_important_annotation=*/false,
         /*is_animation_tainted=*/false,
         /*must_contain_variable_reference=*/false, /*restricted_value=*/false,
-        /*comma_ends_declaration=*/false, important_ignored,
-        context_->GetExecutionContext());
+        /*comma_ends_declaration=*/false, important_ignored, *context_);
   }
 
   while (!stream.AtEnd()) {
@@ -2452,7 +2457,7 @@ StyleRuleMixin* CSSParserImpl::ConsumeMixinRule(CSSParserTokenStream& stream) {
 
   // The destructor expects there to be at least one selector in the StyleRule.
   CSSSelector dummy;
-  StyleRule* fake_parent_rule = StyleRule::Create(std::vector{dummy});
+  StyleRule* fake_parent_rule = StyleRule::Create(base::span_from_ref(dummy));
   HeapVector<Member<StyleRuleBase>, 4> child_rules;
   ConsumeRuleListOrNestedDeclarationList(stream,
                                          /*is_nested_group_rule=*/true,
@@ -3108,7 +3113,7 @@ bool CSSParserImpl::ConsumeDeclaration(CSSParserTokenStream& stream,
                 /*is_animation_tainted=*/false,
                 /*must_contain_variable_reference=*/false,
                 /*restricted_value=*/true, /*comma_ends_declaration=*/false,
-                important, context_->GetExecutionContext());
+                important, *context_);
           }
         } else {
           ConsumeDeclarationValue(stream, unresolved_property,
@@ -3131,7 +3136,7 @@ bool CSSParserImpl::ConsumeDeclaration(CSSParserTokenStream& stream,
           /*is_animation_tainted=*/false,
           /*must_contain_variable_reference=*/false,
           /*restricted_value=*/true, /*comma_ends_declaration=*/false,
-          important, context_->GetExecutionContext());
+          important, *context_);
     }
     // The end offset is the offset of the terminating token, which is peeked
     // but not yet consumed.
@@ -3161,7 +3166,7 @@ bool CSSParserImpl::ConsumeVariableValue(CSSParserTokenStream& stream,
             stream, allow_important_annotation, is_animation_tainted,
             /*must_contain_variable_reference=*/false,
             /*restricted_value=*/false, /*comma_ends_declaration=*/false,
-            important, context_->GetExecutionContext());
+            important, *context_);
     if (!variable_data) {
       return false;
     }

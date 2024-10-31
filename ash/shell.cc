@@ -113,7 +113,6 @@
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/multi_capture/multi_capture_service_client.h"
 #include "ash/multi_device_setup/multi_device_notification_presenter.h"
-#include "ash/picker/picker_controller.h"
 #include "ash/policy/policy_recommendation_restorer.h"
 #include "ash/projector/projector_controller_impl.h"
 #include "ash/public/cpp/accelerator_keycode_lookup_cache.h"
@@ -129,6 +128,7 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/tab_cluster/tab_cluster_ui_controller.h"
 #include "ash/public/cpp/views_text_services_context_menu_ash.h"
+#include "ash/quick_insert/quick_insert_controller.h"
 #include "ash/quick_pair/keyed_service/quick_pair_mediator.h"
 #include "ash/rgb_keyboard/rgb_keyboard_manager.h"
 #include "ash/root_window_controller.h"
@@ -284,6 +284,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/user_activity/user_activity_detector.h"
@@ -593,7 +594,7 @@ void Shell::DoInitialWorkspaceAnimation() {
 }
 
 void Shell::ShowContextMenu(const gfx::Point& location_in_screen,
-                            ui::MenuSourceType source_type) {
+                            ui::mojom::MenuSourceType source_type) {
   // Bail with no active user session, in the lock screen, or in app/kiosk mode.
   if (session_controller_->NumberOfLoggedInUsers() < 1 ||
       session_controller_->IsScreenLocked() ||
@@ -702,7 +703,11 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate)
       locale_update_controller_(std::make_unique<LocaleUpdateControllerImpl>()),
       parent_access_controller_(std::make_unique<ParentAccessControllerImpl>()),
       local_authentication_request_controller_(
-          std::make_unique<LocalAuthenticationRequestControllerImpl>()),
+          features::IsLocalAuthenticationWithPinEnabled()
+              ? std::unique_ptr<LocalAuthenticationRequestController>(
+                    new LocalAuthenticationWithPinControllerImpl())
+              : std::unique_ptr<LocalAuthenticationRequestController>(
+                    new LocalAuthenticationRequestControllerImpl())),
       active_session_auth_controller_(
           std::make_unique<ActiveSessionAuthControllerImpl>()),
       session_controller_(std::make_unique<SessionControllerImpl>()),
@@ -825,7 +830,7 @@ Shell::~Shell() {
   // EventRewriterController directly, so it must be reset first to avoid
   // accessing invalid memory (see b/315127220).
   AccessibilityController::Get()->SetAccessibilityEventRewriter(nullptr);
-  AccessibilityController::Get()->SetDisableTrackpadEventRewriter(nullptr);
+  AccessibilityController::Get()->SetDisableTouchpadEventRewriter(nullptr);
   AccessibilityController::Get()->SetFilterKeysEventRewriter(nullptr);
   // AccessibilityController observes
   // input_device_settings_controller_; it also outlives
@@ -1060,6 +1065,7 @@ Shell::~Shell() {
   accessibility_focus_ring_controller_.reset();
   policy_recommendation_restorer_.reset();
   active_session_auth_controller_.reset();
+  local_authentication_request_controller_.reset();
   ime_controller_.reset();
   back_gesture_event_handler_.reset();
 
@@ -1467,8 +1473,10 @@ void Shell::Init(
   frame_throttling_controller_ = std::make_unique<FrameThrottlingController>(
       context_factory->GetHostFrameSinkManager());
 
-  if (features::IsTabClusterUIEnabled()) {
+  if (features::IsCoralFeatureEnabled()) {
     tab_cluster_ui_controller_ = std::make_unique<TabClusterUIController>();
+    coral_controller_ = std::make_unique<CoralController>();
+    coral_delegate_ = shell_delegate_->CreateCoralDelegate();
   }
 
   window_tree_host_manager_->Start();
@@ -1822,16 +1830,7 @@ void Shell::Init(
         shell_delegate_->CreateUserEducationDelegate());
   }
 
-  if (features::IsCoralFeatureEnabled()) {
-    coral_controller_ = std::make_unique<CoralController>();
-  }
-  if (features::IsBirchCoralEnabled()) {
-    coral_delegate_ = shell_delegate_->CreateCoralDelegate();
-  }
-
-  if (features::IsPickerUpdateEnabled()) {
-    picker_controller_ = std::make_unique<PickerController>();
-  }
+  picker_controller_ = std::make_unique<PickerController>();
 
   if (features::IsLobsterEnabled() && LobsterController::IsEnabled()) {
     lobster_controller_ = std::make_unique<LobsterController>();

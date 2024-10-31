@@ -39,9 +39,6 @@ extern const char kShoppingListDescription[];
 extern const char kChromeCartDomBasedHeuristicsName[];
 extern const char kChromeCartDomBasedHeuristicsDescription[];
 
-extern const char kParcelTrackingTestDataName[];
-extern const char kParcelTrackingTestDataDescription[];
-
 extern const char kPriceInsightsName[];
 extern const char kPriceInsightsDescription[];
 
@@ -64,6 +61,9 @@ extern const char kTrackByDefaultOnMobileDescription[];
 
 extern const char kPriceTrackingSubscriptionServiceLocaleKeyName[];
 extern const char kPriceTrackingSubscriptionServiceLocaleKeyDescription[];
+
+extern const char kPriceTrackingSubscriptionServiceProductVersionName[];
+extern const char kPriceTrackingSubscriptionServiceProductVersionDescription[];
 
 }  // namespace commerce::flag_descriptions
 

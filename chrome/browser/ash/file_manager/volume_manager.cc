@@ -28,7 +28,6 @@
 #include "chrome/browser/ash/arc/fileapi/arc_documents_provider_util.h"
 #include "chrome/browser/ash/arc/fileapi/arc_file_system_operation_runner.h"
 #include "chrome/browser/ash/arc/fileapi/arc_media_view_util.h"
-#include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
@@ -512,13 +511,13 @@ void VolumeManager::AddSshfsCrostiniVolume(
 }
 
 void VolumeManager::AddSftpGuestOsVolume(
-    const std::string display_name,
+    std::string display_name,
     const base::FilePath& sftp_mount_path,
     const base::FilePath& remote_mount_path,
     const guest_os::VmType vm_type) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DoMountEvent(Volume::CreateForSftpGuestOs(display_name, sftp_mount_path,
-                                            remote_mount_path, vm_type));
+  DoMountEvent(Volume::CreateForSftpGuestOs(
+      std::move(display_name), sftp_mount_path, remote_mount_path, vm_type));
 }
 
 void VolumeManager::RemoveSshfsCrostiniVolume(
@@ -1093,6 +1092,10 @@ void VolumeManager::OnArcPlayStoreEnabledChanged(bool enabled) {
 
   documents_provider_root_manager_->SetEnabled(mounting);
   arc_volumes_mounted_ = mounting;
+}
+
+void VolumeManager::OnShutdown() {
+  arc_session_manager_observation_.Reset();
 }
 
 void VolumeManager::OnExternalStorageDisabledChanged() {
@@ -1719,9 +1722,8 @@ void VolumeManager::UnsubscribeFromArcEvents() {
   }
   // TODO(crbug.com/40497410): We need nullptr check here because
   // ArcSessionManager may or may not be alive at this point.
-  if (arc::ArcSessionManager* const session_manager =
-          arc::ArcSessionManager::Get()) {
-    session_manager->RemoveObserver(this);
+  if (arc::ArcSessionManager::Get()) {
+    arc_session_manager_observation_.Reset();
   }
 }
 
@@ -1733,7 +1735,7 @@ void VolumeManager::SubscribeAndMountArc() {
   // Registers a mount point for Android files only when the flag is enabled.
   RegisterAndroidFilesMountPoint();
   if (arc::ArcSessionManager::Get()) {
-    arc::ArcSessionManager::Get()->AddObserver(this);
+    arc_session_manager_observation_.Observe(arc::ArcSessionManager::Get());
   } else {
     // Can be NULL only in tests.
     CHECK_IS_TEST();

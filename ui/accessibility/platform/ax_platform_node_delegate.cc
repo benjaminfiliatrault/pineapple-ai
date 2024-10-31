@@ -141,8 +141,7 @@ AXNodePosition::AXPositionInstance AXPlatformNodeDelegate::CreateTextPositionAt(
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetNSWindow() {
-  NOTREACHED_IN_MIGRATION() << "Only available on macOS.";
-  return nullptr;
+  NOTREACHED() << "Only available on macOS.";
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetNativeViewAccessible() {
@@ -151,8 +150,7 @@ gfx::NativeViewAccessible AXPlatformNodeDelegate::GetNativeViewAccessible() {
   // overridden this method. On all other platforms, this method should not be
   // called yet. In the future, when all subclasses have moved over to be
   // implemented by AXPlatformNode, we may make this method completely virtual.
-  NOTREACHED_IN_MIGRATION() << "https://crbug.com/703369";
-  return nullptr;
+  NOTREACHED() << "https://crbug.com/703369";
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetParent() const {
@@ -823,36 +821,10 @@ bool AXPlatformNodeDelegate::GetStringListAttribute(
   return found;
 }
 
-bool AXPlatformNodeDelegate::HasHtmlAttribute(const char* attribute) const {
-  if (node_)
-    return node_->HasHtmlAttribute(attribute);
-  return GetData().HasHtmlAttribute(attribute);
-}
-
 const base::StringPairs& AXPlatformNodeDelegate::GetHtmlAttributes() const {
   if (node_)
     return node_->GetHtmlAttributes();
   return GetData().html_attributes;
-}
-
-bool AXPlatformNodeDelegate::GetHtmlAttribute(const char* attribute,
-                                              std::string* value) const {
-  bool found = HasHtmlAttribute(attribute);
-  if (found) {
-    *value = node_ ? node_->GetHtmlAttribute(attribute)
-                   : GetData().GetHtmlAttribute(attribute);
-  }
-  return found;
-}
-
-bool AXPlatformNodeDelegate::GetHtmlAttribute(const char* attribute,
-                                              std::u16string* value) const {
-  bool found = HasHtmlAttribute(attribute);
-  if (found) {
-    *value = node_ ? node_->GetHtmlAttributeUTF16(attribute)
-                   : GetData().GetHtmlAttributeUTF16(attribute);
-  }
-  return found;
 }
 
 AXTextAttributes AXPlatformNodeDelegate::GetTextAttributes() const {

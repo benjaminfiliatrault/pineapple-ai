@@ -121,8 +121,7 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
 
   void DidEndTextFieldEditing() override {}
 
-  void SelectOrSelectListFieldOptionsDidChange(
-      const autofill::FormData& form) override {}
+  void SelectFieldOptionsDidChange(const autofill::FormData& form) override {}
 
   // Records the form data received via FormSubmitted() call.
   std::unique_ptr<FormData> form_submitted_;
@@ -523,8 +522,11 @@ class FormAutocompleteSubmissionTest : public FormAutocompleteTest,
                                        public testing::WithParamInterface<int> {
  public:
   FormAutocompleteSubmissionTest() {
-    EXPECT_LE(GetParam(), 2);
+    EXPECT_LE(GetParam(), 5);
     std::vector<base::test::FeatureRef> features = {
+        features::kAutofillFixFormTracking,
+        features::kAutofillUseSubmittedFormInHtmlSubmission,
+        features::kAutofillPreferSavedFormAsSubmittedForm,
         features::kAutofillReplaceCachedWebElementsByRendererIds,
         features::kAutofillReplaceFormElementObserver};
 
@@ -541,7 +543,7 @@ class FormAutocompleteSubmissionTest : public FormAutocompleteTest,
 
 INSTANTIATE_TEST_SUITE_P(AutofillSubmissionTest,
                          FormAutocompleteSubmissionTest,
-                         ::testing::Values(0, 1, 2));
+                         ::testing::Values(0, 1, 2, 3, 4, 5));
 
 // Tests that submitting a form generates FormSubmitted message with the form
 // fields.

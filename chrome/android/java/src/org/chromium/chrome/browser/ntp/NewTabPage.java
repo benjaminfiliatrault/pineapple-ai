@@ -547,7 +547,6 @@ public class NewTabPage
                 mFeedSurfaceProvider.getTouchEnabledDelegate(),
                 mFeedSurfaceProvider.getUiConfig(),
                 lifecycleDispatcher,
-                uma,
                 mTab.getProfile(),
                 windowAndroid,
                 mIsTablet,
@@ -893,7 +892,7 @@ public class NewTabPage
     /** Records UMA for the NTP being hidden and the time spent on it. */
     private void recordNtpHidden() {
         mJankTracker.finishTrackingScenario(JankScenario.NEW_TAB_PAGE);
-        RecordHistogram.recordMediumTimesHistogram(
+        RecordHistogram.deprecatedRecordMediumTimesHistogram(
                 "NewTabPage.TimeSpent",
                 (System.nanoTime() - mLastShownTimeNs) / TimeUtils.NANOSECONDS_PER_MILLISECOND);
         SuggestionsMetrics.recordSurfaceHidden();
@@ -1161,7 +1160,7 @@ public class NewTabPage
         }
 
         if (mHomeModulesCoordinator == null) {
-            initializeMagicStack(mostRecentTab);
+            initializeMagicStack();
         }
         mHomeModulesCoordinator.show(this::onMagicStackShown);
     }
@@ -1199,7 +1198,7 @@ public class NewTabPage
      * Initializes the magic stack to show home modules on the current new tab page which is used as
      * the home surface.
      */
-    private void initializeMagicStack(Tab mostRecentTab) {
+    private void initializeMagicStack() {
         mHomeModulesContainer =
                 (ViewGroup)
                         ((ViewStub)

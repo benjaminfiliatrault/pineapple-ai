@@ -25,6 +25,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/base_tracing.h"
+#include "base/trace_event/named_trigger.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/typed_macros.h"
 #include "base/types/cxx23_to_underlying.h"
@@ -775,12 +776,10 @@ void RenderFrameHostManager::DidNavigateFrame(
     bool is_same_document_navigation,
     bool clear_proxies_on_commit,
     const blink::FramePolicy& frame_policy,
-    bool allow_subframe_paint_holding,
-    bool is_initiated_by_animated_transition) {
+    bool allow_paint_holding) {
   CommitPendingIfNecessary(render_frame_host, was_caused_by_user_gesture,
                            is_same_document_navigation, clear_proxies_on_commit,
-                           allow_subframe_paint_holding,
-                           is_initiated_by_animated_transition);
+                           allow_paint_holding);
 
   // Make sure any dynamic changes to this frame's sandbox flags and permissions
   // policy that were made prior to navigation take effect.  This should only
@@ -817,8 +816,7 @@ void RenderFrameHostManager::CommitPendingIfNecessary(
     bool was_caused_by_user_gesture,
     bool is_same_document_navigation,
     bool clear_proxies_on_commit,
-    bool allow_subframe_paint_holding,
-    bool is_initiated_by_animated_transition) {
+    bool allow_paint_holding) {
   if (!speculative_render_frame_host_) {
     // There's no speculative RenderFrameHost so it must be that the current
     // RenderFrameHost completed a navigation.
@@ -829,8 +827,7 @@ void RenderFrameHostManager::CommitPendingIfNecessary(
     // A cross-RenderFrameHost navigation completed, so show the new renderer.
     CommitPending(std::move(speculative_render_frame_host_),
                   std::move(stored_page_to_restore_), clear_proxies_on_commit,
-                  allow_subframe_paint_holding,
-                  is_initiated_by_animated_transition);
+                  allow_paint_holding);
 
     if (GetNavigationQueueingFeatureLevel() >=
         NavigationQueueingFeatureLevel::kAvoidRedundantCancellations) {
@@ -887,9 +884,26 @@ void RenderFrameHostManager::CommitPendingIfNecessary(
     // output on prerender activation.
     if (render_frame_host_->lifecycle_state() !=
         LifecycleStateImpl::kPrerendering) {
-      static_cast<RenderWidgetHostImpl*>(
-          render_frame_host_->GetView()->GetRenderWidgetHost())
-          ->StartNewContentRenderingTimeout();
+      auto* rwhi = static_cast<RenderWidgetHostImpl*>(
+          render_frame_host_->GetView()->GetRenderWidgetHost());
+
+      rwhi->StartNewContentRenderingTimeout();
+      // Force the timer to expire immediately if we don't allow main frame
+      // paint holding.
+      if (frame_tree_node_->IsMainFrame() && !allow_paint_holding) {
+        // We post task here, since this evicts a surface but the embedding of a
+        // new surface would be done in the same stack as this call. The
+        // ordering of whether the new surface has or has not yet been embedded
+        // differs for different platforms, and we always want the new surface
+        // to be embedded before we evict. Hence, we post a task. In practice
+        // this still disables paint holding unless this task is delayed for a
+        // long time.
+        GetUIThreadTaskRunner({})->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                &RenderWidgetHostImpl::ForceFirstFrameAfterNavigationTimeout,
+                rwhi->GetWeakPtr()));
+      }
     }
   }
 
@@ -1528,9 +1542,7 @@ void RenderFrameHostManager::PerformEarlyRenderFrameHostSwapIfNeeded(
       std::move(speculative_render_frame_host_),
       /*pending_stored_page=*/nullptr,
       request->browsing_context_group_swap().ShouldClearProxiesOnCommit(),
-      /* allow_subframe_paint_holding */ false,
-      /*is_initiated_by_animated_transition=*/
-      request->was_initiated_by_animated_transition());
+      /*allow_paint_holding=*/false);
   request->SetAssociatedRFHType(
       NavigationRequest::AssociatedRenderFrameHostType::CURRENT);
 
@@ -1581,7 +1593,7 @@ RenderFrameHostManager::GetFrameHostForNavigation(
           features::kEnableBackForwardCacheForOngoingSubframeNavigation) &&
       current_frame_host()->lifecycle_state() ==
           LifecycleStateImpl::kInBackForwardCache) {
-    CHECK(!request->IsInMainFrame());
+    CHECK(request->GetParentFrameOrOuterDocument());
     CHECK(!request->NeedsUrlLoader() ||
           (!request->HasLoader() &&
            request->state() <=
@@ -1661,6 +1673,9 @@ RenderFrameHostManager::GetFrameHostForNavigation(
   // Force using a different RenderFrameHost when RenderDocument is enabled.
   if (use_current_rfh &&
       render_frame_host_->ShouldChangeRenderFrameHostOnSameSiteNavigation()) {
+    // TODO(https://crbug.com/40615943): Remove trigger after we're done with
+    // RenderDocument performance investigations.
+    base::trace_event::EmitNamedTrigger("render-document-swap");
     use_current_rfh = false;
     AppendReason(reason,
                  "GetFrameHostForNavigation / RenderDocument-enforcement");
@@ -1780,37 +1795,6 @@ RenderFrameHostManager::GetFrameHostForNavigation(
         dest_site_instance->GetProcess()->IncrementPendingReuseRefCount();
       }
 
-      if (request->IsInPrerenderedMainFrame() &&
-          speculative_render_frame_host_) {
-        // For prerendered pages, the main frame is never in the provisional
-        // state in the renderer. Discarding it now is going to lead to crashes
-        // in the renderer, e.g. https://crbug.com/40063628 and
-        // https://crbug.com/40076091. Try to gather some info now to help
-        // diagnose the renderer-side crashes.
-        SCOPED_CRASH_KEY_STRING256("Bug40076091", "reason",
-                                   reason ? *reason : "n/a");
-        SCOPED_CRASH_KEY_NUMBER(
-            "Bug40076091", "bcg_swap_type",
-            base::to_underlying(browsing_context_group_swap->type()));
-        SCOPED_CRASH_KEY_NUMBER(
-            "Bug40076091", "bi_swap_result",
-            base::to_underlying(
-                request->coop_status().browsing_instance_swap_result()));
-        SCOPED_CRASH_KEY_STRING64(
-            "Bug40076091", "currrent_si",
-            current_site_instance->GetSiteInfo().GetDebugString());
-        SCOPED_CRASH_KEY_STRING64(
-            "Bug40076091", "dest_si",
-            dest_site_instance->GetSiteInfo().GetDebugString());
-        // When this happens, this is a bug. In tests, crash so the failure
-        // isn't silent. But in the wild, crashing the user's browser from a
-        // recoverable error is not useful, so don't crash there :)
-#if DCHECK_IS_ON()
-        DCHECK(false);
-#else
-        base::debug::DumpWithoutCrashing();
-#endif
-      }
       DiscardSpeculativeRFH(request->GetTypeForNavigationDiscardReason());
       bool success = CreateSpeculativeRenderFrameHost(
           current_site_instance, dest_site_instance.get(),
@@ -4105,6 +4089,18 @@ RenderFrameHostManager::CreateSpeculativeRenderFrame(
   DCHECK(render_frame_host_->GetSiteInstance() != instance ||
          render_frame_host_->ShouldChangeRenderFrameHostOnSameSiteNavigation());
 
+  // Speculative fix for https://crbug.com/354382462 where we're seeing a page
+  // in BFCache sharing SiteInstances with a non-BFCached page. We're
+  // suspecting that a navigation with a related SiteInstance is ongoing just
+  // before the related page enters BFCache. To prevent confusion, evict any
+  // BFCached page that has a related SiteInstance as the RenderFrameHost we're
+  // about to create.
+  // TODO(https://crbug.com/354382462): Make this a proper fix with a repro
+  // test and delete the debugging code around this.
+  GetNavigationController()
+      .GetBackForwardCache()
+      .EvictFramesInRelatedSiteInstances(instance);
+
   std::unique_ptr<RenderFrameHostImpl> new_render_frame_host =
       CreateRenderFrameHost(CreateFrameCase::kCreateSpeculative, instance,
                             /*frame_routing_id=*/MSG_ROUTING_NONE,
@@ -4146,13 +4142,14 @@ RenderFrameHostManager::CreateSpeculativeRenderFrame(
       // Then we should remove the null-check for the RenderWidgetHostView in
       // RenderWidgetHostImpl::RendererWidgetCreated().
       delegate_->CreateRenderWidgetHostViewForRenderManager(render_view_host);
-      // If we are recovering a crashed frame in the same SiteInstance and we
-      // are not skipping early commit then we will create a proxy and that will
-      // prevent the regular outer delegate reattach path in
+      // If we are recovering a crashed frame in the same SiteInstanceGroup and
+      // we are not skipping early commit then we will create a proxy and that
+      // will prevent the regular outer delegate reattach path in
       // CreateRenderViewForRenderManager() from working.
       if (recovering_without_early_commit &&
-          render_frame_host_->GetSiteInstance() == instance)
+          render_frame_host_->GetSiteInstance()->group() == instance->group()) {
         delegate_->ReattachOuterDelegateIfNeeded();
+      }
     }
     // And since we are reusing the RenderViewHost make sure it is hidden, like
     // a new RenderViewHost would be, until navigation commits.
@@ -4705,8 +4702,7 @@ void RenderFrameHostManager::CommitPending(
     std::unique_ptr<RenderFrameHostImpl> pending_rfh,
     std::unique_ptr<StoredPage> pending_stored_page,
     bool clear_proxies_on_commit,
-    bool allow_subframe_paint_holding,
-    bool is_initiated_by_animated_transition) {
+    bool allow_paint_holding) {
   TRACE_EVENT1("navigation", "RenderFrameHostManager::CommitPending",
                "FrameTreeNode id", frame_tree_node_->frame_tree_node_id());
   CHECK(pending_rfh);
@@ -5004,9 +5000,11 @@ void RenderFrameHostManager::CommitPending(
   // valid surface id, because it already has that surface embedded through
   // `RenderFrameHostImpl::WillLeaveBackForwardCache` and the timeout that
   // would be set here will clear that frame (incorrectly).
-  if (is_main_frame && old_view && old_view != new_view) {
-    // We should take the fallback if we're not coming from BFCache or if we
-    // don't have a valid surface id to display.
+  if (is_main_frame && allow_paint_holding && old_view &&
+      old_view != new_view) {
+    // If allowed, we should take the fallback in any of the following cases:
+    //  - We're not coming from BFCache
+    //  - We don't have a valid surface id to display.
     auto* render_widget_host_view_base =
         static_cast<RenderWidgetHostViewBase*>(render_frame_host_->GetView());
     should_take_fallback_content =
@@ -5020,11 +5018,6 @@ void RenderFrameHostManager::CommitPending(
   // the RFH so that we can clean up RendererResources related to the RFH first.
   delegate_->NotifySwappedFromRenderManager(old_render_frame_host.get(),
                                             render_frame_host_.get());
-
-  // Disable paint holding if the committing request is being animated.
-  if (is_initiated_by_animated_transition) {
-    should_take_fallback_content = false;
-  }
 
   if (should_take_fallback_content) {
     new_view->TakeFallbackContentFrom(old_view);
@@ -5146,7 +5139,7 @@ void RenderFrameHostManager::CommitPending(
   if (proxy_to_parent_or_outer_delegate) {
     proxy_to_parent_or_outer_delegate->SetChildRWHView(
         static_cast<RenderWidgetHostViewChildFrame*>(new_view),
-        old_size ? &*old_size : nullptr, allow_subframe_paint_holding);
+        old_size ? &*old_size : nullptr, allow_paint_holding);
   }
 
   if (render_frame_host_->is_local_root()) {
@@ -5583,8 +5576,7 @@ void RenderFrameHostManager::CreateNewFrameForInnerDelegateAttachIfNecessary() {
   CommitPending(std::move(speculative_render_frame_host_),
                 /*pending_stored_page=*/nullptr,
                 /*clear_proxies_on_commit=*/false,
-                /*allow_subframe_paint_holding=*/false,
-                /*is_initiated_by_animated_transition=*/false);
+                /*allow_paint_holding=*/false);
   NotifyPrepareForInnerDelegateAttachComplete(true /* success */);
 }
 

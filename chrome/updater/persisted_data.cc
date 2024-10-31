@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/374320451): Fix and remove.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/updater/persisted_data.h"
 
 #include <optional>
@@ -10,7 +15,6 @@
 
 #include "base/base64.h"
 #include "base/check.h"
-#include "base/check_op.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/sequence_checker.h"
@@ -400,7 +404,7 @@ void PersistedData::SetLastUpdateCheckError(
   delegate_->SetLastUpdateCheckError(error);
 }
 
-void PersistedData::SetThrottleUpdatesUntil(const base::Time& time) {
+void PersistedData::SetThrottleUpdatesUntil(base::Time time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   delegate_->SetThrottleUpdatesUntil(time);
 }
@@ -620,7 +624,7 @@ base::Time PersistedData::GetLastChecked() const {
   return pref_service_->GetTime(kLastChecked);
 }
 
-void PersistedData::SetLastChecked(const base::Time& time) {
+void PersistedData::SetLastChecked(base::Time time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (pref_service_) {
     pref_service_->SetTime(kLastChecked, time);
@@ -632,7 +636,7 @@ base::Time PersistedData::GetLastStarted() const {
   return pref_service_->GetTime(kLastStarted);
 }
 
-void PersistedData::SetLastStarted(const base::Time& time) {
+void PersistedData::SetLastStarted(base::Time time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (pref_service_) {
     pref_service_->SetTime(kLastStarted, time);

@@ -8,7 +8,7 @@ import './region_selection.js';
 import './post_selection_renderer.js';
 import './overlay_shimmer.js';
 import './overlay_shimmer_canvas.js';
-import './strings.m.js';
+import '/strings.m.js';
 import '//resources/cr_elements/cr_button/cr_button.js';
 import '//resources/cr_elements/cr_toast/cr_toast.js';
 
@@ -209,6 +209,7 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
       },
       selectionOverlayRect: Object,
       isSearchboxFocused: Boolean,
+      areLanguagePickersOpen: Boolean,
     };
   }
 
@@ -237,6 +238,9 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
   // Whether the users focus is currently in the overlay searchbox. Passed in
   // from parent.
   private isSearchboxFocused: boolean;
+  // Whether any of the language pickers are currently open. Passed in from
+  // parent.
+  private areLanguagePickersOpen: boolean;
 
   // The selected region on which the context menu is being displayed. Used as
   // argument for copy and save as image calls.
@@ -644,9 +648,15 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
       clientY: event.clientY,
     };
 
+    // Try to close the translate feature promo if it is currently active. No-op
+    // if it is not active.
+    this.browserProxy.handler.maybeCloseTranslateFeaturePromo(
+        /*featureEngaged=*/ false);
+
     // If searchbox is stealing focus, we only want to respond to drag gestures,
-    // so wait to send gesture started until a drag has happened.
-    if (!this.isSearchboxFocused) {
+    // so wait to send gesture started until a drag has happened. This is also
+    // the case if the language pickers are currently open.
+    if (!this.isSearchboxFocused && !this.areLanguagePickersOpen) {
       // If searchbox isn't stealing focus, start the gesture ASAP.
       this.handleGestureStart();
     }
@@ -1122,6 +1132,10 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
 
   setSearchboxFocusForTesting(isFocused: boolean) {
     this.isSearchboxFocused = isFocused;
+  }
+
+  setLanguagePickersOpenForTesting(open: boolean) {
+    this.areLanguagePickersOpen = open;
   }
 }
 

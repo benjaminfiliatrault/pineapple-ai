@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "base/check.h"
 #include "base/functional/bind.h"
@@ -20,6 +21,7 @@
 namespace {
 
 constexpr char kContentTypeJson[] = "application/json; charset=utf-8";
+constexpr char kUpdateRequiredMessage[] = "UPDATE_REQUIRED";
 
 // Returns true if a localized error message is expected in the response body
 // for a response with error code `error`.
@@ -37,6 +39,7 @@ bool ErrorMessageExpected(google_apis::ApiErrorCode error) {
     case google_apis::HTTP_NOT_IMPLEMENTED:
     case google_apis::HTTP_BAD_GATEWAY:
     case google_apis::HTTP_SERVICE_UNAVAILABLE:
+    case google_apis::YOUTUBE_MUSIC_UPDATE_REQUIRED:
       return true;
     default:
       return false;
@@ -99,6 +102,21 @@ void HandleError(
   std::move(finish_request).Run();
 }
 
+// For expected `code` and `reason` combinations, re-maps the error to
+// the service specific value. Otherwise, returns `code` unchanged.
+google_apis::ApiErrorCode RemapError(google_apis::ApiErrorCode code,
+                                     std::string_view reason) {
+  if (code != google_apis::HTTP_BAD_REQUEST) {
+    return code;
+  }
+
+  if (reason == kUpdateRequiredMessage) {
+    return google_apis::YOUTUBE_MUSIC_UPDATE_REQUIRED;
+  }
+
+  return code;
+}
+
 }  // namespace
 
 namespace google_apis::youtube_music {
@@ -124,7 +142,7 @@ GURL GetMusicSectionRequest::GetURL() const {
 ApiErrorCode GetMusicSectionRequest::MapReasonToError(
     ApiErrorCode code,
     const std::string& reason) {
-  return code;
+  return RemapError(code, reason);
 }
 
 bool GetMusicSectionRequest::IsSuccessfulErrorCode(ApiErrorCode error) {
@@ -200,7 +218,7 @@ GURL GetPlaylistRequest::GetURL() const {
 
 ApiErrorCode GetPlaylistRequest::MapReasonToError(ApiErrorCode code,
                                                   const std::string& reason) {
-  return code;
+  return RemapError(code, reason);
 }
 
 bool GetPlaylistRequest::IsSuccessfulErrorCode(ApiErrorCode error) {
@@ -271,7 +289,7 @@ GURL PlaybackQueuePrepareRequest::GetURL() const {
 ApiErrorCode PlaybackQueuePrepareRequest::MapReasonToError(
     ApiErrorCode code,
     const std::string& reason) {
-  return code;
+  return RemapError(code, reason);
 }
 
 bool PlaybackQueuePrepareRequest::IsSuccessfulErrorCode(ApiErrorCode error) {
@@ -350,7 +368,7 @@ GURL PlaybackQueueNextRequest::GetURL() const {
 ApiErrorCode PlaybackQueueNextRequest::MapReasonToError(
     ApiErrorCode code,
     const std::string& reason) {
-  return code;
+  return RemapError(code, reason);
 }
 
 bool PlaybackQueueNextRequest::IsSuccessfulErrorCode(ApiErrorCode error) {
@@ -413,6 +431,7 @@ ReportPlaybackRequest::ReportPlaybackRequest(
     Callback callback)
     : SignedRequest(sender),
       payload_(std::move(payload)),
+      base_url_("https://youtubemediaconnect.googleapis.com"),
       callback_(std::move(callback)) {
   CHECK(payload_);
   CHECK(!callback_.is_null());
@@ -420,15 +439,19 @@ ReportPlaybackRequest::ReportPlaybackRequest(
 
 ReportPlaybackRequest::~ReportPlaybackRequest() = default;
 
+void ReportPlaybackRequest::SetBaseUrlForTesting(const GURL& base_url) {
+  base_url_ = base_url;
+}
+
 GURL ReportPlaybackRequest::GetURL() const {
   // TODO(b/341324009): Move to an util file or class.
-  return GURL("https://youtubemediaconnect.googleapis.com/v1/reports/playback");
+  return base_url_.Resolve("/v1/reports/playback");
 }
 
 ApiErrorCode ReportPlaybackRequest::MapReasonToError(
     ApiErrorCode code,
     const std::string& reason) {
-  return code;
+  return RemapError(code, reason);
 }
 
 bool ReportPlaybackRequest::IsSuccessfulErrorCode(ApiErrorCode error) {

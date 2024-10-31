@@ -78,7 +78,7 @@ namespace {
 class LensOverlayMediatorTest : public PlatformTest {
  public:
   LensOverlayMediatorTest() {
-    mediator_ = [[LensOverlayMediator alloc] init];
+    mediator_ = [[LensOverlayMediator alloc] initWithIsIncognito:NO];
     mediator_.templateURLService =
         search_engines_test_environment_.template_url_service();
     mock_omnibox_coordinator_ =
@@ -112,10 +112,10 @@ class LensOverlayMediatorTest : public PlatformTest {
     mediator_.resultConsumer = fake_result_consumer_;
     mediator_.omniboxCoordinator = mock_omnibox_coordinator_;
     mediator_.toolbarConsumer = mock_toolbar_consumer_;
-    mediator_.webState = fake_web_state_.get();
     mediator_.lensHandler = fake_chrome_lens_overlay_;
     mediator_.commandsHandler = mock_lens_commands_;
     mediator_.omniboxClient = lens_omnibox_client_.get();
+    [mediator_ lensResultPageDidChangeActiveWebState:fake_web_state_.get()];
   }
 
   ~LensOverlayMediatorTest() override {
@@ -149,6 +149,9 @@ class LensOverlayMediatorTest : public PlatformTest {
 
     // UI is updated.
     OCMExpect([mock_omnibox_coordinator_ setThumbnailImage:[OCMArg any]]);
+    // Expect omnibox text update when accepting an omnibox text.
+    OCMExpect([mock_omnibox_coordinator_ updateOmniboxState]);
+    // Expect omnibox text update after page load.
     OCMExpect([mock_omnibox_coordinator_ updateOmniboxState]);
     OCMExpect([mock_toolbar_consumer_ setCanGoBack:expectCanGoBack]);
 
@@ -201,7 +204,6 @@ class LensOverlayMediatorTest : public PlatformTest {
   /// Simulates a web navigation.
   void SimulateWebNavigation(const GURL& URL, BOOL expectCanGoBack) {
     OCMExpect([mock_toolbar_consumer_ setCanGoBack:expectCanGoBack]);
-    OCMExpect([mock_omnibox_coordinator_ updateOmniboxState]);
 
     web::FakeNavigationContext navigationContext;
     navigationContext.SetWebState(fake_web_state_.get());
@@ -210,7 +212,6 @@ class LensOverlayMediatorTest : public PlatformTest {
     fake_web_state_->OnNavigationStarted(&navigationContext);
     fake_web_state_->OnNavigationFinished(&navigationContext);
 
-    EXPECT_OCMOCK_VERIFY(mock_omnibox_coordinator_);
     EXPECT_OCMOCK_VERIFY(mock_toolbar_consumer_);
   }
 
@@ -218,10 +219,13 @@ class LensOverlayMediatorTest : public PlatformTest {
   void GoBack(const GURL& expectedURL,
               BOOL expectCanGoBack,
               id<ChromeLensOverlayResult> expectedResultReload) {
+    // Expect UI update when starting to go back and on navigation start.
+    OCMExpect([mock_omnibox_coordinator_ updateOmniboxState]);
     OCMExpect([mock_omnibox_coordinator_ updateOmniboxState]);
     OCMExpect([mock_toolbar_consumer_ setCanGoBack:expectCanGoBack]);
-
+    OCMExpect([mock_toolbar_consumer_ setCanGoBack:expectCanGoBack]);
     if (expectedResultReload) {
+      OCMExpect([mock_omnibox_coordinator_ setThumbnailImage:[OCMArg any]]);
       OCMExpect([mock_omnibox_coordinator_ setThumbnailImage:[OCMArg any]]);
     }
 
@@ -231,7 +235,6 @@ class LensOverlayMediatorTest : public PlatformTest {
       EXPECT_EQ(fake_chrome_lens_overlay_.lastReload, expectedResultReload);
     }
 
-    EXPECT_EQ(fake_result_consumer_.lastPushedURL, expectedURL);
     EXPECT_OCMOCK_VERIFY(mock_omnibox_coordinator_);
     EXPECT_OCMOCK_VERIFY(mock_toolbar_consumer_);
   }
@@ -281,8 +284,10 @@ TEST_F(LensOverlayMediatorTest, DefocusOmnibox) {
 
 // Tests simulating web navigation.
 TEST_F(LensOverlayMediatorTest, WebNavigation) {
-  SimulateWebNavigation(/*URL=*/GURL("https://some-url.com"),
-                        /*expectCanGoBack=*/NO);
+  UpdateLensSelection(/*resultURL=*/GURL("https://some-url.com/1"),
+                      /*expectCanGoBack=*/NO);
+  SimulateWebNavigation(/*URL=*/GURL("https://some-url.com/2"),
+                        /*expectCanGoBack=*/YES);
 }
 
 // Tests simulating omnibox navigation.
@@ -299,29 +304,7 @@ TEST_F(LensOverlayMediatorTest, SelectionUpdate) {
                       /*expectCanGoBack=*/NO);
 }
 
-// Tests going back with web navigation on the same ChromeLensOverlayResult.
-TEST_F(LensOverlayMediatorTest, HistoryStackWebNavigation) {
-  GURL URL1 = GURL("https://url.com/1");
-  UpdateLensSelection(URL1, /*expectCanGoBack=*/NO);
-
-  // One navigation.
-  GURL URL2 = GURL("https://url.com/2");
-  SimulateWebNavigation(URL2, /*expectCanGoBack=*/YES);
-  GoBack(/*expectedURL=*/URL1, /*expectCanGoBack=*/NO,
-         /*expectedResultReload=*/nil);
-
-  // Two navigation.
-  GURL URL3 = GURL("https://url.com/3");
-  SimulateWebNavigation(URL3, /*expectCanGoBack=*/YES);
-  SimulateWebNavigation(GURL("https://url.com/X"), /*expectCanGoBack=*/YES);
-
-  GoBack(/*expectedURL=*/URL3, /*expectCanGoBack=*/YES,
-         /*expectedResultReload=*/nil);
-  GoBack(/*expectedURL=*/URL1, /*expectCanGoBack=*/NO,
-         /*expectedResultReload=*/nil);
-}
-
-// Tests going back with a mix of omnibox, web, lensSelection updates.
+// Tests going back with a mix of omnibox, lensSelection updates.
 TEST_F(LensOverlayMediatorTest, HistoryStackMixed) {
   // Lens selection.
   // lensResult1/URL1
@@ -329,40 +312,21 @@ TEST_F(LensOverlayMediatorTest, HistoryStackMixed) {
   id<ChromeLensOverlayResult> lensResult1 =
       UpdateLensSelection(URL1, /*expectCanGoBack=*/NO);
 
-  // Web navigation.
-  // lensResult1/URL1 > lensResult1/URL2
-  GURL URL2 = GURL("https://url.com/2");
-  SimulateWebNavigation(/*URL=*/URL2, /*expectCanGoBack=*/YES);
-
   // Omnibox navigation.
-  // lensResult1/URL1 > lensResult1/URL2 > lensResult2/URL3
-  GURL URL3 = GURL("https://url.com/3");
+  // lensResult1/URL1 > lensResult2/URL2
+  GURL URL2 = GURL("https://url.com/2");
   id<ChromeLensOverlayResult> lensResult2 =
       AcceptOmniboxText(/*text=*/u"search terms",
                         /*omniboxURL=*/GURL("https://some-url.com"),
-                        /*resultURL=*/URL3,
+                        /*resultURL=*/URL2,
                         /*expectCanGoBack=*/YES);
 
-  // Web navigation.
-  // lensResult1/URL1 > lensResult1/URL2 > lensResult2/URL3 > lensResult2/URL4
-  GURL URL4 = GURL("https://url.com/4");
-  SimulateWebNavigation(/*URL=*/URL4, /*expectCanGoBack=*/YES);
-
   // Lens selection.
-  // lensResult1/URL1 > lensResult1/URL2 > lensResult2/URL3 > lensResult2/URL4 >
-  // lensResultX/URLX
+  // lensResult1/URL1 > lensResult2/URL2 > lensResultX/URLX
   UpdateLensSelection(GURL("https://url.com/X"), /*expectCanGoBack=*/YES);
 
-  GoBack(/*expectedURL=*/URL4, /*expectCanGoBack=*/YES,
-         /*expectedResultReload=*/lensResult2);
-
-  // Reloading a result will create a new one. So `lensResult2` is expected to
-  // be reloaded. After the first goBack, the history stack is:
-  // lensResult1/URL1 > lensResult1/URL2 > lensResult2/URL3 > lensResult3/URL4
-  GoBack(/*expectedURL=*/URL3, /*expectCanGoBack=*/YES,
-         /*expectedResultReload=*/lensResult2);
   GoBack(/*expectedURL=*/URL2, /*expectCanGoBack=*/YES,
-         /*expectedResultReload=*/lensResult1);
+         /*expectedResultReload=*/lensResult2);
   GoBack(/*expectedURL=*/URL1, /*expectCanGoBack=*/NO,
          /*expectedResultReload=*/lensResult1);
 }
@@ -420,16 +384,16 @@ TEST_F(LensOverlayMediatorTest, SuggestSignals) {
   Base64UrlEncode("xyz", base::Base64UrlEncodePolicy::INCLUDE_PADDING,
                   &expected_signals);
 
-  EXPECT_TRUE(lens_omnibox_client_->GetLensOverlayInteractionResponse()
-                  ->has_suggest_signals());
+  EXPECT_TRUE(lens_omnibox_client_->GetLensOverlaySuggestInputs()
+                  ->has_encoded_image_signals());
   EXPECT_EQ(expected_signals,
-            lens_omnibox_client_->GetLensOverlayInteractionResponse()
-                ->suggest_signals());
+            lens_omnibox_client_->GetLensOverlaySuggestInputs()
+                ->encoded_image_signals());
 
   // On a new selection, the signals reset until they are fetched again.
   UpdateLensSelection(/*resultURL=*/GURL("https://some-other-url.com"),
                       /*expectCanGoBack=*/YES);
-  EXPECT_FALSE(lens_omnibox_client_->GetLensOverlayInteractionResponse());
+  EXPECT_FALSE(lens_omnibox_client_->GetLensOverlaySuggestInputs());
 }
 
 }  // namespace

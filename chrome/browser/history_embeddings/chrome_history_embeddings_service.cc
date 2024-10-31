@@ -10,6 +10,10 @@
 #include "chrome/browser/optimization_guide/chrome_model_quality_logs_uploader_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
+#include "components/history_embeddings/history_embeddings_features.h"
+#include "components/optimization_guide/core/model_execution/feature_keys.h"
+#include "components/optimization_guide/core/model_execution/model_execution_prefs.h"
+#include "components/optimization_guide/core/model_execution/model_execution_util.h"
 #include "components/optimization_guide/core/model_quality/feature_type_map.h"
 #include "components/optimization_guide/core/model_quality/model_quality_log_entry.h"
 #include "components/optimization_guide/proto/features/history_query.pb.h"
@@ -36,6 +40,25 @@ ChromeHistoryEmbeddingsService::ChromeHistoryEmbeddingsService(
 
 ChromeHistoryEmbeddingsService::~ChromeHistoryEmbeddingsService() = default;
 
+bool ChromeHistoryEmbeddingsService::IsAnswererUseAllowed() const {
+  if (kForceAnswererUseAllowed.Get()) {
+    return true;
+  }
+  if (!optimization_guide_service_) {
+    return false;
+  }
+  if (optimization_guide::
+          GetGenAILocalFoundationalModelEnterprisePolicySettings(
+              g_browser_process->local_state()) ==
+      optimization_guide::model_execution::prefs::
+          GenAILocalFoundationalModelEnterprisePolicySettings::kDisallowed) {
+    return false;
+  }
+  return optimization_guide_service_
+      ->ShouldFeatureAllowModelExecutionForSignedInUser(
+          optimization_guide::UserVisibleFeatureKey::kHistorySearch);
+}
+
 QualityLogEntry ChromeHistoryEmbeddingsService::PrepareQualityLogEntry() {
   if (!optimization_guide_service_) {
     return nullptr;
@@ -49,7 +72,6 @@ QualityLogEntry ChromeHistoryEmbeddingsService::PrepareQualityLogEntry() {
 
   QualityLogEntry log_entry =
       std::make_unique<optimization_guide::ModelQualityLogEntry>(
-          std::make_unique<optimization_guide::proto::LogAiDataRequest>(),
           quality_uploader->GetWeakPtr());
 
   optimization_guide::proto::LogAiDataRequest* request =

@@ -227,6 +227,11 @@ class MediaDevicesDispatcherHostMock
     NOTREACHED_IN_MIGRATION();
   }
 
+  void SelectAudioOutput(const String& device_id,
+                         SelectAudioOutputCallback callback) override {
+    NOTREACHED_IN_MIGRATION();
+  }
+
   void AddMediaDevicesListener(
       bool subscribe_audio_input,
       bool subscribe_video_input,
@@ -367,6 +372,11 @@ class MockMediaDevicesDispatcherHost
       bool subscribe_audio_output,
       mojo::PendingRemote<blink::mojom::blink::MediaDevicesListener> listener)
       override {
+    NOTREACHED_IN_MIGRATION();
+  }
+
+  void SelectAudioOutput(const String& device_id,
+                         SelectAudioOutputCallback callback) override {
     NOTREACHED_IN_MIGRATION();
   }
 
@@ -1094,11 +1104,6 @@ TEST_F(UserMediaClientTest, DefaultConstraintsPropagate) {
             properties.echo_cancellation_type);
   EXPECT_FALSE(properties.goog_audio_mirroring);
   EXPECT_TRUE(properties.goog_auto_gain_control);
-  // The default value for goog_experimental_echo_cancellation is platform
-  // dependent.
-  EXPECT_EQ(
-      blink::AudioProcessingProperties().goog_experimental_echo_cancellation,
-      properties.goog_experimental_echo_cancellation);
   EXPECT_TRUE(properties.goog_noise_suppression);
   EXPECT_TRUE(properties.goog_experimental_noise_suppression);
   EXPECT_TRUE(properties.goog_highpass_filter);
@@ -1153,7 +1158,6 @@ TEST_F(UserMediaClientTest, DefaultTabCapturePropagate) {
             properties.echo_cancellation_type);
   EXPECT_FALSE(properties.goog_audio_mirroring);
   EXPECT_FALSE(properties.goog_auto_gain_control);
-  EXPECT_FALSE(properties.goog_experimental_echo_cancellation);
   EXPECT_FALSE(properties.goog_noise_suppression);
   EXPECT_FALSE(properties.goog_experimental_noise_suppression);
   EXPECT_FALSE(properties.goog_highpass_filter);
@@ -1206,7 +1210,6 @@ TEST_F(UserMediaClientTest, DefaultDesktopCapturePropagate) {
             properties.echo_cancellation_type);
   EXPECT_FALSE(properties.goog_audio_mirroring);
   EXPECT_FALSE(properties.goog_auto_gain_control);
-  EXPECT_FALSE(properties.goog_experimental_echo_cancellation);
   EXPECT_FALSE(properties.goog_noise_suppression);
   EXPECT_FALSE(properties.goog_experimental_noise_suppression);
   EXPECT_FALSE(properties.goog_highpass_filter);
@@ -1273,7 +1276,6 @@ TEST_F(UserMediaClientTest, NonDefaultAudioConstraintsPropagate) {
             properties.echo_cancellation_type);
   EXPECT_TRUE(properties.goog_audio_mirroring);
   EXPECT_FALSE(properties.goog_auto_gain_control);
-  EXPECT_FALSE(properties.goog_experimental_echo_cancellation);
   EXPECT_FALSE(properties.goog_noise_suppression);
   EXPECT_FALSE(properties.goog_experimental_noise_suppression);
   EXPECT_FALSE(properties.goog_highpass_filter);

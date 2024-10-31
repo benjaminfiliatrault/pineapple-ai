@@ -232,7 +232,7 @@ AudioContext* AudioContext::Create(ExecutionContext* context,
       AutoplayUnlockType::kContextConstructor);
   if (audio_context->IsAllowedToStart()) {
     audio_context->StartRendering();
-    audio_context->SetContextState(kRunning);
+    audio_context->SetContextState(V8AudioContextState::Enum::kRunning);
   }
 #if DEBUG_AUDIONODE_REFERENCES
   fprintf(stderr, "[%16p]: AudioContext::AudioContext(): %u #%u\n",
@@ -385,7 +385,7 @@ ScriptPromise<IDLUndefined> AudioContext::suspendContext(
     ExceptionState& exception_state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
 
-  if (ContextState() == kClosed) {
+  if (ContextState() == V8AudioContextState::Enum::kClosed) {
     return ScriptPromise<IDLUndefined>::RejectWithDOMException(
         script_state, MakeGarbageCollected<DOMException>(
                           DOMExceptionCode::kInvalidStateError,
@@ -412,11 +412,25 @@ ScriptPromise<IDLUndefined> AudioContext::resumeContext(
     ExceptionState& exception_state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
 
-  if (ContextState() == kClosed) {
+  if (ContextState() == V8AudioContextState::Enum::kClosed) {
     return ScriptPromise<IDLUndefined>::RejectWithDOMException(
         script_state, MakeGarbageCollected<DOMException>(
                           DOMExceptionCode::kInvalidStateError,
                           "Cannot resume a closed AudioContext."));
+  } else if (ContextState() == V8AudioContextState::Enum::kInterrupted) {
+    return ScriptPromise<IDLUndefined>::RejectWithDOMException(
+        script_state, MakeGarbageCollected<DOMException>(
+                          DOMExceptionCode::kInvalidStateError,
+                          "Cannot resume an interrupted AudioContext."));
+  } else if (ContextState() == V8AudioContextState::Enum::kSuspended &&
+             is_interrupted_while_suspended_) {
+    // When the interruption ends, the context should be in the running state.
+    should_transition_to_running_after_interruption_ = true;
+    SetContextState(V8AudioContextState::Enum::kInterrupted);
+    return ScriptPromise<IDLUndefined>::RejectWithDOMException(
+        script_state, MakeGarbageCollected<DOMException>(
+                          DOMExceptionCode::kInvalidStateError,
+                          "Cannot resume an interrupted AudioContext."));
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
@@ -424,7 +438,7 @@ ScriptPromise<IDLUndefined> AudioContext::resumeContext(
   auto promise = resolver->Promise();
 
   // If we're already running, just resolve; nothing else needs to be done.
-  if (ContextState() == kRunning) {
+  if (ContextState() == V8AudioContextState::Enum::kRunning) {
     resolver->Resolve();
     return promise;
   }
@@ -511,7 +525,7 @@ ScriptPromise<IDLUndefined> AudioContext::closeContext(
     ExceptionState& exception_state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
 
-  if (ContextState() == kClosed) {
+  if (ContextState() == V8AudioContextState::Enum::kClosed) {
     return ScriptPromise<IDLUndefined>::RejectWithDOMException(
         script_state, MakeGarbageCollected<DOMException>(
                           DOMExceptionCode::kInvalidStateError,
@@ -535,7 +549,7 @@ ScriptPromise<IDLUndefined> AudioContext::closeContext(
 }
 
 void AudioContext::DidClose() {
-  SetContextState(kClosed);
+  SetContextState(V8AudioContextState::Enum::kClosed);
 
   if (close_resolver_) {
     close_resolver_->Resolve();
@@ -572,9 +586,9 @@ void AudioContext::StopRendering() {
   // It is okay to perform the following on a suspended AudioContext because
   // this method gets called from ExecutionContext::ContextDestroyed() meaning
   // the AudioContext is already unreachable from the user code.
-  if (ContextState() != kClosed) {
+  if (ContextState() != V8AudioContextState::Enum::kClosed) {
     destination()->GetAudioDestinationHandler().StopRendering();
-    SetContextState(kClosed);
+    SetContextState(V8AudioContextState::Enum::kClosed);
     GetDeferredTaskHandler().ClearHandlersToBeDeleted();
     keep_alive_.Clear();
   }
@@ -584,9 +598,13 @@ void AudioContext::SuspendRendering() {
   DCHECK(destination());
   SendLogMessage(__func__, "");
 
-  if (ContextState() == kRunning) {
+  if (ContextState() == V8AudioContextState::Enum::kRunning ||
+      ContextState() == V8AudioContextState::Enum::kInterrupted) {
+    if (is_interrupted_while_suspended_) {
+      should_transition_to_running_after_interruption_ = false;
+    }
     destination()->GetAudioDestinationHandler().StopRendering();
-    SetContextState(kSuspended);
+    SetContextState(V8AudioContextState::Enum::kSuspended);
   }
 }
 
@@ -609,9 +627,6 @@ double AudioContext::outputLatency() const {
 
 AudioPlayoutStats* AudioContext::playoutStats() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
-  if (!RuntimeEnabledFeatures::AudioContextPlayoutStatsEnabled()) {
-    return nullptr;
-  }
   if (!audio_playout_stats_) {
     audio_playout_stats_ = MakeGarbageCollected<AudioPlayoutStats>(this);
   }
@@ -636,7 +651,7 @@ ScriptPromise<IDLUndefined> AudioContext::setSinkId(
 
   // setSinkId invoked from a closed AudioContext should throw
   // kInvalidStateError DOMException.
-  if (ContextState() == kClosed) {
+  if (ContextState() == V8AudioContextState::Enum::kClosed) {
     return ScriptPromise<IDLUndefined>::RejectWithDOMException(
         script_state,
         MakeGarbageCollected<DOMException>(
@@ -695,7 +710,7 @@ void AudioContext::NotifySourceNodeStart() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
 
   // Do nothing when the context is already closed. (crbug.com/1292101)
-  if (ContextState() == AudioContextState::kClosed) {
+  if (ContextState() == V8AudioContextState::Enum::kClosed) {
     return;
   }
 
@@ -706,10 +721,10 @@ void AudioContext::NotifySourceNodeStart() {
 
   MaybeAllowAutoplayWithUnlockType(AutoplayUnlockType::kSourceNodeStart);
 
-  if (ContextState() == AudioContextState::kSuspended && !suspended_by_user_ &&
-      IsAllowedToStart()) {
+  if (ContextState() == V8AudioContextState::Enum::kSuspended &&
+      !suspended_by_user_ && IsAllowedToStart()) {
     StartRendering();
-    SetContextState(kRunning);
+    SetContextState(V8AudioContextState::Enum::kRunning);
   }
 }
 
@@ -835,9 +850,9 @@ bool AudioContext::HasPendingActivity() const {
   // as having activity even though they are basically idle with nothing going
   // on.  However, they can be resumed at any time, so we don't want contexts
   // going away prematurely.
-  return
-      ((ContextState() != kClosed) && BaseAudioContext::HasPendingActivity()) ||
-      permission_receiver_.is_bound();
+  return ((ContextState() != V8AudioContextState::Enum::kClosed) &&
+          BaseAudioContext::HasPendingActivity()) ||
+         permission_receiver_.is_bound();
 }
 
 RealtimeAudioDestinationNode* AudioContext::GetRealtimeAudioDestinationNode()
@@ -1056,10 +1071,11 @@ void AudioContext::NotifySetSinkIdBegins() {
 
   // This performs step 5 to 9 from the second part of setSinkId() algorithm:
   // https://webaudio.github.io/web-audio-api/#dom-audiocontext-setsinkid-domstring-or-audiosinkoptions-sinkid
-  sink_transition_flag_was_running_ = ContextState() == kRunning;
+  sink_transition_flag_was_running_ =
+      ContextState() == V8AudioContextState::Enum::kRunning;
   destination()->GetAudioDestinationHandler().StopRendering();
   if (sink_transition_flag_was_running_) {
-    SetContextState(kSuspended);
+    SetContextState(V8AudioContextState::Enum::kSuspended);
   }
 }
 
@@ -1076,7 +1092,7 @@ void AudioContext::NotifySetSinkIdIsDone(
   DispatchEvent(*Event::Create(event_type_names::kSinkchange));
   if (sink_transition_flag_was_running_) {
     destination()->GetAudioDestinationHandler().StartRendering();
-    SetContextState(kRunning);
+    SetContextState(V8AudioContextState::Enum::kRunning);
     sink_transition_flag_was_running_ = false;
   }
 
@@ -1241,12 +1257,17 @@ void AudioContext::ResumeOnPrerenderActivation() {
   CHECK(blocked_by_prerendering_);
   blocked_by_prerendering_ = false;
   switch (ContextState()) {
-    case kSuspended:
+    case V8AudioContextState::Enum::kSuspended:
       StartRendering();
       break;
-    case kRunning:
+    case V8AudioContextState::Enum::kRunning:
       NOTREACHED();
-    case kClosed:
+    case V8AudioContextState::Enum::kClosed:
+    // Prerender activation doesn't automatically resume audio playback
+    // when the context is in the `interrupted` state.
+    // TODO(crbug.com/374805121): Add the spec URL for this interruption
+    // behavior when it has been published.
+    case V8AudioContextState::Enum::kInterrupted:
       break;
   }
 }
@@ -1263,6 +1284,51 @@ int AudioContext::PendingDeviceListUpdates() {
   return pending_device_list_updates_;
 }
 
+void AudioContext::StartContextInterruption() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
+  if (!RuntimeEnabledFeatures::AudioContextInterruptedStateEnabled()) {
+    return;
+  }
+
+  SendLogMessage(__func__, "");
+  V8AudioContextState::Enum context_state = ContextState();
+  if (context_state == V8AudioContextState::Enum::kClosed ||
+      context_state == V8AudioContextState::Enum::kInterrupted) {
+    return;
+  }
+
+  if (context_state == V8AudioContextState::Enum::kRunning) {
+    // The context is running, so we need to stop the rendering.
+    destination()->GetAudioDestinationHandler().StopRendering();
+    should_transition_to_running_after_interruption_ = true;
+    SetContextState(V8AudioContextState::Enum::kInterrupted);
+  }
+
+  // If the context is suspended, we don't make the transition to interrupted
+  // state, because of privacy reasons. The suspended->interrupted transition is
+  // only made when resumeContext() is called during an ongoing interruption.
+  is_interrupted_while_suspended_ = true;
+}
+
+void AudioContext::EndContextInterruption() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
+  if (!RuntimeEnabledFeatures::AudioContextInterruptedStateEnabled()) {
+    return;
+  }
+
+  SendLogMessage(__func__, "");
+  is_interrupted_while_suspended_ = false;
+  if (ContextState() == V8AudioContextState::Enum::kClosed) {
+    return;
+  }
+
+  if (should_transition_to_running_after_interruption_) {
+    destination()->GetAudioDestinationHandler().StartRendering();
+    should_transition_to_running_after_interruption_ = false;
+    SetContextState(V8AudioContextState::Enum::kRunning);
+  }
+}
+
 void AudioContext::HandleRenderError() {
   SendLogMessage(__func__, "");
 
@@ -1277,15 +1343,15 @@ void AudioContext::HandleRenderError() {
 
   // Implements
   // https://webaudio.github.io/web-audio-api/#error-handling-on-a-running-audio-context
-  if (ContextState() == kRunning) {
+  if (ContextState() == V8AudioContextState::Enum::kRunning) {
     // TODO(https://crbug.com/353641602): starting or stopping the renderer
     // should happen on the render thread, but this is the current convention.
     destination()->GetAudioDestinationHandler().StopRendering();
 
     DispatchEvent(*Event::Create(event_type_names::kError));
     suspended_by_user_ = false;
-    SetContextState(kSuspended);
-  } else if (ContextState() == kSuspended) {
+    SetContextState(V8AudioContextState::Enum::kSuspended);
+  } else if (ContextState() == V8AudioContextState::Enum::kSuspended) {
     DispatchEvent(*Event::Create(event_type_names::kError));
   }
 }
@@ -1300,7 +1366,7 @@ void AudioContext::SendLogMessage(const char* const function_name,
   WebRtcLogMessage(
       String::Format(
           "[WA]AC::%s %s [state=%s sink_descriptor_=%s, sink_id_given_=%s]",
-          function_name, message.Utf8().c_str(), state().Utf8().c_str(),
+          function_name, message.Utf8().c_str(), state().AsCStr(),
           sink_descriptor_.SinkId().Utf8().c_str(),
           is_sink_id_given_ ? "true" : "false")
           .Utf8());

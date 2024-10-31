@@ -14,6 +14,7 @@
 #include "base/containers/span.h"
 #include "base/numerics/checked_math.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "net/base/mime_util.h"
@@ -64,7 +65,7 @@ class ContentNegotiationAlgorithm {
                                          /*delimiter=*/',');
     while (values.GetNext()) {
       net::HttpUtil::NameValuePairsIterator name_value_pairs(
-          values.value_piece(), /*delimiter=*/';',
+          values.value(), /*delimiter=*/';',
           net::HttpUtil::NameValuePairsIterator::Values::NOT_REQUIRED,
           net::HttpUtil::NameValuePairsIterator::Quotes::STRICT_QUOTES);
       if (!name_value_pairs.GetNext())
@@ -73,15 +74,14 @@ class ContentNegotiationAlgorithm {
       item.value = name_value_pairs.name();
       item.weight = 1.0;
       while (name_value_pairs.GetNext()) {
-        if (base::EqualsCaseInsensitiveASCII(name_value_pairs.name_piece(),
-                                             "q")) {
-          if (auto value = GetQValue(name_value_pairs.value_piece())) {
+        if (base::EqualsCaseInsensitiveASCII(name_value_pairs.name(), "q")) {
+          if (auto value = GetQValue(name_value_pairs.value())) {
             item.weight = *value;
           }
         } else {
           // Parameters except for "q" are included in the output.
-          item.value +=
-              ';' + name_value_pairs.name() + '=' + name_value_pairs.value();
+          base::StrAppend(&item.value, {";", name_value_pairs.name(), "=",
+                                        name_value_pairs.value()});
         }
       }
       if (item.weight != 0.0)

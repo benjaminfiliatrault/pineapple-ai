@@ -8,6 +8,8 @@ import android.app.Activity;
 
 import androidx.annotation.Nullable;
 
+import org.chromium.base.ResettersForTesting;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ActivityTabProvider.ActivityTabTabObserver;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -25,6 +27,8 @@ import org.chromium.components.messages.MessageDispatcher;
 import org.chromium.components.messages.MessageIdentifier;
 import org.chromium.ui.modelutil.PropertyModel;
 
+import java.util.Collections;
+
 /** Class that controls and manages when and if surveys should be shown. */
 public class PrivacySandboxSurveyController {
     private static final String SENTIMENT_SURVEY_TRIGGER = "privacy-sandbox-sentiment-survey";
@@ -35,7 +39,9 @@ public class PrivacySandboxSurveyController {
     private TabModelSelector mTabModelSelector;
     private MessageDispatcher mMessageDispatcher;
     private Profile mProfile;
+    private PrivacySandboxSurveyBridge mPrivacySandboxSurveyBridge;
     private boolean mHasSeenNtp;
+    private static boolean sEnableForTesting;
 
     PrivacySandboxSurveyController(
             TabModelSelector tabModelSelector,
@@ -50,6 +56,7 @@ public class PrivacySandboxSurveyController {
         mTabModelSelector = tabModelSelector;
         mMessageDispatcher = messageDispatcher;
         mProfile = profile;
+        mPrivacySandboxSurveyBridge = new PrivacySandboxSurveyBridge(mProfile);
 
         setSurveyMessageToDefault();
         createTabObserver(activityTabProvider);
@@ -69,6 +76,10 @@ public class PrivacySandboxSurveyController {
             MessageDispatcher messageDispatcher,
             ActivityTabProvider activityTabProvider,
             Profile profile) {
+        // Do not create the client for testing unless explicitly enabled.
+        if (BuildConfig.IS_FOR_TEST && !sEnableForTesting) {
+            return null;
+        }
         if (!ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_SENTIMENT_SURVEY)) {
             return null;
         }
@@ -111,12 +122,17 @@ public class PrivacySandboxSurveyController {
                 mActivity.getResources(), mMessage);
     }
 
-    private void onNewTabPage() {
+    private void maybeLaunchSurvey() {
         SurveyClient sentimentSurveyClient = constructSurveyClient(SENTIMENT_SURVEY_TRIGGER);
         if (sentimentSurveyClient == null) {
             return;
         }
-        sentimentSurveyClient.showSurvey(mActivity, mActivityLifecycleDispatcher);
+
+        sentimentSurveyClient.showSurvey(
+                mActivity,
+                mActivityLifecycleDispatcher,
+                mPrivacySandboxSurveyBridge.getPrivacySandboxSentimentSurveyPsb(),
+                Collections.emptyMap());
     }
 
     private void createTabObserver(ActivityTabProvider activityTabProvider) {
@@ -129,11 +145,17 @@ public class PrivacySandboxSurveyController {
                         }
                         if (UrlUtilities.isNtpUrl(tab.getUrl())) {
                             if (mHasSeenNtp) {
-                                onNewTabPage();
+                                maybeLaunchSurvey();
                             }
                             mHasSeenNtp = true;
                         }
                     }
                 };
+    }
+
+    /** Set whether to trigger the start up survey in tests. */
+    public static void setEnableForTesting() {
+        sEnableForTesting = true;
+        ResettersForTesting.register(() -> sEnableForTesting = false);
     }
 }

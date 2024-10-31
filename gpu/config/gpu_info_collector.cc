@@ -200,8 +200,7 @@ std::string GetDisplayTypeString(gl::DisplayType type) {
     case gl::ANGLE_METAL_NULL:
       return "ANGLE_METAL_NULL";
     default:
-      NOTREACHED_IN_MIGRATION();
-      return "";
+      NOTREACHED();
   }
 }
 
@@ -234,8 +233,7 @@ std::string GetDawnBackendTypeString(wgpu::BackendType type) {
     case wgpu::BackendType::OpenGLES:
       return "OpenGLES backend";
     default:
-      NOTREACHED_IN_MIGRATION();
-      return "";
+      NOTREACHED();
   }
 }
 
@@ -313,9 +311,10 @@ void ReportWebGPUAdapterMetrics(dawn::native::Instance* instance) {
 #endif
 
   bool supports_shader_f16 = false;
-  for (dawn::native::Adapter& adapter :
+  for (dawn::native::Adapter& nativeAdapter :
        instance->EnumerateAdapters(&adapter_options)) {
-    adapter.SetUseTieredLimits(false);
+    nativeAdapter.SetUseTieredLimits(false);
+    wgpu::Adapter adapter = wgpu::Adapter(nativeAdapter.Get());
     wgpu::AdapterInfo info;
     adapter.GetInfo(&info);
     if (info.adapterType != wgpu::AdapterType::DiscreteGPU &&
@@ -324,7 +323,7 @@ void ReportWebGPUAdapterMetrics(dawn::native::Instance* instance) {
       continue;
     }
 
-    WGPUSupportedLimits limits;
+    wgpu::SupportedLimits limits;
     limits.nextInChain = nullptr;
     if (adapter.GetLimits(&limits) != wgpu::Status::Success) {
       continue;

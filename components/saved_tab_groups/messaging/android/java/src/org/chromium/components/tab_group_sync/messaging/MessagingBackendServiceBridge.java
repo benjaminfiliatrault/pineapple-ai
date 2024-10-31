@@ -19,7 +19,7 @@ import java.util.Optional;
 
 /** Implementation of {@link MessagingBackendService} that connects to the native counterpart. */
 @JNINamespace("tab_groups::messaging::android")
-public class MessagingBackendServiceBridge implements MessagingBackendService {
+/*package*/ class MessagingBackendServiceBridge implements MessagingBackendService {
     private static String getSyncId(EitherId id) {
         if (id == null || !id.isSyncId()) {
             return null;
@@ -139,6 +139,16 @@ public class MessagingBackendServiceBridge implements MessagingBackendService {
                 .getMessages(mNativeMessagingBackendServiceBridge, this, type_int);
     }
 
+    @Override
+    public List<ActivityLogItem> getActivityLog(ActivityLogQueryParams params) {
+        if (mNativeMessagingBackendServiceBridge == 0) {
+            return new ArrayList<ActivityLogItem>();
+        }
+
+        return MessagingBackendServiceBridgeJni.get()
+                .getActivityLog(mNativeMessagingBackendServiceBridge, this, params.collaborationId);
+    }
+
     @CalledByNative
     private static MessagingBackendServiceBridge create(long nativeMessagingBackendServiceBridge) {
         return new MessagingBackendServiceBridge(nativeMessagingBackendServiceBridge);
@@ -171,9 +181,19 @@ public class MessagingBackendServiceBridge implements MessagingBackendService {
     }
 
     @CalledByNative
-    private void displayInstantaneousMessage(InstantMessage message) {
+    private void displayInstantaneousMessage(InstantMessage message, long nativeCallback) {
         if (mInstantMessageDelegate != null) {
-            mInstantMessageDelegate.displayInstantaneousMessage(message);
+            mInstantMessageDelegate.displayInstantaneousMessage(
+                    message,
+                    (Boolean success) -> {
+                        assert success != null;
+                        MessagingBackendServiceBridgeJni.get()
+                                .runInstantaneousMessageSuccessCallback(
+                                        mNativeMessagingBackendServiceBridge,
+                                        this,
+                                        nativeCallback,
+                                        success);
+                    });
         }
     }
 
@@ -200,5 +220,16 @@ public class MessagingBackendServiceBridge implements MessagingBackendService {
                 long nativeMessagingBackendServiceBridge,
                 MessagingBackendServiceBridge caller,
                 @PersistentNotificationType int type);
+
+        List<ActivityLogItem> getActivityLog(
+                long nativeMessagingBackendServiceBridge,
+                MessagingBackendServiceBridge caller,
+                String collaborationId);
+
+        void runInstantaneousMessageSuccessCallback(
+                long nativeMessagingBackendServiceBridge,
+                MessagingBackendServiceBridge caller,
+                long callback,
+                boolean success);
     }
 }

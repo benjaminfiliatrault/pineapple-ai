@@ -9,9 +9,10 @@ import type {LanguageMenuElement} from 'chrome-untrusted://read-anything-side-pa
 import {ToolbarEvent, VoiceClientSideStatusCode, VoiceNotificationManager} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import type {VoiceSelectionMenuElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertEquals, assertFalse, assertStringContains, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
+import {keyDownOn} from 'chrome-untrusted://webui-test/keyboard_mock_interactions.js';
 import {hasStyle, microtasksFinished} from 'chrome-untrusted://webui-test/test_util.js';
 
-import {createSpeechSynthesisVoice, stubAnimationFrame} from './common.js';
+import {createSpeechSynthesisVoice, stubAnimationFrame, waitForSpinnerTimeout} from './common.js';
 
 function stringToHtmlTestId(s: string): string {
   return s.replace(/\s/g, '-').replace(/[()]/g, '');
@@ -321,6 +322,39 @@ suite('VoiceSelectionMenu', () => {
       assertTrue(clickEmitted);
     });
 
+    test('spinner shows before speech starts and is hidden after', async () => {
+      // Display dropdown menu
+      voiceSelectionMenu.onVoiceSelectionMenuClick(dots);
+
+      const previewButton =
+          getDropdownItemForVoice(voice1).querySelector<CrIconButtonElement>(
+              '#preview-icon')!;
+      previewButton!.click();
+
+      await microtasksFinished();
+      await waitForSpinnerTimeout();
+      stubAnimationFrame();
+
+      const spinnerVoice0 =
+          getDropdownItemForVoice(voice1).querySelector<CrIconButtonElement>(
+              '#spinner-span')!;
+
+      // The spinner should be visible and the preview button should be
+      // disabled.
+      assertTrue(spinnerVoice0.classList.contains('item-invisible-false'));
+      assertTrue(previewButton.disabled);
+
+      // Set the previewVoicePlaying to the voice, to simulate onstart
+      // being called on the preview SpeechSynthesisUtterance.
+      voiceSelectionMenu.previewVoicePlaying = voice1;
+      await microtasksFinished();
+
+      // After onstart, the spinner shouldn't be showing and the buttons
+      // shouldn't be disabled.
+      assertTrue(spinnerVoice0.classList.contains('item-invisible-true'));
+      assertFalse(previewButton.disabled);
+    });
+
     test('it shows preview-playing button when preview plays', async () => {
       await openVoiceMenu();
       voiceSelectionMenu.previewVoicePlaying = previewVoice;
@@ -332,6 +366,12 @@ suite('VoiceSelectionMenu', () => {
       const playIconOfPreviewVoice =
           getDropdownItemForVoice(previewVoice)
               .querySelector<CrIconButtonElement>('#preview-icon')!;
+      const spinnerVoice0 =
+          getDropdownItemForVoice(voice1).querySelector<CrIconButtonElement>(
+              '#spinner-span')!;
+
+      // The spinner shouldn't be visible
+      assertTrue(spinnerVoice0.classList.contains('item-invisible-true'));
 
       // The play icon should flip to stop for the voice being previewed
       assertTrue(isPositionedOnPage(playIconOfPreviewVoice));
@@ -375,6 +415,75 @@ suite('VoiceSelectionMenu', () => {
           playIconOfPreviewVoice.ariaLabel!.toLowerCase(), 'preview voice for');
       assertStringContains(
           playIconVoice0.ariaLabel!.toLowerCase(), 'preview voice for');
+    });
+  });
+
+  // TODO(crbug.com/333596001): Add more keyboard tests here.
+  suite('keyboard navigation', () => {
+    function getDropdownItems() {
+      return voiceSelectionMenu.$.voiceSelectionMenu.get()
+          .querySelectorAll<HTMLButtonElement>(
+              '.dropdown-voice-selection-button');
+    }
+
+    function getPreviewButton(dropdownItem: HTMLElement) {
+      return dropdownItem.querySelector<HTMLElement>('#preview-icon')!;
+    }
+
+    setup(async () => {
+      const voice1 =
+          createSpeechSynthesisVoice({name: 'Google English', lang: 'en-US'});
+      const voice2 =
+          createSpeechSynthesisVoice({name: 'Google Spanish', lang: 'es-US'});
+      const voice3 =
+          createSpeechSynthesisVoice({name: 'Google French', lang: 'fr'});
+      const availableVoices = [
+        voice1,
+        voice2,
+        voice3,
+      ];
+      await setAvailableVoicesAndEnabledLangs(availableVoices);
+      return openVoiceMenu();
+    });
+
+    test('tab stops are correct', () => {
+      const items = getDropdownItems();
+      const firstItem = items[0];
+
+      // The first and last item should be reachable with tab.
+      assertTrue(!!firstItem);
+      assertEquals(0, firstItem.tabIndex);
+      assertEquals(0, getPreviewButton(firstItem).tabIndex);
+      assertEquals(0, items[items.length - 1]!.tabIndex);
+      // The rest of the items should not be.
+      for (let i = 1; i < items.length - 1; i++) {
+        const item = items[i];
+        assertTrue(!!item);
+        assertEquals(-1, item.tabIndex);
+        assertEquals(-1, getPreviewButton(item).tabIndex);
+      }
+    });
+
+    test('tab closes menu only on language button', async () => {
+      const items = getDropdownItems();
+
+      // None of these should close the menu.
+      for (let i = 0; i < items.length - 1; i++) {
+        const item = items[i];
+        assertTrue(!!item);
+        item.focus();
+        keyDownOn(item, 0, undefined, 'Tab');
+        await microtasksFinished();
+        assertTrue(voiceSelectionMenu.$.voiceSelectionMenu.get().open);
+      }
+
+      // Tab on the last item should close the menu.
+      const item = items[items.length - 1];
+      assertTrue(!!item);
+      item.focus();
+      keyDownOn(item, 0, undefined, 'Tab');
+      await microtasksFinished();
+      assertFalse(voiceSelectionMenu.$.voiceSelectionMenu.get().open);
     });
   });
 

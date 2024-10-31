@@ -18,7 +18,6 @@
 #include "ash/components/arc/crash_collector/arc_crash_collector_bridge.h"
 #include "ash/components/arc/disk_space/arc_disk_space_bridge.h"
 #include "ash/components/arc/ime/arc_ime_service.h"
-#include "ash/components/arc/keyboard_shortcut/arc_keyboard_shortcut_bridge.h"
 #include "ash/components/arc/media_session/arc_media_session_bridge.h"
 #include "ash/components/arc/memory/arc_memory_bridge.h"
 #include "ash/components/arc/metrics/arc_metrics_service.h"
@@ -87,7 +86,7 @@
 #include "chrome/browser/ash/arc/process/arc_process_service.h"
 #include "chrome/browser/ash/arc/screen_capture/arc_screen_capture_bridge.h"
 #include "chrome/browser/ash/arc/session/arc_disk_space_monitor.h"
-#include "chrome/browser/ash/arc/session/arc_initial_optin_metrics_recorder.h"
+#include "chrome/browser/ash/arc/session/arc_initial_optin_metrics_recorder_factory.h"
 #include "chrome/browser/ash/arc/session/arc_play_store_enabled_preference_handler.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/arc/sharesheet/arc_sharesheet_bridge.h"
@@ -262,7 +261,9 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcIioSensorBridge::GetForBrowserContext(profile);
   ArcImeService::GetForBrowserContext(profile);
   ArcInputMethodManagerService::GetForBrowserContext(profile);
-  input_overlay::ArcInputOverlayManager::GetForBrowserContext(profile);
+  if (ash::features::IsGameDashboardEnabled()) {
+    input_overlay::ArcInputOverlayManager::GetForBrowserContext(profile);
+  }
   ArcInstanceThrottle::GetForBrowserContext(profile);
   {
     auto* intent_helper = ArcIntentHelperBridge::GetForBrowserContext(profile);
@@ -271,7 +272,6 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
     arc_icon_cache_delegate_provider_ =
         std::make_unique<ArcIconCacheDelegateProvider>(intent_helper);
   }
-  ArcKeyboardShortcutBridge::GetForBrowserContext(profile);
   if (ShouldUseArcKeyMint()) {
     ArcKeyMintBridge::GetForBrowserContext(profile);
   } else {
@@ -325,7 +325,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   apps::ArcAppsFactory::GetForProfile(profile);
   ash::ApkWebAppService::Get(profile);
   ash::app_restore::AppRestoreArcTaskHandlerFactory::GetForProfile(profile);
-  ArcInitialOptInMetricsRecorder::GetForProfile(profile);
+  ArcInitialOptInMetricsRecorderFactory::GetForBrowserContext(profile);
   ArcChromeFeatureFlagsBridge::GetForBrowserContext(profile);
 
   if (arc::IsArcVmEnabled()) {
@@ -455,9 +455,8 @@ void ArcServiceLauncher::EnsureFactoriesBuilt() {
   ArcIdleManager::EnsureFactoryBuilt();
   ArcIioSensorBridge::EnsureFactoryBuilt();
   ArcImeService::EnsureFactoryBuilt();
-  ArcInitialOptInMetricsRecorder::EnsureFactoryBuilt();
+  ArcInitialOptInMetricsRecorderFactory::GetInstance();
   ArcInstanceThrottle::EnsureFactoryBuilt();
-  ArcKeyboardShortcutBridge::EnsureFactoryBuilt();
   if (ShouldUseArcKeyMint()) {
     ArcKeyMintBridge::EnsureFactoryBuilt();
   } else {

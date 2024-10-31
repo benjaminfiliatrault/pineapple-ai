@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/drive_file_picker/coordinator/root_drive_file_picker_coordinator.h"
 
+#import "base/test/metrics/histogram_tester.h"
 #import "base/test/task_environment.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "ios/chrome/browser/drive/model/drive_list.h"
@@ -34,10 +35,9 @@ class RootDriveFilePickerCoordinatorTest : public PlatformTest {
     TestProfileIOS::Builder builder;
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        AuthenticationServiceFactory::GetDefaultFactory());
+        AuthenticationServiceFactory::GetFactoryWithDelegate(
+            std::make_unique<FakeAuthenticationServiceDelegate>()));
     profile_ = std::move(builder).Build();
-    AuthenticationServiceFactory::CreateAndInitializeForProfile(
-        profile_.get(), std::make_unique<FakeAuthenticationServiceDelegate>());
     browser_ = std::make_unique<TestBrowser>(profile_.get());
     handler_ = [[FakeDriveFilePickerHandler alloc] init];
     CommandDispatcher* dispatcher = browser_->GetCommandDispatcher();
@@ -56,7 +56,8 @@ class RootDriveFilePickerCoordinatorTest : public PlatformTest {
     ChooseFileTabHelper* tab_helper =
         ChooseFileTabHelper::GetOrCreateForWebState(fake_web_state_.get());
     auto controller = std::make_unique<FakeChooseFileController>(
-        ChooseFileEvent(false, std::vector<std::string>{},
+        ChooseFileEvent(false /*allow_multiple_files*/,
+                        false /*has_selected_file*/, std::vector<std::string>{},
                         std::vector<std::string>{}, fake_web_state_.get()));
     tab_helper->StartChoosingFiles(std::move(controller));
   }
@@ -93,4 +94,17 @@ class RootDriveFilePickerCoordinatorTest : public PlatformTest {
 TEST_F(RootDriveFilePickerCoordinatorTest, StartCoordinator) {
   SignIn();
   [coordinator_ start];
+}
+
+// Tests the metrics for identity change.
+TEST_F(RootDriveFilePickerCoordinatorTest, IdentityChange) {
+  base::HistogramTester histogram_tester;
+  SignIn();
+  [coordinator_ start];
+  [coordinator_ setSelectedIdentity:[FakeSystemIdentity fakeIdentity2]];
+  // The expected bucket is `kChangeAccount` which corresponds to enum 0
+  // bucket of `IOS.FilePicker.Drive.AccountSelection` histogram.
+  histogram_tester.ExpectBucketCount("IOS.FilePicker.Drive.AccountSelection", 0,
+                                     1);
+  histogram_tester.ExpectTotalCount("IOS.FilePicker.Drive.AccountSelection", 1);
 }

@@ -48,9 +48,9 @@ import org.chromium.chrome.browser.safe_browsing.settings.SafeBrowsingSettingsFr
 import org.chromium.chrome.browser.safety_check.PasswordsCheckPreferenceProperties.PasswordsState;
 import org.chromium.chrome.browser.safety_check.SafetyCheckProperties.SafeBrowsingState;
 import org.chromium.chrome.browser.safety_check.SafetyCheckProperties.UpdatesState;
-import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
+import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
+import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncCoordinator;
 import org.chromium.chrome.browser.ui.signin.SigninAndHistorySyncActivityLauncher;
-import org.chromium.chrome.browser.ui.signin.SigninAndHistorySyncCoordinator;
 import org.chromium.chrome.browser.ui.signin.SyncConsentActivityLauncher;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerBottomSheetStrings;
 import org.chromium.components.prefs.PrefService;
@@ -126,9 +126,6 @@ class SafetyCheckMediator {
 
     /** Callbacks and related objects to show the checking state for at least 1 second. */
     private Handler mHandler;
-
-    /** Stores the callback updating the password check state in the UI after the delay. */
-    private Runnable mRunnablePasswords;
 
     /** Stores the callback updating the safe browsing check state in the UI after the delay. */
     private Runnable mRunnableSafeBrowsing;
@@ -331,8 +328,8 @@ class SafetyCheckMediator {
                                     SafetyCheckInteractions.MAX_VALUE + 1);
                             // Open the Safe Browsing settings.
                             Intent intent =
-                                    SettingsLauncherFactory.createSettingsLauncher()
-                                            .createSettingsActivityIntent(
+                                    SettingsNavigationFactory.createSettingsNavigation()
+                                            .createSettingsIntent(
                                                     p.getContext(),
                                                     SafeBrowsingSettingsFragment.class,
                                                     SafeBrowsingSettingsFragment.createArguments(
@@ -613,15 +610,24 @@ class SafetyCheckMediator {
                                                             .safety_check_passwords_error_signed_out)
                                             .build();
                             // Open the sign-in page.
-                            mSigninLauncher.launchActivityIfAllowed(
-                                    p.getContext(),
-                                    mProfile,
-                                    strings,
-                                    SigninAndHistorySyncCoordinator.NoAccountSigninMode.ADD_ACCOUNT,
-                                    SigninAndHistorySyncCoordinator.WithAccountSigninMode
-                                            .DEFAULT_ACCOUNT_BOTTOM_SHEET,
-                                    SigninAndHistorySyncCoordinator.HistoryOptInMode.NONE,
-                                    SigninAccessPoint.SAFETY_CHECK);
+                            @Nullable
+                            Intent intent =
+                                    mSigninLauncher.createBottomSheetSigninIntentOrShowError(
+                                            p.getContext(),
+                                            mProfile,
+                                            strings,
+                                            BottomSheetSigninAndHistorySyncCoordinator
+                                                    .NoAccountSigninMode.ADD_ACCOUNT,
+                                            BottomSheetSigninAndHistorySyncCoordinator
+                                                    .WithAccountSigninMode
+                                                    .DEFAULT_ACCOUNT_BOTTOM_SHEET,
+                                            BottomSheetSigninAndHistorySyncCoordinator
+                                                    .HistoryOptInMode.NONE,
+                                            SigninAccessPoint.SAFETY_CHECK,
+                                            /* selectedCoreAccountId= */ null);
+                            if (intent != null) {
+                                p.getContext().startActivity(intent);
+                            }
                         } else {
                             // Open the sync page.
                             mSyncLauncher.launchActivityIfAllowed(

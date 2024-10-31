@@ -31,13 +31,15 @@ import {PerfLogger} from '../../core/perf.js';
 import {
   PlatformHandler as PlatformHandlerBase,
 } from '../../core/platform_handler.js';
-import {computed, signal} from '../../core/reactive/signal.js';
+import {computed, Signal, signal} from '../../core/reactive/signal.js';
+import {LangPackInfo, LanguageCode} from '../../core/soda/language_info.js';
 import {
   HypothesisPart,
   SodaEvent,
   SodaSession,
   TimeDelta,
 } from '../../core/soda/types.js';
+import {settings} from '../../core/state/settings.js';
 import {
   assert,
   assertEnumVariant,
@@ -315,7 +317,7 @@ function substituteI18nString(label: string, ...args: Array<number|string>):
   string {
   return label.replace(/\$(.|$|\n)/g, (m) => {
     assert(
-      m.match(/\$[$1-9]/) !== null,
+      /\$[$1-9]/.exec(m) !== null,
       'Unescaped $ found in localized string.',
     );
     if (m === '$$') {
@@ -335,7 +337,9 @@ function substituteI18nString(label: string, ...args: Array<number|string>):
 export class PlatformHandler extends PlatformHandlerBase {
   override readonly quietMode = signal(false);
 
-  override readonly sodaState = signal<ModelState>({kind: 'notInstalled'});
+  private readonly sodaStates = new Map<LanguageCode, Signal<ModelState>>();
+
+  private readonly langPacks = new Map<LanguageCode, LangPackInfo>();
 
   override readonly canUseSpeakerLabel = computed(
     () => devSettings.value.canUseSpeakerLabel,
@@ -360,10 +364,25 @@ export class PlatformHandler extends PlatformHandlerBase {
   override async init(): Promise<void> {
     document.body.appendChild(this.errorView);
     settingsInit();
+    const sodaState = signal<ModelState>({kind: 'notInstalled'});
+    this.sodaStates.set(LanguageCode.EN_US, sodaState);
     if (devSettings.value.sodaInstalled) {
       // TODO(pihsun): Remember the whole state in devSettings instead?
-      this.sodaState.value = {kind: 'installed'};
+      sodaState.value = {kind: 'installed'};
     }
+    this.langPacks.set(LanguageCode.EN_US, {
+      languageCode: LanguageCode.EN_US,
+      displayName: 'English',
+      isGenAiSupported: true,
+    });
+  }
+
+  override getLangPackList(): readonly LangPackInfo[] {
+    return Array.from(this.langPacks.values());
+  }
+
+  override getLangPackInfo(language: LanguageCode): LangPackInfo {
+    return assertExists(this.langPacks.get(language));
   }
 
   override summaryModelLoader = new ModelLoaderDev(new SummaryModelDev());
@@ -376,10 +395,11 @@ export class PlatformHandler extends PlatformHandlerBase {
 
   override perfLogger = new PerfLogger(this.eventsSender);
 
-  override installSoda(): void {
-    console.log('SODA installation requested');
-    if (this.sodaState.value.kind === 'notInstalled') {
-      this.sodaState.value = {kind: 'installing', progress: 0};
+  override installSoda(language: LanguageCode): void {
+    console.log(`SODA lang pack ${language} installation requested`);
+    const sodaState = this.getSodaState(language);
+    if (sodaState.value.kind === 'notInstalled') {
+      sodaState.value = {kind: 'installing', progress: 0};
       // Simulate the loading of SODA model.
       // Not awaiting the async block should be fine since this is only for
       // dev, and no two async block of this will run at the same time.
@@ -393,16 +413,30 @@ export class PlatformHandler extends PlatformHandlerBase {
             devSettings.mutate((s) => {
               s.sodaInstalled = true;
             });
-            this.sodaState.value = {kind: 'installed'};
+            sodaState.value = {kind: 'installed'};
             return;
           }
-          this.sodaState.value = {kind: 'installing', progress};
+          sodaState.value = {kind: 'installing', progress};
         }
       })();
     }
   }
 
-  override async newSodaSession(): Promise<SodaSession> {
+  override isSodaAvailable(): boolean {
+    return true;
+  }
+
+  override getSodaState(language: LanguageCode): Signal<ModelState> {
+    return assertExists(this.sodaStates.get(language));
+  }
+
+  override getSelectedLanguageState(): Signal<ModelState>|null {
+    const selectedLanguage = settings.value.transcriptionLanguage;
+    return selectedLanguage === null ? null :
+                                       this.getSodaState(selectedLanguage);
+  }
+
+  override async newSodaSession(_language: LanguageCode): Promise<SodaSession> {
     return new SodaSessionDev();
   }
 

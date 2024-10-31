@@ -68,7 +68,7 @@ void FakeTrustedVaultClientBackend::
 void FakeTrustedVaultClientBackend::FetchKeys(
     id<SystemIdentity> identity,
     trusted_vault::SecurityDomainId security_domain_id,
-    KeyFetchedCallback completion) {
+    KeysFetchedCallback completion) {
   // Do nothing.
 }
 
@@ -139,6 +139,15 @@ void FakeTrustedVaultClientBackend::ClearLocalData(
 void FakeTrustedVaultClientBackend::GetPublicKeyForIdentity(
     id<SystemIdentity> identity,
     GetPublicKeyCallback completion) {
+  // Do nothing.
+}
+
+void FakeTrustedVaultClientBackend::UpdateGPMPinForAccount(
+    id<SystemIdentity> identity,
+    trusted_vault::SecurityDomainId security_domain_id,
+    UINavigationController* navigationController,
+    UIView* brandedNavigationItemTitleView,
+    UpdateGPMPinCompletionCallback completion) {
   // Do nothing.
 }
 

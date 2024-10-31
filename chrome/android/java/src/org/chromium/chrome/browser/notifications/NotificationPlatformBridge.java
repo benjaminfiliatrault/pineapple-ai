@@ -35,6 +35,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.Promise;
+import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
@@ -45,7 +46,7 @@ import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
-import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
+import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.usage_stats.UsageStatsService;
 import org.chromium.chrome.browser.webapps.ChromeWebApkHost;
 import org.chromium.chrome.browser.webapps.WebApkServiceClient;
@@ -54,7 +55,7 @@ import org.chromium.components.browser_ui.notifications.BaseNotificationManagerP
 import org.chromium.components.browser_ui.notifications.NotificationMetadata;
 import org.chromium.components.browser_ui.notifications.NotificationWrapper;
 import org.chromium.components.browser_ui.notifications.PendingIntentProvider;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
+import org.chromium.components.browser_ui.settings.SettingsNavigation;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
 import org.chromium.components.browser_ui.site_settings.SingleWebsiteSettings;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
@@ -309,6 +310,7 @@ public class NotificationPlatformBridge {
             NotificationPlatformBridgeJni.get().initializeNotificationPlatformBridge();
             if (sInstance == null) {
                 Log.e(TAG, "Unable to initialize the native NotificationPlatformBridge.");
+                reportTrampolineTrackerJobCompleted(intent);
                 return false;
             }
         }
@@ -337,9 +339,13 @@ public class NotificationPlatformBridge {
             return true;
         } else if (NotificationConstants.ACTION_COMMIT_UNSUBSCRIBE.equals(intent.getAction())) {
             sInstance.onNotificationCommitUnsubscribe(attributes);
+            // No activity needs to be launched when unsubscribing a notification, report the job
+            // as completed.
+            reportTrampolineTrackerJobCompleted(intent);
             return true;
         }
 
+        reportTrampolineTrackerJobCompleted(intent);
         Log.e(TAG, "Unrecognized Notification action: " + intent.getAction());
         return false;
     }
@@ -352,10 +358,10 @@ public class NotificationPlatformBridge {
                             - intent.getLongExtra(
                                     NotificationConstants.EXTRA_JOB_SCHEDULED_TIME_MS, -1);
             if (duration < 0) return; // Possible if device rebooted before job started.
-            RecordHistogram.recordMediumTimesHistogram(
+            RecordHistogram.deprecatedRecordMediumTimesHistogram(
                     "Notifications.Android.JobStartDelay", duration);
             if (NotificationConstants.ACTION_PRE_UNSUBSCRIBE.equals(intent.getAction())) {
-                RecordHistogram.recordMediumTimesHistogram(
+                RecordHistogram.deprecatedRecordMediumTimesHistogram(
                         "Notifications.Android.JobStartDelay.PreUnsubscribe", duration);
             }
         }
@@ -367,10 +373,10 @@ public class NotificationPlatformBridge {
                     SystemClock.elapsedRealtime()
                             - intent.getLongExtra(
                                     NotificationConstants.EXTRA_JOB_STARTED_TIME_MS, -1);
-            RecordHistogram.recordMediumTimesHistogram(
+            RecordHistogram.deprecatedRecordMediumTimesHistogram(
                     "Notifications.Android.JobNativeStartupDuration", duration);
             if (NotificationConstants.ACTION_PRE_UNSUBSCRIBE.equals(intent.getAction())) {
-                RecordHistogram.recordMediumTimesHistogram(
+                RecordHistogram.deprecatedRecordMediumTimesHistogram(
                         "Notifications.Android.JobNativeStartupDuration.PreUnsubscribe", duration);
             }
         }
@@ -432,17 +438,16 @@ public class NotificationPlatformBridge {
                     SiteSettingsCategory.preferenceKey(SiteSettingsCategory.Type.NOTIFICATIONS));
             fragmentArguments.putString(
                     SingleCategorySettings.EXTRA_TITLE,
-                    applicationContext
-                            .getResources()
-                            .getString(R.string.push_notifications_permission_title));
+                    applicationContext.getString(R.string.push_notifications_permission_title));
         }
 
         Class<? extends PreferenceFragmentCompat> fragment =
                 launchSingleWebsitePreferences
                         ? SingleWebsiteSettings.class
                         : SingleCategorySettings.class;
-        SettingsLauncher settingsLauncher = SettingsLauncherFactory.createSettingsLauncher();
-        settingsLauncher.launchSettingsActivity(applicationContext, fragment, fragmentArguments);
+        SettingsNavigation settingsNavigation =
+                SettingsNavigationFactory.createSettingsNavigation();
+        settingsNavigation.startSettings(applicationContext, fragment, fragmentArguments);
     }
 
     /**
@@ -979,6 +984,9 @@ public class NotificationPlatformBridge {
         Context context = ContextUtils.getApplicationContext();
         Resources res = context.getResources();
 
+        // TODO(crbug.com/41495650): Ideally we would not need native libraries here, find a way to
+        // format the `origin` using means other than the `UrlFormatter`.
+        LibraryLoader.getInstance().ensureInitialized();
         NotificationBuilderBase notificationBuilder =
                 prepareNotificationBuilder(
                         identifyingAttributes,
@@ -1051,9 +1059,10 @@ public class NotificationPlatformBridge {
         // TODO(peter): Generalize the NotificationPlatformBridge sufficiently to not need
         // to care about the individual notification types.
         // Set up a pending intent for going to the settings screen for |origin|.
-        SettingsLauncher settingsLauncher = SettingsLauncherFactory.createSettingsLauncher();
+        SettingsNavigation settingsNavigation =
+                SettingsNavigationFactory.createSettingsNavigation();
         Intent settingsIntent =
-                settingsLauncher.createSettingsActivityIntent(
+                settingsNavigation.createSettingsIntent(
                         context,
                         SingleWebsiteSettings.class,
                         SingleWebsiteSettings.createFragmentArgsForSite(origin));
@@ -1263,6 +1272,7 @@ public class NotificationPlatformBridge {
         if (identifyingAttributes.origin != null
                 && sOriginsWithProvisionallyRevokedPermissions.containsKey(
                         identifyingAttributes.origin)) {
+            onNotificationProcessed(identifyingAttributes.notificationId);
             return;
         }
 
@@ -1539,6 +1549,16 @@ public class NotificationPlatformBridge {
             mTwaClient = ChromeApplicationImpl.getComponent().resolveTrustedWebActivityClient();
         }
         return mTwaClient;
+    }
+
+    private static void reportTrampolineTrackerJobCompleted(Intent intent) {
+        String notificationid = intent.getStringExtra(NotificationConstants.EXTRA_NOTIFICATION_ID);
+        TrampolineActivityTracker.getInstance().onIntentCompleted(notificationid);
+    }
+
+    @CalledByNative
+    private void onNotificationProcessed(String notificationId) {
+        TrampolineActivityTracker.getInstance().onIntentCompleted(notificationId);
     }
 
     @NativeMethods

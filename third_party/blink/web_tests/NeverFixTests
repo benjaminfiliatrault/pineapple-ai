@@ -1671,9 +1671,6 @@ crbug.com/691944 external/wpt/service-workers/service-worker/update-after-oneday
 crbug.com/1224804 virtual/not-site-per-process/external/wpt/wasm/serialization/module/window-similar-but-cross-origin-success.sub.html [ Skip ]
 crbug.com/1224804 virtual/not-site-per-process/external/wpt/wasm/serialization/module/window-domain-success.sub.html [ Skip ]
 
-# Utility for manual testing, not intended to be run as part of layout tests.
-crbug.com/785955 http/tests/credentialmanagement/tools/virtual-authenticator-environment-manual.html [ Skip ]
-
 # Since enabling the multi IDP flag affects existing tests, we only enable the flag in the virtual multi IDP test suite
 crbug.com/1373766 external/wpt/credential-management/fedcm-multi-idp/* [ Skip ]
 
@@ -1830,8 +1827,14 @@ crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/web
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/lesser.https.any.worker.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/lesser_or_equal.https.any.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/lesser_or_equal.https.any.worker.html?gpu [ Skip ]
+crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/logical_and.https.any.html?gpu [ Skip ]
+crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/logical_and.https.any.worker.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/logical_not.https.any.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/logical_not.https.any.worker.html?gpu [ Skip ]
+crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/logical_or.https.any.html?gpu [ Skip ]
+crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/logical_or.https.any.worker.html?gpu [ Skip ]
+crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/logical_xor.https.any.html?gpu [ Skip ]
+crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/logical_xor.https.any.worker.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/abs.https.any.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/abs.https.any.worker.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/ceil.https.any.html?gpu [ Skip ]
@@ -1938,6 +1941,10 @@ crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/web
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/resample2d.https.any.worker.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/reshape.https.any.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/reshape.https.any.worker.html?gpu [ Skip ]
+crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/scalars.https.any.html?gpu [ Skip ]
+crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/scalars.https.any.worker.html?gpu [ Skip ]
+crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/scatterElements.https.any.html?gpu [ Skip ]
+crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/scatterElements.https.any.worker.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/scatterND.https.any.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/scatterND.https.any.worker.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/conformance_tests/sigmoid.https.any.html?gpu [ Skip ]
@@ -2060,6 +2067,8 @@ crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/web
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/validation_tests/resample2d.https.any.worker.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/validation_tests/reshape.https.any.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/validation_tests/reshape.https.any.worker.html?gpu [ Skip ]
+crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/validation_tests/scatterElements.https.any.html?gpu [ Skip ]
+crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/validation_tests/scatterElements.https.any.worker.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/validation_tests/scatterND.https.any.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/validation_tests/scatterND.https.any.worker.html?gpu [ Skip ]
 crbug.com/1500120 [ Win10.20h2 ] virtual/webnn-service-with-gpu/external/wpt/webnn/validation_tests/sigmoid.https.any.html?gpu [ Skip ]

@@ -24,7 +24,7 @@ import '//resources/cr_elements/cr_button/cr_button.js';
 import '//resources/cr_elements/cr_link_row/cr_link_row.js';
 import '//resources/cr_elements/cr_shared_style.css.js';
 import '//resources/cr_elements/cr_shared_vars.css.js';
-import '//resources/cr_elements/icons_lit.html.js';
+import '//resources/cr_elements/icons.html.js';
 import '//resources/cr_elements/cr_page_selector/cr_page_selector.js';
 import '//resources/cr_elements/cr_menu_selector/cr_menu_selector.js';
 import '//resources/cr_elements/cr_nav_menu_item_style.css.js';
@@ -89,6 +89,7 @@ export interface CertificateManagerV2Element {
     clientCertSection: HTMLElement,
     crsCertSection: CrsSectionV2Element,
     adminCertsSection: CertificateSubpageV2Element,
+    userCertsSection: CertificateSubpageV2Element,
     platformCertsSection: CertificateSubpageV2Element,
     platformClientCertsSection: CertificateSubpageV2Element,
   };
@@ -165,6 +166,29 @@ export class CertificateManagerV2Element extends
         // <if expr="not chromeos_ash">
         computed: 'computeClientPlatformSubpageLists_()',
         // </if>
+      },
+
+      userSubpageLists_: {
+        type: Array<SubpageCertificateList>,
+        value: (): SubpageCertificateList[] => {
+          return [
+            {
+              headerText: loadTimeData.getString(
+                  'certificateManagerV2TrustedCertsList'),
+              certSource: CertificateSource.kUserTrustedCerts,
+            },
+            {
+              headerText: loadTimeData.getString(
+                  'certificateManagerV2IntermediateCertsList'),
+              certSource: CertificateSource.kUserIntermediateCerts,
+            },
+            {
+              headerText: loadTimeData.getString(
+                  'certificateManagerV2DistrustedCertsList'),
+              certSource: CertificateSource.kUserDistrustedCerts,
+            },
+          ];
+        },
       },
 
       toastMessage_: String,
@@ -318,6 +342,9 @@ export class CertificateManagerV2Element extends
         case Page.PLATFORM_CLIENT_CERTS:
           this.$.platformClientCertsSection.setInitialFocus();
           break;
+        case Page.USER_CERTS:
+          this.$.userCertsSection.setInitialFocus();
+          break;
         default:
           assertNotReached();
       }
@@ -383,8 +410,8 @@ export class CertificateManagerV2Element extends
       return;
     }
     if (result.error !== undefined) {
-      // TODO(crbug.com/40928765): localize
-      this.infoDialogTitle_ = 'import result';
+      this.infoDialogTitle_ =
+          loadTimeData.getString('certificateManagerV2ImportErrorTitle');
       this.infoDialogMessage_ = result.error;
       this.showInfoDialog_ = true;
     }
@@ -396,8 +423,8 @@ export class CertificateManagerV2Element extends
       return;
     }
     if (result.error !== undefined) {
-      // TODO(crbug.com/40928765): localize
-      this.infoDialogTitle_ = 'delete result';
+      this.infoDialogTitle_ =
+          loadTimeData.getString('certificateManagerV2DeleteErrorTitle');
       this.infoDialogMessage_ = result.error;
       this.showInfoDialog_ = true;
     }
@@ -424,7 +451,11 @@ export class CertificateManagerV2Element extends
         hideHeader:
             !this.showClientCertImport_ && !this.showClientCertImportAndBind_,
         // </if>
-        // <if expr="not chromeos_ash">
+        // <if expr="is_linux">
+        showImport: true,
+        hideHeader: false,
+        // </if>
+        // <if expr="not chromeos_ash and not is_linux">
         hideHeader: true,
         // </if>
       },

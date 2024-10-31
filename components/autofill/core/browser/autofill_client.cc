@@ -64,8 +64,8 @@ AutofillOptimizationGuide* AutofillClient::GetAutofillOptimizationGuide()
   return nullptr;
 }
 
-AutofillMlPredictionModelHandler*
-AutofillClient::GetAutofillMlPredictionModelHandler() {
+FieldClassificationModelHandler*
+AutofillClient::GetAutofillFieldClassificationModelHandler() {
   return nullptr;
 }
 
@@ -137,6 +137,13 @@ const AutofillAblationStudy& AutofillClient::GetAblationStudy() const {
   return AutofillAblationStudy::disabled_study();
 }
 
+#if BUILDFLAG(IS_ANDROID)
+AutofillSnackbarControllerImpl*
+AutofillClient::GetAutofillSnackbarController() {
+  return nullptr;
+}
+#endif
+
 void AutofillClient::TriggerUserPerceptionOfAutofillSurvey(
     FillingProduct filling_product,
     const std::map<std::string, std::string>& field_filling_stats_data) {
@@ -148,18 +155,19 @@ AutofillClient::GetDeviceAuthenticator() {
   return nullptr;
 }
 
-void AutofillClient::ShowAutofillFieldIphForManualFallbackFeature(
-    const FormFieldData&) {}
+void AutofillClient::ShowPlusAddressEmailOverrideNotification(
+    const std::string& original_email,
+    EmailOverrideUndoCallback email_override_undo_callback) {}
 
-void AutofillClient::HideAutofillFieldIphForManualFallbackFeature() {}
+bool AutofillClient::ShowAutofillFieldIphForFeature(
+    const FormFieldData&,
+    AutofillClient::IphFeature feature) {
+  return false;
+}
 
-void AutofillClient::NotifyAutofillManualFallbackUsed() {}
+void AutofillClient::HideAutofillFieldIph() {}
 
-void AutofillClient::ShowSaveAutofillPredictionImprovementsBubble(
-    const std::vector<optimization_guide::proto::UserAnnotationsEntry>&
-        to_be_upserted_entries,
-    base::OnceCallback<void(bool prompt_was_accepted)>
-        prompt_acceptance_callback) {}
+void AutofillClient::NotifyIphFeatureUsed(AutofillClient::IphFeature feature) {}
 
 std::optional<AutofillClient::PopupScreenLocation>
 AutofillClient::GetPopupScreenLocation() const {

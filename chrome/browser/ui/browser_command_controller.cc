@@ -46,6 +46,7 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+#include "chrome/browser/ui/bubble_anchor_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/customize_chrome/side_panel_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_controller.h"
@@ -63,7 +64,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_utils.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/views/side_panel/companion/companion_utils.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry_id.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_enums.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
@@ -120,11 +120,9 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/crosapi/browser_data_migrator.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
 #include "chrome/browser/ui/browser_commands_chromeos.h"
-#include "chromeos/ash/components/standalone_browser/migrator_util.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user_manager.h"
 #endif
@@ -685,6 +683,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_ORGANIZE_TABS:
       StartTabOrganizationRequest(browser_);
       break;
+    case IDC_DECLUTTER_TABS:
+      ShowTabDeclutter(browser_);
+      break;
     case IDC_SHOW_TRANSLATE:
       ShowTranslateBubble(browser_);
       break;
@@ -834,10 +835,6 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     case IDC_FEEDBACK:
       OpenFeedbackDialog(browser_, feedback::kFeedbackSourceBrowserCommand);
-      break;
-    case IDC_SHOW_SEARCH_COMPANION:
-      browser_->GetFeatures().side_panel_ui()->Show(
-          SidePanelEntryId::kSearchCompanion, SidePanelOpenTrigger::kAppMenu);
       break;
 #endif
     case IDC_SHOW_CHROME_LABS:
@@ -1023,7 +1020,7 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
             base::BindOnce(&AppInfoDialogClosedCallback,
                            sessions::SessionTabHelper::IdForWindowContainingTab(
                                web_contents)),
-            bubble_anchor_util::kAppMenuButton);
+            bubble_anchor_util::Anchor::kAppMenuButton);
       }
       break;
     }
@@ -1244,6 +1241,7 @@ void BrowserCommandController::InitCommandState() {
 
   command_updater_.UpdateCommandEnabled(IDC_ORGANIZE_TABS, true);
   command_updater_.UpdateCommandEnabled(IDC_CREATE_NEW_TAB_GROUP, true);
+  command_updater_.UpdateCommandEnabled(IDC_DECLUTTER_TABS, true);
 #if BUILDFLAG(IS_CHROMEOS)
   command_updater_.UpdateCommandEnabled(IDC_TOGGLE_MULTITASK_MENU, true);
 #endif
@@ -1447,9 +1445,6 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_SHOW_BOOKMARK_SIDE_PANEL, true);
 
   if (browser_->is_type_normal()) {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-    command_updater_.UpdateCommandEnabled(IDC_SHOW_SEARCH_COMPANION, true);
-#endif
     // Reading list commands.
     command_updater_.UpdateCommandEnabled(IDC_READING_LIST_MENU, true);
     command_updater_.UpdateCommandEnabled(IDC_READING_LIST_MENU_ADD_TAB, true);
@@ -1639,10 +1634,6 @@ void BrowserCommandController::UpdateCommandsForTabState() {
   command_updater_.UpdateCommandEnabled(
       IDC_TOGGLE_REQUEST_TABLET_SITE,
       CanRequestTabletSite(current_web_contents));
-
-  command_updater_.UpdateCommandEnabled(
-      IDC_SHOW_SEARCH_COMPANION,
-      companion::IsCompanionAvailableForCurrentActiveTab(browser_));
 
   UpdateCommandsForContentRestrictionState();
   UpdateCommandsForBookmarkEditing();

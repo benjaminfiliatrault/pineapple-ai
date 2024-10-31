@@ -19,6 +19,7 @@
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalan</translation>
 <translation id="1168100932582989117">Google ਨੇਮ ਸਰਵਰ</translation>
+<translation id="1170788066030116158">ਫ਼ੋਟੋ ਖਿੱਚਣ ਦੀ ਤਾਰੀਖ</translation>
 <translation id="1172970565351728681">ਲਗਭਗ <ph name="REMAINING_TIME" /> ਬਾਕੀ</translation>
 <translation id="1173894706177603556">ਮੁੜ-ਨਾਮਕਰਨ ਕਰੋ</translation>
 <translation id="1173916544412572294">ਨੈੱਟਵਰਕ <ph name="NETWORK_COUNT" /> ਵਿੱਚੋਂ <ph name="NETWORK_INDEX" />, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, ਸਿਗਨਲ ਦੀ ਤੀਬਰਤਾ <ph name="SIGNAL_STRENGTH" />%, ਫ਼ੋਨ ਦੀ ਬੈਟਰੀ <ph name="BATTERY_STATUS" />%, ਵੇਰਵੇ</translation>
@@ -581,6 +582,7 @@
 <translation id="5447680084201416734">ਲੋੜੀਂਦੀ ਸਟੋਰੇਜ ਨਹੀਂ ਹੈ।</translation>
 <translation id="5449551289610225147">ਅਵੈਧ ਪਾਸਵਰਡ</translation>
 <translation id="5459064203055649751">"<ph name="FILENAME" />" ਨਾਮਕ ਫ਼ਾਈਲ ਪਹਿਲਾਂ ਹੀ ਮੌਜੂਦ ਹੈ। ਕੀ ਤੁਸੀਂ ਇਸ ਫ਼ਾਈਲ ਨੂੰ ਮੌਜੂਦਾ ਫ਼ਾਈਲ ਨਾਲ ਬਦਲਣਾ ਚਾਹੁੰਦੇ ਹੋ?</translation>
+<translation id="5462378611565326489">OneDrive ਆਫ਼ਲਾਈਨ ਉਪਲਬਧ ਨਹੀਂ ਹੈ।</translation>
 <translation id="5463231940765244860">ਦਾਖਲ ਕਰੋ</translation>
 <translation id="5469868506864199649">ਇਤਾਲਵੀ</translation>
 <translation id="5473333559083690127">ਨਵਾਂ PIN ਮੁੜ-ਦਾਖਲ ਕਰੋ</translation>

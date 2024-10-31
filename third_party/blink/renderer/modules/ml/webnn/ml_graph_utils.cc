@@ -6,6 +6,7 @@
 
 #include <numeric>
 
+#include "third_party/blink/public/mojom/devtools/console_message.mojom-blink-forward.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_gemm_options.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -231,6 +232,9 @@ DOMArrayBufferView::ViewType GetArrayBufferViewType(
       return DOMArrayBufferView::ViewType::kTypeInt8;
     case webnn::OperandDataType::kUint8:
       return DOMArrayBufferView::ViewType::kTypeUint8;
+    case webnn::OperandDataType::kInt4:
+    case webnn::OperandDataType::kUint4:
+      return DOMArrayBufferView::ViewType::kTypeUint8;
   }
 }
 
@@ -345,6 +349,10 @@ V8MLOperandDataType ToBlinkDataType(webnn::OperandDataType data_type) {
       return V8MLOperandDataType(V8MLOperandDataType::Enum::kInt8);
     case webnn::OperandDataType::kUint8:
       return V8MLOperandDataType(V8MLOperandDataType::Enum::kUint8);
+    case webnn::OperandDataType::kInt4:
+      return V8MLOperandDataType(V8MLOperandDataType::Enum::kInt4);
+    case webnn::OperandDataType::kUint4:
+      return V8MLOperandDataType(V8MLOperandDataType::Enum::kUint4);
   }
 }
 
@@ -366,6 +374,10 @@ webnn::OperandDataType FromBlinkDataType(V8MLOperandDataType::Enum data_type) {
       return webnn::OperandDataType::kInt8;
     case V8MLOperandDataType::Enum::kUint8:
       return webnn::OperandDataType::kUint8;
+    case V8MLOperandDataType::Enum::kInt4:
+      return webnn::OperandDataType::kInt4;
+    case V8MLOperandDataType::Enum::kUint4:
+      return webnn::OperandDataType::kUint4;
   }
 }
 
@@ -385,45 +397,22 @@ bool IsLogicalBinaryOperator(
     case webnn::mojom::blink::ElementWiseBinary::Kind::kGreaterOrEqual:
     case webnn::mojom::blink::ElementWiseBinary::Kind::kLesser:
     case webnn::mojom::blink::ElementWiseBinary::Kind::kLesserOrEqual:
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kLogicalAnd:
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kLogicalOr:
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kLogicalXor:
       return true;
   }
 }
 
-// Allows a tensor's shape to be specified through either the
-// `MLOperandDescriptor`'s `shape` or `dimensions` fields. This code exists for
-// now to give callers the opportunity to migrate their code to use `shape`.
-//
-// TODO(crbug.com/365813262): Remove this function after about a milestone.
-base::expected<Vector<uint32_t>, std::string> GetShapeFromDescriptor(
-    ScriptState* script_state,
-    const MLOperandDescriptor& desc) {
-  if (!desc.hasDimensions()) {
-    return desc.shape();
-  }
-
-  if (desc.shape() != desc.dimensions()) {
-    if (!desc.shape().empty()) {
-      return base::unexpected(
-          "Invalid operand descriptor: shape and dimensions do not match.");
-    } else {
-      LogConsoleWarning(
-          script_state,
-          "WARNING: MLOperandDescriptor.dimensions is deprecated. "
-          "Use MLOperandDescriptor.shape instead.");
-    }
-  }
-
-  return desc.dimensions();
-}
-
-void LogConsoleWarning(ScriptState* script_state, const String& message) {
+void LogConsoleWarning(ScriptState* script_state,
+                       const String& message,
+                       mojom::blink::ConsoleMessageSource message_source) {
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   if (!execution_context) {
     return;
   }
   execution_context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-      mojom::blink::ConsoleMessageSource::kJavaScript,
-      mojom::blink::ConsoleMessageLevel::kWarning, message));
+      message_source, mojom::blink::ConsoleMessageLevel::kWarning, message));
 }
 
 }  // namespace blink

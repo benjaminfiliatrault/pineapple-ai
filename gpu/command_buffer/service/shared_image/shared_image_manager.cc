@@ -35,7 +35,9 @@
 #endif
 
 #if BUILDFLAG(IS_OZONE)
+#include "gpu/config/gpu_finch_features.h"
 #include "ui/ozone/public/ozone_platform.h"
+#include "ui/ozone/public/surface_factory_ozone.h"
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
@@ -55,12 +57,6 @@
 namespace gpu {
 
 namespace {
-
-#if BUILDFLAG(IS_OZONE)
-BASE_FEATURE(kSupportScanoutOnOzoneOnlyIfOverlaysSupported,
-             "SupportScanoutOnOzoneOnlyIfOverlaysSupported",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
 
 // `DCHECKS` and dumps without crashing that `backing`'s usage overlaps with
 // `usage`.
@@ -616,10 +612,10 @@ bool SharedImageManager::SupportsScanoutImages() {
   // buffers can actually be scanned out. This killswitch guards the rollout.
   // TODO(crbug.com/330865436): Remove killswitch post-safe rollout.
   if (base::FeatureList::IsEnabled(
-          kSupportScanoutOnOzoneOnlyIfOverlaysSupported)) {
+          features::kSharedImageSupportScanoutOnOzoneOnlyIfOverlaysSupported)) {
     return ui::OzonePlatform::GetInstance()
-        ->GetPlatformRuntimeProperties()
-        .supports_overlays;
+        ->GetSurfaceFactoryOzone()
+        ->SupportsOverlays();
   } else {
     return ui::OzonePlatform::GetInstance()
         ->GetPlatformRuntimeProperties()

@@ -35,10 +35,10 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/saved_tab_groups/features.h"
-#include "components/saved_tab_groups/pref_names.h"
-#include "components/saved_tab_groups/saved_tab_group_tab.h"
-#include "components/saved_tab_groups/utils.h"
+#include "components/saved_tab_groups/public/features.h"
+#include "components/saved_tab_groups/public/pref_names.h"
+#include "components/saved_tab_groups/public/saved_tab_group_tab.h"
+#include "components/saved_tab_groups/public/utils.h"
 #include "components/sync/base/user_selectable_type.h"
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_user_settings.h"
@@ -63,6 +63,14 @@ DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SavedTabGroupUtils,
                                       kToggleGroupPinStateMenuItem);
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SavedTabGroupUtils, kTabsTitleItem);
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SavedTabGroupUtils, kTab);
+
+bool SavedTabGroupUtils::IsEnabledForProfile(Profile* profile) {
+  if (!profile) {
+    return false;
+  }
+
+  return SavedTabGroupUtils::GetServiceForProfile(profile) != nullptr;
+}
 
 // static
 TabGroupSyncService* SavedTabGroupUtils::GetServiceForProfile(
@@ -193,7 +201,6 @@ void SavedTabGroupUtils::DeleteSavedGroup(const Browser* browser,
   }
 }
 
-// See comment for TabStripModelDelegate::ConfirmGroupDeletion
 void SavedTabGroupUtils::MaybeShowSavedTabGroupDeletionDialog(
     Browser* browser,
     DeletionDialogController::DialogType type,

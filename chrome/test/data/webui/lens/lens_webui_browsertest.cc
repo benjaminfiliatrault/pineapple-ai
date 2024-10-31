@@ -34,6 +34,9 @@ class LensWebUIBrowserTest : public WebUIMochaBrowserTest {
  protected:
   LensWebUIBrowserTest() {
     set_test_loader_scheme(content::kChromeUIUntrustedScheme);
+    scoped_feature_list_.InitWithFeatures(
+        {lens::features::kLensOverlay},
+        {lens::features::kLensOverlayContextualSearchbox});
   }
 
   void SetUp() override {
@@ -60,8 +63,7 @@ class LensWebUIBrowserTest : public WebUIMochaBrowserTest {
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      lens::features::kLensOverlay};
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 class LensOverlayTest : public LensWebUIBrowserTest {
@@ -99,6 +101,11 @@ class LensOverlayTest : public LensWebUIBrowserTest {
     RunTest(file, trigger);
   }
 
+  void RunGhostLoaderTest(const std::string& file, const std::string& trigger) {
+    set_test_loader_host(chrome::kChromeUILensSidePanelHost);
+    RunTest(file, trigger);
+  }
+
   // Lens overlay takes a screenshot of the tab. In order to take a screenshot
   // the tab must not be about:blank and must be painted.
   void WaitForPaint() {
@@ -121,6 +128,10 @@ IN_PROC_BROWSER_TEST_F(LensOverlayTest, OverlayBackgroundScrim) {
 
 IN_PROC_BROWSER_TEST_F(LensOverlayTest, OverlayCloseButton) {
   RunOverlayTest("lens/overlay/overlay_close_button_test.js", "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(LensOverlayTest, OverlayPerformanceTracker) {
+  RunOverlayTest("lens/overlay/performance_tracker_test.js", "mocha.run()");
 }
 
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
@@ -175,7 +186,18 @@ IN_PROC_BROWSER_TEST_F(LensOverlayTest, CubicBezier) {
   RunOverlayTest("lens/overlay/cubic_bezier_test.js", "mocha.run()");
 }
 
-IN_PROC_BROWSER_TEST_F(LensOverlayTest, TranslateButton) {
+IN_PROC_BROWSER_TEST_F(LensOverlayTest, TranslatePromo) {
+  RunOverlayTest("lens/overlay/overlay_show_translate_promo_test.js",
+                 "mocha.run()");
+}
+
+#if defined(UNDEFINED_SANITIZER)
+#define MAYBE_TranslateButton DISABLED_TranslateButton
+#else
+#define MAYBE_TranslateButton TranslateButton
+#endif
+// TODO(crbug.com/370882134): flaky on ubsan.
+IN_PROC_BROWSER_TEST_F(LensOverlayTest, MAYBE_TranslateButton) {
   RunOverlayTest("lens/overlay/translate_button_test.js", "mocha.run()");
 }
 
@@ -191,5 +213,15 @@ IN_PROC_BROWSER_TEST_F(LensSidePanelTest, SearchboxBackButton) {
 
 IN_PROC_BROWSER_TEST_F(LensSidePanelTest, ErrorPage) {
   RunSidePanelTest("lens/side_panel/error_page_test.js", "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(LensSidePanelTest, GhostLoaderState) {
+  RunSidePanelTest("lens/side_panel/ghost_loader_state_test.js", "mocha.run()");
+}
+
+using LensGhostLoaderTest = LensOverlayTest;
+IN_PROC_BROWSER_TEST_F(LensGhostLoaderTest, GhostLoaderState) {
+  RunGhostLoaderTest("lens/ghost_loader/ghost_loader_state_test.js",
+                     "mocha.run()");
 }
 }  // namespace

@@ -4,11 +4,17 @@
 
 #include "net/device_bound_sessions/session_service_impl.h"
 
+#include "crypto/scoped_mock_unexportable_key_provider.h"
+#include "net/device_bound_sessions/test_util.h"
 #include "net/device_bound_sessions/unexportable_key_service_factory.h"
 #include "net/test/test_with_task_environment.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using ::testing::InSequence;
+using ::testing::Invoke;
+using ::testing::StrictMock;
 
 namespace net::device_bound_sessions {
 
@@ -22,13 +28,15 @@ class SessionServiceImplTest : public TestWithTaskEnvironment {
   SessionServiceImplTest()
       : context_(CreateTestURLRequestContextBuilder()->Build()),
         service_(*UnexportableKeyServiceFactory::GetInstance()->GetShared(),
-                 context_.get()) {}
+                 context_.get(),
+                 /*store=*/nullptr) {}
 
   SessionServiceImpl& service() { return service_; }
 
   std::unique_ptr<URLRequestContext> context_;
 
  private:
+  crypto::ScopedMockUnexportableKeyProvider scoped_mock_key_provider_;
   SessionServiceImpl service_;
 };
 
@@ -186,5 +194,94 @@ TEST_F(SessionServiceImplTest, SetChallengeForBoundSession) {
   ASSERT_FALSE(session);
 }
 
+TEST_F(SessionServiceImplTest, ExpiryExtendedOnUser) {
+  // Set the session id to be used for in TestFetcher()
+  g_session_id = "SessionId";
+  ScopedTestFetcher scopedTestFetcher;
+
+  auto fetch_param = RegistrationFetcherParam::CreateInstanceForTesting(
+      kTestUrl, {crypto::SignatureVerifier::SignatureAlgorithm::ECDSA_SHA256},
+      "challenge", /*authorization=*/std::nullopt);
+  service().RegisterBoundSession(std::move(fetch_param),
+                                 IsolationInfo::CreateTransient());
+
+  Session* session =
+      service().GetSessionForTesting(SchemefulSite(kTestUrl), g_session_id);
+  ASSERT_TRUE(session);
+  session->set_expiry_date(base::Time::Now() + base::Days(1));
+
+  std::unique_ptr<URLRequest> request = context_->CreateRequest(
+      kTestUrl, IDLE, new FakeDelegate(), kDummyAnnotation);
+  // The request needs to be samesite for it to be considered
+  // candidate for deferral.
+  request->set_site_for_cookies(SiteForCookies::FromUrl(kTestUrl));
+
+  service().GetAnySessionRequiringDeferral(request.get());
+
+  EXPECT_GT(session->expiry_date(), base::Time::Now() + base::Days(399));
+}
+
 }  // namespace
+
+class SessionServiceImplWithStoreTest : public TestWithTaskEnvironment {
+ public:
+  SessionServiceImplWithStoreTest()
+      : context_(CreateTestURLRequestContextBuilder()->Build()),
+        store_(std::make_unique<StrictMock<SessionStoreMock>>()),
+        service_(*UnexportableKeyServiceFactory::GetInstance()->GetShared(),
+                 context_.get(),
+                 store_.get()) {}
+
+  SessionServiceImpl& service() { return service_; }
+  StrictMock<SessionStoreMock>& store() { return *store_; }
+
+  void OnSessionsLoaded() {
+    service().OnLoadSessionsComplete(SessionStore::SessionsMap());
+  }
+
+  size_t GetSiteSessionsCount(const SchemefulSite& site) {
+    auto [begin, end] = service().GetSessionsForSite(site);
+    return std::distance(begin, end);
+  }
+
+ private:
+  crypto::ScopedMockUnexportableKeyProvider scoped_mock_key_provider_;
+  std::unique_ptr<URLRequestContext> context_;
+  std::unique_ptr<StrictMock<SessionStoreMock>> store_;
+  SessionServiceImpl service_;
+};
+
+TEST_F(SessionServiceImplWithStoreTest, UsesSessionStore) {
+  {
+    InSequence seq;
+    EXPECT_CALL(store(), LoadSessions)
+        .Times(1)
+        .WillOnce(
+            Invoke(this, &SessionServiceImplWithStoreTest::OnSessionsLoaded));
+    EXPECT_CALL(store(), SaveSession).Times(1);
+    EXPECT_CALL(store(), DeleteSession).Times(1);
+  }
+
+  // Will invoke the store's load session method.
+  service().LoadSessionsAsync();
+
+  // Set the session id to be used in TestFetcher().
+  g_session_id = "SessionId";
+  ScopedTestFetcher scopedTestFetcher;
+  auto fetch_param = RegistrationFetcherParam::CreateInstanceForTesting(
+      kTestUrl, {crypto::SignatureVerifier::SignatureAlgorithm::ECDSA_SHA256},
+      "challenge", /*authorization=*/std::nullopt);
+  // Will invoke the store's save session method.
+  service().RegisterBoundSession(std::move(fetch_param),
+                                 IsolationInfo::CreateTransient());
+
+  auto site = SchemefulSite(kTestUrl);
+  Session* session = service().GetSessionForTesting(site, g_session_id);
+  ASSERT_TRUE(session);
+  EXPECT_EQ(GetSiteSessionsCount(site), 1u);
+  session->set_expiry_date(base::Time::Now() - base::Days(1));
+  // Will invoke the store's delete session method.
+  EXPECT_EQ(GetSiteSessionsCount(site), 0u);
+}
+
 }  // namespace net::device_bound_sessions

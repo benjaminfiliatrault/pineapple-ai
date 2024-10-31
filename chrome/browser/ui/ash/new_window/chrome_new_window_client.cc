@@ -10,6 +10,7 @@
 
 #include "apps/launcher.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/web_app_id_constants.h"
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_types.h"
@@ -59,7 +60,6 @@
 #include "chrome/browser/ui/webui/chrome_web_contents_handler.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_util.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
@@ -526,15 +526,16 @@ void ChromeNewWindowClient::OpenFile(const base::FilePath& file_path) {
 }
 
 void ChromeNewWindowClient::LaunchCameraApp(const std::string& queries,
+                                            bool launch_in_dialog,
                                             int32_t task_id) {
   DCHECK(IsCameraAppEnabled());
   ChromeCameraAppUIDelegate::CameraAppDialog::ShowIntent(
-      queries, arc::GetArcWindow(task_id));
-  apps::RecordAppLaunch(web_app::kCameraAppId, apps::LaunchSource::kFromArc);
+      queries, launch_in_dialog, arc::GetArcWindow(task_id));
+  apps::RecordAppLaunch(ash::kCameraAppId, apps::LaunchSource::kFromArc);
 }
 
 void ChromeNewWindowClient::CloseCameraApp() {
-  const ash::ShelfID shelf_id(web_app::kCameraAppId);
+  const ash::ShelfID shelf_id(ash::kCameraAppId);
   AppWindowShelfItemController* const app_controller =
       ChromeShelfController::instance()
           ->shelf_model()

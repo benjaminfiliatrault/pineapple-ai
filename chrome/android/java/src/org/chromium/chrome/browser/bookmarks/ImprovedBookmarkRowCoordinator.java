@@ -30,6 +30,7 @@ public class ImprovedBookmarkRowCoordinator {
     private final BookmarkModel mBookmarkModel;
     private final BookmarkUiPrefs mBookmarkUiPrefs;
     private final ShoppingService mShoppingService;
+    private int mImageSize;
 
     /**
      * @param context The calling context.
@@ -49,6 +50,11 @@ public class ImprovedBookmarkRowCoordinator {
         mBookmarkModel = bookmarkModel;
         mBookmarkUiPrefs = bookmarkUiPrefs;
         mShoppingService = shoppingService;
+        onBookmarkRowDisplayPrefChanged(mBookmarkUiPrefs.getBookmarkRowDisplayPref());
+    }
+
+    private void onBookmarkRowDisplayPrefChanged(@BookmarkRowDisplayPref int displayPref) {
+        mImageSize = BookmarkUtils.getImageIconSize(mContext.getResources(), displayPref);
     }
 
     /** Sets the given bookmark id. */
@@ -92,8 +98,7 @@ public class ImprovedBookmarkRowCoordinator {
                         String.format(
                                 "%s %s",
                                 contentDescription,
-                                mContext.getResources()
-                                        .getString(R.string.local_bookmarks_section_header));
+                                mContext.getString(R.string.local_bookmarks_section_header));
             }
             propertyModel.set(
                     ImprovedBookmarkRowProperties.CONTENT_DESCRIPTION, contentDescription);
@@ -105,7 +110,6 @@ public class ImprovedBookmarkRowCoordinator {
         // Selection and drag state setup.
         propertyModel.set(ImprovedBookmarkRowProperties.SELECTED, false);
         propertyModel.set(ImprovedBookmarkRowProperties.SELECTION_ACTIVE, false);
-        propertyModel.set(ImprovedBookmarkRowProperties.DRAG_ENABLED, false);
         propertyModel.set(ImprovedBookmarkRowProperties.EDITABLE, bookmarkItem.isEditable());
 
         // Shopping coordinator setup.
@@ -164,7 +168,7 @@ public class ImprovedBookmarkRowCoordinator {
                                             mContext, item.getId(), mBookmarkModel, displayPref));
                         } else if (shouldShowImagesForBookmark(item, displayPref)) {
                             mBookmarkImageFetcher.fetchImageForBookmarkWithFaviconFallback(
-                                    item, this::set);
+                                    item, mImageSize, this::set);
                         } else {
                             mBookmarkImageFetcher.fetchFaviconForBookmark(item, this::set);
                         }
@@ -202,7 +206,7 @@ public class ImprovedBookmarkRowCoordinator {
                     public void doSet() {
                         if (shouldShowImagesForFolder(bookmarkItem.getId())) {
                             mBookmarkImageFetcher.fetchFirstTwoImagesForFolder(
-                                    bookmarkItem, this::set);
+                                    bookmarkItem, mImageSize, this::set);
                         } else {
                             set(new Pair<>(null, null));
                         }

@@ -102,7 +102,9 @@ import org.chromium.components.embedder_support.util.TouchEventFilter;
 import org.chromium.components.embedder_support.util.WebResourceResponseInfo;
 import org.chromium.components.navigation_interception.InterceptNavigationDelegate;
 import org.chromium.components.sensitive_content.SensitiveContentFeatures;
+import org.chromium.components.stylus_handwriting.StylusHandwritingFeatureMap;
 import org.chromium.components.stylus_handwriting.StylusWritingController;
+import org.chromium.components.stylus_handwriting.StylusWritingSettingsState;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.components.viz.common.VizFeatures;
 import org.chromium.components.zoom.ZoomConstants;
@@ -125,6 +127,7 @@ import org.chromium.content_public.browser.SelectionClient;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.SmartClipProvider;
 import org.chromium.content_public.browser.ViewEventSink;
+import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsAccessibility;
 import org.chromium.content_public.browser.WebContentsInternals;
@@ -1205,8 +1208,7 @@ public class AwContents implements SmartClipProvider {
             return mAttachedWebviews;
         }
 
-        public static AwFrameMetricsListener onAttachedToWindow(
-                Window window, AwContents awContents) {
+        public static AwFrameMetricsListener onAttachedToWindow(Window window) {
             AwFrameMetricsListener listener = sWindowMap.get(window);
             if (listener == null) {
                 listener = new AwFrameMetricsListener();
@@ -1217,7 +1219,7 @@ public class AwContents implements SmartClipProvider {
             return listener;
         }
 
-        public static void onDetachedFromWindow(Window window, AwContents awContents) {
+        public static void onDetachedFromWindow(Window window) {
             AwFrameMetricsListener listener = sWindowMap.get(window);
             listener.decrementAttachedWebviews();
             if (listener.getAttachedWebviews() >= 1) return;
@@ -1841,7 +1843,8 @@ public class AwContents implements SmartClipProvider {
                             new ActivityWindowAndroid(
                                     context,
                                     listenToActivityState,
-                                    IntentRequestTracker.createFromActivity(activity));
+                                    IntentRequestTracker.createFromActivity(activity),
+                                    /* insetObserver= */ null);
                 }
                 wrapper = new WindowAndroidWrapper(activityWindow);
             } else {
@@ -3609,7 +3612,7 @@ public class AwContents implements SmartClipProvider {
         if (AwFeatureMap.isEnabled(BaseFeatures.COLLECT_ANDROID_FRAME_TIMELINE_METRICS)) {
             Window window = mWindowAndroid.getWindowAndroid().getWindow();
             if (window != null && mContainerView.isHardwareAccelerated()) {
-                mAwFrameMetricsListener = AwFrameMetricsListener.onAttachedToWindow(window, this);
+                mAwFrameMetricsListener = AwFrameMetricsListener.onAttachedToWindow(window);
             }
         }
 
@@ -3648,7 +3651,7 @@ public class AwContents implements SmartClipProvider {
         if (mAwFrameMetricsListener != null) {
             Window window = mWindowAndroid.getWindowAndroid().getWindow();
             if (window != null && mContainerView.isHardwareAccelerated()) {
-                AwFrameMetricsListener.onDetachedFromWindow(window, this);
+                AwFrameMetricsListener.onDetachedFromWindow(window);
                 mAwFrameMetricsListener = null;
             }
         }
@@ -3812,9 +3815,9 @@ public class AwContents implements SmartClipProvider {
         boolean contentVisible = AwContentsJni.get().isVisible(mNativeAwContents);
 
         if (contentVisible && !mIsContentVisible) {
-            mWebContents.onShow();
+            mWebContents.updateWebContentsVisibility(Visibility.VISIBLE);
         } else if (!contentVisible && mIsContentVisible) {
-            mWebContents.onHide();
+            mWebContents.updateWebContentsVisibility(Visibility.HIDDEN);
         }
         mIsContentVisible = contentVisible;
         updateChildProcessImportance();
@@ -3952,7 +3955,7 @@ public class AwContents implements SmartClipProvider {
      * @param requestId an id that will be returned from the callback invocation to allow
      * callers to match requests with callbacks.
      * @param callback the callback to be inserted
-     * @throw IllegalStateException if this method is invoked after {@link #destroy()} has been
+     * @throws IllegalStateException if this method is invoked after {@link #destroy()} has been
      * called.
      */
     public void insertVisualStateCallback(long requestId, VisualStateCallback callback) {
@@ -4761,13 +4764,6 @@ public class AwContents implements SmartClipProvider {
             mScrollOffsetManager.setProcessingTouchEvent(false);
 
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                // Note this will trigger IPC back to browser even if nothing is
-                // hit.
-                float eventX = event.getX();
-                float eventY = event.getY();
-                float touchMajor = Math.max(event.getTouchMajor(), event.getTouchMinor());
-                AwContentsJni.get()
-                        .requestNewHitTestDataAt(mNativeAwContents, eventX, eventY, touchMajor);
                 // If the stylus is above an editable element, prevent the parent element from
                 // intercepting the scroll event.
                 if (event.getPointerCount() == 1
@@ -4836,6 +4832,10 @@ public class AwContents implements SmartClipProvider {
             if (mComponentCallbacks != null) return;
             mComponentCallbacks = new AwComponentCallbacks();
             mContext.registerComponentCallbacks(mComponentCallbacks);
+            if (StylusHandwritingFeatureMap.isEnabled(
+                    StylusHandwritingFeatureMap.CACHE_STYLUS_SETTINGS)) {
+                StylusWritingSettingsState.getInstance().registerObserver(mStylusWritingController);
+            }
         }
 
         @Override
@@ -4857,6 +4857,12 @@ public class AwContents implements SmartClipProvider {
             if (mComponentCallbacks != null) {
                 mContext.unregisterComponentCallbacks(mComponentCallbacks);
                 mComponentCallbacks = null;
+            }
+
+            if (StylusHandwritingFeatureMap.isEnabled(
+                    StylusHandwritingFeatureMap.CACHE_STYLUS_SETTINGS)) {
+                StylusWritingSettingsState.getInstance()
+                        .unregisterObserver(mStylusWritingController);
             }
 
             mScrollAccessibilityHelper.removePostedCallbacks();
@@ -5069,10 +5075,6 @@ public class AwContents implements SmartClipProvider {
         void clearCache(long nativeAwContents, boolean includeDiskFiles);
 
         byte[] getCertificate(long nativeAwContents);
-
-        // Coordinates are in physical pixels when --use-zoom-for-dsf is enabled.
-        // Otherwise, coordinates are in desity independent pixels.
-        void requestNewHitTestDataAt(long nativeAwContents, float x, float y, float touchMajor);
 
         void updateLastHitTestData(long nativeAwContents);
 

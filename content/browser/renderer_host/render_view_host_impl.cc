@@ -520,30 +520,39 @@ bool RenderViewHostImpl::CreateRenderView(
     local_frame_params->subresource_loader_factories =
         main_rfh->CreateSubresourceLoaderFactoriesForInitialEmptyDocument();
 
+    // If the speculative RenderViewHost and the current RenderFrameHost have
+    // the same SiteInstanceGroup, this is a local -> local main frame swap for
+    // RenderDocument.
     if (is_speculative_ &&
         frame_tree_node->current_frame_host()->IsRenderFrameLive() &&
         frame_tree_node->current_frame_host()->GetSiteInstance()->group() ==
             site_instance_group_.get()) {
-      // The speculative RenderViewHost has the same SiteInstanceGroup as the
-      // current RenderFrameHost. This means when the speculative
-      // RenderFrameHost commits, it must do a local RenderFrame swap with the
-      // previous RenderFrame. Pass down the frame token of the current
-      // RenderFrameHost, so that the speculative RenderFrame can find the right
-      // RenderFrame.
-      local_frame_params->previous_frame_token =
-          frame_tree_node->current_frame_host()->GetFrameToken();
-
-      if (frame_tree_node->current_frame_host()->ShouldReuseCompositing(
-              *main_rfh->GetSiteInstance())) {
-        local_frame_params->widget_params
-            ->previous_frame_token_for_compositor_reuse =
-            frame_tree_node->current_frame_host()->GetFrameToken();
+      local_frame_params->widget_params->reuse_compositor =
+          frame_tree_node->current_frame_host()->ShouldReuseCompositing(
+              *main_rfh->GetSiteInstance());
+      if (local_frame_params->widget_params->reuse_compositor) {
         main_rfh->NotifyWillCreateRenderWidgetOnCommit();
       }
-    }
 
-    params->main_frame = mojom::CreateMainFrameUnion::NewLocalParams(
-        std::move(local_frame_params));
+      params->main_frame =
+          mojom::CreateMainFrameUnion::NewProvisionalLocalParams(
+              mojom::CreateProvisionalLocalMainFrameParams::New(
+                  std::move(local_frame_params),
+                  frame_tree_node->current_frame_host()->GetFrameToken()));
+    } else if (frame_tree_->is_prerendering()) {
+      // During a prerender navigation, a local main frame for a new
+      // RenderViewHost must always start as a provisinonal RenderFrame in the
+      // renderer. Otherwise, discarding a speculative RFH during prerender
+      // navigation causes the browser and the renderer to go out of sync. See
+      // https://crbug.com/40076091 for more background and details.
+      params->main_frame =
+          mojom::CreateMainFrameUnion::NewProvisionalLocalParams(
+              mojom::CreateProvisionalLocalMainFrameParams::New(
+                  std::move(local_frame_params), std::nullopt));
+    } else {
+      params->main_frame = mojom::CreateMainFrameUnion::NewLocalParams(
+          std::move(local_frame_params));
+    }
   } else {
     params->main_frame = mojom::CreateMainFrameUnion::NewRemoteParams(
         mojom::CreateRemoteMainFrameParams::New(
@@ -882,8 +891,10 @@ void RenderViewHostImpl::RenderWidgetDidForwardMouseEvent(
 bool RenderViewHostImpl::MayRenderWidgetForwardKeyboardEvent(
     const input::NativeWebKeyboardEvent& key_event) {
   if (GetWidget()->IsIgnoringWebInputEvents(key_event)) {
-    if (key_event.GetType() == WebInputEvent::Type::kRawKeyDown)
+    if (key_event.GetType() == WebInputEvent::Type::kRawKeyDown ||
+        key_event.GetType() == WebInputEvent::Type::kKeyDown) {
       delegate_->OnIgnoredUIEvent();
+    }
     return false;
   }
   return true;
@@ -1028,7 +1039,7 @@ mojom::ViewWidgetType RenderViewHostImpl::ViewWidgetType() {
     return *view_widget_type_;
   }
 
-  bool is_guest_view = delegate_->IsGuest();
+  bool is_guest_view = frame_tree_->is_guest() || delegate_->IsGuest();
   bool is_fenced_frame = frame_tree_->is_fenced_frame();
 
   if (is_fenced_frame) {

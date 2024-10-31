@@ -15,9 +15,11 @@
 #include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/autofill_wallet_usage_data.h"
+#include "components/autofill/core/browser/data_model/bnpl_issuer.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/credit_card_benefit.h"
 #include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
+#include "components/autofill/core/browser/data_model/ewallet.h"
 #include "components/autofill/core/browser/data_model/iban.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
@@ -160,6 +162,7 @@ CreditCard GetMaskedServerCardVisa();
 CreditCard GetMaskedServerCardAmex();
 CreditCard GetMaskedServerCardWithNickname();
 CreditCard GetMaskedServerCardEnrolledIntoVirtualCardNumber();
+CreditCard GetMaskedServerCardEnrolledIntoRuntimeRetrieval();
 
 // Returns a full server card full of dummy info.
 CreditCard GetFullServerCard();
@@ -382,10 +385,13 @@ Suggestion CreateAutofillSuggestion(
 
 Suggestion CreateAutofillSuggestion(const std::u16string& main_text_value,
                                     const std::u16string& minor_text_value,
-                                    bool apply_deactivated_style);
+                                    bool has_deactivated_style);
 
 // Returns a bank account enabled for Pix with fake data.
 BankAccount CreatePixBankAccount(int64_t instrument_id);
+
+// Returns an eWallet account with fake data.
+Ewallet CreateEwalletAccount(int64_t instrument_id);
 
 // Returns a payment instrument with a bank account filled with fake data.
 sync_pb::PaymentInstrument CreatePaymentInstrumentWithBankAccount(
@@ -398,6 +404,9 @@ sync_pb::PaymentInstrument CreatePaymentInstrumentWithIban(
 // Returns a payment instrument with an eWallet account filled with fake data.
 sync_pb::PaymentInstrument CreatePaymentInstrumentWithEwalletAccount(
     int64_t instrument_id);
+
+// Returns a BNPL issuer with fake data.
+BnplIssuer GetTestBnplIssuer();
 
 }  // namespace test
 }  // namespace autofill

@@ -20,6 +20,7 @@
 <translation id="1070066693520972135">WEP</translation>
 <translation id="1071587090247825784">S-a detectat un firewall</translation>
 <translation id="1075811647922107217">Dimensiunea paginii</translation>
+<translation id="108084407137234521">Nu se poate rezuma o transcriere mai scurtă de <ph name="MIN_WORD_LENGTH" /> cuvinte</translation>
 <translation id="1082009148392559545">Se descarcă screensaverul</translation>
 <translation id="1094693127011229778">Adresa IP nu este disponibilă</translation>
 <translation id="1100902271996134409">Se creează imaginile…</translation>
@@ -43,6 +44,7 @@
 <translation id="11743817593307477">Folosește tastele săgeți pentru a muta comanda la acțiunea de joc dorită. Folosește tasta Enter pentru a plasa comanda. Folosește tasta Escape pentru a anula.</translation>
 <translation id="1175697296044146566">Acest <ph name="DEVICE_TYPE" /> este gestionat de <ph name="MANAGER" />.</translation>
 <translation id="1175951029573070619">Medie (<ph name="SIGNAL_STRENGTH" />)</translation>
+<translation id="1178581264944972037">Întrerupe</translation>
 <translation id="1180621378971766337">intimă</translation>
 <translation id="1181037720776840403">Elimină</translation>
 <translation id="1191518099344003522">APN este activat.</translation>
@@ -218,6 +220,7 @@
 <translation id="1905710495812624430">Ai depășit numărul maxim de încercări permise.</translation>
 <translation id="1908234395526491708">Erori de solicitare UDP</translation>
 <translation id="1908394185991500139">săgeată la stânga</translation>
+<translation id="1914144885717544695">vineri</translation>
 <translation id="1923388006036088459">Culori de evidențiere</translation>
 <translation id="1945403655450283000">Recorder</translation>
 <translation id="1947737735496445907">Printată</translation>
@@ -248,7 +251,6 @@
 <translation id="2085089206770112532">Reducerea luminozității ecranului</translation>
 <translation id="2086091080968010660">Este posibil ca modificările în funcție de oră să nu fie precise. Activează accesul la locația sistemului în setări.</translation>
 <translation id="2102231663024125441">Editarea textului</translation>
-<translation id="2102648867808308635">Ajută-mă să citesc această pagină</translation>
 <translation id="2105810540595158374">Dispozitivul este un controler de jocuri.</translation>
 <translation id="2119172414412204879"><ph name="BOARD_NAME" />, versiunea <ph name="MILESTONE_VERSION" /></translation>
 <translation id="2124643134650336457">Opțiune disponibilă numai în limba engleză (S.U.A.)</translation>
@@ -257,6 +259,7 @@
 <translation id="2138109643290557664">Float on by</translation>
 <translation id="2141644705054017895"><ph name="PERCENTAGE_VALUE" /> %</translation>
 <translation id="2148716181193084225">Astăzi</translation>
+<translation id="215206000155329774"><ph name="INTENT" />; <ph name="QUERY_TEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="2152882202543497059"><ph name="NUMBER" /> fotografii</translation>
 <translation id="2154460308960858308">Șterge căutarea</translation>
 <translation id="2157660087437850958">selector de emoji</translation>
@@ -375,6 +378,7 @@
 <translation id="2713444072780614174">Alb</translation>
 <translation id="2715723665057727940">râu</translation>
 <translation id="2717139507051041123">Activează modul de culoare închisă</translation>
+<translation id="2726755229438917165">luni</translation>
 <translation id="2728460467788544679">Șterge tot istoricul printărilor</translation>
 <translation id="2731700343119398978">Așteptați...</translation>
 <translation id="2740531572673183784">OK</translation>
@@ -414,9 +418,11 @@
 <translation id="3031560714565892478">Dispozitivul este o cameră video.</translation>
 <translation id="3042927241478734594">Ieși din înregistrare?</translation>
 <translation id="3054177598518735801"><ph name="CURRENT_VALUE" /> mA</translation>
+<translation id="3055176406666937744">Nu se poate rezuma o transcriere mai lungă de <ph name="MAX_WORD_LENGTH" /> cuvinte</translation>
 <translation id="3056720590588772262">Punct final</translation>
 <translation id="3060579846059757016">Scheme</translation>
 <translation id="3061850252076394168">activează Selectează și ascultă</translation>
+<translation id="3066772729299747758">marți</translation>
 <translation id="3069085583900247081">Testul nu a reușit</translation>
 <translation id="3078740164268491126">tabel</translation>
 <translation id="3081652522083185657">luminoasă</translation>
@@ -450,6 +456,7 @@
 <translation id="3226657629376379887">Meniu de acțiuni pentru aspect</translation>
 <translation id="3227186760713762082">Împarte valoarea pentru <ph name="CATEGORY_TEXT" /> la <ph name="CONVERSION_RATE" /></translation>
 <translation id="3237710083340813756">Rescrie</translation>
+<translation id="3245518008592055173">Nu se pot crea nume pentru o transcriere mai scurtă de <ph name="MIN_WORD_LENGTH" /> cuvinte</translation>
 <translation id="3246869037381808805">Sarcinile de printare mai vechi de o zi vor fi eliminate</translation>
 <translation id="324961752321393509">Administratorul nu permite închiderea acestei aplicații</translation>
 <translation id="3263941347294171263">Deconectează și reconectează <ph name="DEVICE_NAME" /> pentru a continua procesul de actualizare</translation>
@@ -463,6 +470,7 @@
 <translation id="3305294846493618482">mai multe</translation>
 <translation id="3310640316857623290">Latența DNS depășește semnificativ pragul permisibil</translation>
 <translation id="3321030238473337787">Viteza de redare</translation>
+<translation id="3327613592010997943">Vei putea folosi din nou dispozitivul <ph name="DAY" /> la <ph name="TIME" />.</translation>
 <translation id="3328783797891415197">Se rulează testul</translation>
 <translation id="3340011300870565703">Nivelul bateriei căștii drepte a dispozitivului este de <ph name="BATTERY_PERCENTAGE" /> %.</translation>
 <translation id="3340978935015468852">setări</translation>
@@ -472,6 +480,7 @@
 <translation id="3361618936611118375">sushi</translation>
 <translation id="3368922792935385530">Conectat</translation>
 <translation id="3369013195428705271">Sigur vrei să ștergi tot istoricul printărilor? Sarcinile de printare în curs nu vor fi șterse.</translation>
+<translation id="3369632935976756339"><ph name="INTENT" />; <ph name="QUERY_TEXT" />; <ph name="SUBTEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="3373141842870501561">Imagine de fundal Earth Flow</translation>
 <translation id="33736539805963175">Fundal <ph name="LETTERS_COLOR" /> cu litera <ph name="LETTERS_LETTER" /></translation>
 <translation id="3383623117265110236">Exclusive</translation>
@@ -499,7 +508,6 @@
 <translation id="3502426834823382181">vezi toate aplicațiile</translation>
 <translation id="3510890413042482857">Trimite <ph name="BEGIN_LINK1" />datele privind urmărirea performanței<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Actualizare SO Chrome</translation>
-<translation id="3522508178835057262">Momentan, nu se acceptă transcrierile cu mai mult de <ph name="MAX_WORD_LENGTH" /> cuvinte</translation>
 <translation id="3527036260304016759">Nereușită – Eroare necunoscută</translation>
 <translation id="353214771040290298">Editarea s-a încheiat</translation>
 <translation id="3532980081107202182">Au mai rămas aproximativ <ph name="MIN_REMAINING" /> minute</translation>
@@ -611,6 +619,7 @@
 <translation id="409427325554347132">Salvează detaliile testului</translation>
 <translation id="409469431304488632">Experiment</translation>
 <translation id="4095829376260267438">WPA2 / WPA3</translation>
+<translation id="4105182082354119881">Nu se pot crea nume pentru o transcriere mai lungă de <ph name="MAX_WORD_LENGTH" /> cuvinte</translation>
 <translation id="4110686435123617899">Selectează albumul <ph name="TITLE" /> <ph name="DESC" /></translation>
 <translation id="4111761024568264522">Touchpad USB</translation>
 <translation id="4113067922640381334">Acum ai acces la noi <ph name="BEGIN_LINK_WALLPAPER_SUBPAGE" />imagini de fundal<ph name="END_LINK_WALLPAPER_SUBPAGE" /></translation>
@@ -619,6 +628,7 @@
 <translation id="4130035430755296270">Plasează cursorul pentru mai multe opțiuni de aspect</translation>
 <translation id="4130750466177569591">Sunt de acord</translation>
 <translation id="4131410914670010031">Alb-negru</translation>
+<translation id="4137700675046373159">sâmbătă</translation>
 <translation id="4143226836069425823">Atinge altă tastă de pe tastatură pentru a înlocui</translation>
 <translation id="4145784616224233563">Firewall HTTP</translation>
 <translation id="4147897805161313378">Google Foto</translation>
@@ -641,6 +651,7 @@
 <translation id="4227825898293920515">Parola expiră în <ph name="TIME" /></translation>
 <translation id="4238516577297848345">Nicio sarcină de printare în desfășurare</translation>
 <translation id="4239069858505860023">GPRS</translation>
+<translation id="4249717042534905822">duminică</translation>
 <translation id="4250229828105606438">Captură de ecran</translation>
 <translation id="4251839292699800785">Birou elegant</translation>
 <translation id="4258281355379922695">Latența solicitărilor HTTP</translation>
@@ -660,6 +671,7 @@
 <translation id="4333390807948134856">A fost apăsată tasta <ph name="KEY_NAME" /></translation>
 <translation id="4334293042716981313">În plus, poți să <ph name="BEGIN_LINK_FREEFORM_SUBPAGE" />scrii propria solicitare<ph name="END_LINK_FREEFORM_SUBPAGE" /></translation>
 <translation id="4354430579665871434">tastă</translation>
+<translation id="4356100841225547054">Dezactivează sunetul</translation>
 <translation id="4361257691546579041">APN este tipul prestabilit.</translation>
 <translation id="437294888293595148">Resetează toate comenzile rapide</translation>
 <translation id="437477383107495720">iepurași</translation>
@@ -715,7 +727,6 @@
 <translation id="458794348635939462">Nu s-au putut rezolva toate gazdele</translation>
 <translation id="4593212453765072419">Este necesară autentificarea la serverul proxy</translation>
 <translation id="4594021849294327751">Creează o transcriere</translation>
-<translation id="4602266091140407479">Microfon</translation>
 <translation id="4607282946861182308">Nu se pot crea imagini pe baza acestei solicitări. Încearcă alta.</translation>
 <translation id="4609350030397390689">Reducerea luminozității tastaturii</translation>
 <translation id="4623061655523261501">Numele înregistrărilor au fost generate</translation>
@@ -754,7 +765,6 @@
 <translation id="4809927044794281115">Temă luminoasă</translation>
 <translation id="4813136279048157860">Imaginile mele</translation>
 <translation id="4813345808229079766">Conexiune</translation>
-<translation id="4824527342590024245">Momentan, nu este acceptată o transcriere cu mai puțin de <ph name="MIN_WORD_LENGTH" /> cuvinte</translation>
 <translation id="4830894019733815633">canion</translation>
 <translation id="4832079907277790330">Selectează dosarul în aplicația Fișiere...</translation>
 <translation id="4835901797422965222">Nu există rețele active</translation>
@@ -815,12 +825,12 @@
 <translation id="5089810972385038852">Stat</translation>
 <translation id="5090362543162270857">IPsec (IKEv2)</translation>
 <translation id="5095761549884461003">Deconectează cablul USB <ph name="DEVICE_NAME" />, apoi reintrodu-l pentru a continua procesul de actualizare</translation>
-<translation id="5095864667399748231">Activează / dezactivează sunetul</translation>
 <translation id="5099354524039520280">sus</translation>
 <translation id="5107243100836678918">Comanda rapidă fără <ph name="META_KEY" /> poate intra în conflict cu comanda rapidă a unei aplicații. Introdu din nou comanda rapidă ca să o folosești în continuare sau introdu o nouă comandă rapidă care folosește tasta <ph name="KEY" />. <ph name="LINK_BEGIN" />Află mai multe<ph name="LINK_END" /></translation>
 <translation id="5108781503443873320">Sinonime:</translation>
 <translation id="5130848777448318809">ponei</translation>
 <translation id="5137451382116112100">Complet</translation>
+<translation id="5140788690559353412">Când pierzi accesul la contul școlar, nu vei mai avea acces la e-mailul asociat și la fișierele Google Drive, cum ar fi Gmail, Documente, Prezentări și altele.</translation>
 <translation id="5142961317498132443">Autentificare</translation>
 <translation id="5144311987923128508">Butonul de confirmare este acum dezactivat</translation>
 <translation id="5144887194300568405">Copiază traducerea</translation>
@@ -898,6 +908,7 @@
 <translation id="550600468576850160">pajiște</translation>
 <translation id="551689408806449779">Dispozitivul a fost deconectat. Încearcă să-l reconectezi pentru a-l testa</translation>
 <translation id="5519195206574732858">LTE</translation>
+<translation id="5527146180235316490">Opțiuni pentru microfon</translation>
 <translation id="5534900277405737921">Teren</translation>
 <translation id="554067135846762198">coral și bej</translation>
 <translation id="5543701552415191873">blocat</translation>
@@ -914,6 +925,7 @@
 <translation id="5595623927872580850">gri</translation>
 <translation id="5596627076506792578">Mai multe opțiuni</translation>
 <translation id="5600027863942488546">A fost testată tasta <ph name="KEY_NAME" /></translation>
+<translation id="5606865426897221650">Tab</translation>
 <translation id="5613201299517339763">Te-ai deconectat</translation>
 <translation id="5620281292257375798">Numai intern</translation>
 <translation id="5630438231335788050">bauhaus</translation>
@@ -943,6 +955,7 @@
 <translation id="5760715441271661976">Starea portalului</translation>
 <translation id="5763838252932650682">Se repornește și se actualizează <ph name="APP_NAME" /></translation>
 <translation id="576835345334454681">Creșterea luminozității ecranului</translation>
+<translation id="5775340474232476653">Profesorul a încheiat cursul</translation>
 <translation id="5779818640587041940">Menține ecranul activat în timpul înregistrării</translation>
 <translation id="57838592816432529">Dezactivează sunetul</translation>
 <translation id="5784136236926853061">Latență mare a solicitărilor HTTP</translation>
@@ -1008,6 +1021,7 @@
 <translation id="6075872808778243331">(Android) Latența solicitărilor HTTP</translation>
 <translation id="6078323886959318429">Adaugă o comandă rapidă</translation>
 <translation id="6091080061796993741">galben</translation>
+<translation id="6093853427925392522">Folosește aplicația Content Transfer de la Google pentru a muta datele din contul școlar în contul personal înainte de a-ți pierde accesul.</translation>
 <translation id="6104112872696127344">Scanarea a fost anulată</translation>
 <translation id="6106186594183574873">Pentru a finaliza, introdu vechea parolă</translation>
 <translation id="6108689792487843350">Gateway-ul nu poate fi accesat</translation>
@@ -1020,6 +1034,7 @@
 <translation id="6122191549521593678">Online</translation>
 <translation id="6122277663991249694">Serviciul metodei de introducere a textului din sistemul de operare Chrome</translation>
 <translation id="6127426868813166163">alb</translation>
+<translation id="613049107179582049">Când Conținutul audio de pe Chromebook este activat, Recorder înregistrează tot conținutul audio redat pe acest dispozitiv</translation>
 <translation id="6136285399872347291">șterge un caracter</translation>
 <translation id="6137614725462089991">cyberpunk</translation>
 <translation id="6137767437444130246">Certificat de utilizator</translation>
@@ -1114,6 +1129,7 @@
 <translation id="6527081081771465939">Protocol de securitate Wi-Fi necunoscut</translation>
 <translation id="6535178685492749208">Ești offline. Feedbackul se va trimite mai târziu.</translation>
 <translation id="6543412779435705598">tacos</translation>
+<translation id="6550369542114086980">joi</translation>
 <translation id="6551839203326557324">mere</translation>
 <translation id="65526652485742171">Butonul de confirmare este acum activat</translation>
 <translation id="6557784757915238407">APN-ul este de tip <ph name="ATTACH" />.</translation>
@@ -1139,7 +1155,6 @@
 <translation id="6650062777702288430">Comutare între tastatura Kana și tastatura alfanumerică</translation>
 <translation id="6657240842932274095">Permiți serviciilor de sistem să-ți folosească locația?</translation>
 <translation id="6657585470893396449">Parolă</translation>
-<translation id="6659594942844771486">Filă</translation>
 <translation id="66621959568103627">roz corai</translation>
 <translation id="6667885109186363316"><ph name="SEA_PEN_INTRO_FIRST_PARAGRAPH" />
           <ph name="LINE_BREAK" />
@@ -1244,6 +1259,7 @@
 <translation id="7130438335435247835">Numele punctului de acces (APN)</translation>
 <translation id="7134436342991564651">{0,plural, =1{Server de nume}few{Servere de nume}other{Servere de nume}}</translation>
 <translation id="7135814714616751706">Caută comenzi rapide</translation>
+<translation id="7141470099673912333">Content Transfer</translation>
 <translation id="7143207342074048698">Se conectează</translation>
 <translation id="7144878232160441200">Reîncearcă</translation>
 <translation id="7144954474087165241">pagodă</translation>
@@ -1260,6 +1276,7 @@
 <translation id="7180865173735832675">Personalizează</translation>
 <translation id="7182063559013288142">Hotspot instant</translation>
 <translation id="7184043045742675738">Dă clic pe orice tastă pentru a personaliza butonul. Repoziționează tasta folosind mouse-ul sau tastele săgeată.</translation>
+<translation id="7187669805838282391">miercuri</translation>
 <translation id="7206979415662233817">Termeni și condiții</translation>
 <translation id="7210635925306941239">azuriu</translation>
 <translation id="7212547870105584639">Gestionează setările APN ale rețelei. APN-urile stabilesc o conexiune între o rețea de date mobile și internet. <ph name="BEGIN_LINK_LEARN_MORE" />Află mai multe<ph name="END_LINK_LEARN_MORE" /></translation>
@@ -1306,6 +1323,7 @@ Descarcă modelul de transcriere (până la 100 MB) pentru a obține aceste tran
 <translation id="7388959671917308825">Touchpad încorporat</translation>
 <translation id="7397270852490618635">Dezactivează tema luminoasă</translation>
 <translation id="7401543881546089382">Ștergeți comanda rapidă</translation>
+<translation id="7405493795721832710"><ph name="DEVICE_NAME" /> este gata să fie actualizat</translation>
 <translation id="741244894080940828">conversie</translation>
 <translation id="7415801143053185905">Latență foarte mare a solicitărilor HTTP</translation>
 <translation id="7425037327577270384">Ajută-mă să scriu</translation>
@@ -1320,6 +1338,7 @@ Descarcă modelul de transcriere (până la 100 MB) pentru a obține aceste tran
 <translation id="7500205272584643581">Permiți ca Recorder să detecteze și să eticheteze vorbitorii?</translation>
 <translation id="7501957181231305652">sau</translation>
 <translation id="7502658306369382406">Adresă IPv6</translation>
+<translation id="7503342217608032738">Dispozitivul nu poate fi folosit</translation>
 <translation id="7507061649493508884">O <ph name="FLOWER_TYPE" /> <ph name="FLOWER_COLOR" /> viu colorată</translation>
 <translation id="7513770521371759388">jos</translation>
 <translation id="7514365320538308">Descarcă</translation>
@@ -1334,11 +1353,13 @@ Descarcă modelul de transcriere (până la 100 MB) pentru a obține aceste tran
 <translation id="7551123448725492271">Dispozitivul este un dispozitiv audio.</translation>
 <translation id="7559239713112547082">Previzualizează captura de ecran</translation>
 <translation id="7561454561030345039">Această setare este gestionată de administrator</translation>
+<translation id="7561759921596375678">Activează sunetul</translation>
 <translation id="7569444139234840525"><ph name="QUERY_TEXT" /> · /<ph name="PHONETICS" />/</translation>
 <translation id="7570674786725311828">Ecran tactil USB</translation>
 <translation id="757747079855995705">piatră</translation>
 <translation id="7590883480672980941">Setări de introducere a textului</translation>
 <translation id="7595982850646262331">Timp rămas: <ph name="TIME_VALUE" /></translation>
+<translation id="7600430297804876776">Administratorul <ph name="MANAGER" /> a setat când se poate folosi acest <ph name="DEVICE_TYPE" /></translation>
 <translation id="7613724632293948900">Repoziționează folosind mouse-ul sau tastele săgeată.</translation>
 <translation id="7618774594543487847">Neutru</translation>
 <translation id="7620771111601174153">Află mai multe din Centrul de ajutor</translation>
@@ -1392,7 +1413,9 @@ Descarcă modelul de transcriere (până la 100 MB) pentru a obține aceste tran
 <translation id="785170686607360576">lalea</translation>
 <translation id="7856267634822906833">Ecran tactil cu Bluetooth</translation>
 <translation id="7859006200041800233">floare de cactus</translation>
+<translation id="7865217133132122390">Activează microfonul</translation>
 <translation id="7869143217755017858">Dezactivează modul întunecat</translation>
+<translation id="7878972877380405573">Rezumă cu Ajută-mă să citesc</translation>
 <translation id="7881066108824108340">DNS</translation>
 <translation id="7882358943899516840">Tip furnizor</translation>
 <translation id="7882501334836096755">Cheie publică</translation>
@@ -1419,6 +1442,7 @@ Descarcă modelul de transcriere (până la 100 MB) pentru a obține aceste tran
 <translation id="7983597390787556680">{NUM_ROOL_APPS,plural, =1{<ph name="APP_NAME_1" /> a pornit automat}few{# aplicații au pornit automat}other{# de aplicații au pornit automat}}</translation>
 <translation id="7994702968232966508">Metodă EAP</translation>
 <translation id="8004582292198964060">Browser</translation>
+<translation id="8010765388850538088">Află mai multe despre AI generativ</translation>
 <translation id="8017679124341497925">Comanda rapidă a fost editată</translation>
 <translation id="802154636333426148">Descărcarea nu a reușit</translation>
 <translation id="8028993641010258682">Dimensiune</translation>
@@ -1428,6 +1452,7 @@ Descarcă modelul de transcriere (până la 100 MB) pentru a obține aceste tran
 <translation id="8045012663542226664">Dezactivează sunetul microfonului</translation>
 <translation id="8054112564438735763">bej</translation>
 <translation id="8062968459344882447"><ph name="CHARACTERS_SUBJECTS" /> <ph name="CHARACTERS_COLOR" /> pe fundal <ph name="CHARACTERS_BACKGROUND" /></translation>
+<translation id="8064337065720789104"><ph name="QUERY_TEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="8067126283828232460">APN-ul este conectat.</translation>
 <translation id="8067208048261192356">maro</translation>
 <translation id="8067224607978179455">Șterge <ph name="ACTION_NAME" /></translation>
@@ -1440,6 +1465,7 @@ Descarcă modelul de transcriere (până la 100 MB) pentru a obține aceste tran
 <translation id="8088963492174775412">Apasă pentru a înregistra</translation>
 <translation id="8094062939584182041">Permite ca Google să-ți trimită e-mail despre această problemă</translation>
 <translation id="8104083085214006426">Folosești o rețea deschisă și nesigură</translation>
+<translation id="8110942816572072814">Profesorul ți-a blocat ecranul</translation>
 <translation id="811820734797650957">(Android) Gateway-ul acceptă testul de ping</translation>
 <translation id="8129620843620772246"><ph name="TEMPERATURE_C" /> °C</translation>
 <translation id="8131740175452115882">Confirmați</translation>
@@ -1456,12 +1482,12 @@ Descarcă modelul de transcriere (până la 100 MB) pentru a obține aceste tran
 <translation id="8179976553408161302">Enter</translation>
 <translation id="8183975772394450380">plajă</translation>
 <translation id="819278132617411009">Folosește Google AI pentru productivitate</translation>
+<translation id="8200772114523450471">Reia</translation>
 <translation id="8206859287963243715">Celular</translation>
 <translation id="8208861521865154048">Avantaje</translation>
 <translation id="8226628635270268143">Alege fotografiile și albumele preferate</translation>
 <translation id="8227119283605456246">Atașează un fișier</translation>
 <translation id="8230672074305416752">Nu s-a putut da ping către gateway-ul de rețea prestabilit</translation>
-<translation id="8236972776513018241">Transcriere</translation>
 <translation id="8238771987802558562">Alege un APN</translation>
 <translation id="8246209727385807362">Operator necunoscut</translation>
 <translation id="8250926778281121244">ruginiu</translation>
@@ -1531,11 +1557,13 @@ Descarcă modelul de transcriere (până la 100 MB) pentru a obține aceste tran
 <translation id="8557447961879934694">WPA2</translation>
 <translation id="8575298406870537639">Operatorul poate solicita această opțiune ca să te conectezi la rețeaua respectivă. Contactează operatorul pentru detalii.</translation>
 <translation id="8576249514688522074">Neinițializată</translation>
+<translation id="8584654835905316966">Este necesară o repornire pentru a finaliza instalarea firmware-ului pentru <ph name="DEVICE_NAME" /> la versiunea <ph name="VERSION" />. Poate părea că computerul repornește de câteva ori. Acest comportament este normal.</translation>
 <translation id="8593058461203131755">întrerupe conținutul media</translation>
 <translation id="8620617069779373398">Stare roaming</translation>
 <translation id="8626489604350149811">Mai multe acțiuni pentru <ph name="APN_NAME" /></translation>
 <translation id="86356131183441916">Mov deschis</translation>
 <translation id="8647595191512746911">Transcriere audio</translation>
+<translation id="8650852232143958317">Ia-ți fișierele Gmail și Google Drive cu tine</translation>
 <translation id="8651481478098336970">dezactivează sunetul</translation>
 <translation id="8655295600908251630">Canal</translation>
 <translation id="8655828773034788261">Trimite adresa URL:</translation>
@@ -1587,7 +1615,6 @@ Descarcă modelul de transcriere (până la 100 MB) pentru a obține aceste tran
 <translation id="8864415976656252616">Nu există conținut sugerat. Vezi cel mai popular conținut de ajutor.</translation>
 <translation id="8868741746785112895">GUID</translation>
 <translation id="8876270629542503161">Dispozitivul este o tabletă.</translation>
-<translation id="8878117140814294155">Dezactivează sunetul microfonului</translation>
 <translation id="8881098542468797602">Testul a reușit</translation>
 <translation id="8882789155418924367">bufnițe</translation>
 <translation id="8892443466059986410">Anulează modificarea comenzii rapide</translation>
@@ -1664,6 +1691,7 @@ Descarcă modelul de transcriere (până la 100 MB) pentru a obține aceste tran
 <translation id="917720651393141712">Testează</translation>
 <translation id="9188992814426075118">Tastatura se poate potrivi automat cu imaginea de fundal</translation>
 <translation id="9189000703457422362">Nu se poate conecta la această rețea folosind APN-uri detectate automat. Contactează operatorul de telefonie mobilă pentru informații suplimentare.</translation>
+<translation id="9190726385682694354"><ph name="QUERY_TEXT" />; <ph name="SUBTEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="9193744392140377127">APN*</translation>
 <translation id="9195918315673527512">Tastele pentru joystick selectate sunt <ph name="KEYS" />. Atinge butonul pentru a edita comanda</translation>
 <translation id="9204237731135241582">Nu se poate contacta gateway-ul din aplicații pentru Android</translation>
@@ -1684,5 +1712,6 @@ Descarcă modelul de transcriere (până la 100 MB) pentru a obține aceste tran
 <translation id="982713511914535780">Rulează testul Descărcare</translation>
 <translation id="98515147261107953">Peisaj</translation>
 <translation id="987264212798334818">General</translation>
+<translation id="994473081369871639">Dezactivează microfonul</translation>
 <translation id="995062385528875723">Nu se pot folosi litere cu accent, alfabet non-latin sau simboluri</translation>
 </translationbundle>

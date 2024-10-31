@@ -19,6 +19,7 @@
 <translation id="115443833402798225">হাঙ্গুল আনমাটে</translation>
 <translation id="1155759005174418845">ক্যাটালান</translation>
 <translation id="1168100932582989117">Google নাম সার্ভার</translation>
+<translation id="1170788066030116158">ক্যাপচার করার তারিখ</translation>
 <translation id="1172970565351728681">আরও প্রায় <ph name="REMAINING_TIME" /> সময় লাগবে</translation>
 <translation id="1173894706177603556">পুনঃনামকরণ</translation>
 <translation id="1173916544412572294"><ph name="NETWORK_COUNT" />টির মধ্যে <ph name="NETWORK_INDEX" /> নম্বর নেটওয়ার্ক, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, সিগন্যাল: <ph name="SIGNAL_STRENGTH" />%, ফোনের ব্যাটারি <ph name="BATTERY_STATUS" />%, বিবরণ</translation>
@@ -580,6 +581,7 @@
 <translation id="5447680084201416734">পর্যাপ্ত স্টোরেজ নেই।</translation>
 <translation id="5449551289610225147">ভুল পাসওয়ার্ড</translation>
 <translation id="5459064203055649751">"<ph name="FILENAME" />" নামের ফাইল আগে থেকেই আছে। আপনি কি এটিকে একটি ফাইল দিয়ে পরিবর্তন করতে চান যা বর্তমানে আছে?</translation>
+<translation id="5462378611565326489">অফলাইনে OneDrive উপলভ্য নেই।</translation>
 <translation id="5463231940765244860">লিখুন</translation>
 <translation id="5469868506864199649">ইতালীয়</translation>
 <translation id="5473333559083690127">নতুন পিন পুনরায় লিখুন</translation>

@@ -19,6 +19,7 @@
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalaans</translation>
 <translation id="1168100932582989117">Google-naamservers</translation>
+<translation id="1170788066030116158">Gemaakt op</translation>
 <translation id="1172970565351728681">Ongeveer <ph name="REMAINING_TIME" /> resterend</translation>
 <translation id="1173894706177603556">Naam wijzigen</translation>
 <translation id="1173916544412572294">Netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, signaalsterkte <ph name="SIGNAL_STRENGTH" />%, telefoonbatterij <ph name="BATTERY_STATUS" />%, details</translation>
@@ -582,6 +583,7 @@
 <translation id="5447680084201416734">Onvoldoende opslagruimte.</translation>
 <translation id="5449551289610225147">Ongeldig wachtwoord</translation>
 <translation id="5459064203055649751">Er is al een bestand met de naam <ph name="FILENAME" />. Wil je het vervangen door het bestand dat je verplaatst?</translation>
+<translation id="5462378611565326489">OneDrive is niet beschikbaar als je offline bent.</translation>
 <translation id="5463231940765244860">Opgeven</translation>
 <translation id="5469868506864199649">Italiaans</translation>
 <translation id="5473333559083690127">Pincode opnieuw opgeven</translation>

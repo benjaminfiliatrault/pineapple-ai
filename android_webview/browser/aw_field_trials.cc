@@ -26,6 +26,7 @@
 #include "net/base/features.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "ui/android/ui_android_features.h"
 #include "ui/gl/gl_features.h"
 
@@ -222,6 +223,8 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
 
   // FedCM is not yet supported on WebView.
   aw_feature_overrides.DisableFeature(::features::kFedCm);
+  aw_feature_overrides.DisableFeature(
+      blink::features::kFedCmWithStorageAccessAPI);
 
   // TODO(crbug.com/40272633): Web MIDI permission prompt for all usage.
   aw_feature_overrides.DisableFeature(blink::features::kBlockMidiByDefault);
@@ -265,16 +268,6 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   // TODO(b/344852824): Enable the feature for WebView
   aw_feature_overrides.DisableFeature(::features::kDIPS);
 
-  // Async Safe Browsing check will be rolled out together with
-  // kHashPrefixRealTimeLookups on WebView.
-  aw_feature_overrides.DisableFeature(
-      safe_browsing::kSafeBrowsingAsyncRealTimeCheck);
-  aw_feature_overrides.DisableFeature(
-      safe_browsing::kHashPrefixRealTimeLookups);
-
-  // WebView does not currently support the Permissions API (crbug.com/490120)
-  aw_feature_overrides.DisableFeature(::features::kWebPermissionsApi);
-
   // TODO(crbug.com/41492947): See crrev.com/c/5744034 for details, but I was
   // unable to add this feature to fieldtrial_testing_config and pass all tests.
   aw_feature_overrides.EnableFeature(blink::features::kElementGetInnerHTML);
@@ -285,4 +278,9 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   aw_feature_overrides.EnableFeature(blink::features::kThreadedBodyLoader);
   aw_feature_overrides.EnableFeature(blink::features::kThreadedPreloadScanner);
   aw_feature_overrides.EnableFeature(blink::features::kPrecompileInlineScripts);
+
+  // This feature has not been experimented with yet on WebView.
+  // TODO(crbug.com/336852432): Enable this feature for WebView.
+  aw_feature_overrides.DisableFeature(
+      blink::features::kNavigationPredictorNewViewportFeatures);
 }

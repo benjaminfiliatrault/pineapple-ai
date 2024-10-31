@@ -253,6 +253,9 @@ public class IntentHandler {
     public static final String EXTRA_APP_SPECIFIC_HISTORY =
             "org.chromium.chrome.browser.app_specific_history";
 
+    public static final String EXTRA_SKIP_PRECONNECT =
+            "org.chromium.chrome.browser.skip_preconnect";
+
     /** The package name for the Google Search App. */
     public static final String PACKAGE_GSA = GSAUtils.GSA_PACKAGE_NAME;
 
@@ -331,19 +334,19 @@ public class IntentHandler {
 
     /**
      * Represents apps that launch Incognito CCT. DO NOT reorder items in this interface, because
-     * it's mirrored to UMA (as {@link IncognitoCCTCallerId}). Values should be enumerated from 0.
+     * it's mirrored to UMA (as {@link IncognitoCctCallerId}). Values should be enumerated from 0.
      * When removing items, comment them out and keep existing numeric values stable.
      */
     @IntDef({
-        IncognitoCCTCallerId.OTHER_APPS,
-        IncognitoCCTCallerId.GOOGLE_APPS,
-        IncognitoCCTCallerId.OTHER_CHROME_FEATURES,
-        IncognitoCCTCallerId.READER_MODE,
-        IncognitoCCTCallerId.READ_LATER,
-        IncognitoCCTCallerId.EPHEMERAL_TAB,
+        IncognitoCctCallerId.OTHER_APPS,
+        IncognitoCctCallerId.GOOGLE_APPS,
+        IncognitoCctCallerId.OTHER_CHROME_FEATURES,
+        IncognitoCctCallerId.READER_MODE,
+        IncognitoCctCallerId.READ_LATER,
+        IncognitoCctCallerId.EPHEMERAL_TAB,
     })
     @Retention(RetentionPolicy.SOURCE)
-    public @interface IncognitoCCTCallerId {
+    public @interface IncognitoCctCallerId {
         int OTHER_APPS = 0;
         int GOOGLE_APPS = 1;
         // This should not be used, it's a fallback for Chrome features that didn't identify
@@ -358,7 +361,7 @@ public class IntentHandler {
         // An ephemeral custom tab without incognito branding.
         int EPHEMERAL_TAB = 5;
 
-        // Update {@link IncognitoCCTCallerId} in enums.xml when adding new items.
+        // Update {@link IncognitoCctCallerId} in enums.xml when adding new items.
         int NUM_ENTRIES = 6;
     }
 

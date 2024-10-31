@@ -98,8 +98,8 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
 
         PropertyModelChangeProcessor.create(mModel, mStatusView, new StatusViewBinder());
 
-        PageInfoIPHController pageInfoIPHController =
-                new PageInfoIPHController(
+        PageInfoIphController pageInfoIphController =
+                new PageInfoIphController(
                         new UserEducationHelper(
                                 ContextUtils.activityFromContext(mStatusView.getContext()),
                                 profileSupplier,
@@ -109,7 +109,6 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
         mMediator =
                 new StatusMediator(
                         mModel,
-                        mStatusView.getResources(),
                         mStatusView.getContext(),
                         urlBarEditingTextStateProvider,
                         isTablet,
@@ -117,7 +116,7 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
                         PermissionDialogController.getInstance(),
                         templateUrlServiceSupplier,
                         profileSupplier,
-                        pageInfoIPHController,
+                        pageInfoIphController,
                         windowAndroid,
                         merchantTrustSignalsCoordinatorSupplier);
 
@@ -391,5 +390,13 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
             animator.setStartDelay(startDelayMs);
             animators.add(animator);
         }
+    }
+
+    /**
+     * Set whether the status view should be shown. If the view is not shown, the status view will
+     * be permanently gone until it is updated through this method during the current lifecycle.
+     */
+    public void setShowStatusView(boolean show) {
+        mMediator.setShowStatusView(show);
     }
 }

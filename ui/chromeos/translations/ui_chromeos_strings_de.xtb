@@ -19,6 +19,7 @@
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Katalanisch</translation>
 <translation id="1168100932582989117">Google-Nameserver</translation>
+<translation id="1170788066030116158">Aufnahmedatum</translation>
 <translation id="1172970565351728681">Noch ungefähr <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Umbenennen</translation>
 <translation id="1173916544412572294">Netzwerk <ph name="NETWORK_INDEX" /> von <ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, Signalstärke bei <ph name="SIGNAL_STRENGTH" /> %, Smartphone-Akku bei <ph name="BATTERY_STATUS" /> %, Details</translation>
@@ -581,6 +582,7 @@
 <translation id="5447680084201416734">Nicht genügend Speicherplatz verfügbar.</translation>
 <translation id="5449551289610225147">Ungültiges Passwort</translation>
 <translation id="5459064203055649751">Eine Datei mit dem Namen „<ph name="FILENAME" />“ ist bereits vorhanden. Möchtest du sie durch die zu verschiebende Datei ersetzen?</translation>
+<translation id="5462378611565326489">OneDrive ist offline nicht verfügbar.</translation>
 <translation id="5463231940765244860">Eingabe</translation>
 <translation id="5469868506864199649">Italienisch</translation>
 <translation id="5473333559083690127">Neue PIN noch einmal eingeben</translation>

@@ -346,9 +346,19 @@ void V8Initializer::ExceptionPropagationCallback(
   }
   DCHECK(class_name.Is8Bit());
 
-  ApplyContextToException(
-      isolate, isolate->GetCurrentContext(), exception,
-      ExceptionContext(context_type, class_name.Utf8().data(), property_name));
+  for (auto* dictionary_context =
+           V8PerIsolateData::From(isolate)->TopOfDictionaryStack();
+       dictionary_context;
+       dictionary_context = dictionary_context->Previous()) {
+    ApplyContextToException(isolate, isolate->GetCurrentContext(), exception,
+                            v8::ExceptionContext::kAttributeGet,
+                            dictionary_context->DictionaryName(),
+                            dictionary_context->PropertyName());
+  }
+
+  ApplyContextToException(isolate, isolate->GetCurrentContext(), exception,
+                          context_type, class_name.Utf8().data(),
+                          property_name);
 }
 
 static void PromiseRejectHandlerInWorker(v8::PromiseRejectMessage data) {
@@ -898,7 +908,7 @@ V8PerIsolateData::V8ContextSnapshotMode GetV8ContextSnapshotMode() {
 
 void V8Initializer::InitializeIsolateHolder(
     const intptr_t* reference_table,
-    const std::string js_command_line_flags) {
+    const std::string& js_command_line_flags) {
   DEFINE_STATIC_LOCAL(ArrayBufferAllocator, array_buffer_allocator, ());
   gin::IsolateHolder::Initialize(gin::IsolateHolder::kNonStrictMode,
                                  &array_buffer_allocator, reference_table,

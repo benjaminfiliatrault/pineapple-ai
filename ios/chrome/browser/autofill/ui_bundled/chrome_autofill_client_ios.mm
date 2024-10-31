@@ -76,7 +76,7 @@ ChromeAutofillClientIOS::ChromeAutofillClientIOS(
     infobars::InfoBarManager* infobar_manager,
     id<AutofillClientIOSBridge> bridge)
     : pref_service_(profile->GetPrefs()),
-      sync_service_(SyncServiceFactory::GetForBrowserState(profile)),
+      sync_service_(SyncServiceFactory::GetForProfile(profile)),
       personal_data_manager_(PersonalDataManagerFactory::GetForProfile(
           profile->GetOriginalProfile())),
       autocomplete_history_manager_(
@@ -102,6 +102,10 @@ ChromeAutofillClientIOS::~ChromeAutofillClientIOS() {
 void ChromeAutofillClientIOS::SetBaseViewController(
     UIViewController* base_view_controller) {
   base_view_controller_ = base_view_controller;
+}
+
+base::WeakPtr<autofill::AutofillClient> ChromeAutofillClientIOS::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 version_info::Channel ChromeAutofillClientIOS::GetChannel() const {
@@ -167,7 +171,7 @@ FormDataImporter* ChromeAutofillClientIOS::GetFormDataImporter() {
   if (!form_data_importer_) {
     form_data_importer_ = std::make_unique<FormDataImporter>(
         this,
-        ios::HistoryServiceFactory::GetForBrowserState(
+        ios::HistoryServiceFactory::GetForProfile(
             profile_, ServiceAccessType::EXPLICIT_ACCESS),
         GetApplicationContext()->GetApplicationLocale());
   }
@@ -245,7 +249,7 @@ GeoIpCountryCode ChromeAutofillClientIOS::GetVariationConfigCountryCode()
 
 void ChromeAutofillClientIOS::ShowAutofillSettings(
     SuggestionType suggestion_type) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void ChromeAutofillClientIOS::ConfirmSaveAddressProfile(
@@ -307,6 +311,13 @@ ChromeAutofillClientIOS::ShowAutofillSuggestions(
     base::WeakPtr<AutofillSuggestionDelegate> delegate) {
   [bridge_ showAutofillPopup:open_args.suggestions suggestionDelegate:delegate];
   return SuggestionUiSessionId();
+}
+
+void ChromeAutofillClientIOS::ShowPlusAddressEmailOverrideNotification(
+    const std::string& original_email,
+    EmailOverrideUndoCallback email_override_undo_callback) {
+  // TODO(crbug.com/324557053): Implement.
+  NOTIMPLEMENTED();
 }
 
 AutofillPlusAddressDelegate* ChromeAutofillClientIOS::GetPlusAddressDelegate() {
@@ -444,26 +455,12 @@ PasswordFormClassification ChromeAutofillClientIOS::ClassifyAsPasswordForm(
     return {};
   }
 
-  password_manager::FormDataParser parser;
   // The driver id is irrelevant here because it would only be used by password
   // manager logic that handles the `PasswordForm` returned by the parser.
-  parser.set_predictions(password_manager::ConvertToFormPredictions(
-      /*driver_id=*/0, *renderer_form, form_and_predictions.predictions));
-
-  // The parser can use stored usernames to identify a filled username field by
-  // the value it contains. Here it remains empty.
-  std::unique_ptr<password_manager::PasswordForm> pw_form = parser.Parse(
-      *renderer_form, password_manager::FormDataParser::Mode::kFilling,
-      /*stored_usernames=*/{});
-  if (!pw_form) {
-    return {};
-  }
-  PasswordFormClassification result{.type = pw_form->GetPasswordFormType()};
-  if (!pw_form->username_element_renderer_id.is_null()) {
-    result.username_field = FieldGlobalId(
-        field_id.frame_token, pw_form->username_element_renderer_id);
-  }
-  return result;
+  return password_manager::ClassifyAsPasswordForm(
+      *renderer_form,
+      password_manager::ConvertToFormPredictions(
+          /*driver_id=*/0, *renderer_form, form_and_predictions.predictions));
 }
 
 AutofillSaveCardInfoBarDelegateIOS*

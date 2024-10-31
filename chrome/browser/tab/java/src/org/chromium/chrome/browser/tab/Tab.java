@@ -338,9 +338,15 @@ public interface Tab extends TabLifecycle {
 
     /**
      * @return the last time this tab was shown or the time of its initialization if it wasn't yet
-     *         shown.
+     *     shown.
      */
     long getTimestampMillis();
+
+    /**
+     * Sets the last time this tab was shown. Used for delcutter to mark the tab as "active" after
+     * it's restored, but not immediately shown.
+     */
+    void setTimestampMillis(long timestampMillis);
 
     /**
      * @return parent identifier for the {@link Tab}
@@ -427,4 +433,17 @@ public interface Tab extends TabLifecycle {
      * @return True if the current tab has embedded media experience enabled.
      */
     boolean shouldEnableEmbeddedMediaExperience();
+
+    /** Returns the content sensitivity of the tab. */
+    boolean getTabHasSensitiveContent();
+
+    /**
+     * Sets the content sensitivity of the tab.
+     *
+     * @param contentIsSensitive True if the content is sensitive.
+     */
+    void setTabHasSensitiveContent(boolean contentIsSensitive);
+
+    /** Called when the tab is restored from the archived tab model. */
+    void onTabRestoredFromArchivedTabModel();
 }

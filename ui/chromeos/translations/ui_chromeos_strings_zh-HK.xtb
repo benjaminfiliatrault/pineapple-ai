@@ -19,6 +19,7 @@
 <translation id="115443833402798225">韓文 (安馬太正音)</translation>
 <translation id="1155759005174418845">嘉泰羅尼亞文</translation>
 <translation id="1168100932582989117">Google 域名伺服器</translation>
+<translation id="1170788066030116158">拍攝日期</translation>
 <translation id="1172970565351728681">大約剩餘 <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">重新命名</translation>
 <translation id="1173916544412572294">第 <ph name="NETWORK_INDEX" /> 個網絡，一共有 <ph name="NETWORK_COUNT" /> 個網絡，<ph name="PHONE_NAME" />，<ph name="CONNECTION_STATUS" />，訊號強度係 <ph name="SIGNAL_STRENGTH" />%，手機電量係 <ph name="BATTERY_STATUS" />%，詳情</translation>
@@ -581,6 +582,7 @@
 <translation id="5447680084201416734">儲存空間不足。</translation>
 <translation id="5449551289610225147">密碼無效</translation>
 <translation id="5459064203055649751">名稱為「<ph name="FILENAME" />」的檔案已經存在。要用正在移動的檔案取代這個檔案嗎？</translation>
+<translation id="5462378611565326489">OneDrive 無法離線使用。</translation>
 <translation id="5463231940765244860">輸入</translation>
 <translation id="5469868506864199649">意大利文</translation>
 <translation id="5473333559083690127">重新輸入新的 PIN</translation>

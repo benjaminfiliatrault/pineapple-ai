@@ -113,8 +113,7 @@ bool IsWebauthnTaggedElement(const blink::WebFormControlElement& element);
 // Returns true if |element| can be edited (enabled and not read only).
 bool IsElementEditable(const blink::WebInputElement& element);
 
-// True if this element can take focus. If this element is a selectlist, checks
-// whether a child of the selectlist can take focus.
+// True if this element can take focus.
 bool IsWebElementFocusableForAutofill(const blink::WebElement& element);
 
 // Returns the FormRendererId of a given WebFormElement or contenteditable. If
@@ -140,16 +139,10 @@ std::vector<blink::WebFormControlElement> GetOwnedAutofillableFormControls(
 // Returns the form that owns the `form_control`, or a null `WebFormElement` if
 // no form owns the `form_control`.
 //
-// When `kAutofillIncludeFormElementsInShadowDom` is enabled, the form that owns
-// `form_control` is
+// The form that owns `form_control` is
 // - if `form_control` is associated to a form, the furthest shadow-including
 //   form ancestor of that form,
 // - otherwise, the furthest shadow-including form ancestor of `form_control`.
-//
-// When `kAutofillIncludeFormElementsInShadowDom` is disabled, `form_control`'s
-// owner is
-// - if `form_control` is associated to a form, that form,
-// - otherwise, the nearest shadow-including form ancestor of `form_control`.
 blink::WebFormElement GetOwningForm(
     const blink::WebFormControlElement& form_control);
 
@@ -263,6 +256,12 @@ void TraverseDomForFourDigitCombinations(
     const blink::WebDocument& document,
     base::OnceCallback<void(const std::vector<std::string>&)>
         potential_matches);
+
+// Attempts to update `FormFieldData::user_input_` of `field`, whose DOM element
+// is identified by `element_id`, using `field_data_manager`.
+void MaybeUpdateUserInput(FormFieldData& field,
+                          FieldRendererId element_id,
+                          const FieldDataManager& field_data_manager);
 
 // The following functions exist in as internal helper functions in
 // form_autofill_util.cc and are exposed here just for testing purposes. Check

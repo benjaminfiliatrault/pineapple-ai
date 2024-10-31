@@ -132,8 +132,8 @@ const net::HttpStatusCode kRedirectStatusCodes[] = {
 // requests to https://{foo|bar}.com/non-existing-{image.jpg|iframe.html}.
 class ThirdPartyURLLoaderInterceptor {
  public:
-  explicit ThirdPartyURLLoaderInterceptor(const std::set<GURL> intercepted_urls)
-      : intercepted_urls_(intercepted_urls),
+  explicit ThirdPartyURLLoaderInterceptor(std::set<GURL> intercepted_urls)
+      : intercepted_urls_(std::move(intercepted_urls)),
         interceptor_(base::BindRepeating(
             &ThirdPartyURLLoaderInterceptor::InterceptURLRequest,
             base::Unretained(this))) {}
@@ -363,8 +363,8 @@ class AlternatingCriticalCHRequestHandler {
 void ExpectUKMSeen(const ukm::TestAutoSetUkmRecorder& ukm_recorder,
                    const std::vector<network::mojom::WebClientHintsType>& hints,
                    size_t loads,
-                   const std::string_view metric_name,
-                   const std::string_view type_name) {
+                   std::string_view metric_name,
+                   std::string_view type_name) {
   auto ukm_entries = ukm_recorder.GetEntriesByName(metric_name);
   // We expect the same series of `hints` to appear `loads` times.
   ASSERT_EQ(ukm_entries.size(), hints.size() * loads);

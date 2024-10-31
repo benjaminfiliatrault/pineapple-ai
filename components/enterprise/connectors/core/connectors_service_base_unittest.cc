@@ -72,6 +72,12 @@ class TestConnectorsService : public ConnectorsServiceBase {
   PrefService* GetPrefs() override { return &prefs_; }
   const PrefService* GetPrefs() const override { return &prefs_; }
 
+  policy::CloudPolicyManager* GetManagedUserCloudPolicyManager()
+      const override {
+    NOTREACHED();
+    // return nullptr;
+  }
+
  private:
   bool connectors_enabled_ = false;
   std::optional<DmToken> machine_dm_token_;
@@ -186,11 +192,6 @@ class ConnectorsServiceBaseReportingSettingsTest
 
 TEST_P(ConnectorsServiceBaseReportingSettingsTest, Test) {
   TestConnectorsService service;
-  // TODO(b/344593927): Re-enable this test for Android and iOS
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-  ASSERT_FALSE(service.GetPrefs()->FindPreference(
-      "enterprise_connectors.on_security_event"));
-#else
   service.set_connectors_manager_base();
   if (pref_value()) {
     service.GetPrefs()->Set(pref(), *base::JSONReader::Read(pref_value()));
@@ -204,7 +205,6 @@ TEST_P(ConnectorsServiceBaseReportingSettingsTest, Test) {
             !service.GetConnectorsManagerBase()
                  ->GetReportingConnectorsSettingsForTesting()
                  .empty());
-#endif
 }
 
 INSTANTIATE_TEST_SUITE_P(

@@ -65,7 +65,7 @@
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/same_document_navigation_type.mojom-shared.h"
-#include "third_party/blink/public/mojom/origin_trial_feature/origin_trial_feature.mojom-shared.h"
+#include "third_party/blink/public/mojom/origin_trials/origin_trial_feature.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/page.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_fetch_handler_bypass_option.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_fetch_handler_type.mojom-blink.h"
@@ -2154,6 +2154,9 @@ void DocumentLoader::WillCommitNavigation() {
 }
 
 void DocumentLoader::DidCommitNavigation() {
+  TRACE_EVENT0("loading", "DocumentLoader::DidCommitNavigation");
+  base::ScopedUmaHistogramTimer histogram_timer(
+      "Navigation.DocumentLoader.DidCommitNavigation");
   if (commit_reason_ != CommitReason::kRegular)
     return;
 
@@ -2403,6 +2406,13 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
       // Some clients do not want local URLs to have access to other local
       // URLs.
       origin->BlockLocalAccessFromLocalOrigin();
+      if (origin_to_commit_) {
+        // This information does not exist on `origin_to_commit_` as it comes
+        // from the browser side. To make sure the `IsSameOriginWith()` check
+        // at the end of the function will pass, also block access for
+        // `origin_to_commit_`.
+        origin_to_commit_->BlockLocalAccessFromLocalOrigin();
+      }
       debug_info_builder.Append(", universal_access_block_file");
     }
   }
@@ -2429,7 +2439,45 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
   }
   origin_calculation_debug_info_ = debug_info_builder.ToAtomicString();
   if (origin_to_commit_) {
-    CHECK(origin->IsSameOriginWith(origin_to_commit_.get()));
+    SCOPED_CRASH_KEY_STRING256("OriginCalc", "debug_info",
+                               origin_calculation_debug_info_.Ascii());
+    SCOPED_CRASH_KEY_STRING256("OriginCalc", "url_stripped",
+                               url_.StrippedForUseAsReferrer().Ascii());
+    SCOPED_CRASH_KEY_BOOL("OriginCalc", "same_ptr",
+                          origin == origin_to_commit_);
+    SCOPED_CRASH_KEY_STRING256("OriginCalc", "origin",
+                               origin->ToString().Ascii());
+    SCOPED_CRASH_KEY_STRING256("OriginCalc", "origin_to_commit",
+                               origin_to_commit_->ToString().Ascii());
+    SCOPED_CRASH_KEY_BOOL("OriginCalc", "origin_local", origin->IsLocal());
+    SCOPED_CRASH_KEY_BOOL("OriginCalc", "origin_to_commit_local",
+                          origin_to_commit_->IsLocal());
+    SCOPED_CRASH_KEY_BOOL("OriginCalc", "origin_opaque", origin->IsOpaque());
+    SCOPED_CRASH_KEY_BOOL("OriginCalc", "origin_to_commit_opaque",
+                          origin_to_commit_->IsOpaque());
+    SCOPED_CRASH_KEY_BOOL("OriginCalc", "origin_block",
+                          origin->block_local_access_from_local_origin());
+    SCOPED_CRASH_KEY_BOOL(
+        "OriginCalc", "origin_to_commit_block",
+        origin_to_commit_->block_local_access_from_local_origin());
+    if (origin->IsLocal() && !origin->IsOpaque() &&
+        origin->block_local_access_from_local_origin() &&
+        origin != origin_to_commit_) {
+      // For local non-opaque origins that block local access, we can't use the
+      // IsSameOrigin check directly if the ptr is not the same (e.g. when the
+      // origin is inherited from the owner, instead of using
+      // `origin_to_commit_`), since the blocking will apply within that check.
+      // Instead, check that all the important properties are the same.
+      CHECK(owner_document && owner_document->domWindow());
+      CHECK(origin_to_commit_->IsLocal());
+      CHECK(!origin_to_commit_->IsOpaque());
+      CHECK(origin_to_commit_->block_local_access_from_local_origin());
+      CHECK_EQ(origin->Protocol(), origin_to_commit_->Protocol());
+      CHECK_EQ(origin->Host(), origin_to_commit_->Host());
+      CHECK_EQ(origin->Domain(), origin_to_commit_->Domain());
+    } else {
+      CHECK(origin->IsSameOriginWith(origin_to_commit_.get()));
+    }
   }
   return origin;
 }
@@ -2724,6 +2772,8 @@ void DocumentLoader::CommitNavigation() {
   TRACE_EVENT_WITH_FLOW0("loading", "DocumentLoader::CommitNavigation",
                          TRACE_ID_LOCAL(this),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
+  base::ScopedUmaHistogramTimer histogram_timer(
+      "Navigation.DocumentLoader.CommitNavigation");
   base::ElapsedTimer timer;
   DCHECK_LT(state_, kCommitted);
   DCHECK(frame_->GetPage());
@@ -2976,16 +3026,11 @@ void DocumentLoader::CommitNavigation() {
   last_navigation_had_trusted_initiator_ =
       !requestor_origin_ || is_same_origin_initiator;
 
-  // The PaintHolding feature defers compositor commits until content has
-  // been painted or 500ms have passed, whichever comes first. The additional
-  // PaintHoldingCrossOrigin feature allows PaintHolding even for cross-origin
-  // navigations, otherwise only same-origin navigations have deferred commits.
-  // We also require that this be an html document served via http.
+  // The PaintHolding feature defers compositor commits until content has been
+  // painted or 500ms have passed, whichever comes first. We require that this
+  // be an html document served via http.
   if (base::FeatureList::IsEnabled(blink::features::kPaintHolding) &&
-      IsA<HTMLDocument>(document) && Url().ProtocolIsInHTTPFamily() &&
-      (is_same_origin_initiator ||
-       base::FeatureList::IsEnabled(
-           blink::features::kPaintHoldingCrossOrigin))) {
+      IsA<HTMLDocument>(document) && Url().ProtocolIsInHTTPFamily()) {
     document->SetDeferredCompositorCommitIsAllowed(true);
   } else {
     document->SetDeferredCompositorCommitIsAllowed(false);
@@ -3141,6 +3186,16 @@ void DocumentLoader::CreateParserPostCommit() {
       window->GetOriginTrialContext()->AddFeature(
           mojom::blink::OriginTrialFeature::kTouchEventFeatureDetection);
     }
+
+#if BUILDFLAG(IS_CHROMEOS)
+    // TODO(crbug.com/371971653): Remove the force enabling of
+    // getAllScreensMedia once the feature is moved to stable in runtime enabled
+    // features.
+    if (window->GetExecutionContext()->IsIsolatedContext()) {
+      window->GetOriginTrialContext()->AddFeature(
+          mojom::blink::OriginTrialFeature::kGetAllScreensMedia);
+    }
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
     // Enable any origin trials that have been force enabled for this commit.
     window->GetOriginTrialContext()->AddForceEnabledTrials(
@@ -3464,9 +3519,7 @@ base::TimeDelta DocumentLoader::RemainingTimeToLCPLimit() const {
   // We shouldn't call this function before navigation start
   DCHECK(!document_load_timing_.NavigationStart().is_null());
   base::TimeTicks lcp_limit =
-      document_load_timing_.NavigationStart() +
-      base::Milliseconds(
-          features::kAlignFontDisplayAutoTimeoutWithLCPGoalTimeoutParam.Get());
+      document_load_timing_.NavigationStart() + kLCPLimit;
   base::TimeTicks now = clock_->NowTicks();
   if (now < lcp_limit)
     return lcp_limit - now;

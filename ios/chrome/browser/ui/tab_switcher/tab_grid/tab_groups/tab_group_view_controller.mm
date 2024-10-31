@@ -75,6 +75,8 @@ constexpr CGFloat kSpace = 8;
   UIView* _coloredDotView;
   // Whether this is an incognito group.
   BOOL _incognito;
+  // Whether this is shared with other users.
+  BOOL _shared;
   // The bottom toolbar.
   TabGridBottomToolbar* _bottomToolbar;
 }
@@ -83,6 +85,7 @@ constexpr CGFloat kSpace = 8;
 
 - (instancetype)initWithHandler:(id<TabGroupsCommands>)handler
                       incognito:(BOOL)incognito
+                         shared:(BOOL)shared
                        tabGroup:(const TabGroup*)tabGroup {
   CHECK(IsTabGroupInGridEnabled())
       << "You should not be able to create a tab group view controller outside "
@@ -91,6 +94,7 @@ constexpr CGFloat kSpace = 8;
   if ((self = [super init])) {
     _handler = handler;
     _incognito = incognito;
+    _shared = shared;
     _tabGroup = tabGroup;
     _gridViewController = [[TabGroupGridViewController alloc] init];
     if (!incognito) {
@@ -310,8 +314,20 @@ constexpr CGFloat kSpace = 8;
   dotsItem.accessibilityLabel = l10n_util::GetNSString(
       IDS_IOS_TAB_GROUP_THREE_DOT_MENU_BUTTON_ACCESSIBILITY_LABEL);
 
+  UIBarButtonItem* facePileButton;
+  UIViewController* facePile = self.facePile;
+  if (facePile) {
+    [self addChildViewController:facePile];
+    facePileButton = [[UIBarButtonItem alloc] initWithCustomView:facePile.view];
+    [facePile didMoveToParentViewController:self];
+  }
+
   if (IsTabGroupIndicatorEnabled()) {
-    navigationItem.rightBarButtonItems = @[ dotsItem ];
+    if (facePileButton) {
+      navigationItem.rightBarButtonItems = @[ dotsItem, facePileButton ];
+    } else {
+      navigationItem.rightBarButtonItems = @[ dotsItem ];
+    }
   } else {
     UIImage* plusImage =
         DefaultSymbolWithPointSize(kPlusSymbol, kPlusImageSize);
@@ -460,6 +476,16 @@ constexpr CGFloat kSpace = 8;
   __weak TabGroupViewController* weakSelf = self;
   NSMutableArray<UIMenuElement*>* menuElements = [[NSMutableArray alloc] init];
 
+  if (_shared) {
+    CHECK(IsTabGroupSyncEnabled());
+
+    // TODO(crbug.com/358533115): Add an entry point to the management UI.
+
+    [menuElements addObject:[actionFactory actionToShowRecentActivity:^{
+                    [weakSelf showRecentActivity];
+                  }]];
+  }
+
   [menuElements addObject:[actionFactory actionToRenameTabGroupWithBlock:^{
                   [weakSelf displayEditionMenu];
                 }]];
@@ -468,9 +494,11 @@ constexpr CGFloat kSpace = 8;
                   [weakSelf openNewTab];
                 }]];
 
-  [menuElements addObject:[actionFactory actionToUngroupTabGroupWithBlock:^{
-                  [weakSelf ungroup];
-                }]];
+  if (!_shared) {
+    [menuElements addObject:[actionFactory actionToUngroupTabGroupWithBlock:^{
+                    [weakSelf ungroup];
+                  }]];
+  }
 
   if (IsTabGroupSyncEnabled()) {
     [menuElements addObject:[actionFactory actionToCloseTabGroupWithBlock:^{
@@ -540,6 +568,12 @@ constexpr CGFloat kSpace = 8;
 
   [self.mutator deleteGroup];
   [_handler hideTabGroup];
+}
+
+// Shows the recent activity of a shared tab group.
+- (void)showRecentActivity {
+  CHECK(_shared);
+  [_handler showRecentActivityForGroup:_tabGroup->GetWeakPtr()];
 }
 
 // Updates the safe area inset of the grid based on this VC safe areas and the

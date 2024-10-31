@@ -258,8 +258,8 @@ void InitLogging(UpdaterScope updater_scope) {
   }
   base::CreateDirectory(log_file->DirName());
   // Rotate log if needed.
-  int64_t size = 0;
-  if (base::GetFileSize(*log_file, &size) && size >= kLogRotateAtSize) {
+  std::optional<int64_t> size = base::GetFileSize(*log_file);
+  if (size.has_value() && size.value() >= kLogRotateAtSize) {
     base::ReplaceFile(
         *log_file, log_file->AddExtension(FILE_PATH_LITERAL(".old")), nullptr);
   }
@@ -287,8 +287,9 @@ void InitLogging(UpdaterScope updater_scope) {
 #endif
 }
 
-std::string GetUpdaterUserAgent() {
-  return base::StrCat({PRODUCT_FULLNAME_STRING, " ", kUpdaterVersion});
+std::string GetUpdaterUserAgent(const base::Version& updater_version) {
+  return base::StrCat(
+      {PRODUCT_FULLNAME_STRING, " ", updater_version.GetString()});
 }
 
 // This function and the helper functions are copied from net/base/url_util.cc
@@ -376,7 +377,7 @@ void InitializeThreadPool(const char* name) {
   base::ThreadPoolInstance::Get()->Start(init_params);
 }
 
-bool DeleteExcept(const std::optional<base::FilePath>& except) {
+bool DeleteExcept(std::optional<base::FilePath> except) {
   if (!except) {
     return false;
   }

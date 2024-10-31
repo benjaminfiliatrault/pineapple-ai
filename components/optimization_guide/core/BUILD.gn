@@ -271,6 +271,10 @@ static_library("core") {
       "model_execution/response_parser.h",
       "model_execution/response_parser_registry.cc",
       "model_execution/response_parser_registry.h",
+      "model_execution/safety_checker.cc",
+      "model_execution/safety_checker.h",
+      "model_execution/safety_client.cc",
+      "model_execution/safety_client.h",
       "model_execution/safety_config.cc",
       "model_execution/safety_config.h",
       "model_execution/safety_model_info.cc",
@@ -390,6 +394,8 @@ static_library("prediction") {
 static_library("test_support") {
   testonly = true
   sources = [
+    "mock_optimization_guide_decider.cc",
+    "mock_optimization_guide_decider.h",
     "mock_optimization_guide_model_executor.cc",
     "mock_optimization_guide_model_executor.h",
     "mock_push_notification_manager.cc",
@@ -516,12 +522,11 @@ source_set("unit_tests") {
       "model_execution/optimization_guide_model_execution_error_unittest.cc",
       "model_execution/redactor_unittest.cc",
       "model_execution/repetition_checker_unittest.cc",
+      "model_execution/safety_checker_unittest.cc",
       "model_execution/simple_response_parser_unittest.cc",
       "model_execution/substitution_unittest.cc",
       "model_execution/test/fake_model_assets.cc",
       "model_execution/test/fake_model_assets.h",
-      "model_execution/test/fake_on_device_model_service_controller.cc",
-      "model_execution/test/fake_on_device_model_service_controller.h",
       "model_execution/test/feature_config_builder.cc",
       "model_execution/test/feature_config_builder.h",
       "model_execution/test/request_builder.cc",
@@ -571,6 +576,7 @@ source_set("unit_tests") {
     "//services/data_decoder/public/cpp:test_support",
     "//services/network:network_service",
     "//services/network:test_support",
+    "//services/on_device_model/public/cpp",
     "//services/on_device_model/public/cpp/test_support",
     "//testing/gmock",
     "//testing/gtest",
@@ -648,6 +654,7 @@ action("on_device_model_execution_proto_generator") {
     "$root_gen_dir/components/optimization_guide/proto/history_answer.descriptor",
     "$root_gen_dir/components/optimization_guide/proto/prompt_api.descriptor",
     "$root_gen_dir/components/optimization_guide/proto/summarize.descriptor",
+    "$root_gen_dir/components/optimization_guide/proto/history_query_intent.descriptor",
   ]
   outputs = [ output_proto_descriptors_cc_file ]
 
@@ -660,15 +667,18 @@ action("on_device_model_execution_proto_generator") {
     "--include=\"components/optimization_guide/proto/features/history_answer.pb.h\"",
     "--include=\"components/optimization_guide/proto/features/prompt_api.pb.h\"",
     "--include=\"components/optimization_guide/proto/features/summarize.pb.h\"",
+    "--include=\"components/optimization_guide/proto/features/history_query_intent.pb.h\"",
     "--request=.optimization_guide.proto.ComposeRequest",
     "--request=.optimization_guide.proto.TabOrganizationRequest",
     "--request=.optimization_guide.proto.HistoryAnswerRequest",
     "--request=.optimization_guide.proto.StringValue",
     "--request=.optimization_guide.proto.SummarizeRequest",
     "--request=.optimization_guide.proto.PromptApiRequest",
+    "--request=.optimization_guide.proto.HistoryQueryIntentRequest",
     "--response=.optimization_guide.proto.ComposeResponse",
     "--response=.optimization_guide.proto.TabOrganizationResponse",
     "--response=.optimization_guide.proto.HistoryAnswerResponse",
+    "--response=.optimization_guide.proto.HistoryQueryIntentResponse",
     "--response=.optimization_guide.proto.StringValue",
   ]
   foreach(file, inputs) {
@@ -681,6 +691,7 @@ action("on_device_model_execution_proto_generator") {
   deps = [
     "//components/optimization_guide/proto:compose_proto_descriptor",
     "//components/optimization_guide/proto:history_answer_proto_descriptor",
+    "//components/optimization_guide/proto:history_query_intent_proto_descriptor",
     "//components/optimization_guide/proto:prompt_api_proto_descriptor",
     "//components/optimization_guide/proto:string_value_proto_descriptor",
     "//components/optimization_guide/proto:summarize_descriptor",

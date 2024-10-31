@@ -262,7 +262,7 @@ class V8FeatureVisitor : public base::FeatureVisitor {
 namespace {
 
 void SetFlags(IsolateHolder::ScriptMode mode,
-              const std::string js_command_line_flags) {
+              const std::string& js_command_line_flags) {
   // Chromium features prefixed with "V8Flag_" are forwarded to V8 as V8 flags,
   // with the "V8Flag_" prefix stripped off. For example, an enabled feature
   // "V8Flag_foo_bar" will be passed to V8 as the flag `--foo_bar`. Similarly,
@@ -340,6 +340,9 @@ void SetFlags(IsolateHolder::ScriptMode mode,
   SetV8FlagsIfOverridden(features::kV8ExternalMemoryAccountedInGlobalLimit,
                          "--external-memory-accounted-in-global-limit",
                          "--no-external-memory-accounted-in-global-limit");
+  SetV8FlagsIfOverridden(features::kV8GCSpeedUsesCounters,
+                         "--gc-speed-uses-counters",
+                         "--no-gc-speed-uses-counters");
   SetV8FlagsIfOverridden(features::kV8TurboFastApiCalls,
                          "--turbo-fast-api-calls", "--no-turbo-fast-api-calls");
   SetV8FlagsIfOverridden(features::kV8MegaDomIC, "--mega-dom-ic",
@@ -549,7 +552,7 @@ void SetFlags(IsolateHolder::ScriptMode mode,
 
 // static
 void V8Initializer::Initialize(IsolateHolder::ScriptMode mode,
-                               const std::string js_command_line_flags,
+                               const std::string& js_command_line_flags,
                                v8::OOMErrorCallback oom_error_callback) {
   static bool v8_is_initialized = false;
   if (v8_is_initialized)

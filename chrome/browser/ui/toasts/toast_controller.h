@@ -17,6 +17,7 @@
 #include "chrome/browser/ui/exclusive_access/fullscreen_observer.h"
 #include "chrome/browser/ui/omnibox/omnibox_tab_helper.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/base/models/image_model.h"
 #include "ui/views/widget/widget_observer.h"
 
 class BrowserWindowInterface;
@@ -46,6 +47,7 @@ struct ToastParams {
   ToastId toast_id_;
   std::vector<std::u16string> body_string_replacement_params_;
   std::vector<std::u16string> action_button_string_replacement_params_;
+  std::optional<ui::ImageModel> image_override_ = std::nullopt;
 };
 
 class ToastController : public views::WidgetObserver,
@@ -91,6 +93,8 @@ class ToastController : public views::WidgetObserver,
 
   views::Widget* GetToastWidgetForTesting() { return toast_widget_; }
 
+  toasts::ToastView* GetToastViewForTesting() { return toast_view_; }
+
   base::OneShotTimer* GetToastCloseTimerForTesting();
 
  private:
@@ -104,6 +108,7 @@ class ToastController : public views::WidgetObserver,
                               std::vector<std::u16string> replacement);
   void ClearTabScopedToasts();
   void UpdateToastWidgetVisibility(bool show_toast_widget);
+  bool ShouldRenderToastOverWebContents();
 
   // FullscreenObserver:
   void OnFullscreenStateChanged() override;

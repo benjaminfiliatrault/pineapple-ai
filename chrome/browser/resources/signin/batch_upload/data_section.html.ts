@@ -11,9 +11,7 @@ export function getHtml(this: DataSectionElement) {
   return html`
     <div class="data-section">
       <div class="data-section-header">
-        <div id="sectionTitle">
-          ${this.getSectionTitle_()}
-        </div>
+        <h2 id="sectionTitle">${this.title_}</h2>
         <cr-expand-button id="expandButton" no-hover
             ?hidden="${this.disabled_}"
             ?expanded="${this.expanded_}"
@@ -33,11 +31,20 @@ export function getHtml(this: DataSectionElement) {
             <cr-checkbox class="item-checkbox"
                 data-id="${item.id}"
                 ?checked="${this.isCheckboxChecked_(item.id)}"
-                @change="${this.onCheckedChanged_}"/>
+                @change="${this.onCheckedChanged_}">
+            </cr-checkbox>
             <div class="data-item-content">
-              <img class="item-icon" alt="Item icon" src="${item.iconUrl}">
-              <div class="item-title">${item.title}</div>
-              <div class="item-subtitle">${item.subtitle}</div>
+              <img class="item-icon"
+                  ?hidden="${this.isStrEmpty_(item.iconUrl)}"
+                  alt="Item icon" src="${this.getFaviconUrl_(item.iconUrl)}">
+              <div class="item-info">
+                <div class="item-title text-elide">
+                  ${item.title}
+                </div>
+                <div class="item-subtitle text-elide">
+                  ${item.subtitle}
+                </div>
+              </div>
             </div>
           </div>
           `)}

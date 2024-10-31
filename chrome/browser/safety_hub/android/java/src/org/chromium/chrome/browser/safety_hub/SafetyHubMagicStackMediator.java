@@ -19,7 +19,7 @@ import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.safe_browsing.settings.SafeBrowsingSettingsFragment;
 import org.chromium.chrome.browser.safety_hub.SafetyHubMetricUtils.ExternalInteractions;
-import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
+import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
@@ -161,12 +161,11 @@ class SafetyHubMagicStackMediator implements TabModelSelectorObserver, MagicStac
     private void bindRevokedPermissionsView(@NonNull String title) {
         mModel.set(
                 SafetyHubMagicStackViewProperties.HEADER,
-                mContext.getResources().getString(R.string.safety_hub_magic_stack_module_name));
+                mContext.getString(R.string.safety_hub_magic_stack_module_name));
         mModel.set(SafetyHubMagicStackViewProperties.TITLE, title);
         mModel.set(
                 SafetyHubMagicStackViewProperties.BUTTON_TEXT,
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_safe_state_button_text));
+                mContext.getString(R.string.safety_hub_magic_stack_safe_state_button_text));
         mModel.set(
                 SafetyHubMagicStackViewProperties.ICON_DRAWABLE,
                 SettingsUtils.getTintedIcon(
@@ -177,8 +176,8 @@ class SafetyHubMagicStackMediator implements TabModelSelectorObserver, MagicStac
                 SafetyHubMagicStackViewProperties.BUTTON_ON_CLICK_LISTENER,
                 (view) -> {
                     mShowSurveyCallback.onResult(MagicStackEntry.ModuleType.REVOKED_PERMISSIONS);
-                    SettingsLauncherFactory.createSettingsLauncher()
-                            .launchSettingsActivity(mContext, SafetyHubFragment.class);
+                    SettingsNavigationFactory.createSettingsNavigation()
+                            .startSettings(mContext, SafetyHubFragment.class);
                     recordExternalInteractions(ExternalInteractions.OPEN_FROM_MAGIC_STACK);
                 });
     }
@@ -186,16 +185,14 @@ class SafetyHubMagicStackMediator implements TabModelSelectorObserver, MagicStac
     private void bindNotificationReviewView(@NonNull String summary) {
         mModel.set(
                 SafetyHubMagicStackViewProperties.HEADER,
-                mContext.getResources().getString(R.string.safety_hub_magic_stack_module_name));
+                mContext.getString(R.string.safety_hub_magic_stack_module_name));
         mModel.set(
                 SafetyHubMagicStackViewProperties.TITLE,
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_notifications_title));
+                mContext.getString(R.string.safety_hub_magic_stack_notifications_title));
         mModel.set(SafetyHubMagicStackViewProperties.SUMMARY, summary);
         mModel.set(
                 SafetyHubMagicStackViewProperties.BUTTON_TEXT,
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_safe_state_button_text));
+                mContext.getString(R.string.safety_hub_magic_stack_safe_state_button_text));
         mModel.set(
                 SafetyHubMagicStackViewProperties.ICON_DRAWABLE,
                 SettingsUtils.getTintedIcon(
@@ -207,8 +204,8 @@ class SafetyHubMagicStackMediator implements TabModelSelectorObserver, MagicStac
                 (view) -> {
                     mShowSurveyCallback.onResult(
                             MagicStackEntry.ModuleType.NOTIFICATION_PERMISSIONS);
-                    SettingsLauncherFactory.createSettingsLauncher()
-                            .launchSettingsActivity(mContext, SafetyHubFragment.class);
+                    SettingsNavigationFactory.createSettingsNavigation()
+                            .startSettings(mContext, SafetyHubFragment.class);
                     recordExternalInteractions(ExternalInteractions.OPEN_FROM_MAGIC_STACK);
                 });
     }
@@ -216,16 +213,14 @@ class SafetyHubMagicStackMediator implements TabModelSelectorObserver, MagicStac
     private void bindSafeBrowsingView(@NonNull String summary) {
         mModel.set(
                 SafetyHubMagicStackViewProperties.HEADER,
-                mContext.getResources().getString(R.string.safety_hub_magic_stack_module_name));
+                mContext.getString(R.string.safety_hub_magic_stack_module_name));
         mModel.set(
                 SafetyHubMagicStackViewProperties.TITLE,
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_safe_browsing_title));
+                mContext.getString(R.string.safety_hub_magic_stack_safe_browsing_title));
         mModel.set(SafetyHubMagicStackViewProperties.SUMMARY, summary);
         mModel.set(
                 SafetyHubMagicStackViewProperties.BUTTON_TEXT,
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_safe_browsing_button_text));
+                mContext.getString(R.string.safety_hub_magic_stack_safe_browsing_button_text));
         mModel.set(
                 SafetyHubMagicStackViewProperties.ICON_DRAWABLE,
                 SettingsUtils.getTintedIcon(
@@ -236,8 +231,8 @@ class SafetyHubMagicStackMediator implements TabModelSelectorObserver, MagicStac
                 SafetyHubMagicStackViewProperties.BUTTON_ON_CLICK_LISTENER,
                 (view) -> {
                     mShowSurveyCallback.onResult(MagicStackEntry.ModuleType.SAFE_BROWSING);
-                    SettingsLauncherFactory.createSettingsLauncher()
-                            .launchSettingsActivity(mContext, SafeBrowsingSettingsFragment.class);
+                    SettingsNavigationFactory.createSettingsNavigation()
+                            .startSettings(mContext, SafeBrowsingSettingsFragment.class);
                     recordExternalInteractions(
                             ExternalInteractions.OPEN_SAFE_BROWSING_FROM_MAGIC_STACK);
                     mMagicStackBridge.dismissSafeBrowsingModule();
@@ -248,16 +243,14 @@ class SafetyHubMagicStackMediator implements TabModelSelectorObserver, MagicStac
     private void bindCompromisedPasswordsView(String summary) {
         mModel.set(
                 SafetyHubMagicStackViewProperties.HEADER,
-                mContext.getResources().getString(R.string.safety_hub_magic_stack_module_name));
+                mContext.getString(R.string.safety_hub_magic_stack_module_name));
         mModel.set(
                 SafetyHubMagicStackViewProperties.TITLE,
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_compromised_passwords_title));
+                mContext.getString(R.string.safety_hub_magic_stack_compromised_passwords_title));
         mModel.set(SafetyHubMagicStackViewProperties.SUMMARY, summary);
         mModel.set(
                 SafetyHubMagicStackViewProperties.BUTTON_TEXT,
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_compromised_passwords_title));
+                mContext.getString(R.string.safety_hub_magic_stack_compromised_passwords_title));
         mModel.set(
                 SafetyHubMagicStackViewProperties.ICON_DRAWABLE,
                 SettingsUtils.getTintedIcon(

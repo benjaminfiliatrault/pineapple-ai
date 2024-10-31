@@ -30,6 +30,19 @@ void EmptyDataSharingService::AddObserver(Observer* observer) {}
 
 void EmptyDataSharingService::RemoveObserver(Observer* observer) {}
 
+bool EmptyDataSharingService::IsGroupDataModelLoaded() {
+  return false;
+}
+
+std::optional<GroupData> EmptyDataSharingService::ReadGroup(
+    const GroupId& group_id) {
+  return std::nullopt;
+}
+
+std::set<GroupData> EmptyDataSharingService::ReadAllGroups() {
+  return std::set<GroupData>();
+}
+
 void EmptyDataSharingService::ReadAllGroups(
     base::OnceCallback<void(const GroupsDataSetOrFailureOutcome&)> callback) {}
 
@@ -60,13 +73,18 @@ void EmptyDataSharingService::RemoveMember(
     const std::string& member_email,
     base::OnceCallback<void(PeopleGroupActionOutcome)> callback) {}
 
+void EmptyDataSharingService::LeaveGroup(
+    const GroupId& group_id,
+    base::OnceCallback<void(PeopleGroupActionOutcome)> callback) {}
+
 bool EmptyDataSharingService::ShouldInterceptNavigationForShareURL(
     const GURL& url) {
   return false;
 }
 
 void EmptyDataSharingService::HandleShareURLNavigationIntercepted(
-    const GURL& url) {}
+    const GURL& url,
+    std::unique_ptr<ShareURLInterceptionContext> context) {}
 
 std::unique_ptr<GURL> EmptyDataSharingService::GetDataSharingURL(
     const GroupData& group_data) {
@@ -86,6 +104,9 @@ void EmptyDataSharingService::GetSharedEntitiesPreview(
     const GroupToken& group_token,
     base::OnceCallback<void(const SharedDataPreviewOrFailureOutcome&)>
         callback) {}
+
+void EmptyDataSharingService::SetUIDelegate(
+    std::unique_ptr<DataSharingUIDelegate> ui_delegate) {}
 
 DataSharingUIDelegate* EmptyDataSharingService::GetUIDelegate() {
   return nullptr;

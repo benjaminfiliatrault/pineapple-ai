@@ -15,10 +15,10 @@ import org.jni_zero.JNINamespace;
 
 import org.chromium.base.Callback;
 import org.chromium.components.data_sharing.configs.AvatarConfig;
+import org.chromium.components.data_sharing.configs.DataSharingAvatarBitmapConfig;
 import org.chromium.components.data_sharing.configs.DataSharingCreateUiConfig;
 import org.chromium.components.data_sharing.configs.DataSharingJoinUiConfig;
 import org.chromium.components.data_sharing.configs.DataSharingManageUiConfig;
-import org.chromium.components.data_sharing.configs.GroupMemberConfig;
 import org.chromium.components.data_sharing.configs.MemberPickerConfig;
 import org.chromium.url.GURL;
 
@@ -86,22 +86,6 @@ public interface DataSharingUIDelegate {
             AvatarConfig config) {}
 
     /**
-     * Method to create group member list view.
-     *
-     * @param activity Used to associate with the given view group.
-     * @param view The UI will be drawn inside the provided view.
-     * @param groupId Used to associate the view with the group members.
-     * @param tokenSecret Used to authenticate the user for whom the group member list is shown.
-     * @param config Used to set properties for the API.
-     */
-    default void createGroupMemberListView(
-            @NonNull Activity activity,
-            @NonNull ViewGroup view,
-            String groupId,
-            String tokenSecret,
-            GroupMemberConfig config) {}
-
-    /**
      * Handle the intercepted URL to show relevant data sharing group information.
      *
      * @param url The URL of the current share action.
@@ -152,4 +136,11 @@ public interface DataSharingUIDelegate {
      * @param sessionId Used to identify the flow to be destroyed.
      */
     default void destroyFlow(String sessionId) {}
+
+    /**
+     * Method to get bitmap for an avatar.
+     *
+     * @param avatarBitmapConfig Used to set properties for getting bitmap for an avatar.
+     */
+    default void getAvatarBitmap(DataSharingAvatarBitmapConfig avatarBitmapConfig) {}
 }

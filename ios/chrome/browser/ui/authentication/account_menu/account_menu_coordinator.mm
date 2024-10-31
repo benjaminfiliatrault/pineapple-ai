@@ -14,6 +14,7 @@
 #import "components/sync/service/sync_service_utils.h"
 #import "components/sync/service/sync_user_settings.h"
 #import "components/trusted_vault/trusted_vault_server_constants.h"
+#import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/browser/policy/model/management_state.h"
 #import "ios/chrome/browser/policy/ui_bundled/management_util.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_service.h"
@@ -23,7 +24,6 @@
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
-#import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
@@ -38,14 +38,19 @@
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/account_menu/account_menu_constants.h"
-#import "ios/chrome/browser/ui/authentication/account_menu/account_menu_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/authentication/account_menu/account_menu_mediator.h"
 #import "ios/chrome/browser/ui/authentication/account_menu/account_menu_mediator_delegate.h"
 #import "ios/chrome/browser/ui/authentication/account_menu/account_menu_view_controller.h"
 #import "ios/chrome/browser/ui/authentication/authentication_flow.h"
+#import "ios/chrome/browser/ui/authentication/signin/add_account_signin/add_account_signin_coordinator.h"
+#import "ios/chrome/browser/ui/authentication/signin/signin_completion_info.h"
+#import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
+#import "ios/chrome/browser/ui/authentication/signin/signin_coordinator+protected.h"
+#import "ios/chrome/browser/ui/authentication/signin/signin_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/signout_action_sheet/signout_action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/scoped_ui_blocker/scoped_ui_blocker.h"
-#import "ios/chrome/browser/ui/settings/google_services/manage_accounts/accounts_coordinator.h"
+#import "ios/chrome/browser/ui/settings/google_services/manage_accounts/manage_accounts_coordinator.h"
+#import "ios/chrome/browser/ui/settings/google_services/manage_accounts/manage_accounts_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/settings/settings_controller_protocol.h"
 #import "ios/chrome/browser/ui/settings/settings_root_view_controlling.h"
 #import "ios/chrome/browser/ui/settings/sync/sync_encryption_passphrase_table_view_controller.h"
@@ -53,10 +58,9 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
-@interface AccountMenuCoordinator () <
-    AccountMenuMediatorDelegate,
-    UIAdaptivePresentationControllerDelegate,
-    UINavigationControllerDelegate>
+@interface AccountMenuCoordinator () <AccountMenuMediatorDelegate,
+                                      ManageAccountsCoordinatorDelegate,
+                                      UIAdaptivePresentationControllerDelegate>
 
 // The view controller.
 @property(nonatomic, strong) AccountMenuViewController* viewController;
@@ -74,7 +78,7 @@
   SystemIdentityManager::DismissViewCallback
       _accountDetailsControllerDismissCallback;
   // The coordinators for the "Edit account list"
-  AccountsCoordinator* _accountsCoordinator;
+  ManageAccountsCoordinator* _manageAccountsCoordinator;
   // The coordinator for the action sheet to sign out.
   SignoutActionSheetCoordinator* _signoutActionSheetCoordinator;
   raw_ptr<syncer::SyncService> _syncService;
@@ -84,14 +88,22 @@
   // ApplicationCommands handler.
   id<ApplicationCommands> _applicationHandler;
   raw_ptr<ChromeAccountManagerService> _accountManagerService;
-  // BrowserCoordinatorCommands to show the activity indicator when the view
-  // controller is dismissed.
-  id<BrowserCoordinatorCommands> _browserCoordinatorCommands;
   // Callback to hide the activity overlay.
   base::ScopedClosureRunner _activityOverlayCallback;
+  // The add account coordinator if it’s open. It may be presented by the Manage
+  // Account’s coordinator view controller.
+  SigninCoordinator* _addAccountCoordinator;
 
   // Block the UI when the identity removal or switch is in progress.
   std::unique_ptr<ScopedUIBlocker> _UIBlocker;
+}
+
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+                                   browser:(Browser*)browser {
+  return [super initWithBaseViewController:viewController
+                                   browser:browser
+                               accessPoint:signin_metrics::AccessPoint::
+                                               ACCESS_POINT_ACCOUNT_MENU];
 }
 
 - (void)dealloc {
@@ -111,15 +123,10 @@
   _applicationHandler = HandlerForProtocol(self.browser->GetCommandDispatcher(),
                                            ApplicationCommands);
 
-  _browserCoordinatorCommands = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), BrowserCoordinatorCommands);
-
-  _viewController = [[AccountMenuViewController alloc]
-      initWithStyle:UITableViewStyleInsetGrouped];
+  _viewController = [[AccountMenuViewController alloc] init];
 
   _navigationController = [[UINavigationController alloc]
       initWithRootViewController:_viewController];
-  _navigationController.delegate = self;
 
   _navigationController.modalPresentationStyle = UIModalPresentationPopover;
   _navigationController.popoverPresentationController.sourceView =
@@ -153,29 +160,24 @@
   if (!_mediator) {
     return;
   }
-  if (!_accountDetailsControllerDismissCallback.is_null()) {
-    std::move(_accountDetailsControllerDismissCallback).Run(/*animated=*/false);
-  }
-  _activityOverlayCallback.RunAndReset();
-  [self unblockOtherScene];
-  [self stopAccountsCoordinator];
-  _authenticationService = nil;
-  _browserCoordinatorCommands = nil;
-  _identityManager = nil;
-  _prefService = nil;
-  [self dismissTheViewController];
   [_syncEncryptionPassphraseTableViewController settingsWillBeDismissed];
   _syncEncryptionPassphraseTableViewController = nil;
   [_syncEncryptionTableViewController settingsWillBeDismissed];
   _syncEncryptionTableViewController = nil;
+
+  // Sets to nil the account menu objects.
   [_mediator disconnect];
   _mediator.delegate = nil;
   _mediator = nil;
+
+  // Sets the service to nil.
+  _authenticationService = nil;
+  _identityManager = nil;
+  _prefService = nil;
   _applicationHandler = nil;
   _syncService = nullptr;
   _accountManagerService = nullptr;
-  [self stopSignoutActionSheetCoordinator];
-  [self stopAccountsCoordinator];
+  [self unblockOtherScenes];
   [super stop];
 }
 
@@ -183,8 +185,11 @@
 
 - (void)presentationControllerDidDismiss:
     (UIPresentationController*)presentationController {
-  [self.delegate acountMenuCoordinatorShouldStop:self];
-  _navigationController = nil;
+  // We assume the dismiss was done by the user.
+  self.mediator.signinCoordinatorResult = SigninCoordinatorResultCanceledByUser;
+  // UIShutdownNoDismiss because the UI is already dismissed.
+  [self interruptWithAction:SigninCoordinatorInterrupt::UIShutdownNoDismiss
+                 completion:nil];
 }
 
 #pragma mark - AccountMenuMediatorDelegate
@@ -206,136 +211,135 @@
                   weakSelf));
 }
 
-- (void)didTapEditAccountList {
-  _accountsCoordinator = [[AccountsCoordinator alloc]
+- (void)didTapManageAccounts {
+  CHECK(!_manageAccountsCoordinator, base::NotFatalUntil::M133);
+  _manageAccountsCoordinator = [[ManageAccountsCoordinator alloc]
       initWithBaseViewController:_navigationController
                          browser:self.browser
        closeSettingsOnAddAccount:NO];
-  _accountsCoordinator.signoutDismissalByParentCoordinator = YES;
-  [_accountsCoordinator start];
+  _manageAccountsCoordinator.delegate = self;
+  _manageAccountsCoordinator.signoutDismissalByParentCoordinator = YES;
+  [_manageAccountsCoordinator start];
 }
 
 - (void)signOutFromTargetRect:(CGRect)targetRect
-                     callback:(void (^)(BOOL))callback {
+                    forSwitch:(BOOL)forSwitch
+                   completion:(void (^)(BOOL))completion {
   if (!_authenticationService->HasPrimaryIdentity(
           signin::ConsentLevel::kSignin)) {
     // This could happen in very rare cases, if the account somehow got removed
     // after the accounts menu was created.
     return;
   }
+  signin_metrics::ProfileSignout metricSignOut =
+      forSwitch
+          ? signin_metrics::ProfileSignout::kChangeAccountInAccountMenu
+          : signin_metrics::ProfileSignout::kUserClickedSignoutInAccountMenu;
   _signoutActionSheetCoordinator = [[SignoutActionSheetCoordinator alloc]
       initWithBaseViewController:_viewController
                          browser:self.browser
                             rect:targetRect
                             view:_viewController.view
         forceSnackbarOverToolbar:YES
-                      withSource:signin_metrics::ProfileSignout::
-                                     kUserClickedSignoutInAccountMenu];
+                      withSource:metricSignOut];
+  _signoutActionSheetCoordinator.accountSwitch = forSwitch;
   __weak __typeof(self) weakSelf = self;
   _signoutActionSheetCoordinator.signoutCompletion = ^(BOOL success) {
     [weakSelf stopSignoutActionSheetCoordinator];
-    if (success) {
-      [weakSelf.delegate acountMenuCoordinatorShouldStop:weakSelf];
-    }
-    if (callback) {
-      callback(success);
+    if (completion) {
+      completion(success);
     }
   };
   [_signoutActionSheetCoordinator start];
 }
 
-- (void)didTapAddAccount:(ShowSigninCommandCompletionCallback)callback {
-  ShowSigninCommand* command = [[ShowSigninCommand alloc]
-      initWithOperation:AuthenticationOperation::kAddAccount
-               identity:nil
-            accessPoint:signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU
-            promoAction:signin_metrics::PromoAction::
-                            PROMO_ACTION_NO_SIGNIN_PROMO
-               callback:callback];
-  [_applicationHandler showSignin:command
-               baseViewController:_navigationController];
+- (void)didTapAddAccountWithCompletion:
+    (ShowSigninCommandCompletionCallback)completion {
+  [self openAddAccountWithBaseViewController:_navigationController
+                                  completion:completion];
 }
 
 - (void)mediatorWantsToBeDismissed:(AccountMenuMediator*)mediator {
   CHECK_EQ(mediator, _mediator);
-  [self.delegate acountMenuCoordinatorShouldStop:self];
+  [self interruptWithAction:SigninCoordinatorInterrupt::DismissWithAnimation
+                 completion:nil];
 }
 
-// Requests to dismiss the account menu view. Keeps the coordinator open and
-// show a spinner instead.
-- (void)mediatorWantsToDismissTheView:(AccountMenuMediator*)mediator {
-  CHECK_EQ(mediator, _mediator);
-  CHECK(_viewController);
-  [self dismissTheViewController];
-  _activityOverlayCallback = [_browserCoordinatorCommands showActivityOverlay];
+- (AuthenticationFlow*)
+    triggerSigninWithSystemIdentity:(id<SystemIdentity>)identity
+                         completion:
+                             (signin_ui::SigninCompletionCallback)completion {
+  AuthenticationFlow* authenticationFlow = [[AuthenticationFlow alloc]
+               initWithBrowser:self.browser
+                      identity:identity
+                   accessPoint:signin_metrics::AccessPoint::
+                                   ACCESS_POINT_ACCOUNT_MENU
+             postSignInActions:PostSignInActionSet({PostSignInAction::kNone})
+      presentingViewController:_navigationController];
+
+  [authenticationFlow
+      startSignInWithCompletion:^(SigninCoordinatorResult result) {
+        if (completion) {
+          completion(result);
+        }
+      }];
+  return authenticationFlow;
 }
 
-- (void)triggerAccountSwitchWithTargetRect:(CGRect)targetRect
-                               newIdentity:(id<SystemIdentity>)newIdentity
-           viewWillBeDismissedAfterSignout:(BOOL)viewWillBeDismissedAfterSignout
-                    userDecisionCompletion:(void (^)())userDecisionCompletion
-                          signInCompletion:(ShowSigninCommandCompletionCallback)
-                                               signInCompletion {
-  CHECK(
-      _authenticationService->HasPrimaryIdentity(signin::ConsentLevel::kSignin),
-      base::NotFatalUntil::M130)
-      << "There must be a signed-in account to view the menu and be able to "
-         "switch accounts.";
-
-  [_applicationHandler
-      switchAccountWithBaseViewController:_navigationController
-                              newIdentity:newIdentity
-                                     rect:targetRect
-                           rectAnchorView:_viewController.view
-          viewWillBeDismissedAfterSignout:viewWillBeDismissedAfterSignout
-                   userDecisionCompletion:userDecisionCompletion
-                         signInCompletion:signInCompletion];
+- (void)triggerAccountSwitchSnackbarWithIdentity:
+    (id<SystemIdentity>)systemIdentity {
+  UIImage* avatar = _accountManagerService->GetIdentityAvatarWithIdentity(
+      systemIdentity, IdentityAvatarSize::Regular);
+  ManagementState managementState = GetManagementState(
+      _identityManager, _authenticationService, _prefService);
+  MDCSnackbarMessage* snackbarTitle = [[IdentitySnackbarMessage alloc]
+      initWithName:systemIdentity.userGivenName
+             email:systemIdentity.userEmail
+            avatar:avatar
+           managed:managementState.is_profile_managed()];
+  CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
+  id<SnackbarCommands> snackbarCommandsHandler =
+      HandlerForProtocol(dispatcher, SnackbarCommands);
+  [snackbarCommandsHandler showSnackbarMessageOverBrowserToolbar:snackbarTitle];
 }
 
-- (void)blockOtherScene {
+- (BOOL)blockOtherScenesIfPossible {
   SceneState* sceneState = self.browser->GetSceneState();
+  if (sceneState.isUIBlocked) {
+    // This could occur due to race condition with multiple windows and
+    // simultaneous taps. See crbug.com/368310663.
+    return NO;
+  }
   _UIBlocker = std::make_unique<ScopedUIBlocker>(sceneState);
+  return YES;
 }
 
-- (void)unblockOtherScene {
+- (void)unblockOtherScenes {
   _UIBlocker.reset();
 }
 
 #pragma mark - SyncErrorSettingsCommandHandler
 
 - (void)openPassphraseDialogWithModalPresentation:(BOOL)presentModally {
-  if (presentModally) {
-    _syncEncryptionPassphraseTableViewController =
-        [[SyncEncryptionPassphraseTableViewController alloc]
-            initWithBrowser:self.browser];
-    _syncEncryptionPassphraseTableViewController.presentModally = YES;
-    UINavigationController* navigationController =
-        [[UINavigationController alloc]
-            initWithRootViewController:
-                _syncEncryptionPassphraseTableViewController];
-    navigationController.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self configureHandlersForRootViewController:
-              _syncEncryptionPassphraseTableViewController];
-    [_navigationController presentViewController:navigationController
-                                        animated:YES
-                                      completion:nil];
+  CHECK(presentModally);
+  SceneState* sceneState = self.browser->GetSceneState();
+  if (sceneState.isUIBlocked) {
+    // This could occur due to race condition with multiple windows and
+    // simultaneous taps. See crbug.com/368310663.
     return;
   }
-  // If there was a sync error, prompt the user to enter the passphrase.
-  // Otherwise, show the full encryption options.
-  UIViewController<SettingsRootViewControlling>* controllerToPush;
-  if (_syncService->GetUserSettings()->IsPassphraseRequired()) {
-    controllerToPush = _syncEncryptionPassphraseTableViewController =
-        [[SyncEncryptionPassphraseTableViewController alloc]
-            initWithBrowser:self.browser];
-  } else {
-    controllerToPush = _syncEncryptionTableViewController =
-        [[SyncEncryptionTableViewController alloc]
-            initWithBrowser:self.browser];
-  }
-
-  [self configureHandlersForRootViewController:controllerToPush];
-  [_navigationController pushViewController:controllerToPush animated:YES];
+  _syncEncryptionPassphraseTableViewController =
+      [[SyncEncryptionPassphraseTableViewController alloc]
+          initWithBrowser:self.browser];
+  _syncEncryptionPassphraseTableViewController.presentModally = YES;
+  UINavigationController* navigationController = [[UINavigationController alloc]
+      initWithRootViewController:_syncEncryptionPassphraseTableViewController];
+  navigationController.modalPresentationStyle = UIModalPresentationFormSheet;
+  [self configureHandlersForRootViewController:
+            _syncEncryptionPassphraseTableViewController];
+  [_navigationController presentViewController:navigationController
+                                      animated:YES
+                                    completion:nil];
 }
 
 - (void)openTrustedVaultReauthForFetchKeys {
@@ -390,11 +394,81 @@
                baseViewController:_navigationController];
 }
 
+#pragma mark - SigninCoordinator
+
+- (void)interruptWithAction:(SigninCoordinatorInterrupt)action
+                 completion:(ProceduralBlock)completion {
+  __weak __typeof(self) weakSelf = self;
+  ProceduralBlock childrenCompletion = ^() {
+    [weakSelf
+        runCompletionWithSigninResult:weakSelf.mediator.signinCoordinatorResult
+                       completionInfo:weakSelf.mediator.signinCompletionInfo];
+    if (completion) {
+      completion();
+    }
+  };
+  [self stopChildrenAndViewControllerWithAction:action
+                                     completion:childrenCompletion];
+}
+
+#pragma mark - ManageAccountsCoordinatorDelegate
+
+- (void)manageAccountsCoordinatorWantsToBeStopped:
+    (ManageAccountsCoordinator*)coordinator {
+  CHECK_EQ(coordinator, _manageAccountsCoordinator, base::NotFatalUntil::M133);
+  [self stopManageAccountsCoordinator];
+}
+
+- (void)manageAccountsCoordinator:
+            (ManageAccountsCoordinator*)manageAccountsCoordinator
+    didRequestAddAccountWithBaseViewController:(UIViewController*)viewController
+                                    completion:
+                                        (ShowSigninCommandCompletionCallback)
+                                            completion {
+  CHECK_EQ(manageAccountsCoordinator, _manageAccountsCoordinator);
+  [self openAddAccountWithBaseViewController:viewController
+                                  completion:completion];
+}
+
 #pragma mark - Private
 
-- (void)stopAccountsCoordinator {
-  [_accountsCoordinator stop];
-  _accountsCoordinator = nil;
+// Opens the add account coordinator on top of `baseViewController`.
+- (void)openAddAccountWithBaseViewController:baseViewController
+                                  completion:
+                                      (ShowSigninCommandCompletionCallback)
+                                          completion {
+  _addAccountCoordinator = [SigninCoordinator
+      addAccountCoordinatorWithBaseViewController:baseViewController
+                                          browser:self.browser
+                                      accessPoint:self.accessPoint];
+  __weak __typeof(self) weakSelf = self;
+  _addAccountCoordinator.signinCompletion =
+      ^(SigninCoordinatorResult signinResult,
+        SigninCompletionInfo* signinCompletionInfo) {
+        [weakSelf addAccountCompletionWithSigninResult:signinResult
+                                        completionInfo:signinCompletionInfo
+                                            completion:completion];
+      };
+  [_addAccountCoordinator start];
+}
+
+// Clean up the add account coordinator.
+- (void)
+    addAccountCompletionWithSigninResult:(SigninCoordinatorResult)signinResult
+                          completionInfo:(SigninCompletionInfo*)completionInfo
+                              completion:(ShowSigninCommandCompletionCallback)
+                                             completion {
+  [_addAccountCoordinator stop];
+  _addAccountCoordinator = nil;
+  if (completion) {
+    completion(signinResult, completionInfo);
+  }
+}
+
+- (void)stopManageAccountsCoordinator {
+  [_manageAccountsCoordinator stop];
+  _manageAccountsCoordinator.delegate = nil;
+  _manageAccountsCoordinator = nil;
 }
 
 - (void)resetAccountDetailsControllerDismissCallback {
@@ -416,17 +490,75 @@
   _signoutActionSheetCoordinator = nil;
 }
 
-// Dismisses the view controller.
-- (void)dismissTheViewController {
+// Stops all children, then dismiss the view controller, then execute
+// `completion`. If `dismiss` is YES, dismiss the add account coordinator if it
+// is present.
+- (void)stopChildrenAndViewControllerWithAction:
+            (SigninCoordinatorInterrupt)action
+                                     completion:(ProceduralBlock)completion {
+  // Stopping all potentially open children views.
+  if (!_accountDetailsControllerDismissCallback.is_null()) {
+    std::move(_accountDetailsControllerDismissCallback).Run(/*animated=*/false);
+  }
+  [self stopSignoutActionSheetCoordinator];
+  __weak __typeof(self) weakSelf = self;
+  ProceduralBlock dismissAndCompletion = ^() {
+    // Add Account coordinator should be stopped before the Manage Accounts
+    // Coordinator, as the former may be presented by the latter.
+    [weakSelf stopManageAccountsCoordinator];
+    [weakSelf dismissViewControllerAction:action completion:completion];
+  };
+  if (_addAccountCoordinator) {
+    SigninCoordinatorInterrupt subviewAction =
+        (action == SigninCoordinatorInterrupt::UIShutdownNoDismiss)
+            ? SigninCoordinatorInterrupt::UIShutdownNoDismiss
+            : SigninCoordinatorInterrupt::DismissWithoutAnimation;
+    [_addAccountCoordinator interruptWithAction:subviewAction
+                                     completion:dismissAndCompletion];
+  } else {
+    dismissAndCompletion();
+  }
+}
+
+// Unplugs the view and navigation controller. Dismisses the navigation
+// controller as specified by the action.
+- (void)dismissViewControllerAction:(SigninCoordinatorInterrupt)action
+                         completion:(void (^)())completion {
+  if (!_navigationController) {
+    // The view controller was already dismissed. We can directly call
+    // completion.
+    if (completion) {
+      completion();
+    }
+    return;
+  }
+  _activityOverlayCallback.RunAndReset();
   _mediator.consumer = nil;
   _viewController.dataSource = nil;
   _viewController.mutator = nil;
-  [_navigationController.presentingViewController
-      dismissViewControllerAnimated:YES
-                         completion:nil];
-  _navigationController.delegate = nil;
+  UINavigationController* navigationController = _navigationController;
   _navigationController = nil;
   _viewController = nil;
+  switch (action) {
+    case SigninCoordinatorInterrupt::UIShutdownNoDismiss: {
+      if (completion) {
+        completion();
+      }
+      break;
+    }
+    case SigninCoordinatorInterrupt::DismissWithoutAnimation: {
+      [navigationController.presentingViewController
+          dismissViewControllerAnimated:NO
+                             completion:completion];
+      break;
+    }
+    case SigninCoordinatorInterrupt::DismissWithAnimation: {
+      [navigationController.presentingViewController
+          dismissViewControllerAnimated:YES
+                             completion:completion];
+      break;
+    }
+  }
 }
 
 @end

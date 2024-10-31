@@ -62,6 +62,14 @@ void DataSharingPageHandler::GetShareLink(const std::string& group_id,
       data_sharing::GetShareLink(group_id, access_token, GetProfile()));
 }
 
+void DataSharingPageHandler::GetTabGroupPreview(
+    const std::string& group_id,
+    const std::string& access_token,
+    GetTabGroupPreviewCallback callback) {
+  data_sharing::GetTabGroupPreview(group_id, access_token, GetProfile(),
+                                   std::move(callback));
+}
+
 void DataSharingPageHandler::AssociateTabGroupWithGroupId(
     const std::string& tab_group_id,
     const std::string& group_id) {
@@ -132,4 +140,11 @@ void DataSharingPageHandler::ReadGroups(
     data_sharing::mojom::Page::ReadGroupsCallback callback) {
   CHECK(api_initialized_);
   page_->ReadGroups(group_ids, std::move(callback));
+}
+
+void DataSharingPageHandler::DeleteGroup(
+    std::string group_id,
+    data_sharing::mojom::Page::DeleteGroupCallback callback) {
+  CHECK(api_initialized_);
+  page_->DeleteGroup(group_id, std::move(callback));
 }

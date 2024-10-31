@@ -206,6 +206,7 @@ android_library("chrome_java_transit") {
     "javatests/src/org/chromium/chrome/test/transit/context_menu/LinkContextMenuFacility.java",
     "javatests/src/org/chromium/chrome/test/transit/dom_distiller/ReaderModeConditions.java",
     "javatests/src/org/chromium/chrome/test/transit/dom_distiller/ReaderModePreferencesDialog.java",
+    "javatests/src/org/chromium/chrome/test/transit/edge_to_edge/EdgeToEdgeBottomChinFacility.java",
     "javatests/src/org/chromium/chrome/test/transit/edge_to_edge/EdgeToEdgeConditions.java",
     "javatests/src/org/chromium/chrome/test/transit/edge_to_edge/ViewportFitCoverPageStation.java",
     "javatests/src/org/chromium/chrome/test/transit/hub/HubBaseStation.java",
@@ -271,7 +272,6 @@ android_library("chrome_java_transit") {
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/settings:test_support_java",
     "//chrome/browser/tab:java",
-    "//chrome/browser/tab_group:java",
     "//chrome/browser/tab_ui/android:java",
     "//chrome/browser/tabmodel:java",
     "//chrome/browser/ui/android/appmenu:java",
@@ -386,7 +386,6 @@ android_library("chrome_java_integration_test_support") {
     "//chrome/browser/signin/services/android:java",
     "//chrome/browser/sync/android:java",
     "//chrome/browser/tab:java",
-    "//chrome/browser/tab_group:java",
     "//chrome/browser/tabmodel:java",
     "//chrome/browser/thumbnail/generator:java",
     "//chrome/browser/ui/android/appmenu:java",
@@ -400,6 +399,7 @@ android_library("chrome_java_integration_test_support") {
     "//chrome/browser/ui/messages/android:java",
     "//chrome/browser/util:java",
     "//components/bookmarks/common/android:bookmarks_java",
+    "//components/browser_ui/device_lock/android:java",
     "//components/browser_ui/notifications/android:test_support_java",
     "//components/browser_ui/styles/android:java",
     "//components/browser_ui/widget/android:java",
@@ -498,7 +498,6 @@ android_library("chrome_java_test_support_common") {
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/signin/services/android:java",
     "//chrome/browser/tab:java",
-    "//chrome/browser/tab_group:java",
     "//chrome/browser/tabmodel:java",
     "//chrome/browser/thumbnail/generator:java",
     "//chrome/browser/ui/android/native_page:java",
@@ -547,19 +546,13 @@ android_library("chrome_java_test_support_common") {
 # separately.
 android_library("live_signin_test_util_java") {
   testonly = true
-  sources = [
-    "javatests/src/org/chromium/chrome/test/util/browser/signin/LiveSigninTestUtil.java",
+  sources = [ "javatests/src/org/chromium/chrome/test/util/browser/signin/LiveSigninTestUtil.java" ]
 
-    # The impl is listed here but then excluded via jar_excluded_patterns, so
-    # downstream targets can provide their own implementation.
-    "javatests/src/org/chromium/chrome/test/util/browser/signin/LiveSigninTestUtilImpl.java",
-  ]
-
-  jar_excluded_patterns = [ "*/LiveSigninTestUtilImpl.class" ]
   deps = [
     ":chrome_java_integration_test_support",
     "//base:base_java",
     "//base:base_java_test_support",
+    "//base:service_loader_java",
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/signin/services/android:java",
     "//components/signin/public/android:java",
@@ -567,11 +560,4 @@ android_library("live_signin_test_util_java") {
     "//content/public/test/android:content_java_test_support",
     "//third_party/hamcrest:hamcrest_java",
   ]
-}
-
-# Compiles the implementation of LiveSigninTestUtil for public targets.
-android_library("live_signin_test_util_public_impl_java") {
-  testonly = true
-  sources = [ "javatests/src/org/chromium/chrome/test/util/browser/signin/LiveSigninTestUtilImpl.java" ]
-  deps = [ ":live_signin_test_util_java" ]
 }

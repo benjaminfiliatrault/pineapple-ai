@@ -91,7 +91,9 @@ PrefetchRequest::PrefetchRequest(
     : url(url),
       network_anonymization_key(network_anonymization_key),
       destination(destination) {
-  DCHECK(base::FeatureList::IsEnabled(features::kLoadingPredictorPrefetch));
+  CHECK(
+      base::FeatureList::IsEnabled(features::kLoadingPredictorPrefetch) ||
+      base::FeatureList::IsEnabled(blink::features::kLCPPPrefetchSubresource));
   DCHECK(!network_anonymization_key.IsEmpty());
 }
 
@@ -652,6 +654,22 @@ std::optional<LcppStat> ResourcePrefetchPredictor::GetLcppStat(
     return std::nullopt;
   }
   return lcpp_data_->GetLcppStat(initiator_origin, url);
+}
+
+void ResourcePrefetchPredictor::GetPreconnectAndPrefetchRequest(
+    const std::optional<url::Origin>& initiator_origin,
+    const GURL& url,
+    PreconnectPrediction& prediction) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // The `initialization_state_` can be not `INITIALIZED` in the very first
+  // navigation on browser startup. Because this object is initialized on the
+  // first navigation.
+  if (initialization_state_ != INITIALIZED) {
+    return;
+  }
+
+  lcpp_data_->GetPreconnectAndPrefetchRequest(initiator_origin, url,
+                                              prediction);
 }
 
 void ResourcePrefetchPredictor::OnHistoryDeletions(

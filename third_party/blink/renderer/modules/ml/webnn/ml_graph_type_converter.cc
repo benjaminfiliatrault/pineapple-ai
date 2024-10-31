@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_recurrent_network_activation.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_reduce_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_resample_2d_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_scatter_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_split_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_transpose_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_triangular_options.h"
@@ -72,6 +73,10 @@ webnn::OperandDataType ToOperandDataType(
       return webnn::OperandDataType::kInt8;
     case blink::V8MLOperandDataType::Enum::kUint8:
       return webnn::OperandDataType::kUint8;
+    case blink::V8MLOperandDataType::Enum::kInt4:
+      return webnn::OperandDataType::kInt4;
+    case blink::V8MLOperandDataType::Enum::kUint4:
+      return webnn::OperandDataType::kUint4;
   }
 }
 
@@ -423,7 +428,7 @@ std::optional<base::span<const uint32_t>> GetOutputOperandPermutation(
   }
 }
 
-std::optional<base::span<const uint32_t>> GetConv2DFilterPermutation(
+std::optional<std::array<uint32_t, 4>> GetConv2DFilterPermutation(
     webnn::InputOperandLayout input_layout,
     bool depthwise,
     blink::V8MLConv2dFilterOperandLayout filter_layout) {
@@ -434,11 +439,11 @@ std::optional<base::span<const uint32_t>> GetConv2DFilterPermutation(
         case blink::V8MLConv2dFilterOperandLayout::Enum::kOihw:
           return std::nullopt;
         case blink::V8MLConv2dFilterOperandLayout::Enum::kHwio:
-          return base::span({3u, 2u, 0u, 1u});
+          return std::to_array<uint32_t>({3u, 2u, 0u, 1u});
         case blink::V8MLConv2dFilterOperandLayout::Enum::kOhwi:
-          return base::span({0u, 3u, 1u, 2u});
+          return std::to_array<uint32_t>({0u, 3u, 1u, 2u});
         case blink::V8MLConv2dFilterOperandLayout::Enum::kIhwo:
-          return base::span({3u, 0u, 1u, 2u});
+          return std::to_array<uint32_t>({3u, 0u, 1u, 2u});
       }
       break;
     case webnn::InputOperandLayout::kNhwc:
@@ -446,11 +451,11 @@ std::optional<base::span<const uint32_t>> GetConv2DFilterPermutation(
         // Mojo expects the IHWO layout.
         switch (filter_layout.AsEnum()) {
           case blink::V8MLConv2dFilterOperandLayout::Enum::kOihw:
-            return base::span({1u, 2u, 3u, 0u});
+            return std::to_array<uint32_t>({1u, 2u, 3u, 0u});
           case blink::V8MLConv2dFilterOperandLayout::Enum::kHwio:
-            return base::span({2u, 0u, 1u, 3u});
+            return std::to_array<uint32_t>({2u, 0u, 1u, 3u});
           case blink::V8MLConv2dFilterOperandLayout::Enum::kOhwi:
-            return base::span({3u, 1u, 2u, 0u});
+            return std::to_array<uint32_t>({3u, 1u, 2u, 0u});
           case blink::V8MLConv2dFilterOperandLayout::Enum::kIhwo:
             return std::nullopt;
         }
@@ -458,20 +463,20 @@ std::optional<base::span<const uint32_t>> GetConv2DFilterPermutation(
         switch (filter_layout.AsEnum()) {
           // Mojo expects the OHWI layout.
           case blink::V8MLConv2dFilterOperandLayout::Enum::kOihw:
-            return base::span({0u, 2u, 3u, 1u});
+            return std::to_array<uint32_t>({0u, 2u, 3u, 1u});
           case blink::V8MLConv2dFilterOperandLayout::Enum::kHwio:
-            return base::span({3u, 0u, 1u, 2u});
+            return std::to_array<uint32_t>({3u, 0u, 1u, 2u});
           case blink::V8MLConv2dFilterOperandLayout::Enum::kOhwi:
             return std::nullopt;
           case blink::V8MLConv2dFilterOperandLayout::Enum::kIhwo:
-            return base::span({3u, 1u, 2u, 0u});
+            return std::to_array<uint32_t>({3u, 1u, 2u, 0u});
         }
       }
       break;
   }
 }
 
-std::optional<base::span<const uint32_t>> GetConvTranspose2DFilterPermutation(
+std::optional<std::array<uint32_t, 4>> GetConvTranspose2DFilterPermutation(
     webnn::InputOperandLayout input_layout,
     blink::V8MLConvTranspose2dFilterOperandLayout filter_layout) {
   switch (input_layout) {
@@ -481,18 +486,18 @@ std::optional<base::span<const uint32_t>> GetConvTranspose2DFilterPermutation(
         case blink::V8MLConvTranspose2dFilterOperandLayout::Enum::kIohw:
           return std::nullopt;
         case blink::V8MLConvTranspose2dFilterOperandLayout::Enum::kHwoi:
-          return base::span({3u, 2u, 0u, 1u});
+          return std::to_array<uint32_t>({3, 2, 0, 1});
         case blink::V8MLConvTranspose2dFilterOperandLayout::Enum::kOhwi:
-          return base::span({3u, 0u, 1u, 2u});
+          return std::to_array<uint32_t>({3u, 0u, 1u, 2u});
       }
       break;
     case webnn::InputOperandLayout::kNhwc:
       // Mojo expects OHWI layout.
       switch (filter_layout.AsEnum()) {
         case blink::V8MLConvTranspose2dFilterOperandLayout::Enum::kIohw:
-          return base::span({1u, 2u, 3u, 0u});
+          return std::to_array<uint32_t>({1u, 2u, 3u, 0u});
         case blink::V8MLConvTranspose2dFilterOperandLayout::Enum::kHwoi:
-          return base::span({2u, 0u, 1u, 3u});
+          return std::to_array<uint32_t>({2u, 0u, 1u, 3u});
         case blink::V8MLConvTranspose2dFilterOperandLayout::Enum::kOhwi:
           return std::nullopt;
       }
@@ -697,7 +702,7 @@ std::optional<String> SerializeConv2dOperation(
   conv2d_mojo->output_operand_id = output_operand_id;
 
   const MLOperand* filter_operand = conv2d->Inputs()[1];
-  std::optional<base::span<const uint32_t>> filter_permutation;
+  std::optional<std::array<uint32_t, 4>> filter_permutation;
 
   if constexpr (std::is_same<MLConv2dOptionsType, MLConv2dOptions>::value) {
     conv2d_mojo->kind = blink_mojom::Conv2d::Kind::kDirect;
@@ -1540,6 +1545,27 @@ OperationPtr CreateReshapeOperation(const OperandToIdMap& operand_to_id_map,
   return blink_mojom::Operation::NewReshape(std::move(reshape_mojo));
 }
 
+OperationPtr CreateScatterElementsOperation(
+    const OperandToIdMap& operand_to_id_map,
+    const MLOperator* scatter_elements) {
+  auto scatter_elements_mojo = webnn::mojom::blink::ScatterElements::New();
+  scatter_elements_mojo->input_operand_id =
+      GetOperatorInputId(scatter_elements, operand_to_id_map, 0);
+  scatter_elements_mojo->indices_operand_id =
+      GetOperatorInputId(scatter_elements, operand_to_id_map, 1);
+  scatter_elements_mojo->updates_operand_id =
+      GetOperatorInputId(scatter_elements, operand_to_id_map, 2);
+  scatter_elements_mojo->output_operand_id =
+      GetOperatorOutputId(scatter_elements, operand_to_id_map);
+
+  const auto* options =
+      static_cast<const MLScatterOptions*>(scatter_elements->Options());
+  scatter_elements_mojo->axis = options->axis();
+  scatter_elements_mojo->label = options->label();
+  return webnn::mojom::blink::Operation::NewScatterElements(
+      std::move(scatter_elements_mojo));
+}
+
 OperationPtr CreateScatterNDOperation(const OperandToIdMap& operand_to_id_map,
                                       const MLOperator* scatter_nd) {
   auto scatter_nd_mojo = webnn::mojom::blink::ScatterND::New();
@@ -1887,6 +1913,10 @@ std::optional<String> SerializeMojoOperation(
     case blink_mojom::Operation::Tag::kReshape:
       graph_info->operations.push_back(
           CreateReshapeOperation(operand_to_id_map, op));
+      break;
+    case blink_mojom::Operation::Tag::kScatterElements:
+      graph_info->operations.push_back(
+          CreateScatterElementsOperation(operand_to_id_map, op));
       break;
     case blink_mojom::Operation::Tag::kScatterNd:
       graph_info->operations.push_back(

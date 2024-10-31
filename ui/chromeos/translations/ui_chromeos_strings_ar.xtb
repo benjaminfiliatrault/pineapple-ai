@@ -19,6 +19,7 @@
 <translation id="115443833402798225">هانغول أهنماتي</translation>
 <translation id="1155759005174418845">الكتالانية</translation>
 <translation id="1168100932582989117">‏خوادم أسماء Google</translation>
+<translation id="1170788066030116158">تاريخ التقاط الصورة</translation>
 <translation id="1172970565351728681">تبقّى <ph name="REMAINING_TIME" /> تقريبًا</translation>
 <translation id="1173894706177603556">إعادة تسمية</translation>
 <translation id="1173916544412572294">الشبكة <ph name="NETWORK_INDEX" /> من <ph name="NETWORK_COUNT" />، الهاتف<ph name="PHONE_NAME" />، حالة الاتصال <ph name="CONNECTION_STATUS" />، قوة الإشارة <ph name="SIGNAL_STRENGTH" />%، بطارية الهاتف <ph name="BATTERY_STATUS" />%، التفاصيل</translation>
@@ -581,6 +582,7 @@
 <translation id="5447680084201416734">مساحة التخزين غير كافية.</translation>
 <translation id="5449551289610225147">كلمة المرور غير صالحة</translation>
 <translation id="5459064203055649751">هناك ملف آخر يحمل الاسم "<ph name="FILENAME" />". هل تريد استبداله بالملف الذي تنقله؟</translation>
+<translation id="5462378611565326489">‏لا يتوفّر استخدام OneDrive بلا إنترنت.</translation>
 <translation id="5463231940765244860">إدخال</translation>
 <translation id="5469868506864199649">الإيطالية</translation>
 <translation id="5473333559083690127">إعادة إدخال رقم التعريف الشخصي الجديد</translation>

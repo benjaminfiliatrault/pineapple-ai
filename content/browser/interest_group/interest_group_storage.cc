@@ -5106,11 +5106,7 @@ bool ClearExpiredInterestGroups(sql::Database& db,
   return transaction.Commit();
 }
 
-// Removes interest groups so that per-owner limit is respected. Note that
-// we're intentionally not trying to keep this in sync with
-// `blink::InterestGroup::EstimateSize()`. There's not a compelling reason to
-// keep those exactly aligned and keeping them in sync would require a
-// significant amount of extra work.
+// Removes interest groups so that per-owner limit is respected.
 bool ClearExcessiveStorage(sql::Database& db, size_t max_owner_storage_size) {
   sql::Transaction transaction(&db);
   if (!transaction.Begin()) {
@@ -5733,7 +5729,7 @@ InterestGroupStorage::UpdateInterestGroup(
 }
 
 void InterestGroupStorage::AllowUpdateIfOlderThan(
-    const blink::InterestGroupKey& group_key,
+    blink::InterestGroupKey group_key,
     base::TimeDelta update_if_older_than) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!EnsureDBInitialized()) {
@@ -6037,9 +6033,10 @@ void InterestGroupStorage::PerformDBMaintenance() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   last_maintenance_time_ = base::Time::Now();
   ops_since_last_maintenance_ = 0;
-  int64_t db_size;
-  if (base::GetFileSize(path_to_database_, &db_size)) {
-    UMA_HISTOGRAM_MEMORY_KB("Storage.InterestGroup.DBSize", db_size / 1024);
+  std::optional<int64_t> db_size = base::GetFileSize(path_to_database_);
+  if (db_size.has_value()) {
+    UMA_HISTOGRAM_MEMORY_KB("Storage.InterestGroup.DBSize",
+                            db_size.value() / 1024);
   }
   if (EnsureDBInitialized()) {
     DoPerformDatabaseMaintenance(

@@ -60,6 +60,7 @@ class WebViewInternalCaptureVisibleRegionFunction
   // ExtensionFunction:
   ResponseAction Run() override;
   void GetQuotaLimitHeuristics(QuotaLimitHeuristics* heuristics) const override;
+  bool ShouldSkipQuotaLimiting() const override;
 
  private:
   // extensions::WebContentsCaptureClient:
@@ -72,7 +73,7 @@ class WebViewInternalCaptureVisibleRegionFunction
   void EncodeBitmapOnWorkerThread(
       scoped_refptr<base::TaskRunner> reply_task_runner,
       const SkBitmap& bitmap);
-  void OnBitmapEncodedOnUIThread(bool success, std::string base64_result);
+  void OnBitmapEncodedOnUIThread(std::optional<std::string> base64_result);
 
   std::string GetErrorMessage(CaptureResult result);
 

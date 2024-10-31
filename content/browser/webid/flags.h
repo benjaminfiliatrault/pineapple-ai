@@ -50,16 +50,19 @@ bool IsFedCmWithoutWellKnownEnforcementEnabled();
 bool IsWebIdentityDigitalCredentialsEnabled();
 
 // Whether "Use Other Account" is enabled.
-bool IsFedCmUseOtherAccountEnabled(bool is_button_mode);
+bool IsFedCmUseOtherAccountEnabled(bool is_active_mode);
 
-// Whether the ButtonMode feature is enabled.
-bool IsFedCmButtonModeEnabled();
+// Whether the ActiveMode feature is enabled.
+bool IsFedCmActiveModeEnabled();
 
 // Whether sending of SameSite=Lax cookies is enabled.
 bool IsFedCmSameSiteLaxEnabled();
 
 // Whether specifying a subset of the default fields is enabled.
 bool IsFedCmFlexibleFieldsEnabled();
+
+// Whether showing filtered accounts is enabled.
+bool IsFedCmShowFilteredAccountsEnabled();
 
 }  // namespace content
 

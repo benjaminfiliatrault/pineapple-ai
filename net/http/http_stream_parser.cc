@@ -428,8 +428,7 @@ int HttpStreamParser::DoLoop(int result) {
         result = DoReadBodyComplete(result);
         break;
       default:
-        NOTREACHED_IN_MIGRATION();
-        break;
+        NOTREACHED();
     }
   } while (result != ERR_IO_PENDING &&
            (io_state_ != STATE_DONE && io_state_ != STATE_NONE));
@@ -770,7 +769,8 @@ int HttpStreamParser::DoReadBodyComplete(int result) {
 
   // Filter incoming data if appropriate.  FilterBuf may return an error.
   if (result > 0 && chunked_decoder_.get()) {
-    result = chunked_decoder_->FilterBuf(user_read_buf_->data(), result);
+    result = chunked_decoder_->FilterBuf(
+        user_read_buf_->span().first(base::checked_cast<size_t>(result)));
     if (result == 0 && !chunked_decoder_->reached_eof()) {
       // Don't signal completion of the Read call yet or else it'll look like
       // we received end-of-file.  Wait for more data.

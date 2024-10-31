@@ -73,6 +73,8 @@ constexpr char kIsFledgeSellAllowedHistogram[] =
     "PrivacySandbox.IsFledgeSellAllowed";
 constexpr char kIsFledgeBuyAllowedHistogram[] =
     "PrivacySandbox.IsFledgeBuyAllowed";
+constexpr char kIsFledgeReadAllowedHistogram[] =
+    "PrivacySandbox.IsFledgeReadAllowed";
 constexpr char kIsPrivacySandboxReportingDestinationAttestedHistogram[] =
     "PrivacySandbox.IsPrivacySandboxReportingDestinationAttested";
 constexpr char kIsSharedStorageAllowedHistogram[] =
@@ -157,6 +159,9 @@ void PrivacySandboxSettingsImpl::JoinFledgeHistogram(
       break;
     case content::InterestGroupApiOperation::kBuy:
       JoinHistogram(kIsFledgeBuyAllowedHistogram, status);
+      break;
+    case content::InterestGroupApiOperation::kRead:
+      JoinHistogram(kIsFledgeReadAllowedHistogram, status);
       break;
   }
 }
@@ -437,7 +442,8 @@ bool PrivacySandboxSettingsImpl::MaySendAttributionReport(
   Status attestation_status =
       PrivacySandboxAttestations::GetInstance()->IsSiteAttested(
           net::SchemefulSite(reporting_origin),
-          PrivacySandboxAttestationsGatedAPI::kAttributionReporting);
+          PrivacySandboxAttestationsGatedAPI::kAttributionReporting,
+          AttestationsDefaultBehavior::kAllow);
   if (!IsAllowed(attestation_status)) {
     JoinHistogram(kMaySendAttributionReportHistogram, attestation_status);
     if (console_frame) {
@@ -872,7 +878,7 @@ void PrivacySandboxSettingsImpl::OnCookiesCleared() {
 
 void PrivacySandboxSettingsImpl::OnRelatedWebsiteSetsEnabledPrefChanged() {
   for (auto& observer : observers_) {
-    observer.OnFirstPartySetsEnabledChanged(AreRelatedWebsiteSetsEnabled());
+    observer.OnRelatedWebsiteSetsEnabledChanged(AreRelatedWebsiteSetsEnabled());
   }
 }
 
@@ -889,7 +895,7 @@ void PrivacySandboxSettingsImpl::OnCookieControlsModePrefChanged() {
   }
 
   for (Observer& obs : observers_) {
-    obs.OnFirstPartySetsEnabledChanged(AreRelatedWebsiteSetsEnabled());
+    obs.OnRelatedWebsiteSetsEnabledChanged(AreRelatedWebsiteSetsEnabled());
   }
 }
 
@@ -1000,7 +1006,7 @@ bool PrivacySandboxSettingsImpl::IsCookieDeprecationLabelAllowedForContext(
 
 void PrivacySandboxSettingsImpl::OnBlockAllThirdPartyCookiesChanged() {
   for (auto& observer : observers_) {
-    observer.OnFirstPartySetsEnabledChanged(AreRelatedWebsiteSetsEnabled());
+    observer.OnRelatedWebsiteSetsEnabledChanged(AreRelatedWebsiteSetsEnabled());
   }
 }
 

@@ -7,6 +7,7 @@
 
 #include <concepts>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,6 +16,7 @@
 #include "base/compiler_specific.h"
 #include "base/feature_list.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_forward.h"
 #include "base/i18n/rtl.h"
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
@@ -63,7 +65,7 @@
 #endif
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-#include "components/autofill/core/browser/ml_model/autofill_ml_prediction_model_handler.h"
+#include "components/autofill/core/browser/ml_model/field_classification_model_handler.h"
 #endif
 
 using ::autofill::test::AutofillTestingPrefService;
@@ -96,6 +98,10 @@ class TestAutofillClientTemplate : public T {
   // sources.
   void InitializeUKMSources() {
     test_ukm_recorder_.UpdateSourceURL(source_id_, form_origin_);
+  }
+
+  base::WeakPtr<AutofillClient> GetWeakPtr() override {
+    return weak_ptr_factory_.GetWeakPtr();
   }
 
   version_info::Channel GetChannel() const override {
@@ -206,13 +212,13 @@ class TestAutofillClientTemplate : public T {
   }
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-  AutofillMlPredictionModelHandler* GetAutofillMlPredictionModelHandler()
+  FieldClassificationModelHandler* GetAutofillFieldClassificationModelHandler()
       override {
     return ml_prediction_model_handler_.get();
   }
 
   void set_ml_prediction_model_handler(
-      std::unique_ptr<AutofillMlPredictionModelHandler> handler) {
+      std::unique_ptr<FieldClassificationModelHandler> handler) {
     ml_prediction_model_handler_ = std::move(handler);
   }
 #endif
@@ -295,16 +301,24 @@ class TestAutofillClientTemplate : public T {
 
   SuggestionHidingReason popup_hiding_reason() { return popup_hidden_reason_; }
 
-  void ShowAutofillFieldIphForManualFallbackFeature(
-      const FormFieldData& field) override {
-    is_showing_manual_fallback_iph_ = true;
+  bool ShowAutofillFieldIphForFeature(
+      const FormFieldData& field,
+      AutofillClient::IphFeature feature) override {
+    autofill_iph_showing_ = feature;
+    return true;
   }
 
-  void HideAutofillFieldIphForManualFallbackFeature() override {
-    is_showing_manual_fallback_iph_ = false;
+  void HideAutofillFieldIph() override { autofill_iph_showing_ = std::nullopt; }
+
+  bool IsShowingManualFallbackIph() {
+    return autofill_iph_showing_ == AutofillClient::IphFeature::kManualFallback;
   }
 
-  bool IsShowingManualFallbackIph() { return is_showing_manual_fallback_iph_; }
+  void NotifyIphFeatureUsed(AutofillClient::IphFeature feature) override {
+    if (notify_iph_feature_used_mock_callback_) {
+      notify_iph_feature_used_mock_callback_->Run(feature);
+    }
+  }
 
   bool IsAutocompleteEnabled() const override { return true; }
 
@@ -467,6 +481,11 @@ class TestAutofillClientTemplate : public T {
     suggestion_ui_session_id_ = session_id;
   }
 
+  void set_notify_iph_feature_used_mock_callback(
+      base::RepeatingCallback<void(AutofillClient::IphFeature)> callback) {
+    notify_iph_feature_used_mock_callback_ = std::move(callback);
+  }
+
   GURL form_origin() { return form_origin_; }
 
   ukm::TestUkmRecorder* GetTestUkmRecorder() { return &test_ukm_recorder_; }
@@ -495,8 +514,7 @@ class TestAutofillClientTemplate : public T {
       device_authenticator_ = nullptr;
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-  std::unique_ptr<AutofillMlPredictionModelHandler>
-      ml_prediction_model_handler_;
+  std::unique_ptr<FieldClassificationModelHandler> ml_prediction_model_handler_;
 #endif
 
   // NULL by default.
@@ -529,7 +547,7 @@ class TestAutofillClientTemplate : public T {
 
   SuggestionHidingReason popup_hidden_reason_;
 
-  bool is_showing_manual_fallback_iph_ = false;
+  std::optional<AutofillClient::IphFeature> autofill_iph_showing_;
 
   network::TestURLLoaderFactory test_url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_ =
@@ -553,6 +571,9 @@ class TestAutofillClientTemplate : public T {
   std::optional<AutofillClient::SuggestionUiSessionId>
       suggestion_ui_session_id_;
 
+  std::optional<base::RepeatingCallback<void(AutofillClient::IphFeature)>>
+      notify_iph_feature_used_mock_callback_;
+
   LogRouter log_router_;
   struct LogToTerminal {
     explicit LogToTerminal(LogRouter& log_router) {
@@ -564,6 +585,8 @@ class TestAutofillClientTemplate : public T {
   } log_to_terminal_{log_router_};
   std::unique_ptr<LogManager> log_manager_ =
       LogManager::Create(&log_router_, base::NullCallback());
+
+  base::WeakPtrFactory<TestAutofillClientTemplate> weak_ptr_factory_{this};
 };
 
 // A simple `AutofillClient` for tests. Consider `TestContentAutofillClient` as

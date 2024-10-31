@@ -79,6 +79,9 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
     /** Time at which onPause is called. */
     private long mOnPauseTimestampMs;
 
+    /** Time at which onStart is called. */
+    private long mOnStartTimestampMs;
+
     /**
      * Time at which onPause is called before the activity is recreated due to unfolding. The
      * timestamp is captured only if recreation starts when the activity is not in stopped state.
@@ -244,6 +247,8 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
             TraceEvent.begin("maybePreconnect");
             Intent intent = getIntent();
             if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return;
+            // TODO(https://crbug.com/372710946): Clean this up if CCTEarlyNav doesn't ship.
+            if (intent.getBooleanExtra(IntentHandler.EXTRA_SKIP_PRECONNECT, false)) return;
             String url = IntentHandler.getUrlFromIntent(intent);
             if (url == null) return;
             // Blocking pre-connect for all off-the-record profiles.
@@ -483,6 +488,13 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
     }
 
     /**
+     * @return The timestamp for the activity OnStart event in ms.
+     */
+    protected long getOnStartTimestampMs() {
+        return mOnStartTimestampMs;
+    }
+
+    /**
      * @return The timestamp for OnPause event before activity restarts due to unfolding in ms.
      */
     protected long getOnPauseBeforeFoldRecreateTimestampMs() {
@@ -518,6 +530,7 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
     @CallSuper
     @Override
     public void onStart() {
+        mOnStartTimestampMs = SystemClock.uptimeMillis();
         super.onStart();
         mNativeInitializationController.onStart();
 

@@ -17,6 +17,7 @@
 #include "components/feedback/feedback_constants.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/soda/constants.h"
 #include "components/soda/soda_installer.h"
 #include "components/soda/soda_util.h"
 #include "url/gurl.h"
@@ -43,6 +44,13 @@ void ChromeRecorderAppUIDelegate::InstallSoda(
                                   g_browser_process->local_state());
 }
 
+std::u16string ChromeRecorderAppUIDelegate::GetLanguageDisplayName(
+    speech::LanguageCode language_code) {
+  return speech::GetLanguageDisplayName(
+      speech::GetLanguageName(language_code),
+      g_browser_process->GetApplicationLocale());
+}
+
 void ChromeRecorderAppUIDelegate::OpenAiFeedbackDialog(
     const std::string& description_template) {
   Profile* profile = Profile::FromWebUI(web_ui_);
@@ -66,12 +74,42 @@ ChromeRecorderAppUIDelegate::GetMediaDeviceSaltService(
       context);
 }
 
+bool ChromeRecorderAppUIDelegate::CanUseGenerativeAiForCurrentProfile() {
+  Profile* profile = Profile::FromWebUI(web_ui_);
+  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
+  if (identity_manager == nullptr) {
+    return false;
+  }
+
+  const auto account_id =
+      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kSignin);
+  if (account_id.empty()) {
+    return false;
+  }
+
+  const AccountInfo extended_account_info =
+      identity_manager->FindExtendedAccountInfoByAccountId(account_id);
+  return extended_account_info.capabilities
+             .can_use_generative_ai_in_recorder_app() == signin::Tribool::kTrue;
+}
+
 bool ChromeRecorderAppUIDelegate::CanUseSpeakerLabelForCurrentProfile() {
   Profile* profile = Profile::FromWebUI(web_ui_);
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
-  // TODO: b/341806818 - Integrate with capabilities.
-  return identity_manager != nullptr &&
-         identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin);
+  if (identity_manager == nullptr) {
+    return false;
+  }
+
+  const auto account_id =
+      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kSignin);
+  if (account_id.empty()) {
+    return false;
+  }
+
+  const AccountInfo extended_account_info =
+      identity_manager->FindExtendedAccountInfoByAccountId(account_id);
+  return extended_account_info.capabilities
+             .can_use_speaker_label_in_recorder_app() == signin::Tribool::kTrue;
 }
 
 void ChromeRecorderAppUIDelegate::RecordSpeakerLabelConsent(

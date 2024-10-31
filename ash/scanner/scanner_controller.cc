@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "ash/constants/ash_switches.h"
-#include "ash/public/cpp/scanner/scanner_action.h"
 #include "ash/public/cpp/scanner/scanner_delegate.h"
 #include "ash/public/cpp/scanner/scanner_enums.h"
 #include "ash/public/cpp/scanner/scanner_profile_scoped_delegate.h"
@@ -18,6 +17,10 @@
 #include "base/memory/scoped_refptr.h"
 
 namespace ash {
+
+namespace {
+
+}  // namespace
 
 ScannerController::ScannerController(std::unique_ptr<ScannerDelegate> delegate)
     : delegate_(std::move(delegate)) {}
@@ -44,7 +47,7 @@ void ScannerController::FetchActionsForImage(
     scoped_refptr<base::RefCountedMemory> jpeg_bytes,
     ScannerSession::FetchActionsCallback callback) {
   if (!scanner_session_) {
-    std::move(callback).Run(std::vector<ScannerAction>());
+    std::move(callback).Run({});
     return;
   }
   scanner_session_->FetchActionsForImage(jpeg_bytes, std::move(callback));

@@ -70,8 +70,8 @@ import org.chromium.chrome.browser.media.MediaViewerUtils;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
 import org.chromium.chrome.browser.metrics.PackageMetrics;
 import org.chromium.chrome.browser.metrics.UmaUtils;
+import org.chromium.chrome.browser.notifications.TrampolineActivityTracker;
 import org.chromium.chrome.browser.notifications.channels.ChannelsUpdater;
-import org.chromium.chrome.browser.ntp.FeedPositionUtils;
 import org.chromium.chrome.browser.offlinepages.measurements.OfflineMeasurementsBackgroundTask;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeFactory;
@@ -454,6 +454,7 @@ public class ProcessInitializationHandler {
 
         AppHooks.get().registerPolicyProviders(CombinedPolicyProvider.get());
         SpeechRecognition.initialize();
+        TrampolineActivityTracker.getInstance().onNativeInitialized();
     }
 
     /**
@@ -512,8 +513,6 @@ public class ProcessInitializationHandler {
      */
     @CallSuper
     protected void handleProfileDependentPostNativeInitialization(Profile profile) {
-        FeedPositionUtils.cacheSegmentationResult(profile);
-
         HistoryDeletionBridge.getForProfile(profile)
                 .addObserver(
                         new ContentCaptureHistoryDeletionObserver(

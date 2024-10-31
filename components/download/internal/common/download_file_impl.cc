@@ -487,6 +487,18 @@ void DownloadFileImpl::RenameWithRetryInternal(
 
   DownloadInterruptReason reason = file_.Rename(new_path);
 
+#if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
+  // Handle the case where the file is shorter due to deobfuscation.
+  if (obfuscator_ && reason == DOWNLOAD_INTERRUPT_REASON_FILE_TOO_SHORT) {
+    int64_t expected_size = bytes_seen_ + obfuscator_->GetTotalOverhead();
+    int64_t actual_size = file_.bytes_so_far();
+    if (expected_size >= 0 && actual_size == expected_size) {
+      // Ignore error as the file was deobfuscated before being renamed.
+      reason = DOWNLOAD_INTERRUPT_REASON_NONE;
+    }
+  }
+#endif
+
   // Attempt to retry the rename if possible. If the rename failed and the
   // subsequent open also failed, then in_progress() would be false. We don't
   // try to retry renames if the in_progress() was false to begin with since we
@@ -1004,6 +1016,6 @@ DownloadFileImpl::RenameParameters::RenameParameters(
       retries_left(kMaxRenameRetries),
       completion_callback(std::move(completion_callback)) {}
 
-DownloadFileImpl::RenameParameters::~RenameParameters() {}
+DownloadFileImpl::RenameParameters::~RenameParameters() = default;
 
 }  // namespace download

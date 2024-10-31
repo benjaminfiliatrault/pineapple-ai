@@ -27,11 +27,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loader.h"
 
 #include <algorithm>
@@ -1009,9 +1004,6 @@ void ResourceLoader::DidReceiveResponseInternal(
       return;
     }
   }
-
-  scheduler_->SetConnectionInfo(scheduler_client_id_,
-                                response.ConnectionInfo());
 
   // A response should not serve partial content if it was not requested via a
   // Range header: https://fetch.spec.whatwg.org/#main-fetch

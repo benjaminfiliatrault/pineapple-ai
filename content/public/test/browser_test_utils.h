@@ -79,6 +79,10 @@
 #include "base/win/scoped_handle.h"
 #endif
 
+namespace base::test {
+class ScopedFeatureList;
+}
+
 namespace gfx {
 class Point;
 }  // namespace gfx
@@ -787,7 +791,7 @@ struct EvalJsResult {
   [[nodiscard]] int ExtractInt() const;
   [[nodiscard]] bool ExtractBool() const;
   [[nodiscard]] double ExtractDouble() const;
-  [[nodiscard]] base::Value ExtractList() const;
+  [[nodiscard]] base::Value::List ExtractList() const;
 };
 
 // Enables EvalJsResult to be used directly in ASSERT/EXPECT macros:
@@ -2460,6 +2464,8 @@ void SetCapturedSurfaceControllerFactoryForTesting(
         WebContentsMediaCaptureId)> factory);
 #endif  // !BUILDFLAG(IS_ANDROID)
 
+void InitAndEnableRenderDocumentForAllFrames(
+    base::test::ScopedFeatureList* feature_list);
 }  // namespace content
 
 #endif  // CONTENT_PUBLIC_TEST_BROWSER_TEST_UTILS_H_

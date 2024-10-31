@@ -32,8 +32,10 @@ bool ShouldReportForAnimation(FrameSequenceTrackerType sequence_type,
   // of kMainThreadAnimation and kCompositorAnimation sequences. So these are
   // excluded from the AllAnimation metric to avoid double counting.
 
-  if (sequence_type == FrameSequenceTrackerType::kCompositorAnimation)
+  if (sequence_type == FrameSequenceTrackerType::kCompositorNativeAnimation ||
+      sequence_type == FrameSequenceTrackerType::kCompositorRasterAnimation) {
     return thread_type == SmoothEffectDrivingThread::kCompositor;
+  }
 
   if (sequence_type == FrameSequenceTrackerType::kMainThreadAnimation ||
       sequence_type == FrameSequenceTrackerType::kJSAnimation)
@@ -107,9 +109,10 @@ std::string GetCheckerboardingV3HistogramName(FrameSequenceTrackerType type) {
        FrameSequenceTracker::GetFrameSequenceTrackerTypeName(type)});
 }
 
-std::string GetCheckerboardingV4HistogramName(FrameSequenceTrackerType type) {
+std::string GetCheckerboardingV4HistogramName(FrameSequenceTrackerType type,
+                                              const char* thread_name) {
   return base::StrCat(
-      {"Graphics.Smoothness.Checkerboarding4.",
+      {"Graphics.Smoothness.Checkerboarding4.", thread_name, ".",
        FrameSequenceTracker::GetFrameSequenceTrackerTypeName(type)});
 }
 
@@ -132,6 +135,13 @@ std::string GetThroughputV3HistogramName(FrameSequenceTrackerType type,
                                          const char* thread_name) {
   return base::StrCat(
       {"Graphics.Smoothness.PercentDroppedFrames3.", thread_name, ".",
+       FrameSequenceTracker::GetFrameSequenceTrackerTypeName(type)});
+}
+
+std::string GetThroughputV4HistogramName(FrameSequenceTrackerType type,
+                                         const char* thread_name) {
+  return base::StrCat(
+      {"Graphics.Smoothness.PercentDroppedFrames4.", thread_name, ".",
        FrameSequenceTracker::GetFrameSequenceTrackerTypeName(type)});
 }
 
@@ -197,6 +207,8 @@ void FrameSequenceMetrics::SetCustomReporter(CustomReporter custom_reporter) {
 SmoothEffectDrivingThread FrameSequenceMetrics::GetEffectiveThread() const {
   switch (type_) {
     case FrameSequenceTrackerType::kCompositorAnimation:
+    case FrameSequenceTrackerType::kCompositorNativeAnimation:
+    case FrameSequenceTrackerType::kCompositorRasterAnimation:
     case FrameSequenceTrackerType::kSETCompositorAnimation:
     case FrameSequenceTrackerType::kPinchZoom:
     case FrameSequenceTrackerType::kVideo:
@@ -246,6 +258,7 @@ void FrameSequenceMetrics::Merge(
     v3_.last_frame_delta = metrics->v3_.last_frame_delta;
     v3_.no_update_duration = metrics->v3_.no_update_duration;
   }
+  v4_.frames_dropped += metrics->v4_.frames_dropped;
   v4_.frames_checkerboarded += metrics->v4_.frames_checkerboarded;
   v4_.frames_checkerboarded_need_raster +=
       metrics->v4_.frames_checkerboarded_need_raster;
@@ -288,6 +301,7 @@ void FrameSequenceMetrics::ReportMetrics() {
     v3_.no_update_count = 0u;
     v3_.jank_count = 0u;
     v3_.janks.clear();
+    v4_.frames_dropped = 0u;
     v4_.frames_checkerboarded = 0u;
     v4_.frames_checkerboarded_need_raster = 0u;
     v4_.frames_checkerboarded_need_record = 0u;
@@ -310,6 +324,10 @@ void FrameSequenceMetrics::ReportMetrics() {
 
     const int percent_missing_content = get_percent(v3_.frames_missing_content);
     const int percent_dropped = get_percent(v3_.frames_dropped);
+    const int percent_dropped_v4 =
+        (type() == FrameSequenceTrackerType::kCompositorRasterAnimation)
+            ? get_percent(v4_.frames_dropped)
+            : percent_dropped;
     const int percent_jank = get_percent(v3_.jank_count);
 
     // v4.
@@ -331,6 +349,9 @@ void FrameSequenceMetrics::ReportMetrics() {
       UMA_HISTOGRAM_PERCENTAGE(
           "Graphics.Smoothness.PercentDroppedFrames3.AllAnimations",
           percent_dropped);
+      UMA_HISTOGRAM_PERCENTAGE(
+          "Graphics.Smoothness.PercentDroppedFrames4.AllAnimations",
+          percent_dropped_v4);
     }
     if (is_interaction) {
       UMA_HISTOGRAM_PERCENTAGE(
@@ -344,6 +365,9 @@ void FrameSequenceMetrics::ReportMetrics() {
       UMA_HISTOGRAM_PERCENTAGE(
           "Graphics.Smoothness.PercentDroppedFrames3.AllInteractions",
           percent_dropped);
+      UMA_HISTOGRAM_PERCENTAGE(
+          "Graphics.Smoothness.PercentDroppedFrames4.AllInteractions",
+          percent_dropped_v4);
     }
     if (is_animation || is_interaction) {
       UMA_HISTOGRAM_PERCENTAGE(
@@ -363,17 +387,38 @@ void FrameSequenceMetrics::ReportMetrics() {
       UMA_HISTOGRAM_PERCENTAGE(
           "Graphics.Smoothness.PercentDroppedFrames3.AllSequences",
           percent_dropped);
+      UMA_HISTOGRAM_PERCENTAGE(
+          "Graphics.Smoothness.PercentDroppedFrames4.AllSequences",
+          percent_dropped_v4);
     }
 
     const char* thread_name = GetThreadTypeName(thread_type);
 
-    STATIC_HISTOGRAM_POINTER_GROUP(
-        GetThroughputV3HistogramName(type(), thread_name),
-        GetIndexForMetric(thread_type, type_), kMaximumHistogramIndex,
-        Add(percent_dropped),
-        base::LinearHistogram::FactoryGet(
-            GetThroughputV3HistogramName(type(), thread_name), 1, 100, 101,
-            base::HistogramBase::kUmaTargetedHistogramFlag));
+    if (type() == FrameSequenceTrackerType::kCompositorRasterAnimation) {
+      STATIC_HISTOGRAM_POINTER_GROUP(
+          GetThroughputV4HistogramName(type(), thread_name),
+          GetIndexForMetric(thread_type, type_), kMaximumHistogramIndex,
+          Add(percent_dropped_v4),
+          base::LinearHistogram::FactoryGet(
+              GetThroughputV4HistogramName(type(), thread_name), 1, 100, 101,
+              base::HistogramBase::kUmaTargetedHistogramFlag));
+    } else if (type() == FrameSequenceTrackerType::kCompositorNativeAnimation) {
+      STATIC_HISTOGRAM_POINTER_GROUP(
+          GetThroughputV4HistogramName(type(), thread_name),
+          GetIndexForMetric(thread_type, type_), kMaximumHistogramIndex,
+          Add(percent_dropped),
+          base::LinearHistogram::FactoryGet(
+              GetThroughputV4HistogramName(type(), thread_name), 1, 100, 101,
+              base::HistogramBase::kUmaTargetedHistogramFlag));
+    } else {
+      STATIC_HISTOGRAM_POINTER_GROUP(
+          GetThroughputV3HistogramName(type(), thread_name),
+          GetIndexForMetric(thread_type, type_), kMaximumHistogramIndex,
+          Add(percent_dropped),
+          base::LinearHistogram::FactoryGet(
+              GetThroughputV3HistogramName(type(), thread_name), 1, 100, 101,
+              base::HistogramBase::kUmaTargetedHistogramFlag));
+    }
 
     STATIC_HISTOGRAM_POINTER_GROUP(
         GetCheckerboardingV3HistogramName(type_), static_cast<int>(type_),
@@ -383,11 +428,11 @@ void FrameSequenceMetrics::ReportMetrics() {
             GetCheckerboardingV3HistogramName(type_), 1, 100, 101,
             base::HistogramBase::kUmaTargetedHistogramFlag));
     STATIC_HISTOGRAM_POINTER_GROUP(
-        GetCheckerboardingV4HistogramName(type_), static_cast<int>(type_),
-        static_cast<int>(FrameSequenceTrackerType::kMaxType),
+        GetCheckerboardingV4HistogramName(type_, thread_name),
+        GetIndexForMetric(thread_type, type_), kMaximumHistogramIndex,
         Add(percent_checkerboarded),
         base::LinearHistogram::FactoryGet(
-            GetCheckerboardingV4HistogramName(type_), 1, 100, 101,
+            GetCheckerboardingV4HistogramName(type_, thread_name), 1, 100, 101,
             base::HistogramBase::kUmaTargetedHistogramFlag));
 
     if (scrolling_thread_ != SmoothEffectDrivingThread::kUnknown) {
@@ -533,6 +578,9 @@ void FrameSequenceMetrics::AddSortedFrame(const viz::BeginFrameArgs& args,
       if (frame_info.WasSmoothCompositorUpdateDropped()) {
         ++v3_.frames_dropped;
       }
+      if (frame_info.WasSmoothRasterPropertyUpdateDropped()) {
+        ++v4_.frames_dropped;
+      }
       ++v3_.frames_expected;
       should_calculate_jank_and_checkerboarding = true;
       break;
@@ -540,6 +588,7 @@ void FrameSequenceMetrics::AddSortedFrame(const viz::BeginFrameArgs& args,
       if (frame_info.WasSmoothMainUpdateExpected()) {
         if (frame_info.WasSmoothMainUpdateDropped()) {
           ++v3_.frames_dropped;
+          ++v4_.frames_dropped;
         }
         ++v3_.frames_expected;
         should_calculate_jank_and_checkerboarding = true;

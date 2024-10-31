@@ -7,7 +7,6 @@
 #include <sstream>
 #include <utility>
 
-#include "build/build_config.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
@@ -15,6 +14,7 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -28,12 +28,12 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/user_education/common/feature_promo_controller.h"
-#include "components/user_education/common/feature_promo_data.h"
-#include "components/user_education/common/feature_promo_result.h"
-#include "components/user_education/common/feature_promo_specification.h"
-#include "components/user_education/common/feature_promo_storage_service.h"
+#include "components/user_education/common/feature_promo/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_result.h"
+#include "components/user_education/common/feature_promo/feature_promo_specification.h"
+#include "components/user_education/common/user_education_data.h"
 #include "components/user_education/common/user_education_features.h"
+#include "components/user_education/common/user_education_storage_service.h"
 #include "components/user_education/views/help_bubble_factory_views.h"
 #include "components/user_education/views/help_bubble_view.h"
 #include "components/webapps/common/web_app_id.h"
@@ -246,7 +246,7 @@ class FeaturePromoLifecycleUiTest : public TestBase {
         browser->window()->GetFeaturePromoControllerForTesting());
   }
 
-  static user_education::FeaturePromoStorageService* GetStorageService(
+  static user_education::UserEducationStorageService* GetStorageService(
       Browser* browser) {
     return GetPromoController(browser)->storage_service();
   }
@@ -548,10 +548,13 @@ class FeaturePromoLifecycleAppUiTest : public FeaturePromoLifecycleUiTest {
 
   void SetUpOnMainThread() override {
     FeaturePromoLifecycleUiTest::SetUpOnMainThread();
-    CHECK(embedded_test_server()->Start());
+    embedded_https_test_server().SetCertHostnames({kApp1Host, kApp2Host});
+    CHECK(embedded_https_test_server().Start());
     host_resolver()->AddRule("*", "127.0.0.1");
-    app1_id_ = InstallPWA(embedded_test_server()->GetURL(kApp1Host, kAppPath));
-    app2_id_ = InstallPWA(embedded_test_server()->GetURL(kApp2Host, kAppPath));
+    app1_id_ =
+        InstallPWA(embedded_https_test_server().GetURL(kApp1Host, kAppPath));
+    app2_id_ =
+        InstallPWA(embedded_https_test_server().GetURL(kApp2Host, kAppPath));
     EXPECT_NE(app1_id_, app2_id_);
   }
 
@@ -617,6 +620,7 @@ IN_PROC_BROWSER_TEST_F(FeaturePromoLifecycleAppUiTest, ShowForTwoApps) {
   Browser* const app_browser2 = LaunchWebAppBrowser(app2_id_);
   RunTestSequenceInContext(
       app_browser->window()->GetElementContext(),
+      WaitForShow(kToolbarAppMenuButtonElementId),
       MaybeShowPromo({kFeaturePromoLifecycleTestPromo, app1_id_}),
       WaitForShow(kToolbarAppMenuButtonElementId), DismissIPH(),
       InContext(

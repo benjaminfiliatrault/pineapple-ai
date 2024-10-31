@@ -8,9 +8,9 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncController.TabCreationDelegate;
 import org.chromium.chrome.browser.tabmodel.TabClosureParams;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.components.tab_group_sync.ClosingSource;
 import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_group_sync.OpeningSource;
@@ -36,19 +36,14 @@ public class LocalTabGroupMutationHelper {
     private final TabGroupSyncService mTabGroupSyncService;
     private final TabCreationDelegate mTabCreationDelegate;
 
-    // TODO(shaktisahu): This is unnecessary now. Remove passing this from constructor.
-    private final NavigationTracker mNavigationTracker;
-
     /** Constructor. */
     public LocalTabGroupMutationHelper(
             TabGroupModelFilter tabGroupModelFilter,
             TabGroupSyncService tabGroupSyncService,
-            TabCreationDelegate tabCreationDelegate,
-            NavigationTracker navigationTracker) {
+            TabCreationDelegate tabCreationDelegate) {
         mTabGroupModelFilter = tabGroupModelFilter;
         mTabGroupSyncService = tabGroupSyncService;
         mTabCreationDelegate = tabCreationDelegate;
-        mNavigationTracker = navigationTracker;
     }
 
     /**

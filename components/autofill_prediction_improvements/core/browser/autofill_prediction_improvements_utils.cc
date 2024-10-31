@@ -64,15 +64,22 @@ bool IsFieldEligibleByTypeCriteria(const autofill::AutofillField& field) {
   return false;
 }
 
-bool IsFormEligibleForFillingByFieldCriteria(
-    const autofill::FormStructure& form) {
-  int total_number_of_fillable_fields = 0;
+bool IsFieldEligibleForFilling(const AutofillField& form_field) {
+  return IsFieldEligibleByTypeCriteria(form_field) &&
+         form_field.value(autofill::ValueSemantics::kCurrent).empty();
+}
 
-  // For a field to be fillable it must have the correct field type and the
-  // field's value must be empty.
-  for (const std::unique_ptr<AutofillField>& form_field : form.fields()) {
-    if (IsFieldEligibleByTypeCriteria(*form_field) &&
-        form_field->value(autofill::ValueSemantics::kCurrent).empty()) {
+void SetFieldFillingEligibility(autofill::FormStructure& form) {
+  for (auto& form_field : form) {
+    form_field->set_field_is_eligible_for_prediction_improvements(
+        IsFieldEligibleForFilling(*form_field));
+  }
+}
+
+bool IsFormEligibleForFilling(const autofill::FormStructure& form) {
+  int total_number_of_fillable_fields = 0;
+  for (auto& form_field : form) {
+    if (form_field->IsFocusable() && IsFieldEligibleForFilling(*form_field)) {
       ++total_number_of_fillable_fields;
     }
   }

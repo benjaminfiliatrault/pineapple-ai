@@ -468,6 +468,27 @@ std::string TemplateURLRef::ReplaceSearchTerms(
     query_params.push_back(search_terms_args.additional_query_params);
   if (!gurl.query().empty())
     query_params.push_back(gurl.query());
+
+  if (type_ == SEARCH || type_ == SUGGEST) {
+    auto regulatory_extension_type = owner_->GetRegulatoryExtensionType();
+    base::UmaHistogramEnumeration(
+        type_ == SEARCH
+            ? "Omnibox.TemplateUrl.RegulatoryExtension.SearchVariant"
+            : "Omnibox.TemplateUrl.RegulatoryExtension.SuggestVariant",
+        regulatory_extension_type);
+
+    auto* regulatory_extension =
+        owner_->GetRegulatoryExtension(regulatory_extension_type);
+    if (regulatory_extension) {
+      const char* regulatory_params =
+          type_ == SEARCH ? regulatory_extension->search_params
+                          : regulatory_extension->suggest_params;
+      if (regulatory_params && strlen(regulatory_params) > 0) {
+        query_params.push_back(regulatory_params);
+      }
+    }
+  }
+
 #if BUILDFLAG(IS_ANDROID)
   if (!base::FeatureList::IsEnabled(
           switches::kRemoveSearchEngineChoiceAttribution) &&
@@ -717,8 +738,6 @@ bool TemplateURLRef::ParseParameter(size_t start,
   const auto parameter =
       base::MakeStringPiece(original_url.begin() + start + 1,
                             original_url.begin() + start + 1 + length);
-  const auto full_parameter = base::MakeStringPiece(
-      original_url.begin() + start, original_url.begin() + end + 1);
   // Remove the parameter from the string.  For parameters who replacement is
   // constant and already known, just replace them directly.  For other cases,
   // like parameters whose values may change over time, use |replacements|.
@@ -839,26 +858,6 @@ bool TemplateURLRef::ParseParameter(size_t start,
     // We don't support these.
     if (!optional)
       url->insert(start, "1");
-  } else if (!prepopulated_) {
-    base::UmaHistogramBoolean("Omnibox.TemplateUrl.UnrecognizedParameter",
-                              /* is externally supplied template? */ false);
-    // Note: in certain scenarios this function is tested before FeatureFlag is
-    // initialized. Check whether FeatureList has been instantiated before
-    // testing the flag to avoid talking to EarlyFeatureAccessTracker.
-    if (!base::FeatureList::GetInstance() ||
-        !base::FeatureList::IsEnabled(
-            omnibox::kDropUnrecognizedTemplateUrlParameters)) {
-      url->insert(start, full_parameter.data(), full_parameter.size());
-      return false;
-    }
-    // The unrecognized parameters can originate from Chrome's DMA upstream
-    // definitions, or Chrome Extensions. In each case, data has shown that the
-    // parameters don't carry any JSON or Javascript content and should be safe
-    // to be removed.
-    // This still allows JSON payload to be included in the Template URL, but
-    // requires the braces to be escaped ahead of time.
-    //
-    // Fallthrough.
   } else {
     // Despite Chrome normally relying on prepopulated_engines.json file, there
     // are other mechanisms that can supply overrides - see:
@@ -870,7 +869,7 @@ bool TemplateURLRef::ParseParameter(size_t start,
     //
     // Fallthrough.
     base::UmaHistogramBoolean("Omnibox.TemplateUrl.UnrecognizedParameter",
-                              /* is externally supplied template? */ true);
+                              prepopulated_);
   }
   return true;
 }
@@ -1981,21 +1980,9 @@ GURL TemplateURL::GenerateSearchURL(const SearchTermsData& search_terms_data,
   if (!url_ref().SupportsReplacement(search_terms_data))
     return GURL(url());
 
-  TemplateURLRef::SearchTermsArgs search_terms_args(search_terms);
-  auto regulatory_extension_type = GetRegulatoryExtensionType();
-  base::UmaHistogramEnumeration(
-      "Omnibox.TemplateUrl.RegulatoryExtension.SearchVariant",
-      regulatory_extension_type);
-
-  auto* regulatory_extension =
-      GetRegulatoryExtension(regulatory_extension_type);
-  if (regulatory_extension && regulatory_extension->search_params) {
-    search_terms_args.additional_query_params =
-        regulatory_extension->search_params;
-  }
-
-  return GURL(url_ref().ReplaceSearchTerms(std::move(search_terms_args),
-                                           search_terms_data, nullptr));
+  return GURL(url_ref().ReplaceSearchTerms(
+      TemplateURLRef::SearchTermsArgs(search_terms), search_terms_data,
+      nullptr));
 }
 
 GURL TemplateURL::GenerateSuggestionURL(
@@ -2006,21 +1993,8 @@ GURL TemplateURL::GenerateSuggestionURL(
   if (!suggestions_url_ref().SupportsReplacement(search_terms_data))
     return GURL(suggestions_url());
 
-  TemplateURLRef::SearchTermsArgs search_terms_args{};
-  auto regulatory_extension_type = GetRegulatoryExtensionType();
-  base::UmaHistogramEnumeration(
-      "Omnibox.TemplateUrl.RegulatoryExtension.SuggestVariant",
-      regulatory_extension_type);
-
-  auto* regulatory_extension =
-      GetRegulatoryExtension(regulatory_extension_type);
-  if (regulatory_extension && regulatory_extension->suggest_params) {
-    search_terms_args.additional_query_params =
-        regulatory_extension->suggest_params;
-  }
-
   return GURL(suggestions_url_ref().ReplaceSearchTerms(
-      std::move(search_terms_args), search_terms_data, nullptr));
+      TemplateURLRef::SearchTermsArgs(), search_terms_data, nullptr));
 }
 
 RegulatoryExtensionType TemplateURL::GetRegulatoryExtensionType() const {

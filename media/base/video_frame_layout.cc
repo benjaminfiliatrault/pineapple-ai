@@ -31,7 +31,7 @@ std::string VectorToString(const std::vector<T>& vec) {
 }
 
 std::vector<ColorPlaneLayout> PlanesFromStrides(
-    const std::vector<int32_t> strides) {
+    const std::vector<int32_t>& strides) {
   std::vector<ColorPlaneLayout> planes(strides.size());
   for (size_t i = 0; i < strides.size(); i++) {
     planes[i].stride = strides[i];
@@ -93,8 +93,7 @@ size_t VideoFrameLayout::NumPlanes(VideoPixelFormat format) {
       // Set its NumPlanes() to zero to avoid NOTREACHED().
       return 0;
   }
-  NOTREACHED_IN_MIGRATION() << "Unsupported video frame format: " << format;
-  return 0;
+  NOTREACHED() << "Unsupported video frame format: " << format;
 }
 
 // static

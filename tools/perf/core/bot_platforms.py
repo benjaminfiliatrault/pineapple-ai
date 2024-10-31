@@ -493,7 +493,7 @@ _MAC_HIGH_END_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
 ])
 _MAC_HIGH_END_EXECUTABLE_CONFIGS = frozenset([
     _base_perftests(300),
-    # _dawn_perf_tests(330),    # b/332611618
+    _dawn_perf_tests(330),
     _tint_benchmark(),
     _views_perftests(),
 ])
@@ -502,6 +502,18 @@ _MAC_LOW_END_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
     'v8.runtime_stats.top_25',
 ])
 _MAC_LOW_END_EXECUTABLE_CONFIGS = frozenset([
+    _load_library_perf_tests(),
+])
+_MAC_INTEL_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
+    'blink_perf.display_locking',
+    'v8.runtime_stats.top_25',
+    'rendering.desktop',
+])
+_MAC_INTEL_EXECUTABLE_CONFIGS = frozenset([
+    _base_perftests(300),
+    _dawn_perf_tests(330),
+    _tint_benchmark(),
+    _views_perftests(),
     _load_library_perf_tests(),
 ])
 _MAC_M1_MINI_2020_BENCHMARK_CONFIGS = PerfSuite(
@@ -631,7 +643,6 @@ _ANDROID_PIXEL6_PRO_BENCHMARK_CONFIGS = PerfSuite(
     ])
 _ANDROID_PIXEL6_EXECUTABLE_CONFIGS = frozenset([
     _components_perftests(60),
-    _tint_benchmark(),
 ])
 _ANDROID_PIXEL6_PGO_EXECUTABLE_CONFIGS = frozenset([
     _components_perftests(60),
@@ -740,6 +751,13 @@ MAC_LOW_END_LAPTOP_PGO = PerfPlatform(
     'mac',
     executables=_MAC_LOW_END_EXECUTABLE_CONFIGS,
     pinpoint_only=True)
+MAC_INTEL = PerfPlatform('mac-intel-perf',
+                         'Mac Mini 8,1, Core i7 3.2 GHz',
+                         _MAC_INTEL_BENCHMARK_CONFIGS,
+                         24,
+                         'mac',
+                         executables=_MAC_INTEL_EXECUTABLE_CONFIGS,
+                         crossbench=_CROSSBENCH_BENCHMARKS_ALL)
 MAC_M1_MINI_2020 = PerfPlatform(
     'mac-m1_mini_2020-perf',
     'Mac M1 Mini 2020',
@@ -851,7 +869,10 @@ ANDROID_PIXEL4_PGO = PerfPlatform(
     pinpoint_only=True)
 ANDROID_PIXEL4_WEBVIEW = PerfPlatform(
     'android-pixel4_webview-perf', 'Android R',
-    _ANDROID_PIXEL4_WEBVIEW_BENCHMARK_CONFIGS, 40, 'android')
+    _ANDROID_PIXEL4_WEBVIEW_BENCHMARK_CONFIGS, 23, 'android')
+ANDROID_PIXEL4_WEBVIEW_PGO = PerfPlatform(
+    'android-pixel4_webview-perf-pgo', 'Android R',
+    _ANDROID_PIXEL4_WEBVIEW_BENCHMARK_CONFIGS, 20, 'android')
 # TODO(crbug.com/307958700): Switch shard number back to a higher number around
 #                            28 once more devices are procured. Temporarily use
 #                            15 to avoid high contention in the pixel6 pool.

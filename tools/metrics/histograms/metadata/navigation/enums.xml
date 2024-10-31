@@ -29,22 +29,30 @@ chromium-metrics-reviews@google.com.
 <enum name="AnimationAbortReason">
   <int value="0" label="Render Widget Host Destroyed"/>
   <int value="1" label="Main Commit On Subframe Transition"/>
-  <int value="2" label="New Commit In Primary Main Frame"/>
-  <int value="3" label="Cross Origin Redirect"/>
-  <int value="4" label="New Commit While Displaying Invoke Animation"/>
-  <int value="5" label="New Commit While Displaying Canceled Animation"/>
-  <int value="6" label="New Commit While Waiting For New Renderer To Draw"/>
+  <int value="2" label="[DEPRECATED] New Commit In Primary Main Frame"/>
+  <int value="3" label="[DEPRECATED] Cross Origin Redirect"/>
+  <int value="4"
+      label="[DEPRECATED] New Commit While Displaying Invoke Animation"/>
+  <int value="5"
+      label="[DEPRECATED] New Commit While Displaying Canceled Animation"/>
+  <int value="6"
+      label="[DEPRECATED] New Commit While Waiting For New Renderer To Draw"/>
   <int value="7"
-      label="New Commit While Waiting For Content For Navigation Entry Shown"/>
-  <int value="8" label="New Commit While Displaying Cross Fade Animation"/>
-  <int value="9" label="New Commit While Waiting For Before Unload Response"/>
+      label="[DEPRECATED] New Commit While Waiting For Content For Navigation
+             Entry Shown"/>
+  <int value="8"
+      label="[DEPRECATED] New Commit While Displaying Cross Fade Animation"/>
+  <int value="9"
+      label="[DEPRECATED] New Commit While Waiting For Before Unload Response"/>
   <int value="10" label="Multiple Navigation Requests Created"/>
   <int value="11" label="Navigation Entry Deleted Before Commit"/>
-  <int value="12" label="Post Navigation First Frame Timeout"/>
+  <int value="12" label="[DEPRECATED] Post Navigation First Frame Timeout"/>
   <int value="13" label="Chained Back"/>
   <int value="14" label="Detached From Window"/>
   <int value="15" label="Root Window Visibility Changed"/>
   <int value="16" label="Compositor Detached"/>
+  <int value="17" label="Animation Manager Destroyed"/>
+  <int value="18" label="Physical size changed mid-animation"/>
 </enum>
 
 <enum name="AutomaticBeaconOutcome">
@@ -417,7 +425,7 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="Cache Hit"/>
   <int value="1" label="Sent Screenshot Request"/>
   <int value="2" label="Captured Empty Bitmap"/>
-  <int value="3" label="Cache Miss Subframe"/>
+  <int value="3" label="[DEPRECATED] Cache Miss Subframe"/>
   <int value="4" label="Cache Miss Evicted"/>
   <int value="5" label="Cache Miss Purged Memory Pressure"/>
   <int value="6" label="Cache Miss Cold Start"/>
@@ -431,6 +439,7 @@ chromium-metrics-reviews@google.com.
   <int value="14" label="Navigate away from a crashed page (no early swap)"/>
   <int value="15" label="Window or compositor is detached"/>
   <int value="16" label="Browser not embedding a valid LocalSurfaceID"/>
+  <int value="17" label="Not capture non primary main frames"/>
 </enum>
 
 <enum name="NavigationWasServedFromCache">

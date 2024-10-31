@@ -127,7 +127,9 @@ ContentSettingsType kPermissionType[] = {
 #if !BUILDFLAG(IS_ANDROID)
     ContentSettingsType::HID_GUARD,
     ContentSettingsType::SERIAL_GUARD,
+#endif
     ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
+#if !BUILDFLAG(IS_ANDROID)
     ContentSettingsType::LOCAL_FONTS,
 #endif
     ContentSettingsType::BLUETOOTH_GUARD,
@@ -575,6 +577,14 @@ void PageInfo::RecordPageInfoAction(page_info::PageInfoAction action) {
       base::RecordAction(base::UserMetricsAction(
           "PageInfo.CookiesSubpage.AllSitesFilteredOpened"));
       break;
+    case page_info::PAGE_INFO_SHOW_FULL_HISTORY_CLICKED:
+      base::RecordAction(
+          base::UserMetricsAction("PageInfo.History.ShowFullHistoryClicked"));
+      break;
+    case page_info::PAGE_INFO_SAFE_BROWSING_HELP_OPENED:
+      base::RecordAction(
+          base::UserMetricsAction("PageInfo.SafeBrowsing.HelpOpened"));
+      break;
   }
 }
 
@@ -694,7 +704,7 @@ void PageInfo::OnSitePermissionChanged(
         web_contents_->GetBrowserContext()->GetPermissionController();
 
     blink::PermissionType permission_type =
-        permissions::PermissionUtil::ContentSettingTypeToPermissionType(type);
+        permissions::PermissionUtil::ContentSettingsTypeToPermissionType(type);
 
     // An origin should subscribe to a permission status change from the top
     // frame. Hence we verify only the main frame.
@@ -793,10 +803,10 @@ void PageInfo::OpenAllSitesViewFilteredToRws() {
 #if BUILDFLAG(IS_ANDROID)
   NOTREACHED_IN_MIGRATION();
 #else
-  auto fps_owner = delegate_->GetRwsOwner(site_url_);
+  auto rws_owner = delegate_->GetRwsOwner(site_url_);
   RecordPageInfoAction(page_info::PAGE_INFO_ALL_SITES_WITH_FPS_FILTER_OPENED);
-  if (fps_owner) {
-    delegate_->ShowAllSitesSettingsFilteredByRwsOwner(*fps_owner);
+  if (rws_owner) {
+    delegate_->ShowAllSitesSettingsFilteredByRwsOwner(*rws_owner);
   } else {
     delegate_->ShowAllSitesSettingsFilteredByRwsOwner(std::u16string());
   }
@@ -848,6 +858,15 @@ void PageInfo::OpenConnectionHelpCenterPage(const ui::Event& event) {
 #else
   RecordPageInfoAction(page_info::PAGE_INFO_CONNECTION_HELP_OPENED);
   delegate_->OpenConnectionHelpCenterPage(event);
+#endif
+}
+
+void PageInfo::OpenSafeBrowsingHelpCenterPage(const ui::Event& event) {
+#if BUILDFLAG(IS_ANDROID)
+  NOTREACHED_IN_MIGRATION();
+#else
+  RecordPageInfoAction(page_info::PAGE_INFO_SAFE_BROWSING_HELP_OPENED);
+  delegate_->OpenSafeBrowsingHelpCenterPage(event);
 #endif
 }
 
@@ -1213,7 +1232,7 @@ void PageInfo::PopulatePermissionInfo(PermissionInfo& permission_info,
         PermissionStatus::ASK, content::PermissionStatusSource::UNSPECIFIED);
     if (permissions::PermissionUtil::IsPermission(permission_info.type)) {
       permission_result = delegate_->GetPermissionResult(
-          permissions::PermissionUtil::ContentSettingTypeToPermissionType(
+          permissions::PermissionUtil::ContentSettingsTypeToPermissionType(
               permission_info.type),
           url::Origin::Create(site_url_), permission_info.requesting_origin);
     } else if (permission_info.type ==
@@ -1296,22 +1315,10 @@ bool PageInfo::ShouldShowPermission(
   if (info.type == ContentSettingsType::GEOLOCATION && !is_incognito) {
     return true;
   }
-
-  // The File System write permission is desktop only at the moment.
-  if (info.type == ContentSettingsType::FILE_SYSTEM_WRITE_GUARD) {
-    return false;
-  }
 #else
   // NFC is Android-only at the moment.
   if (info.type == ContentSettingsType::NFC) {
     return false;
-  }
-
-  // Display the File System Access write permission if the File System Access
-  // API is currently being used.
-  if (info.type == ContentSettingsType::FILE_SYSTEM_WRITE_GUARD &&
-      web_contents_->HasFileSystemAccessHandles()) {
-    return true;
   }
 
   // Hide camera if camera PTZ is granted or blocked.
@@ -1324,6 +1331,13 @@ bool PageInfo::ShouldShowPermission(
     }
   }
 #endif
+
+  // Display the File System Access write permission if the File System Access
+  // API is currently being used.
+  if (info.type == ContentSettingsType::FILE_SYSTEM_WRITE_GUARD &&
+      web_contents_->HasFileSystemAccessHandles()) {
+    return true;
+  }
 
   // TODO(crbug.com/40064079): Filter out FPS related STORAGE_ACCESS
   // permissions.
@@ -1481,9 +1495,9 @@ void PageInfo::PresentSiteDataInternal(base::OnceClosure done) {
 #if !BUILDFLAG(IS_ANDROID)
   if (base::FeatureList::IsEnabled(
           privacy_sandbox::kPrivacySandboxFirstPartySetsUI)) {
-    auto fps_owner = delegate_->GetRwsOwner(site_url_);
-    if (fps_owner) {
-      cookies_info.rws_info = PageInfoUI::CookiesRwsInfo(*fps_owner);
+    auto rws_owner = delegate_->GetRwsOwner(site_url_);
+    if (rws_owner) {
+      cookies_info.rws_info = PageInfoUI::CookiesRwsInfo(*rws_owner);
       cookies_info.rws_info->is_managed = delegate_->IsRwsManaged();
     }
   }

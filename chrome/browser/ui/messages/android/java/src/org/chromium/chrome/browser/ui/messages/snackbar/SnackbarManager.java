@@ -23,7 +23,7 @@ import org.chromium.base.UnownedUserData;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
-import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeSupplier;
+import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeSupplier;
 import org.chromium.ui.InsetObserver;
 import org.chromium.ui.accessibility.AccessibilityState;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -171,7 +171,7 @@ public class SnackbarManager
 
         mSnackbars.add(snackbar);
         updateView();
-        mView.announceforAccessibility();
+        mView.updateAccessibilityPaneTitle();
     }
 
     /** Dismisses all snackbars. */
@@ -341,7 +341,7 @@ public class SnackbarManager
                     int durationMs = getDuration(currentSnackbar);
                     mUIThreadHandler.postDelayed(mHideRunnable, durationMs);
                 }
-                mView.announceforAccessibility();
+                mView.updateAccessibilityPaneTitle();
             }
         }
 

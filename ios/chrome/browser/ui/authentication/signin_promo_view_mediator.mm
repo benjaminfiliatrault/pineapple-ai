@@ -136,7 +136,11 @@ bool IsSupportedAccessPoint(signin_metrics::AccessPoint access_point) {
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU_FAILED_SWITCH:
     case signin_metrics::AccessPoint::ACCESS_POINT_PRODUCT_SPECIFICATIONS:
     case signin_metrics::AccessPoint::ACCESS_POINT_ADDRESS_BUBBLE:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_CCT_ACCOUNT_MISMATCH_NOTIFICATION:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
+    case signin_metrics::AccessPoint::ACCESS_POINT_DRIVE_FILE_PICKER_IOS:
+
       return false;
   }
 }
@@ -235,10 +239,12 @@ void RecordImpressionsTilSigninButtonsHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU_FAILED_SWITCH:
     case signin_metrics::AccessPoint::ACCESS_POINT_PRODUCT_SPECIFICATIONS:
     case signin_metrics::AccessPoint::ACCESS_POINT_ADDRESS_BUBBLE:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_CCT_ACCOUNT_MISMATCH_NOTIFICATION:
+    case signin_metrics::AccessPoint::ACCESS_POINT_DRIVE_FILE_PICKER_IOS:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
-      NOTREACHED_IN_MIGRATION() << "Unexpected value for access point "
-                                << static_cast<int>(access_point);
-      break;
+      NOTREACHED() << "Unexpected value for access point "
+                   << static_cast<int>(access_point);
   }
 }
 
@@ -336,10 +342,12 @@ void RecordImpressionsTilDismissHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU_FAILED_SWITCH:
     case signin_metrics::AccessPoint::ACCESS_POINT_PRODUCT_SPECIFICATIONS:
     case signin_metrics::AccessPoint::ACCESS_POINT_ADDRESS_BUBBLE:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_CCT_ACCOUNT_MISMATCH_NOTIFICATION:
+    case signin_metrics::AccessPoint::ACCESS_POINT_DRIVE_FILE_PICKER_IOS:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
-      NOTREACHED_IN_MIGRATION() << "Unexpected value for access point "
-                                << static_cast<int>(access_point);
-      break;
+      NOTREACHED() << "Unexpected value for access point "
+                   << static_cast<int>(access_point);
   }
 }
 
@@ -437,10 +445,12 @@ void RecordImpressionsTilXButtonHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU_FAILED_SWITCH:
     case signin_metrics::AccessPoint::ACCESS_POINT_PRODUCT_SPECIFICATIONS:
     case signin_metrics::AccessPoint::ACCESS_POINT_ADDRESS_BUBBLE:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_CCT_ACCOUNT_MISMATCH_NOTIFICATION:
+    case signin_metrics::AccessPoint::ACCESS_POINT_DRIVE_FILE_PICKER_IOS:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
-      NOTREACHED_IN_MIGRATION() << "Unexpected value for access point "
-                                << static_cast<int>(access_point);
-      break;
+      NOTREACHED() << "Unexpected value for access point "
+                   << static_cast<int>(access_point);
   }
 }
 
@@ -527,6 +537,9 @@ const char* DisplayedCountPreferenceKey(
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU_FAILED_SWITCH:
     case signin_metrics::AccessPoint::ACCESS_POINT_PRODUCT_SPECIFICATIONS:
     case signin_metrics::AccessPoint::ACCESS_POINT_ADDRESS_BUBBLE:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_CCT_ACCOUNT_MISMATCH_NOTIFICATION:
+    case signin_metrics::AccessPoint::ACCESS_POINT_DRIVE_FILE_PICKER_IOS:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return nullptr;
   }
@@ -615,6 +628,9 @@ const char* AlreadySeenSigninViewPreferenceKey(
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU_FAILED_SWITCH:
     case signin_metrics::AccessPoint::ACCESS_POINT_PRODUCT_SPECIFICATIONS:
     case signin_metrics::AccessPoint::ACCESS_POINT_ADDRESS_BUBBLE:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_CCT_ACCOUNT_MISMATCH_NOTIFICATION:
+    case signin_metrics::AccessPoint::ACCESS_POINT_DRIVE_FILE_PICKER_IOS:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return nullptr;
   }
@@ -1127,7 +1143,7 @@ id<SystemIdentity> GetDisplayedIdentity(
                                           identity:identity
                                        accessPoint:self.accessPoint
                                        promoAction:promoAction
-                                          callback:completion];
+                                        completion:completion];
   [self.signinPresenter showSignin:command];
 }
 
@@ -1242,9 +1258,7 @@ id<SystemIdentity> GetDisplayedIdentity(
                        promoAction:promoAction];
       return;
     case SigninPromoAction::kReviewAccountSettings:
-      NOTREACHED_IN_MIGRATION()
-          << "This action is only valid for a signed in account.";
-      return;
+      NOTREACHED() << "This action is only valid for a signed in account.";
   }
 }
 
@@ -1310,14 +1324,10 @@ id<SystemIdentity> GetDisplayedIdentity(
                                        PROMO_ACTION_NOT_DEFAULT];
       return;
     case SigninPromoAction::kReviewAccountSettings:
-      NOTREACHED_IN_MIGRATION()
-          << "This action is only valid for a signed in account.";
-      return;
+      NOTREACHED() << "This action is only valid for a signed in account.";
     case SigninPromoAction::kSigninWithNoDefaultIdentity:
-      NOTREACHED_IN_MIGRATION()
-          << "The user should not be able to explicitly select "
-             "\"other account\".";
-      return;
+      NOTREACHED() << "The user should not be able to explicitly select "
+                      "\"other account\".";
   }
 }
 

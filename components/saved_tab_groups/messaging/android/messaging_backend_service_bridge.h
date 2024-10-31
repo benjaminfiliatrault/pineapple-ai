@@ -25,11 +25,17 @@ class MessagingBackendServiceBridge
   static base::android::ScopedJavaLocalRef<jobject>
   GetBridgeForMessagingBackendService(MessagingBackendService* service);
 
+  static std::unique_ptr<MessagingBackendServiceBridge> CreateForTest(
+      MessagingBackendService* service);
+
   MessagingBackendServiceBridge(const MessagingBackendServiceBridge&) = delete;
   MessagingBackendServiceBridge& operator=(
       const MessagingBackendServiceBridge&) = delete;
 
   ~MessagingBackendServiceBridge() override;
+
+  // Returns the companion Java object for this bridge.
+  base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
 
   // Methods called from Java via JNI.
   bool IsInitialized(JNIEnv* env,
@@ -50,8 +56,18 @@ class MessagingBackendServiceBridge
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& j_caller,
       jint j_type);
+  base::android::ScopedJavaLocalRef<jobject> GetActivityLog(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_caller,
+      jstring j_collaboration_id);
+  void RunInstantaneousMessageSuccessCallback(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_caller,
+      jlong j_callback,
+      jboolean j_result);
 
  private:
+  friend class MessagingBackendServiceBridgeTest;
   explicit MessagingBackendServiceBridge(MessagingBackendService* service);
 
   // MessagingBackendService::PersistentMessageObserver implementation.
@@ -60,7 +76,9 @@ class MessagingBackendServiceBridge
   void HidePersistentMessage(PersistentMessage message) override;
 
   // MessagingBackendService::InstantMessageDelegate implementation.
-  void DisplayInstantaneousMessage(InstantMessage message) override;
+  void DisplayInstantaneousMessage(
+      InstantMessage message,
+      InstantMessageDelegate::SuccessCallback success_callback) override;
 
   raw_ptr<MessagingBackendService> service_;
 

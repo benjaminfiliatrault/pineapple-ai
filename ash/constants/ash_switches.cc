@@ -30,26 +30,13 @@ constexpr char kCampbellHashKey[] =
     "\x78\xb6\xa7\x59\x06\x11\xc7\xea\x09\x7e\x92\xe3\xe9\xff\xa6\x01\x4c"
     "\x03\x18\x32";
 
-// The hash value for the secret key of the conch feature.
-constexpr char kConchHashKey[] =
-    "\x55\x40\xce\x6c\x95\x34\xae\x33\x4c\x82\x20\xa3\x86\xdb\xbc\xc5\x4d\x49"
-    "\x38\xf0";
-
-// The hash value for the secret key of the mahi feature.
-constexpr char kMahiHashKey[] =
-    "\xFE\x34\x22\x3F\xEA\x73\xC2\xD5\xA6\xE8\x82\x0B\xF3\x67\x7D\x01\xA3\x6F"
-    "\x3A\xFF";
-
-// Whether checking the mahi secret key is ignored.
-bool g_ignore_mahi_secret_key = false;
-
-// The hash value for the secret key of the mahi feature.
+// The hash value for the secret key of the modifier split feature.
 constexpr char kModifierSplitHashKey[] =
     "\xFC\xEF\x09\x7D\x01\x39\x86\x6A\x57\x08\x7C\x22\x5F\x1C\xEF\x8A\x3B\x7E"
     "\x10\x99";
 
-// Whether checking the mahi secret key is ignored.
-bool g_ignore_modifier_split_secret_key = false;
+// Whether checking the modifier split secret key is ignored.
+bool g_ignore_modifier_split_secret_key = true;
 
 // The hash value for the secret key of the sparky feature.
 constexpr char kSparkyHashKey[] =
@@ -64,6 +51,14 @@ constexpr std::string_view kScannerUpdateHashKey(
 
 // Whether checking the Scanner update secret key is ignored.
 bool g_ignore_scanner_update_secret_key = false;
+
+// The hash value for the secret key of the Sunfish feature.
+constexpr std::string_view kSunfishFeatureHashKey(
+    "\xce\x89\xdb\x48\xdc\x19\x49\x2a\xba\xd8\xaa\x48\xaa\x28\xc0\xd1\xc0\x10"
+    "\xf4\x2e",
+    base::kSHA1Length);
+
+bool g_ignore_sunfish_secret_key = false;
 
 }  // namespace
 
@@ -354,11 +349,6 @@ const char kChildWallpaperLarge[] = "child-wallpaper-large";
 // non-user-writable JPEG file).
 const char kChildWallpaperSmall[] = "child-wallpaper-small";
 
-// Switch used to pass in a secret key for Conch. Unless the correct secret key
-// is provided, Conch feature will remain disabled, regardless of the state of
-// the associated feature flag.
-const char kConchKey[] = "conch-key";
-
 // Forces CrOS region value.
 const char kCrosRegion[] = "cros-region";
 
@@ -418,6 +408,12 @@ const char kDemoModeForceArcOfflineProvision[] =
 
 // App ID to use for highlights app in demo mode.
 const char kDemoModeHighlightsApp[] = "demo-mode-highlights-extension";
+
+// API key for demo mode server.
+const char kDemoModeServerAPIKey[] = "demo-mode-server-api-key";
+
+// Override the prodution demo mode api url fo demo account sign in.
+const char kDemoModeServerUrl[] = "demo-mode-server-url";
 
 // App ID to use for screensaver app in demo mode.
 const char kDemoModeScreensaverApp[] = "demo-mode-screensaver-extension";
@@ -549,12 +545,6 @@ const char kEnableHoudini[] = "enable-houdini";
 // Enables the use of 64-bit Houdini library for ARM binary translation.
 const char kEnableHoudini64[] = "enable-houdini64";
 
-// Enables the use of Houdini DLC library for ARM binary translation. This is
-// independent of choosing between the 32-bit vs 64-bit Houdini library. Houdini
-// DLC library will be downloaded and installed at run-time instead of at build
-// time.
-const char kEnableHoudiniDlc[] = "enable-houdini-dlc";
-
 // Enables the use of 32-bit NDK translation library for ARM binary translation.
 const char kEnableNdkTranslation[] = "enable-ndk-translation";
 
@@ -675,8 +665,11 @@ const char kFingerprintSensorLocation[] = "fingerprint-sensor-location";
 // Not passed on restart after sign out.
 const char kFirstExecAfterBoot[] = "first-exec-after-boot";
 
-// Forces a chip with fake coral data to be shown.
-const char kForceBirchFakeCoral[] = "force-birch-fake-coral";
+// Forces a fake backend to generate coral groups.
+const char kForceBirchFakeCoralBackend[] = "force-birch-fake-coral-backend";
+
+// Forces a chip with fake coral group to be shown.
+const char kForceBirchFakeCoralGroup[] = "force-birch-fake-coral-group";
 
 // Forces a fetch of Birch data whenever an informed restore session starts.
 const char kForceBirchFetch[] = "force-birch-fetch";
@@ -700,11 +693,6 @@ const char kForceHWIDCheckResultForTest[] = "force-hwid-check-result-for-test";
 // user profile check and time limits and shows the notification every time
 // for any type of user. Should be used only for testing.
 const char kForceHappinessTrackingSystem[] = "force-happiness-tracking-system";
-
-// Forces prelaunching Lacros at login screen regardless
-// of whether there are or aren't users with Lacros enabled.
-const char kForceLacrosLaunchAtLoginScreenForTesting[] =
-    "force-lacros-launch-at-login-screen-for-testing";
 
 // Forces FullRestoreService to launch browser for telemetry tests.
 const char kForceLaunchBrowser[] = "force-launch-browser";
@@ -932,17 +920,6 @@ const char kDisallowLacros[] = "disallow-lacros";
 // used, event if --disallow-lacros is set.
 const char kDisableDisallowLacros[] = "disable-disallow-lacros";
 
-// This flag is a replacement for
-// `features::kLacrosOnly` during the in-between phase where users should not be
-// able to enable Lacros but developers should for debugging. Just like
-// `features::kLacrosOnly`, passing the flag alone does not guarantee that
-// Lacros is enabled and other conditions like whether Lacros is allowed to be
-// enabled i.e. `standalone_browser::BrowserSupport::IsAllowed()` still apply.
-const char kEnableLacrosForTesting[] = "enable-lacros-for-testing";
-
-// Supply secret key for the mahi feature.
-const char kMahiFeatureKey[] = "mahi-feature-key";
-
 // Supply secret key for the sparky feature.
 const char kSparkyFeatureKey[] = "sparky-feature-key";
 
@@ -991,10 +968,6 @@ const char kNaturalScrollDefault[] = "enable-natural-scroll-default";
 // An optional comma-separated list of IDs of apps that can be used to take
 // notes. If unset, a hardcoded list is used instead.
 const char kNoteTakingAppIds[] = "note-taking-app-ids";
-
-// Enables a prototype version of the PIN-only OOBE flow. Only for tests.
-// TODO(b/365059362) - Remove once more stable.
-const char kOobeEnablePinOnlyPrototype[] = "oobe-enable-pin-only-prototype";
 
 // Allows the eula url to be overridden for tests.
 const char kOobeEulaUrlForTests[] = "oobe-eula-url-for-tests";
@@ -1061,8 +1034,6 @@ const char kHiddenNetworkMigrationInterval[] =
 // follow the format "--hidden-network-migration-age=#", and should be >= 0.
 const char kHiddenNetworkMigrationAge[] = "hidden-network-migration-age";
 
-const char kPickerFeatureKey[] = "picker-feature-key";
-
 // Sets the channel from which the PPD files are loaded.
 const char kPrintingPpdChannel[] = "printing-ppd-channel";
 const char kPrintingPpdChannelProduction[] = "production";
@@ -1126,6 +1097,9 @@ const char kShelfHotseat[] = "shelf-hotseat";
 
 // Supply the secret key for Scanner (for more details see b/363103871).
 const char kScannerUpdateKey[] = "scanner-update-key";
+
+// Supply the secret key for Sunfish.
+const char kSunfishFeatureKey[] = "sunfish-feature-key";
 
 // Supply secret key for Seal feature.
 const char kSealKey[] = "seal-key";
@@ -1368,15 +1342,6 @@ bool IsOOBEChromeVoxHintEnabledForDevMode() {
       kEnableOOBEChromeVoxHintForDevMode);
 }
 
-bool IsOobePinOnlyPrototypeEnabled() {
-  // Directly dependent on the 'PasswordlessSetup' flag. This command line
-  // switch provides an 'early preview' into the PasswordlessSetup (PIN-only)
-  // flow and will be removed once it is more stable.
-  return features::IsAllowPasswordlessSetupEnabled() &&
-         base::CommandLine::ForCurrentProcess()->HasSwitch(
-             kOobeEnablePinOnlyPrototype);
-}
-
 bool IsOverviewButtonEnabledForTests() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       kOverviewButtonForTests);
@@ -1463,46 +1428,6 @@ bool IsCampbellSecretKeyMatched() {
   return key_matched;
 }
 
-bool IsConchSecretKeyMatched() {
-  // Commandline looks like:
-  //  out/Default/chrome --user-data-dir=/tmp/tmp123
-  //  --conch-key="INSERT KEY HERE" --enable-features=Conch
-  const std::string provided_key_hash = base::SHA1HashString(
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(kConchKey));
-
-  bool key_matched = (provided_key_hash == kConchHashKey);
-  if (!key_matched) {
-    LOG(ERROR)
-        << "Provided conch secret key does not match with the expected one.";
-  }
-
-  return key_matched;
-}
-
-bool IsMahiSecretKeyMatched() {
-  if (g_ignore_mahi_secret_key) {
-    return true;
-  }
-
-  // Commandline looks like:
-  //  out/Default/chrome --user-data-dir=/tmp/tmp123
-  //  --mahi-feature-key="INSERT KEY HERE" --enable-features=Mahi
-  const std::string provided_key_hash = base::SHA1HashString(
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          kMahiFeatureKey));
-
-  bool mahi_key_matched = (provided_key_hash == kMahiHashKey);
-  if (!mahi_key_matched) {
-    LOG(ERROR) << "Provided secret key does not match with the expected one.";
-  }
-
-  return mahi_key_matched;
-}
-
-base::AutoReset<bool> SetIgnoreMahiSecretKeyForTest() {
-  return {&g_ignore_mahi_secret_key, true};
-}
-
 bool IsSparkySecretKeyMatched() {
   // Commandline looks like:
   //  out/Default/chrome --user-data-dir=/tmp/tmp123
@@ -1584,6 +1509,31 @@ bool IsScannerUpdateSecretKeyMatched() {
 
 base::AutoReset<bool> SetIgnoreScannerUpdateSecretKeyForTest() {
   return {&g_ignore_scanner_update_secret_key, true};
+}
+
+bool IsSunfishSecretKeyMatched() {
+  if (g_ignore_sunfish_secret_key) {
+    return true;
+  }
+
+  // Commandline looks like:
+  //  out/Default/chrome --user-data-dir=/tmp/tmp123
+  //  --sunfish-feature-key="INSERT KEY HERE" --enable-features=SunfishFeature
+  const std::string provided_key_hash = base::SHA1HashString(
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          kSunfishFeatureKey));
+
+  const bool sunfish_key_matched =
+      (provided_key_hash == kSunfishFeatureHashKey);
+  if (!sunfish_key_matched) {
+    LOG(ERROR) << "Provided secret key does not match with the expected one.";
+  }
+
+  return sunfish_key_matched;
+}
+
+base::AutoReset<bool> SetIgnoreSunfishSecretKeyForTest() {
+  return {&g_ignore_sunfish_secret_key, true};
 }
 
 }  // namespace ash::switches

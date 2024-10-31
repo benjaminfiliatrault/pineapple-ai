@@ -55,6 +55,7 @@ using testing::ElementsAre;
 using testing::Field;
 using testing::Matcher;
 using testing::NiceMock;
+using testing::Property;
 using testing::Return;
 using testing::ReturnRef;
 using testing::Test;
@@ -69,9 +70,8 @@ constexpr char kShowSuggestionLatency[] =
 
 Matcher<Suggestion> EqualsManualFallbackSuggestion(SuggestionType type,
                                                    bool is_acceptable) {
-  return AllOf(
-      Field("type", &Suggestion::type, type),
-      Field("is_acceptable", &Suggestion::is_acceptable, is_acceptable));
+  return AllOf(Field("type", &Suggestion::type, type),
+               Property(&Suggestion::IsAcceptable, is_acceptable));
 }
 
 Suggestion::PasswordSuggestionDetails CreateTestPasswordDetails() {
@@ -109,7 +109,9 @@ class MockPasswordManagerDriver : public StubPasswordManagerDriver {
               (override));
   MOCK_METHOD(void,
               FillSuggestion,
-              (const std::u16string&, const std::u16string&),
+              (const std::u16string&,
+               const std::u16string&,
+               base::OnceCallback<void(bool)>),
               (override));
   MOCK_METHOD(void,
               FillSuggestionById,
@@ -648,7 +650,7 @@ TEST_F(PasswordManualFallbackFlowTest,
   suggestion.labels = {{Suggestion::Text(u"username")}};
   // `suggestion.is_acceptable` is `true` if the popup is triggered on a
   // password form.
-  suggestion.is_acceptable = true;
+  suggestion.acceptability = Suggestion::Acceptability::kAcceptable;
   flow().DidSelectSuggestion(suggestion);
 }
 
@@ -680,7 +682,7 @@ TEST_F(PasswordManualFallbackFlowTest,
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_EMPTY_LOGIN))}};
   // `suggestion.is_acceptable` is `true` if the popup is triggered on a
   // password form.
-  suggestion.is_acceptable = true;
+  suggestion.acceptability = Suggestion::Acceptability::kAcceptable;
   flow().DidSelectSuggestion(suggestion);
 }
 
@@ -701,7 +703,7 @@ TEST_F(PasswordManualFallbackFlowTest,
   suggestion.labels = {{Suggestion::Text(u"username")}};
   // `suggestion.is_acceptable` is `false` if the popup is triggered on a
   // different type of form or a standalone field.
-  suggestion.is_acceptable = false;
+  suggestion.acceptability = Suggestion::Acceptability::kUnacceptable;
   flow().DidSelectSuggestion(suggestion);
 }
 
@@ -736,7 +738,7 @@ TEST_F(PasswordManualFallbackFlowTest,
   suggestion.labels = {{Suggestion::Text(u"username")}};
   // `suggestion.is_acceptable` is `true` if the popup is triggered on a
   // password form.
-  suggestion.is_acceptable = true;
+  suggestion.acceptability = Suggestion::Acceptability::kAcceptable;
   ShowAndAcceptSuggestion(suggestion,
                           AutofillSuggestionDelegate::SuggestionMetadata{
                               .row = 0, .sub_popup_level = 0});
@@ -780,7 +782,7 @@ TEST_F(PasswordManualFallbackFlowTest,
   suggestion.labels = {{Suggestion::Text(u"username")}};
   // `suggestion.is_acceptable` is `true` if the popup is triggered on a
   // password form.
-  suggestion.is_acceptable = true;
+  suggestion.acceptability = Suggestion::Acceptability::kAcceptable;
   ShowAndAcceptSuggestion(suggestion,
                           AutofillSuggestionDelegate::SuggestionMetadata{
                               .row = 0, .sub_popup_level = 0});
@@ -834,7 +836,7 @@ TEST_F(PasswordManualFallbackFlowTest,
   suggestion.labels = {{Suggestion::Text(u"username")}};
   // `suggestion.is_acceptable` is `true` if the popup is triggered on a
   // password form.
-  suggestion.is_acceptable = true;
+  suggestion.acceptability = Suggestion::Acceptability::kAcceptable;
   ShowAndAcceptSuggestion(suggestion,
                           AutofillSuggestionDelegate::SuggestionMetadata{
                               .row = 0, .sub_popup_level = 0});
@@ -875,7 +877,7 @@ TEST_F(PasswordManualFallbackFlowTest,
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_EMPTY_LOGIN))}};
   // `suggestion.is_acceptable` is `true` if the popup is triggered on a
   // password form.
-  suggestion.is_acceptable = true;
+  suggestion.acceptability = Suggestion::Acceptability::kAcceptable;
   ShowAndAcceptSuggestion(suggestion,
                           AutofillSuggestionDelegate::SuggestionMetadata{
                               .row = 0, .sub_popup_level = 0});
@@ -898,7 +900,7 @@ TEST_F(PasswordManualFallbackFlowTest,
   suggestion.labels = {{Suggestion::Text(u"username")}};
   // `suggestion.is_acceptable` is `false` if the popup is triggered on a
   // different type of form or a standalone field.
-  suggestion.is_acceptable = false;
+  suggestion.acceptability = Suggestion::Acceptability::kUnacceptable;
   ShowAndAcceptSuggestion(suggestion,
                           AutofillSuggestionDelegate::SuggestionMetadata{
                               .row = 0, .sub_popup_level = 0});

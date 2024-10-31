@@ -32,6 +32,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -44,10 +45,6 @@
 #include "ui/events/ash/keyboard_capability.h"
 #include "ui/events/ash/keyboard_layout_util.h"
 #include "ui/events/devices/device_data_manager.h"
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#include "chromeos/ash/resources/internal/strings/grit/ash_internal_strings.h"
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 namespace ash::settings {
 
@@ -746,6 +743,10 @@ bool IsShowForceRespectUiGainsToggleEnabled() {
   return base::FeatureList::IsEnabled(media::kShowForceRespectUiGainsToggle);
 }
 
+bool IsShowSpatialAudioToggleEnabled() {
+  return base::FeatureList::IsEnabled(ash::features::kShowSpatialAudioToggle);
+}
+
 void AddDeviceKeyboardStrings(content::WebUIDataSource* html_source) {
   const bool kIsRevampEnabled =
       ash::features::IsOsSettingsRevampWayfindingEnabled();
@@ -868,21 +869,14 @@ void AddDeviceKeyboardStrings(content::WebUIDataSource* html_source) {
   };
   html_source->AddLocalizedStrings(keyboard_strings);
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  // For official builds, only add the real string if the feature is enabled.
   if (Shell::Get()->keyboard_capability()->IsModifierSplitEnabled()) {
     html_source->AddLocalizedString("perDeviceKeyboardKeyRightAlt",
-                                    IDS_KEYBOARD_RIGHT_ALT_LABEL);
+                                    IDS_KEYBOARD_QUICK_INSERT_LABEL);
   } else {
     html_source->AddLocalizedString(
         "perDeviceKeyboardKeyRightAlt",
         IDS_SETTINGS_PER_DEVICE_KEYBOARD_KEY_RIGHT_ALT);
   }
-#else
-  html_source->AddLocalizedString(
-      "perDeviceKeyboardKeyRightAlt",
-      IDS_SETTINGS_PER_DEVICE_KEYBOARD_KEY_RIGHT_ALT);
-#endif
 
   html_source->AddBoolean(
       "enableModifierSplit",
@@ -1035,6 +1029,8 @@ void AddDeviceAudioStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_AUDIO_OUTPUT_MUTE_BUTTON_ARIA_LABEL_MUTED},
       {"audioOutputMuteButtonAriaLabelNotMuted",
        IDS_SETTINGS_AUDIO_OUTPUT_MUTE_BUTTON_ARIA_LABEL_NOT_MUTED},
+      {"audioOutputSpatialAudioTitle",
+       IDS_SETTINGS_AUDIO_OUTPUT_ENABLE_SPATIAL_AUDIO_TITLE},
       {"audioTitle", IDS_SETTINGS_AUDIO_TITLE},
       {"audioToggleToMuteTooltip", IDS_SETTINGS_AUDIO_TOGGLE_TO_MUTE_TOOLTIP},
       {"audioToggleToUnmuteTooltip",
@@ -1715,6 +1711,7 @@ void DeviceSection::AddDevicePointersStrings(
       {"builtInPointingStickName", IDS_SETTINGS_BUILT_IN_POINTING_STICK_NAME},
       {"pointingStickTitle", IDS_SETTINGS_POINTING_STICK_TITLE},
       {"builtInTouchpadName", IDS_SETTINGS_BUILT_IN_TOUCHPAD_NAME},
+      {"builtInTouchpadDisabled", IDS_SETTINGS_BUILT_IN_TOUCHPAD_DISABLED},
       {"touchpadTitle", IDS_SETTINGS_TOUCHPAD_TITLE},
       {"mouseAndTouchpadTitle", IDS_SETTINGS_MOUSE_AND_TOUCHPAD_TITLE},
       {"touchpadTapToClickEnabledLabel",
@@ -2027,6 +2024,9 @@ void DeviceSection::AddDeviceDisplayStrings(
 
   html_source->AddBoolean("enableAudioHfpMicSRToggle",
                           features::IsAudioHFPMicSRToggleEnabled());
+
+  html_source->AddBoolean("enableSpatialAudioToggle",
+                          IsShowSpatialAudioToggleEnabled());
 
   html_source->AddBoolean("enableTouchCalibrationSetting",
                           IsTouchCalibrationAvailable());

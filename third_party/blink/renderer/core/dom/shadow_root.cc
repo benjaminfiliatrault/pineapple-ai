@@ -28,6 +28,8 @@
 
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_observable_array_css_style_sheet.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_shadow_root_mode.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_slot_assignment_mode.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
@@ -45,6 +47,7 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/custom/custom_element_registry.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
+#include "third_party/blink/renderer/core/sanitizer/sanitizer_api.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -146,6 +149,37 @@ void ShadowRoot::setHTMLUnsafe(const String& html,
           html, &host(), kAllowScriptingContent,
           Element::ParseDeclarativeShadowRoots::kParse,
           Element::ForceHtml::kDontForce, exception_state)) {
+    if (RuntimeEnabledFeatures::SanitizerAPIEnabled()) {
+      SanitizerAPI::SanitizeUnsafeInternal(fragment, nullptr, exception_state);
+    }
+    ReplaceChildrenWithFragment(this, fragment, exception_state);
+  }
+}
+
+void ShadowRoot::setHTMLUnsafe(const String& html,
+                               SetHTMLOptions* options,
+                               ExceptionState& exception_state) {
+  if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
+          html, &host(), kAllowScriptingContent,
+          Element::ParseDeclarativeShadowRoots::kParse,
+          Element::ForceHtml::kDontForce, exception_state)) {
+    if (RuntimeEnabledFeatures::SanitizerAPIEnabled()) {
+      SanitizerAPI::SanitizeUnsafeInternal(fragment, options, exception_state);
+    }
+    ReplaceChildrenWithFragment(this, fragment, exception_state);
+  }
+}
+
+void ShadowRoot::setHTML(const String& html,
+                         SetHTMLOptions* options,
+                         ExceptionState& exception_state) {
+  if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
+          html, &host(), kAllowScriptingContent,
+          Element::ParseDeclarativeShadowRoots::kParse,
+          Element::ForceHtml::kDontForce, exception_state)) {
+    if (RuntimeEnabledFeatures::SanitizerAPIEnabled()) {
+      SanitizerAPI::SanitizeSafeInternal(fragment, options, exception_state);
+    }
     ReplaceChildrenWithFragment(this, fragment, exception_state);
   }
 }
@@ -215,6 +249,25 @@ void ShadowRoot::RemovedFrom(ContainerNode& insertion_point) {
   DocumentFragment::RemovedFrom(insertion_point);
 }
 
+V8ShadowRootMode ShadowRoot::mode() const {
+  switch (GetMode()) {
+    case ShadowRootMode::kOpen:
+      return V8ShadowRootMode(V8ShadowRootMode::Enum::kOpen);
+    case ShadowRootMode::kClosed:
+      return V8ShadowRootMode(V8ShadowRootMode::Enum::kClosed);
+    case ShadowRootMode::kUserAgent:
+      // UA ShadowRoot should not be exposed to the Web.
+      break;
+  }
+  NOTREACHED();
+}
+
+V8SlotAssignmentMode ShadowRoot::slotAssignment() const {
+  return V8SlotAssignmentMode(IsManualSlotting()
+                                  ? V8SlotAssignmentMode::Enum::kManual
+                                  : V8SlotAssignmentMode::Enum::kNamed);
+}
+
 void ShadowRoot::SetNeedsAssignmentRecalc() {
   if (!slot_assignment_)
     return;
@@ -235,12 +288,16 @@ void ShadowRoot::ChildrenChanged(const ChildrenChange& change) {
     // nothing when not in the active document).
     DCHECK(!InActiveDocument());
   } else if (change.IsChildElementChange()) {
+    Element* changed_element = To<Element>(change.sibling_changed);
+    bool removed = change.type == ChildrenChangeType::kElementRemoved;
     CheckForSiblingStyleChanges(
-        change.type == ChildrenChangeType::kElementRemoved
-            ? kSiblingElementRemoved
-            : kSiblingElementInserted,
-        To<Element>(change.sibling_changed), change.sibling_before_change,
+        removed ? kSiblingElementRemoved : kSiblingElementInserted,
+        changed_element, change.sibling_before_change,
         change.sibling_after_change);
+    GetDocument()
+        .GetStyleEngine()
+        .ScheduleInvalidationsForHasPseudoAffectedByInsertionOrRemoval(
+            this, change.sibling_before_change, *changed_element, removed);
   }
 
   // In the case of input types like button where the child element is not

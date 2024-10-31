@@ -3,6 +3,11 @@ This test documents all interface attributes and methods on the global window ob
 On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE".
 
 [INTERFACES]
+interface AICreateMonitor : EventTarget
+    attribute @@toStringTag
+    getter ondownloadprogress
+    method constructor
+    setter ondownloadprogress
 interface AbortController
     attribute @@toStringTag
     getter signal
@@ -648,14 +653,12 @@ interface CSSPositionTryDescriptors : CSSStyleDeclaration
     getter inline-size
     getter inlineSize
     getter inset
-    getter inset-area
     getter inset-block
     getter inset-block-end
     getter inset-block-start
     getter inset-inline
     getter inset-inline-end
     getter inset-inline-start
-    getter insetArea
     getter insetBlock
     getter insetBlockEnd
     getter insetBlockStart
@@ -721,14 +724,12 @@ interface CSSPositionTryDescriptors : CSSStyleDeclaration
     setter inline-size
     setter inlineSize
     setter inset
-    setter inset-area
     setter inset-block
     setter inset-block-end
     setter inset-block-start
     setter inset-inline
     setter inset-inline-end
     setter inset-inline-start
-    setter insetArea
     setter insetBlock
     setter insetBlockEnd
     setter insetBlockStart
@@ -1614,6 +1615,12 @@ interface DeviceOrientationEvent : Event
     getter beta
     getter gamma
     method constructor
+interface DevicePosture : EventTarget
+    attribute @@toStringTag
+    getter onchange
+    getter type
+    method constructor
+    setter onchange
 interface Document : Node
     static method parseHTMLUnsafe
     attribute @@toStringTag
@@ -2185,7 +2192,6 @@ interface Element : Node
     method getElementsByTagName
     method getElementsByTagNameNS
     method getHTML
-    method getInnerHTML
     method hasAttribute
     method hasAttributeNS
     method hasAttributes
@@ -2653,7 +2659,6 @@ interface GPUAdapter
     getter isFallbackAdapter
     getter limits
     method constructor
-    method requestAdapterInfo
     method requestDevice
 interface GPUAdapterInfo
     attribute @@toStringTag
@@ -2689,6 +2694,7 @@ interface GPUCanvasContext
     getter canvas
     method configure
     method constructor
+    method getConfiguration
     method getCurrentTexture
     method unconfigure
 interface GPUCommandBuffer
@@ -5968,6 +5974,7 @@ interface Navigator
     getter credentials
     getter deprecatedRunAdAuctionEnforcesKAnonymity
     getter deviceMemory
+    getter devicePosture
     getter doNotTrack
     getter geolocation
     getter gpu
@@ -6831,6 +6838,9 @@ interface PublicKeyCredential : Credential
     static method isUserVerifyingPlatformAuthenticatorAvailable
     static method parseCreationOptionsFromJSON
     static method parseRequestOptionsFromJSON
+    static method signalAllAcceptedCredentials
+    static method signalCurrentUserDetails
+    static method signalUnknownCredential
     attribute @@toStringTag
     getter authenticatorAttachment
     getter rawId
@@ -7270,6 +7280,7 @@ interface Request
     getter url
     method arrayBuffer
     method blob
+    method bytes
     method clone
     method constructor
     method formData
@@ -7309,6 +7320,7 @@ interface Response
     getter url
     method arrayBuffer
     method blob
+    method bytes
     method clone
     method constructor
     method formData
@@ -8687,7 +8699,6 @@ interface ShadowRoot : DocumentFragment
     method elementsFromPoint
     method getAnimations
     method getHTML
-    method getInnerHTML
     method getSelection
     method setHTMLUnsafe
     setter adoptedStyleSheets

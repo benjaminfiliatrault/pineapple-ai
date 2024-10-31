@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.bookmarks;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.res.Resources;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnAttachStateChangeListener;
@@ -28,7 +27,6 @@ import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkListEntry.ViewType;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
-import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -44,7 +42,8 @@ import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListLayout;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar.SearchDelegate;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
-import org.chromium.components.favicon.LargeIconBridge;
+import org.chromium.components.commerce.core.CommerceFeatureUtils;
+import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.image_fetcher.ImageFetcher;
 import org.chromium.components.image_fetcher.ImageFetcherConfig;
 import org.chromium.components.image_fetcher.ImageFetcherFactory;
@@ -150,8 +149,9 @@ public class BookmarkManagerCoordinator
         mMainView = (ViewGroup) LayoutInflater.from(context).inflate(R.layout.bookmark_main, null);
         mBookmarkModel = BookmarkModel.getForProfile(profile);
         mBookmarkOpener = new BookmarkOpener(mBookmarkModel, context, openBookmarkComponentName);
-        if (ShoppingFeatures.isShoppingListEligible(profile)) {
-            ShoppingServiceFactory.getForProfile(profile).scheduleSavedProductUpdate();
+        ShoppingService service = ShoppingServiceFactory.getForProfile(profile);
+        if (CommerceFeatureUtils.isShoppingListEligible(service)) {
+            service.scheduleSavedProductUpdate();
         }
         mBookmarkUiPrefs = bookmarkUiPrefs;
 
@@ -204,10 +204,6 @@ public class BookmarkManagerCoordinator
                         () -> IncognitoUtils.isIncognitoModeEnabled(profile));
         mSelectableListLayout.configureWideDisplayStyle();
 
-        LargeIconBridge largeIconBridge = new LargeIconBridge(mProfile);
-        largeIconBridge.createCache(computeCacheMaxSize());
-
-        Resources res = context.getResources();
         final @BookmarkRowDisplayPref int displayPref =
                 mBookmarkUiPrefs.getBookmarkRowDisplayPref();
         BookmarkImageFetcher bookmarkImageFetcher =
@@ -216,10 +212,7 @@ public class BookmarkManagerCoordinator
                         context,
                         mBookmarkModel,
                         mImageFetcher,
-                        largeIconBridge,
-                        BookmarkUtils.getRoundedIconGenerator(context, displayPref),
-                        BookmarkUtils.getImageIconSize(res, displayPref),
-                        BookmarkUtils.getFaviconDisplaySize(res));
+                        BookmarkUtils.getRoundedIconGenerator(context, displayPref));
 
         BookmarkUndoController bookmarkUndoController =
                 new BookmarkUndoController(context, mBookmarkModel, snackbarManager);
@@ -234,7 +227,6 @@ public class BookmarkManagerCoordinator
                         mSelectionDelegate,
                         mRecyclerView,
                         dragReorderableRecyclerViewAdapter,
-                        largeIconBridge,
                         isDialogUi,
                         mBackPressStateSupplier,
                         mProfile,

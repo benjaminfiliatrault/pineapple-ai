@@ -21,6 +21,8 @@ namespace content {
 class WebContents;
 }  // namespace content
 
+class MostRelevantTabResumptionPageHandlerTest;
+
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 enum class URLVisitAggregateDataType {
@@ -52,8 +54,7 @@ class MostRelevantTabResumptionPageHandler
       const std::vector<ntp::most_relevant_tab_resumption::mojom::URLVisitPtr>
           url_visits) override;
   void DismissURLVisit(
-      const ntp::most_relevant_tab_resumption::mojom::URLVisitPtr url_visit)
-      override;
+      ntp::most_relevant_tab_resumption::mojom::URLVisitPtr url_visit) override;
   void RestoreModule(
       const std::vector<ntp::most_relevant_tab_resumption::mojom::URLVisitPtr>
           url_visits) override;
@@ -86,10 +87,18 @@ class MostRelevantTabResumptionPageHandler
 
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
+  friend class MostRelevantTabResumptionPageHandlerTest;
+
  private:
   // Method to determine if a url is in the list of previously dismissed urls.
-  bool IsNewURL(
-      ntp::most_relevant_tab_resumption::mojom::URLVisitPtr& url_visit);
+  bool IsNewURL(const std::string& url_key, const base::Time& timestamp);
+
+  void DismissURLVisits(
+      const std::vector<ntp::most_relevant_tab_resumption::mojom::URLVisitPtr>&
+          url_visits);
+  void RestoreURLVisits(
+      const std::vector<ntp::most_relevant_tab_resumption::mojom::URLVisitPtr>&
+          url_visits);
 
   // Method to clear dismissed tabs that are older than a certain amount of
   // time.
@@ -99,7 +108,7 @@ class MostRelevantTabResumptionPageHandler
   raw_ptr<content::WebContents> web_contents_;
 
   // The result types to request for when fetching URL visit aggregate data.
-  visited_url_ranking::FetchOptions::URLTypeSet result_url_types_;
+  visited_url_ranking::URLVisitAggregate::URLTypeSet result_url_types_;
 
   // The number of days after which URL visit suggestions based on dismissed
   // URLs are again eligigle for display and thus should be removed from the

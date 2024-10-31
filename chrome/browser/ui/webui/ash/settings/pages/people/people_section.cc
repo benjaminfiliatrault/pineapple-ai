@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/webui/ash/settings/pages/people/people_section.h"
 
+#include <vector>
+
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/edusumer/graduation_utils.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/i18n/number_formatting.h"
@@ -129,6 +132,18 @@ const std::vector<SearchConcept>& GetParentalSearchConcepts() {
   return *tags;
 }
 
+const std::vector<SearchConcept>& GetGraduationSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_GRADUATION,
+       mojom::kPeopleSectionPath,
+       mojom::SearchResultIcon::kGraduation,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kGraduation}},
+  });
+  return *tags;
+}
+
 void AddAccountManagerPageStrings(content::WebUIDataSource* html_source,
                                   Profile* profile) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
@@ -220,13 +235,10 @@ void AddAccountManagerPageStrings(content::WebUIDataSource* html_source,
   html_source->AddBoolean(
       "arcAccountRestrictionsEnabled",
       AccountAppsAvailability::IsArcAccountRestrictionsEnabled());
-  html_source->AddBoolean(
-      "arcManagedAccountRestrictionEnabled",
-      AccountAppsAvailability::IsArcManagedAccountRestrictionEnabled());
 }
 
 void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
-                              PrefService* pref_service) {
+                              Profile* profile) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"lockScreenNotificationTitle",
        IDS_ASH_SETTINGS_LOCK_SCREEN_NOTIFICATION_TITLE},
@@ -266,8 +278,6 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_PEOPLE_LOCK_SCREEN_REMOVE_PIN_BUTTON},
       {"lockScreenPasswordLabel",
        IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PASSWORD_LABEL},
-      {"lockScreenPasswordDescription",
-       IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PASSWORD_DESCRIPTION},
       {"lockScreenPinLabel", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_LABEL},
       {"lockScreenSetupPasswordButton",
        IDS_SETTINGS_PEOPLE_LOCK_SCREEN_SETUP_PASSWORD_BUTTON},
@@ -314,9 +324,10 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
   html_source->AddBoolean("quickUnlockEnabled", quick_unlock::IsPinEnabled());
-  html_source->AddBoolean("quickUnlockDisabledByPolicy",
-                          quick_unlock::IsPinDisabledByPolicy(
-                              pref_service, quick_unlock::Purpose::kAny));
+  html_source->AddBoolean(
+      "quickUnlockDisabledByPolicy",
+      quick_unlock::IsPinDisabledByPolicy(profile->GetPrefs(),
+                                          quick_unlock::Purpose::kAny));
   html_source->AddBoolean("lockScreenNotificationsEnabled",
                           ash::features::IsLockScreenNotificationsEnabled());
   html_source->AddBoolean(
@@ -329,6 +340,11 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
       "lockScreenSwitchLocalPasswordDescription",
       l10n_util::GetStringFUTF16(
           IDS_SETTINGS_PEOPLE_LOCK_SCREEN_SWITCH_LOCAL_PASSWORD_DESCRIPTION,
+          ui::GetChromeOSDeviceName()));
+  html_source->AddString(
+      "lockScreenSwitchSetLocalPasswordDescription",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PASSWORD_DESCRIPTION,
           ui::GetChromeOSDeviceName()));
   html_source->AddString("lockScreenFingerprintNotice",
                          l10n_util::GetStringFUTF16(
@@ -464,6 +480,21 @@ void AddParentalControlStrings(content::WebUIDataSource* html_source,
                           are_parental_control_settings_allowed);
 }
 
+void AddGraduationStrings(content::WebUIDataSource* html_source,
+                          Profile* profile) {
+  static constexpr webui::LocalizedString kLocalizedStrings[] = {
+      {"graduationSectionTitle", IDS_SETTINGS_GRADUATION_SECTION_TITLE},
+      {"graduationRowTitle", IDS_SETTINGS_GRADUATION_ROW_TITLE},
+      {"graduationRowSubtitle", IDS_SETTINGS_GRADUATION_ROW_SUBTITLE}};
+
+  html_source->AddLocalizedStrings(kLocalizedStrings);
+
+  html_source->AddBoolean("isGraduationAppEnabled",
+                          ShouldShowGraduationAppSetting(profile));
+  html_source->AddBoolean("isGraduationFlagEnabled",
+                          features::IsGraduationEnabled());
+}
+
 bool IsSameAccount(const ::account_manager::AccountKey& account_key,
                    const AccountId& account_id) {
   switch (account_key.account_type()) {
@@ -525,6 +556,10 @@ PeopleSection::PeopleSection(Profile* profile,
   if (ShouldShowParentalControlSettings(profile)) {
     updater.AddSearchTags(GetParentalSearchConcepts());
   }
+  if (features::IsGraduationEnabled() &&
+      ShouldShowGraduationAppSetting(profile)) {
+    updater.AddSearchTags(GetGraduationSearchConcepts());
+  }
 }
 
 PeopleSection::~PeopleSection() = default;
@@ -570,7 +605,7 @@ void PeopleSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       base::FeatureList::IsEnabled(omnibox::kDocumentProvider));
 
   AddAccountManagerPageStrings(html_source, profile());
-  AddLockScreenPageStrings(html_source, profile()->GetPrefs());
+  AddLockScreenPageStrings(html_source, profile());
   AddFingerprintListStrings(html_source);
   AddFingerprintResources(html_source, AreFingerprintSettingsAllowed());
   AddSetupFingerprintDialogStrings(html_source);
@@ -578,6 +613,7 @@ void PeopleSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   AddUsersStrings(html_source);
   AddParentalControlStrings(html_source,
                             ShouldShowParentalControlSettings(profile()));
+  AddGraduationStrings(html_source, profile());
 
   ::settings::AddPasswordPromptDialogStrings(html_source);
 
@@ -649,6 +685,7 @@ bool PeopleSection::LogMetric(mojom::Setting setting,
 
 void PeopleSection::RegisterHierarchy(HierarchyGenerator* generator) const {
   generator->RegisterTopLevelSetting(mojom::Setting::kSetUpParentalControls);
+  generator->RegisterTopLevelSetting(mojom::Setting::kGraduation);
 
   generator->RegisterTopLevelSubpage(
       IDS_SETTINGS_ACCOUNT_MANAGER_PAGE_TITLE, mojom::Subpage::kMyAccounts,

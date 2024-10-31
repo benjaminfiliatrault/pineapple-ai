@@ -14,6 +14,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
+#include "build/build_config.h"
 #include "chrome/enterprise_companion/device_management_storage/dm_storage.h"
 #include "chrome/updater/protos/omaha_settings.pb.h"
 #include "components/policy/proto/device_management_backend.pb.h"
@@ -24,6 +25,16 @@
 #include "net/proxy_resolution/proxy_config_with_annotation.h"
 #include "services/network/public/cpp/mutable_network_traffic_annotation_tag_mojom_traits.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "base/strings/sys_string_conversions.h"
+#include "base/win/registry.h"
+#include "base/win/shlwapi.h"
+#include "base/win/windows_types.h"
+#include "chrome/enterprise_companion/enterprise_companion_branding.h"
+#define UPDATER_POLICIES_KEY \
+  L"Software\\Policies\\" COMPANY_SHORTNAME_STRING L"\\Update\\"
+#endif
 
 namespace enterprise_companion {
 
@@ -134,8 +145,43 @@ std::optional<ProxyConfigAndOverridePrecedence> GetProxyConfigFromCloudPolicy(
 std::optional<ProxyConfigAndOverridePrecedence>
 GetProxyConfigFromSystemPolicy() {
 #if BUILDFLAG(IS_WIN)
-  // TODO(http://crbug.com/368328077): Determine config from Group Policy.
-  return std::nullopt;
+  std::string proxy_mode;
+  std::string pac_url;
+  std::string proxy_server;
+  std::optional<bool> cloud_policy_overrides_platform_policy;
+  for (base::win::RegistryValueIterator it(HKEY_LOCAL_MACHINE,
+                                           UPDATER_POLICIES_KEY);
+       it.Valid(); ++it) {
+    const std::string key_name =
+        base::ToLowerASCII(base::SysWideToUTF8(it.Name()));
+    if (it.Type() == REG_DWORD &&
+        key_name == "cloudpolicyoverridesplatformpolicy") {
+      cloud_policy_overrides_platform_policy =
+          *reinterpret_cast<const int*>(it.Value());
+      continue;
+    } else if (it.Type() != REG_SZ) {
+      continue;
+    }
+
+    const std::string value = base::SysWideToUTF8(it.Value());
+
+    if (key_name == "proxymode") {
+      proxy_mode = value;
+    } else if (key_name == "proxypacurl") {
+      pac_url = value;
+    } else if (key_name == "proxyserver") {
+      proxy_server = value;
+    }
+  }
+
+  std::optional<net::ProxyConfig> config =
+      GetProxyConfigFromPolicyValues(proxy_mode, pac_url, proxy_server);
+  return config ? std::make_optional(ProxyConfigAndOverridePrecedence{
+                      .config = *config,
+                      .cloud_policy_overrides_platform_policy =
+                          cloud_policy_overrides_platform_policy})
+                : std::nullopt;
+
 #else
   // Proxy configuration is not supported via system policy on Mac or Linux.
   return std::nullopt;
@@ -200,33 +246,37 @@ class ProxyConfigService final : public net::ProxyConfigService,
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     observer_list_.RemoveObserver(observer);
   }
+
+  bool UsesPolling() override { return true; }
+
   void OnLazyPoll() override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     fallback_->OnLazyPoll();
+    std::optional<net::ProxyConfig> new_config = GetEffectiveConfig();
+
+    if ((last_config_.has_value() != new_config.has_value()) ||
+        (last_config_ && new_config &&
+         !last_config_.value().Equals(new_config.value()))) {
+      last_config_ = new_config;
+      observer_list_.Notify(
+          &Observer::OnProxyConfigChanged,
+          net::ProxyConfigWithAnnotation(*last_config_,
+                                         kPolicyProxyConfigTrafficAnnotation),
+          new_config ? ConfigAvailability::CONFIG_VALID
+                     : ConfigAvailability::CONFIG_PENDING);
+    }
   }
 
   ConfigAvailability GetLatestProxyConfig(
       net::ProxyConfigWithAnnotation* config) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    std::optional<net::ProxyConfig> policy_config = GetProxyConfigFromPolicy(
-        dm_storage_, system_policy_proxy_config_provider_.Run());
-    if (policy_config) {
-      VLOG(1) << "Determined proxy configuration from policies: "
-              << config->value().ToValue();
+    OnLazyPoll();
+    if (last_config_) {
       *config = net::ProxyConfigWithAnnotation(
-          *policy_config, kPolicyProxyConfigTrafficAnnotation);
+          *last_config_, kPolicyProxyConfigTrafficAnnotation);
       return ConfigAvailability::CONFIG_VALID;
     }
-    ConfigAvailability fallback_availability =
-        fallback_->GetLatestProxyConfig(config);
-    if (fallback_availability == ConfigAvailability::CONFIG_VALID) {
-      VLOG(1) << "Determined proxy configuration from fallback: "
-              << config->value().ToValue();
-    } else {
-      VLOG(1) << "No proxy configuration from poicies or the fallback is "
-                 "available.";
-    }
-    return fallback_availability;
+    return ConfigAvailability::CONFIG_PENDING;
   }
 
  private:
@@ -237,6 +287,7 @@ class ProxyConfigService final : public net::ProxyConfigService,
       system_policy_proxy_config_provider_;
   const std::unique_ptr<net::ProxyConfigService> fallback_;
   base::ObserverList<Observer>::Unchecked observer_list_;
+  std::optional<net::ProxyConfig> last_config_;
 
   // Overrides for Observer:
   void OnProxyConfigChanged(const net::ProxyConfigWithAnnotation&,
@@ -246,6 +297,29 @@ class ProxyConfigService final : public net::ProxyConfigService,
     ConfigAvailability availability = GetLatestProxyConfig(&config);
     observer_list_.Notify(&Observer::OnProxyConfigChanged, config,
                           availability);
+  }
+
+  std::optional<net::ProxyConfig> GetEffectiveConfig() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    std::optional<net::ProxyConfig> policy_config = GetProxyConfigFromPolicy(
+        dm_storage_, system_policy_proxy_config_provider_.Run());
+    if (policy_config) {
+      VLOG(1) << "Determined proxy configuration from policies: "
+              << policy_config->ToValue();
+      return policy_config;
+    }
+
+    net::ProxyConfigWithAnnotation fallback_config;
+    ConfigAvailability fallback_availability =
+        fallback_->GetLatestProxyConfig(&fallback_config);
+    if (fallback_availability == ConfigAvailability::CONFIG_VALID) {
+      VLOG(1) << "Determined proxy configuration from fallback: "
+              << fallback_config.value().ToValue();
+      return fallback_config.value();
+    }
+    VLOG(1) << "No proxy configuration from policies or the fallback is "
+               "available.";
+    return std::nullopt;
   }
 };
 

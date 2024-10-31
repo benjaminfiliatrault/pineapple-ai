@@ -16,6 +16,7 @@
 #include "components/data_sharing/public/data_sharing_ui_delegate.h"
 #include "components/data_sharing/public/group_data.h"
 #include "components/data_sharing/public/service_status.h"
+#include "components/data_sharing/public/share_url_interception_context.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync/model/data_type_sync_bridge.h"
 
@@ -61,6 +62,11 @@ class DataSharingService : public KeyedService, public base::SupportsUserData {
     Observer(const Observer&) = delete;
     Observer& operator=(const Observer&) = delete;
     ~Observer() override = default;
+
+    // Called when the group data model has been loaded. Use
+    // DataSharingService::IsGroupDataModelLoaded() to check if the model has
+    // been already loaded before starting to observe the service.
+    virtual void OnGroupDataModelLoaded() {}
 
     virtual void OnGroupChanged(const GroupData& group_data) {}
     // User either created a new group or has been invited to the existing one.
@@ -119,8 +125,24 @@ class DataSharingService : public KeyedService, public base::SupportsUserData {
   GetCollaborationGroupControllerDelegate() = 0;
 
   // People Group API.
+  // Returns true if the group data model has been loaded. Read APIs will return
+  // empty results if the model is not loaded.
+  virtual bool IsGroupDataModelLoaded() = 0;
+
+  // Synchronously reads a group from the local storage. Returns nullopt if the
+  // group doesn't exist, it has not been fetched from the server yet, or the
+  // model is not loaded yet.
+  virtual std::optional<GroupData> ReadGroup(
+      const GroupId& group_id) = 0;
+  // Synchronously reads all groups from the local storage. Returns empty set
+  // if the groups haven't been fetched from the server yet, or the model is not
+  // loaded yet.
+  virtual std::set<GroupData> ReadAllGroups() = 0;
+
   // Refreshes data if necessary. On success passes to the `callback` a set of
   // all groups known to the client (ordered by id).
+  // TODO(crbug.com/370897286): Deprecate and eventually remove asynchronous
+  // ReadAllGroups() and ReadGroup() methods.
   virtual void ReadAllGroups(
       base::OnceCallback<void(const GroupsDataSetOrFailureOutcome&)>
           callback) = 0;
@@ -159,11 +181,18 @@ class DataSharingService : public KeyedService, public base::SupportsUserData {
       const std::string& member_email,
       base::OnceCallback<void(PeopleGroupActionOutcome)> callback) = 0;
 
+  // Attempts to leave a group the current user has joined before.
+  virtual void LeaveGroup(
+      const GroupId& group_id,
+      base::OnceCallback<void(PeopleGroupActionOutcome)> callback) = 0;
+
   // Check if the given URL should be intercepted.
   virtual bool ShouldInterceptNavigationForShareURL(const GURL& url) = 0;
 
   // Called when a data sharing type URL has been intercepted.
-  virtual void HandleShareURLNavigationIntercepted(const GURL& url) = 0;
+  virtual void HandleShareURLNavigationIntercepted(
+      const GURL& url,
+      std::unique_ptr<ShareURLInterceptionContext> context) = 0;
 
   // Create a data sharing URL used for sharing. This does not validate if the
   // group is still active nor guarantee that the URL is not expired. The caller
@@ -192,8 +221,13 @@ class DataSharingService : public KeyedService, public base::SupportsUserData {
           callback) = 0;
 
   // Get the current DataSharingUIDelegate instance.
+  virtual void SetUIDelegate(
+      std::unique_ptr<DataSharingUIDelegate> ui_delegate) = 0;
+
+  // Get the current DataSharingUIDelegate instance.
   virtual DataSharingUIDelegate* GetUIDelegate() = 0;
 
+  // DEPRECATED: Use CollaborationService::GetServiceStatus instead.
   // Get the current ServiceStatus.
   virtual ServiceStatus GetServiceStatus() = 0;
 };

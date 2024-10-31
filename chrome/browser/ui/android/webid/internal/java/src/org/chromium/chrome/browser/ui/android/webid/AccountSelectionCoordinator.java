@@ -124,7 +124,7 @@ public class AccountSelectionCoordinator
         int avatarSize =
                 context.getResources()
                         .getDimensionPixelSize(
-                                rpMode == RpMode.BUTTON
+                                rpMode == RpMode.ACTIVE
                                         ? R.dimen.account_selection_button_mode_sheet_avatar_size
                                         : R.dimen.account_selection_account_avatar_size);
         mMediator =
@@ -137,7 +137,9 @@ public class AccountSelectionCoordinator
                         mBottomSheetContent,
                         imageFetcher,
                         avatarSize,
-                        rpMode);
+                        rpMode,
+                        context,
+                        windowAndroid.getModalDialogManager());
 
         // If this object is corresponding to the custom tab opened by showModalDialog, this
         // is the first chance to associate it with the opener, so do so now.
@@ -156,7 +158,7 @@ public class AccountSelectionCoordinator
             ModelList sheetItems,
             @RpMode.EnumType int rpMode) {
         int accountSelectionSheetLayout =
-                rpMode == RpMode.BUTTON
+                rpMode == RpMode.ACTIVE
                         ? R.layout.account_selection_button_mode_sheet
                         : R.layout.account_selection_sheet;
         View contentView =
@@ -171,7 +173,7 @@ public class AccountSelectionCoordinator
                 new LinearLayoutManager(
                         sheetItemListView.getContext(), LinearLayoutManager.VERTICAL, false));
         sheetItemListView.setItemAnimator(null);
-        if (rpMode == RpMode.BUTTON) {
+        if (rpMode == RpMode.ACTIVE) {
             // AccountPickerItemDecoration updates the background and rounds the edges of the
             // account list items.
             sheetItemListView.addItemDecoration(new AccountPickerItemDecoration());
@@ -182,7 +184,7 @@ public class AccountSelectionCoordinator
         adapter.registerType(
                 AccountSelectionProperties.ITEM_TYPE_ACCOUNT,
                 new LayoutViewBuilder(
-                        rpMode == RpMode.BUTTON
+                        rpMode == RpMode.ACTIVE
                                 ? R.layout.account_selection_button_mode_account_item
                                 : R.layout.account_selection_account_item),
                 AccountSelectionViewBinder::bindAccountView);

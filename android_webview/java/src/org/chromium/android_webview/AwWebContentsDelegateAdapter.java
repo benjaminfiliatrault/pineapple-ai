@@ -174,8 +174,8 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
             ResourceRequestBody postData,
             int disposition,
             boolean isRendererInitiated) {
-        // This is only called in chrome layers.
-        assert false;
+        // Not supported.  There are very few cases where this is called other than in //chrome
+        // and we don't expect them to matter for WebView.
     }
 
     @Override
@@ -405,6 +405,19 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
             Uri uri = Uri.parse(filePath);
             return ContentUriUtils.getDisplayName(
                     uri, mContext, MediaStore.MediaColumns.DISPLAY_NAME);
+        }
+    }
+
+    /** Handle zoom in/zoom out for ctrl + mouse wheel. */
+    @Override
+    public void contentsZoomChange(boolean zoomIn) {
+        boolean supportsZoom = mAwContents.getSettings().supportZoom();
+        if (supportsZoom) {
+            if (zoomIn) {
+                mAwContents.zoomIn();
+            } else {
+                mAwContents.zoomOut();
+            }
         }
     }
 }

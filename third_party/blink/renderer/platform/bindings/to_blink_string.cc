@@ -82,8 +82,9 @@ AtomicString StringTraits<AtomicString>::FromV8String(
       32 / sizeof(typename V8StringTrait::CharType);
   if (length <= kInlineBufferSize) {
     typename V8StringTrait::CharType inline_buffer[kInlineBufferSize];
-    V8StringTrait::Write(isolate, v8_string, inline_buffer);
-    return AtomicString(inline_buffer, static_cast<unsigned>(length));
+    base::span<typename V8StringTrait::CharType> buffer_span(inline_buffer);
+    V8StringTrait::Write(isolate, v8_string, buffer_span);
+    return AtomicString(buffer_span.first(static_cast<size_t>(length)));
   }
   base::span<typename V8StringTrait::CharType> buffer;
   String string = String::CreateUninitialized(length, buffer);
@@ -164,6 +165,7 @@ ConvertAndExternalizeString(v8::Isolate* isolate,
     if (result.Is8Bit()) {
       StringResource8* string_resource = new StringResource8(isolate, result);
       if (!v8_string->MakeExternal(string_resource)) [[unlikely]] {
+        string_resource->Unaccount(isolate);
         delete string_resource;
       } else {
         *was_externalized = true;
@@ -171,6 +173,7 @@ ConvertAndExternalizeString(v8::Isolate* isolate,
     } else {
       StringResource16* string_resource = new StringResource16(isolate, result);
       if (!v8_string->MakeExternal(string_resource)) [[unlikely]] {
+        string_resource->Unaccount(isolate);
         delete string_resource;
       } else {
         *was_externalized = true;

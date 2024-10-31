@@ -38,8 +38,10 @@
 #include "chrome/browser/ash/fileapi/file_system_backend.h"
 #include "chrome/browser/ash/fusebox/fusebox_server.h"
 #include "chrome/browser/ash/guest_os/guest_os_session_tracker.h"
+#include "chrome/browser/ash/guest_os/guest_os_session_tracker_factory.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_mount_provider.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_service.h"
+#include "chrome/browser/ash/guest_os/public/guest_os_service_factory.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/smb_client/smb_service.h"
 #include "chrome/browser/ash/smb_client/smb_service_factory.h"
@@ -469,7 +471,7 @@ std::string GetAndroidFilesMountPointName() {
 bool IsBruschettaMountPointName(const std::string& name,
                                 Profile* profile,
                                 guest_os::GuestId* guest_id) {
-  auto* service = guest_os::GuestOsService::GetForProfile(profile);
+  auto* service = guest_os::GuestOsServiceFactory::GetForProfile(profile);
   if (!service) {
     return false;
   }
@@ -586,8 +588,8 @@ bool ConvertFileSystemURLToPathInsideVM(
     // Crostini.
     if (map_crostini_home) {
       auto container_info =
-          guest_os::GuestOsSessionTracker::GetForProfile(profile)->GetInfo(
-              crostini::DefaultContainerId());
+          guest_os::GuestOsSessionTrackerFactory::GetForProfile(profile)
+              ->GetInfo(crostini::DefaultContainerId());
       if (!container_info) {
         return false;
       }
@@ -599,7 +601,7 @@ bool ConvertFileSystemURLToPathInsideVM(
     // Bruschetta: use path to homedir, which is currently the empty string
     // because sftp-server inside the VM runs in the homedir.
     auto container_info =
-        guest_os::GuestOsSessionTracker::GetForProfile(profile)->GetInfo(
+        guest_os::GuestOsSessionTrackerFactory::GetForProfile(profile)->GetInfo(
             guest_id);
     if (!container_info) {
       return false;
@@ -671,7 +673,7 @@ bool ConvertPathInsideVMToFileSystemURL(
 
   if (map_crostini_home) {
     auto container_info =
-        guest_os::GuestOsSessionTracker::GetForProfile(profile)->GetInfo(
+        guest_os::GuestOsSessionTrackerFactory::GetForProfile(profile)->GetInfo(
             crostini::DefaultContainerId());
     if (container_info &&
         AppendRelativePath(container_info->homedir, inside, &relative_path)) {
@@ -1021,8 +1023,8 @@ void ConvertToContentUrls(
 }
 
 bool ReplacePrefix(std::string* const s,
-                   const std::string_view prefix,
-                   const std::string_view replacement) {
+                   std::string_view prefix,
+                   std::string_view replacement) {
   DCHECK(s);
   if (s->starts_with(prefix) &&
       (prefix.ends_with('/') || s->size() <= prefix.size() ||
@@ -1035,7 +1037,7 @@ bool ReplacePrefix(std::string* const s,
 }
 
 std::string GetPathDisplayTextForSettings(Profile* const profile,
-                                          const std::string_view path) {
+                                          std::string_view path) {
   std::string result(path);
   DriveIntegrationService* service =
       DriveIntegrationServiceFactory::FindForProfile(profile);

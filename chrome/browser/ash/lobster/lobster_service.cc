@@ -48,6 +48,12 @@ void LobsterService::InflateCandidate(uint32_t seed,
   resizer_.InflateImage(seed, query, std::move(callback));
 }
 
+void LobsterService::QueueInsertion(const std::string& image_bytes,
+                                    StatusCallback insert_status_callback) {
+  queued_insertion_ = std::make_unique<LobsterInsertion>(
+      image_bytes, std::move(insert_status_callback));
+}
+
 bool LobsterService::SubmitFeedback(const std::string& query,
                                     const std::string& model_version,
                                     const std::string& description,
@@ -55,4 +61,32 @@ bool LobsterService::SubmitFeedback(const std::string& query,
   return SendLobsterFeedback(profile_, /*query=*/query, /*model_version=*/"",
                              /*user_description=*/description,
                              /*image_bytes=*/image_bytes);
+}
+
+void LobsterService::LoadUI(std::optional<std::string> query,
+                            ash::LobsterMode mode) {
+  bubble_coordinator_.LoadUI(profile_, query, mode);
+}
+
+void LobsterService::ShowUI() {
+  bubble_coordinator_.ShowUI();
+}
+
+void LobsterService::CloseUI() {
+  bubble_coordinator_.CloseUI();
+}
+
+void LobsterService::OnFocus(int context_id) {
+  if (queued_insertion_ == nullptr) {
+    return;
+  }
+
+  if (queued_insertion_->HasTimedOut()) {
+    queued_insertion_ = nullptr;
+    return;
+  }
+
+  if (queued_insertion_->Commit()) {
+    queued_insertion_ = nullptr;
+  }
 }

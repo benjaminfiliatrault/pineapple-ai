@@ -71,7 +71,7 @@ namespace {
 // A FakeWebState that returns nullopt as the last trusted committed URL.
 class FakeWebStateWithoutTrustedCommittedUrl : public web::FakeWebState {
  public:
-  ~FakeWebStateWithoutTrustedCommittedUrl() override {}
+  ~FakeWebStateWithoutTrustedCommittedUrl() override = default;
 
   // WebState implementation.
   std::optional<GURL> GetLastCommittedURLIfTrusted() const override {
@@ -156,7 +156,7 @@ class PasswordFormHelperTest : public AutofillTestWithWebState {
                                base::Value::Dict()
                                    .Set("name", "test_field")
                                    .Set("form_control_type", "password")))
-            .Set("frame_id", frame_id));
+            .Set("host_frame", frame_id));
   }
 
   // Returns a script message that can represent a form submission.
@@ -969,7 +969,7 @@ TEST_F(PasswordFormHelperTest, HandleFormSubmittedMessage_CantExtractFormData) {
   LoadHtml(@"<p>");
 
   auto incomplete_message_body = std::make_unique<base::Value>(
-      base::Value::Dict().Set("frame_id", GetMainFrame()->GetFrameId()));
+      base::Value::Dict().Set("host_frame", GetMainFrame()->GetFrameId()));
 
   // Set a message with an incomplete body that misses the required keys to be
   // parsed to form data.

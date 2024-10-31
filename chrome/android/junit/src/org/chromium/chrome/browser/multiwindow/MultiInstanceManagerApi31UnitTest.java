@@ -80,9 +80,9 @@ import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorBase;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorFactory;
-import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderState;
-import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvider;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
+import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
+import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateProvider;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -162,6 +162,7 @@ public class MultiInstanceManagerApi31UnitTest {
     @Mock TabModelOrchestrator mTabModelOrchestrator;
     @Mock ActivityManager mActivityManager;
     @Mock ObservableSupplier<ModalDialogManager> mModalDialogManagerSupplier;
+    @Mock ModalDialogManager mModalDialogManager;
     @Mock ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     @Mock MenuOrKeyboardActionController mMenuOrKeyboardActionController;
     @Mock Supplier<DesktopWindowStateProvider> mDesktopWindowStateProviderSupplier;
@@ -375,6 +376,7 @@ public class MultiInstanceManagerApi31UnitTest {
                     @Override
                     public TabModelSelector buildSelector(
                             Context context,
+                            ModalDialogManager modalDialogManager,
                             OneshotSupplier<ProfileProvider> profileProviderSupplier,
                             TabCreatorManager tabCreatorManager,
                             NextTabPolicySupplier nextTabPolicySupplier) {
@@ -493,6 +495,7 @@ public class MultiInstanceManagerApi31UnitTest {
                 TabWindowManagerSingleton.getInstance()
                         .requestSelector(
                                 mActivityTask57,
+                                mModalDialogManager,
                                 mProfileProviderSupplier,
                                 null,
                                 null,
@@ -523,6 +526,7 @@ public class MultiInstanceManagerApi31UnitTest {
                 TabWindowManagerSingleton.getInstance()
                         .requestSelector(
                                 mActivityTask57,
+                                mModalDialogManager,
                                 mProfileProviderSupplier,
                                 null,
                                 null,
@@ -980,6 +984,7 @@ public class MultiInstanceManagerApi31UnitTest {
                 TabWindowManagerSingleton.getInstance()
                         .requestSelector(
                                 activity,
+                                mModalDialogManager,
                                 mProfileProviderSupplier,
                                 null,
                                 null,

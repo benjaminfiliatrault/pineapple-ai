@@ -260,6 +260,21 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Accessibility.CanvasHasNonTrivialFallback">
+  <owner>aleventhal@chromium.org</owner>
+  <owner>aleventhal@google.com</owner>
+  <summary>
+    Recorded once for any page that had a canvas element with non-trivial
+    fallback content beyond plain text. Only recorded if a11y is turned on (~10%
+    of users).
+  </summary>
+  <metric name="Seen" enum="Boolean">
+    <summary>
+      Only ever set to true, thus serving as a counter.
+    </summary>
+  </metric>
+</event>
+
 <event name="Accessibility.ImageDescriptions">
   <owner>dtseng@chromium.org</owner>
   <owner>nektar@chromium.org</owner>
@@ -11497,6 +11512,14 @@ be describing additional metrics about the same event.
     invocation source of the session, the duration, and whether a search
     performed in the session.
   </summary>
+  <metric name="GeneratedTabCount">
+    <summary>
+      The number of tabs opened by the user during a Lens Overlay session. On
+      iOS the Lens Overlay opens all non-lens URLs in new tabs. New unimodal
+      searches are also opened in a new tab. Additionally the user can open tabs
+      in the background through the web context menu.
+    </summary>
+  </metric>
   <metric name="InvocationResultedInSearch" enum="Boolean">
     <summary>
       Indicates whether or not a search was performed at any point since the
@@ -11526,6 +11549,20 @@ be describing additional metrics about the same event.
     <summary>
       Measures the elapsed time between when the overlay was invoked and when it
       was dismissed.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SessionForegroundDuration">
+    <summary>
+      Measures the total time the Lens Overlay is in the foreground, between
+      invocation and dismissal. Sum of all times that the overlay tab is
+      returned to the foreground.
     </summary>
     <aggregation>
       <history>
@@ -11592,6 +11629,18 @@ be describing additional metrics about the same event.
       <history>
         <statistics>
           <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="FirstInteractionType" enum="LensOverlayFirstInteractionType">
+    <summary>
+      The first interaction event type.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
         </statistics>
       </history>
     </aggregation>
@@ -12328,6 +12377,21 @@ be describing additional metrics about the same event.
         </statistics>
       </history>
     </aggregation>
+  </metric>
+</event>
+
+<event name="Media.EME.CdmSystemCode">
+  <owner>vpasupathy@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    Event recorded whenever CDM reports changed associated with keys for
+    MediaKeySession.
+  </summary>
+  <metric name="CdmSystemCode">
+    <summary>
+      An integer corresponding to a system code for a singular key supplied by
+      the CDM.
+    </summary>
   </metric>
 </event>
 
@@ -16226,11 +16290,86 @@ be describing additional metrics about the same event.
 
 <event name="PasswordForm">
   <owner>battre@chromium.org</owner>
+  <owner>chrome-password-manager-metrics-alerts@google.com</owner>
   <summary>
     Metrics about password forms on websites and the user's interactions with
     them. A separate event is generated for each password form discovered on a
     site.
   </summary>
+  <metric name="ClassificationCorrectness.ConfirmationPassword"
+      enum="PasswordManagerClassificationCorrectness">
+    <summary>
+      Records the correctness of a confirmation password field classification
+      produced on the page load. Is recorded for successfully submitted password
+      forms containing a confirmation password field. The classification is
+      considered correct iff values in the new and in the confirmation password
+      fields match. Recorded on the corresponding form manager destruction.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="ClassificationCorrectness.CurrentPassword"
+      enum="PasswordManagerClassificationCorrectness">
+    <summary>
+      Records the correctness of a current password field classification
+      produced on the page load. Is recorded for successfully submitted password
+      forms containing a current password field, for which the user had saved
+      passwords. The classification is considered correct, if the field
+      contained a previously saved password at the moment of submisison, and
+      incorrect, if any other fields in the form contained a previosuly saved
+      password. Recorded on the corresponding form manager destruction.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="ClassificationCorrectness.NewPassword"
+      enum="PasswordManagerClassificationCorrectness">
+    <summary>
+      Records the correctness of a new password field classification produced on
+      the page load. Is recorded for successfully submitted password forms
+      containing a new password field. The correctness is estimated based on
+      previosuly saved credentials (if the field value was saved before, it's
+      not a new password), and on whether the confirmation password field is
+      present and validates form classification. Recorded on the corresponding
+      form manager destruction.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="ClassificationCorrectness.Username"
+      enum="PasswordManagerClassificationCorrectness">
+    <summary>
+      Records the correctness of a username field classification produced on the
+      page load. Is recorded for successfully submitted password forms
+      containing a username field, for which the user had saved usernames. The
+      classification is considered correct, if the field contained a previously
+      saved username at the moment of submisison, and incorrect, if any other
+      fields in the form contained a previosuly saved username. Recorded on the
+      corresponding form manager destruction.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
   <metric name="Context.FormSignature">
     <summary>
       Records a low entropy hash of the form signature in order to be able to
@@ -16542,7 +16681,7 @@ be describing additional metrics about the same event.
   <owner>kazinova@google.com</owner>
   <owner>vasilii@chromium.org</owner>
   <summary>
-    Metrics for newly saved passwords, recorded at the moment of saving.
+    Metrics for newly saved credentials, recorded at the moment of saving.
   </summary>
   <metric name="HasEmptyUsername" enum="Boolean">
     <summary>
@@ -16559,7 +16698,8 @@ be describing additional metrics about the same event.
   <metric name="IsPasswordGenerated" enum="Boolean">
     <summary>
       Whether the password was generated by Chrome or typed manually by the
-      user.
+      user. Obsolete: The metric is not recorded in M131+. However this entry is
+      kept to gather UKM data from pre-M131 clients.
     </summary>
     <aggregation>
       <history>
@@ -16598,6 +16738,27 @@ be describing additional metrics about the same event.
     <summary>
       A boolean indicating success or failure.
     </summary>
+  </metric>
+</event>
+
+<event name="PasswordManager.SavedPassword">
+  <owner>kazinova@google.com</owner>
+  <owner>vasilii@chromium.org</owner>
+  <summary>
+    Metrics for saved passwords, recorded at the moment of saving.
+  </summary>
+  <metric name="IsPasswordGenerated" enum="Boolean">
+    <summary>
+      Whether the password was generated by Chrome or typed manually by the
+      user.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -18031,34 +18192,32 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
-<event name="Preloading.AnchorInteraction">
-  <owner>jacobstanley@google.com</owner>
-  <owner>curranmax@chromium.org</owner>
-  <owner>chrome-brapp-loading@google.com</owner>
-  <summary>
-    Logged once for each preconnection request sent to the browser in response
-    to the user interacting with an anchor element. Associated with the Source
-    ID of the page triggering the preconnection.
-  </summary>
-  <metric name="AnchorElementPreloaderType" enum="AnchorElementPreloaderType">
-    <summary>
-      One event for each preload operation that was triggered on the current
-      page.
-    </summary>
-  </metric>
-</event>
-
 <event name="Preloading.Attempt">
   <owner>domenic@chromium.org</owner>
   <owner>chrome-instant-ecosystem@google.com</owner>
   <summary>
     This event is logged for each preloading attempt i.e., for preloading
-    features like Preresolve, Preconnect, Prerender, Prefetch, and others when
-    the user navigates or when the WebContents is being destroyed.
+    features like preresolve, preconnect, prerender, prefetch, and others, as
+    long as the user navigated to another page after the preloading attempt
+    occurred.
 
-    Associated with the Source ID of the page user navigates to. Contains
-    information about the type of attempt, its eligibility, triggering outcome,
-    failure reason and whether the attempt was triggered accurately or not.
+    It is associated with the Source ID of the page user navigates to, i.e., the
+    page the user visits *after* a browser feature or the previous page
+    attempted to preload. The page the user navigates to may or may not be the
+    same as the URL that was attempted to be preloaded. If they are the same,
+    AccurateTriggering will be true; otherwise, it will be false. As such, there
+    can be many Preloading.Attempts for a single UKM source, of which only one
+    will have AccurateTriggering set to true.
+
+    This event is logged when the user navigates onward from that successor
+    page, or that sucessor page's WebContents is being destroyed. This means
+    that if a UKM source that attempts a preload is not followed by another
+    navigation to a successor page, e.g. because the user closed their browser,
+    then the Preloading.Attempt event is not recorded: only the
+    Preloading.Attempt.PreviousPrimaryPage is recorded. On the other hand, in
+    cases where there is no initiating page, e.g. because the preload is
+    initiated via Chrome UI, then only Preloading.Attempt is recorded, and not
+    Preloading.Attempt.PreviousPrimaryPage.
 
     Note that this event is sampled based on the PreloadingConfig feature
     configuration (in addition to the normal UKM sampling mechanism). The
@@ -18175,14 +18334,27 @@ be describing additional metrics about the same event.
   <owner>domenic@chromium.org</owner>
   <owner>chrome-instant-ecosystem@google.com</owner>
   <summary>
-    This is same as Preloading.Attempt but UKM is associated with the primary
-    triggering page (if exists) and logged when the user navigates away or when
-    the WebContents is being destroyed.
+    This event is logged for each preloading attempt i.e., for preloading
+    features like preresolve, preconnect, prerender, prefetch, and others, as
+    long as there is a triggering page.
 
-    Associated with the Source ID of the WebContents primary page where the
-    preloading attempt is triggered (user navigates from). All the metrics data
-    are similar to Preloading.Attempt and please see the comments for more
-    details.
+    The difference from Preloading.Attempt is that it is associated with the
+    Source ID of the primary triggering page instead of the navigated-to page.
+    This allows you to find all preloading attempts initiated by a given UKM
+    source, in order to, e.g., filter by URL.
+
+    This event is logged when the user navigates onward from that initiating
+    page, or that initiating page's WebContents is being destroyed. This means
+    that in cases where there is no initiating page, e.g. because the preload is
+    initiated via Chrome UI, then the Preloading.Attempt.PreviousPrimaryPage UKM
+    is not recorded; only the Preloading.Attempt UKM is recorded. On the other
+    hand, if a preload attempt is not followed by a navigation, e.g. because the
+    user closed their browser, then only Preloading.Attempt.PreviousPrimaryPage
+    is recorded, and not Preloading.Attempt.
+
+    Note that some UKM sources that record
+    Preloading.Attempt.PreviousPrimaryPage may not appear as normal page loads.
+    For example, the New Tab Page.
 
     Note that this event is sampled based on the PreloadingConfig feature
     configuration (in addition to the normal UKM sampling mechanism). The
@@ -18918,6 +19090,21 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="RequestStorageAccessFor.RequestStorageResult">
+  <owner>selya@google.com</owner>
+  <owner>cfredric@google.com</owner>
+  <summary>
+    Records invocations of document.requestStorageAccessFor and reasons the
+    request was approved or rejected. Recorded for every call to the function,
+    regardless of outcome.
+  </summary>
+  <metric name="RequestStorageResult" enum="RequestStorageResult">
+    <summary>
+      The result of the requestStorageAccessFor call.
+    </summary>
+  </metric>
+</event>
+
 <event name="Responsiveness.UserInteraction">
   <owner>mmocny@chromium.org</owner>
   <owner>sullivan@chromium.org</owner>
@@ -19049,6 +19236,47 @@ be describing additional metrics about the same event.
     <summary>
       Records the SameSite value of the cookie for cookies which are being
       written (on a response or via JS).
+    </summary>
+  </metric>
+</event>
+
+<event name="SavedTabGroup.Navigation">
+  <owner>qinmin@chromium.org</owner>
+  <owner>shaktisahu@chromium.org</owner>
+  <summary>
+    A collection of metrics which are recorded for navigations inside saved tab
+    groups. The metrics are recorded when a URL is synced from another client
+    and Chrome finishes the navigation to that URL.
+  </summary>
+  <metric name="IsPost" enum="Boolean">
+    <summary>
+      A boolean indicating whether the current navigation is triggered by a POST
+      request.
+    </summary>
+  </metric>
+  <metric name="NumSameUrlLoad">
+    <summary>
+      Records how many times the same URL, including the current navigation, is
+      loaded in the current tab in the past 2 minutes.
+    </summary>
+  </metric>
+  <metric name="NumSameUrlWithoutRefAndQueryParamLoad">
+    <summary>
+      Records how many times the same URL, without ref and query parameters, is
+      loaded in the current tab in the past 2 minutes. The current navigation is
+      also included in this count.
+    </summary>
+  </metric>
+  <metric name="TabGroupType" enum="SavedTabGroupType">
+    <summary>
+      Records the type of the tab group the navigation belongs to, such as
+      shared or synced. See |tab_groups::SavedTabGroupTypes| for enum elements.
+    </summary>
+  </metric>
+  <metric name="WasRedirected" enum="Boolean">
+    <summary>
+      A boolean indicating whether the current navigation involves any
+      redirection.
     </summary>
   </metric>
 </event>
@@ -19790,6 +20018,22 @@ be describing additional metrics about the same event.
       only when the router has matched the incoming resource.
     </summary>
   </metric>
+  <metric name="CacheLookupTime">
+    <summary>
+      Time spent to conduct cache lookup (right before creating the cache lookup
+      request to right after the browser process receives the cache result).
+      Recorded when the service worker has associated routing info with the
+      `cache` as the rule, and the browser or renderer is processing requests.
+      Duration in units of milliseconds.
+    </summary>
+  </metric>
+  <metric name="InitialWorkerStatus" enum="ServiceWorkerStatus">
+    <summary>
+      ServiceWorker running status at the time when the SW is handling the main
+      resource. Recorded regardless of the router existence via Static Routing
+      API.
+    </summary>
+  </metric>
   <metric name="MatchedFirstRouterSourceType"
       enum="ServiceWorkerRouterSourceType">
     <summary>
@@ -19818,6 +20062,11 @@ be describing additional metrics about the same event.
     <summary>
       ServiceWorker running status at the time when router evaluation is
       conducted.
+
+      We expect this is equivalent to `InitialWorkerStatus` in most cases.
+      However, those are set in different tasks (ctor and `StartRequest()` in
+      SWMainResourceLoader) and some other task may update the status between
+      them. We keep both metrics just in case.
     </summary>
   </metric>
 </event>
@@ -20004,6 +20253,24 @@ be describing additional metrics about the same event.
     <summary>
       True if there are service workers handling sub-resource loads of text
       tracks in the page. (boolean value. true: 1 or false: 0)
+    </summary>
+  </metric>
+  <metric name="TotalCacheLookupTime">
+    <summary>
+      Total time spent to conduct cache lookup. Recorded when the service worker
+      has associated routing info with the `cache` as the rule, and the browser
+      or renderer is processing requests. The field is the sum of all cache
+      lookup time of subresources. i.e. if there are X resources whose router
+      source is `cache` for example, this value will be the sum of X cache
+      lookup durations regardless of cache hit or miss. Duration in units of
+      milli seconds.
+    </summary>
+  </metric>
+  <metric name="TotalRouterEvaluationTime">
+    <summary>
+      Total time spent for the router evaluation to handle a request. Recorded
+      when the service worker has associated routing info, and the browser or
+      renderer is processing requests. Duration in units of micro seconds.
     </summary>
   </metric>
   <metric name="TotalSubResourceFallback">
@@ -20214,6 +20481,24 @@ be describing additional metrics about the same event.
     <summary>
       Always true. Recorded when users have visited cart page from Chrome cart
       module.
+    </summary>
+  </metric>
+</event>
+
+<event name="Shopping.Discounts">
+  <owner>meiliang@chromium.org</owner>
+  <owner>ayman@chromium.org</owner>
+  <owner>chrome-shopping-eng@google.com</owner>
+  <summary>
+    Recorded when a user navigates to a product details page with an available
+    discount that is eligible for auto popup. This gives us the true auto popup
+    population.
+  </summary>
+  <metric name="AutoPopupEligibleButSuppressed" enum="Boolean">
+    <summary>
+      Whether the eligible popup bubble was suppressed. This is controlled by a
+      feature flag. Logging the feature flag value to create two groups for data
+      analysis.
     </summary>
   </metric>
 </event>
@@ -21902,7 +22187,7 @@ be describing additional metrics about the same event.
 
 <event name="TouchToFill.Shown">
   <owner>kazinova@google.com</owner>
-  <owner>fhorschig@chromium.org</owner>
+  <owner>friedrichh@chromium.org</owner>
   <owner>kolos@chromium.org</owner>
   <summary>
     Recorded when a user takes an action on the Touch To Fill sheet.
@@ -21916,7 +22201,7 @@ be describing additional metrics about the same event.
 
 <event name="TouchToFill.SubmissionReadiness">
   <owner>kolos@chromium.org</owner>
-  <owner>fhorschig@chromium.org</owner>
+  <owner>friedrichh@chromium.org</owner>
   <summary>
     Recorded when the Touch To Fill sheet is shown to the user.
   </summary>
@@ -21932,7 +22217,7 @@ be describing additional metrics about the same event.
 
 <event name="TouchToFill.TimeToSuccessfulLogin">
   <owner>kolos@chromium.org</owner>
-  <owner>fhorschig@chromium.org</owner>
+  <owner>friedrichh@chromium.org</owner>
   <summary>
     Recorded when a successful login is detected after filling by the Touch To
     Fill.
@@ -24534,7 +24819,8 @@ be describing additional metrics about the same event.
   <owner>chrome-webauthn@google.com</owner>
   <summary>
     Information about the completion of a request to register a new Web
-    Authentication credential.
+    Authentication credential. This was added for desktop platforms in M128 and
+    for Android in M131.
   </summary>
   <metric name="RegisterCompletionResult"
       enum="WebAuthenticationMakeCredentialOutcome">
@@ -24555,7 +24841,8 @@ be describing additional metrics about the same event.
   <owner>chrome-webauthn@google.com</owner>
   <summary>
     Information about the completion of a request for a signed assertion by a
-    Web Authentication credential.
+    Web Authentication credential. This was added for desktop platforms in M128
+    and for Android in M131.
   </summary>
   <metric name="RequestMode" enum="WebAuthenticationRequestMode">
     <summary>

@@ -177,10 +177,7 @@ class FakeMediaControllerManager
 
  private:
   // media_session::mojom::MediaControllerManagerInterceptorForTesting:
-  MediaControllerManager* GetForwardingInterface() override {
-    NOTREACHED_IN_MIGRATION();
-    return nullptr;
-  }
+  MediaControllerManager* GetForwardingInterface() override { NOTREACHED(); }
 
   mojo::ReceiverSet<media_session::mojom::MediaControllerManager> receivers_;
 };
@@ -334,6 +331,8 @@ class TestObserver : public CrasAudioHandler::AudioObserver {
   }
 
   void OnForceRespectUiGainsStateChanged() override {}
+
+  void OnSpatialAudioStateChanged() override {}
 
   void OnSurveyTriggered(const CrasAudioHandler::AudioSurvey& survey) override {
     ++survey_triggerd_count_;
@@ -2333,7 +2332,7 @@ TEST_P(CrasAudioHandlerTest, MultipleNodesChangedSignalsOnPlugInHeadphone) {
     } else if (audio_devices[i].id == headphone.id) {
       EXPECT_TRUE(audio_devices[i].active);
     } else {
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
     }
   }
 }
@@ -2377,7 +2376,7 @@ TEST_P(CrasAudioHandlerTest, MultipleNodesChangedSignalsOnPlugInUSBMic) {
     } else if (audio_devices[i].id == usb_mic.id) {
       EXPECT_TRUE(audio_devices[i].active);
     } else {
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
     }
   }
 }
@@ -2426,7 +2425,7 @@ TEST_P(
     } else if (audio_devices[i].id == usb_mic.id) {
       EXPECT_FALSE(audio_devices[i].active);
     } else {
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
     }
   }
 }
@@ -2474,7 +2473,7 @@ TEST_P(CrasAudioHandlerTest, MultipleNodesChangedSignalsOnSystemBoot) {
     } else if (audio_devices[i].id == internal_mic.id) {
       EXPECT_TRUE(audio_devices[i].active);
     } else {
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
     }
   }
 }
@@ -7789,6 +7788,39 @@ TEST_P(
   // Notification is removed after grace period.
   FastForwardBy(CrasAudioHandler::kRemoveNotificationDelay);
   EXPECT_EQ(0u, GetNotificationCount());
+}
+
+TEST_P(CrasAudioHandlerTest, GetAudioEffectDlcsEmpty) {
+  AudioNodeList audio_nodes = GenerateAudioNodeList({});
+  // Set up initial audio devices, only with internal mic.
+  AudioNode internalMic = GenerateAudioNode(kInternalMic);
+  audio_nodes.push_back(internalMic);
+  SetUpCrasAudioHandlerWithPrimaryActiveNode(audio_nodes, internalMic);
+  fake_cras_audio_client()->SetAudioEffectDlcsForTesting("");
+
+  cras_audio_handler_->RequestGetAudioEffectDlcs();
+  const std::optional<std::vector<std::string>> dlcs =
+      cras_audio_handler_->GetAudioEffectDlcs();
+
+  ASSERT_TRUE(dlcs.has_value());
+  EXPECT_TRUE(dlcs.value().empty());
+}
+
+TEST_P(CrasAudioHandlerTest, GetAudioEffectDlcsNonEmpty) {
+  AudioNodeList audio_nodes = GenerateAudioNodeList({});
+  // Set up initial audio devices, only with internal mic.
+  AudioNode internalMic = GenerateAudioNode(kInternalMic);
+  audio_nodes.push_back(internalMic);
+  SetUpCrasAudioHandlerWithPrimaryActiveNode(audio_nodes, internalMic);
+  fake_cras_audio_client()->SetAudioEffectDlcsForTesting("dlc1,dlc2,dlc4");
+  const std::vector<std::string> expected_dlcs = {"dlc1", "dlc2", "dlc4"};
+
+  cras_audio_handler_->RequestGetAudioEffectDlcs();
+  const std::optional<std::vector<std::string>> dlcs =
+      cras_audio_handler_->GetAudioEffectDlcs();
+
+  ASSERT_TRUE(dlcs.has_value());
+  EXPECT_THAT(dlcs.value(), testing::UnorderedElementsAreArray(expected_dlcs));
 }
 
 }  // namespace ash

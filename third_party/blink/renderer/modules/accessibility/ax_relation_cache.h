@@ -8,7 +8,6 @@
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/html/forms/html_label_element.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
-#include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
@@ -256,7 +255,7 @@ class AXRelationCache {
 
   // Labels and descriptions set by ariaLabelledByElements,
   // ariaDescribedByElements as opposed to aria-labelledby.describedy="[id]".
-  HashSet<DOMNodeId> explicitly_set_text_relations_from_element_attributes_;
+  HashSet<DOMNodeId> explicitly_set_text_relations_;
 
   // A set of IDs that need to be update when layout is clean.
   // For each of these, the new set of owned children

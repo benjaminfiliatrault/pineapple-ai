@@ -185,6 +185,10 @@ class COMPONENT_EXPORT(DBUS_AUDIO) CrasAudioClient {
   // Sets input mute state to |mute_on| value.
   virtual void SetInputMute(bool mute_on) = 0;
 
+  // Gets the DLC IDs of the audio effects supported by the device.
+  virtual void GetAudioEffectDlcs(
+      chromeos::DBusMethodCallback<std::string> callback) = 0;
+
   // Sets input noise cancellation state to |noise_cancellation_on| value.
   virtual void SetNoiseCancellationEnabled(bool noise_cancellation_on) = 0;
 
@@ -311,6 +315,13 @@ class COMPONENT_EXPORT(DBUS_AUDIO) CrasAudioClient {
   // Gets the number of active ARC streams.
   virtual void GetNumberOfArcStreams(
       chromeos::DBusMethodCallback<int32_t> callback) = 0;
+
+  // Sets spatial audio state to |spatial_audio| value.
+  virtual void SetSpatialAudio(bool spatial_audio) = 0;
+
+  // Gets if spatial audio is supported.
+  virtual void GetSpatialAudioSupported(
+      chromeos::DBusMethodCallback<bool> callback) = 0;
 
  protected:
   friend class CrasAudioClientTest;

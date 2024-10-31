@@ -179,15 +179,13 @@ bool InSameAnchorScope(const AnchorKey& key,
   }
   auto anchor_scope_ancestor =
       [name](const LayoutObject& layout_object) -> const Element* {
-    const Element* element = To<Element>(layout_object.GetNode());
-    CHECK(element);
-    while ((element = LayoutTreeBuilderTraversal::ParentElement(*element)) !=
-           nullptr) {
+    for (const Element* element = To<Element>(layout_object.GetNode()); element;
+         element = LayoutTreeBuilderTraversal::ParentElement(*element)) {
       if (IsScopedByElement(*name, *element)) {
-        break;
+        return element;
       }
     }
-    return element;
+    return nullptr;
   };
   return anchor_scope_ancestor(query_object) ==
          anchor_scope_ancestor(anchor_object);
@@ -527,18 +525,19 @@ bool AnchorEvaluatorImpl::AllowAnchorSize() const {
   switch (GetMode()) {
     case Mode::kWidth:
     case Mode::kHeight:
-      return true;
-    case Mode::kNone:
     case Mode::kLeft:
     case Mode::kRight:
     case Mode::kTop:
     case Mode::kBottom:
+      return true;
+    case Mode::kNone:
       return false;
   }
 }
 
 bool AnchorEvaluatorImpl::IsYAxis() const {
-  return GetMode() == Mode::kTop || GetMode() == Mode::kBottom;
+  return GetMode() == Mode::kTop || GetMode() == Mode::kBottom ||
+         GetMode() == Mode::kHeight;
 }
 
 bool AnchorEvaluatorImpl::IsRightOrBottom() const {
@@ -616,10 +615,10 @@ std::optional<LayoutUnit> AnchorEvaluatorImpl::EvaluateAnchorSize(
   }
 
   if (anchor_size_value == CSSAnchorSizeValue::kImplicit) {
-    if (GetMode() == Mode::kWidth) {
-      anchor_size_value = CSSAnchorSizeValue::kWidth;
-    } else {
+    if (IsYAxis()) {
       anchor_size_value = CSSAnchorSizeValue::kHeight;
+    } else {
+      anchor_size_value = CSSAnchorSizeValue::kWidth;
     }
   }
   const LogicalAnchorReference* anchor_reference =

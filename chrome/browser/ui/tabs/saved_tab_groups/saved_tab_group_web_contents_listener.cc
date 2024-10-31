@@ -13,11 +13,11 @@
 #include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_sync_service_proxy.h"
 #include "chrome/browser/ui/tabs/tab_model.h"
 #include "components/favicon/content/content_favicon_driver.h"
-#include "components/saved_tab_groups/features.h"
-#include "components/saved_tab_groups/saved_tab_group.h"
-#include "components/saved_tab_groups/saved_tab_group_model.h"
-#include "components/saved_tab_groups/saved_tab_group_tab.h"
-#include "components/saved_tab_groups/utils.h"
+#include "components/saved_tab_groups/internal/saved_tab_group_model.h"
+#include "components/saved_tab_groups/public/features.h"
+#include "components/saved_tab_groups/public/saved_tab_group.h"
+#include "components/saved_tab_groups/public/saved_tab_group_tab.h"
+#include "components/saved_tab_groups/public/utils.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
@@ -120,6 +120,14 @@ content::WebContents* SavedTabGroupWebContentsListener::contents() const {
 void SavedTabGroupWebContentsListener::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   UpdateTabRedirectChain(navigation_handle);
+  std::optional<SavedTabGroup> group = saved_group();
+  if (group) {
+    TabGroupSyncUtils::RecordSavedTabGroupNavigationUkmMetrics(
+        saved_tab_group_tab_id_,
+        group->collaboration_id() ? SavedTabGroupType::SHARED
+                                  : SavedTabGroupType::SYNCED,
+        navigation_handle, service_);
+  }
 
   // If the navigation was the result of a sync update we don't want to update
   // the SavedTabGroupModel.
@@ -139,7 +147,6 @@ void SavedTabGroupWebContentsListener::DidFinishNavigation(
     return;
   }
 
-  std::optional<SavedTabGroup> group = saved_group();
   SavedTabGroupTab* tab = group->GetTab(saved_tab_group_tab_id_);
   CHECK(tab);
 

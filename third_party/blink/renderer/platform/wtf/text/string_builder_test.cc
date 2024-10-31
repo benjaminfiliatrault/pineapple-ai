@@ -45,9 +45,9 @@ void ExpectBuilderContent(const String& expected,
                           const StringBuilder& builder) {
   // Not using builder.toString() because it changes internal state of builder.
   if (builder.Is8Bit())
-    EXPECT_EQ(expected, String(builder.Characters8(), builder.length()));
+    EXPECT_EQ(expected, String(builder.Span8()));
   else
-    EXPECT_EQ(expected, String(builder.Characters16(), builder.length()));
+    EXPECT_EQ(expected, String(builder.Span16()));
 }
 
 void ExpectEmpty(const StringBuilder& builder) {
@@ -121,7 +121,7 @@ TEST(StringBuilderTest, Append) {
   EXPECT_EQ(3U, builder_for_u_char32_append.length());
   const UChar result_array[] = {U16_LEAD(fraktur_a_char),
                                 U16_TRAIL(fraktur_a_char), 'A'};
-  ExpectBuilderContent(String(result_array, std::size(result_array)),
+  ExpectBuilderContent(String(base::span(result_array)),
                        builder_for_u_char32_append);
 }
 

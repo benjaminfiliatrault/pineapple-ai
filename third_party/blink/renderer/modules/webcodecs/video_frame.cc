@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_frame_buffer_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_frame_copy_to_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_frame_init.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_video_frame_metadata.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_pixel_format.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_state_observer.h"
 #include "third_party/blink/renderer/core/frame/deprecation/deprecation.h"
@@ -444,19 +445,23 @@ const base::TimeDelta CanvasResourceProviderCache::kIdleTimeout =
 std::optional<media::VideoPixelFormat> CopyToFormat(
     const media::VideoFrame& frame) {
   const bool mappable = frame.IsMappable() || frame.HasMappableGpuBuffer();
-  const bool texturable = frame.HasTextures();
-  if (!(mappable || texturable))
+  const bool texturable = frame.HasSharedImage();
+  if (!(mappable || texturable)) {
     return std::nullopt;
+  }
 
   // Readback is not supported for high bit-depth formats.
   if (!mappable && frame.BitDepth() != 8u) {
     return std::nullopt;
   }
 
+  bool si_prefers_external_sampler =
+      frame.HasSharedImage() &&
+      frame.shared_image()->format().PrefersExternalSampler();
   // Externally-sampled frames read back as RGB, regardless of the format.
   // TODO(crbug.com/40215121): Enable alpha readback for supported formats.
-  if (!mappable && frame.RequiresExternalSampler()) {
-    DCHECK(frame.HasTextures());
+  if (!mappable && si_prefers_external_sampler) {
+    DCHECK(frame.HasSharedImage());
     return media::PIXEL_FORMAT_XRGB;
   }
 
@@ -911,10 +916,7 @@ VideoFrame* VideoFrame::Create(ScriptState* script_state,
                                ExceptionState& exception_state) {
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   auto* isolate = script_state->GetIsolate();
-
-  // Handle format; the string was validated by the V8 binding.
-  auto typed_fmt = V8VideoPixelFormat::Create(init->format());
-  auto media_fmt = ToMediaPixelFormat(typed_fmt->AsEnum());
+  auto media_fmt = ToMediaPixelFormat(init->format().AsEnum());
 
   if (!IsFormatEnabled(media_fmt)) {
     exception_state.ThrowTypeError("Unsupported format.");
@@ -1121,6 +1123,37 @@ DOMRectReadOnly* VideoFrame::visibleRect() {
   return visible_rect_.Get();
 }
 
+uint32_t VideoFrame::rotation() const {
+  auto local_frame = handle_->frame();
+  if (!local_frame) {
+    return 0;
+  }
+
+  const auto transform =
+      local_frame->metadata().transformation.value_or(media::kNoTransformation);
+  switch (transform.rotation) {
+    case media::VIDEO_ROTATION_0:
+      return 0;
+    case media::VIDEO_ROTATION_90:
+      return 90;
+    case media::VIDEO_ROTATION_180:
+      return 180;
+    case media::VIDEO_ROTATION_270:
+      return 270;
+  }
+}
+
+bool VideoFrame::flip() const {
+  auto local_frame = handle_->frame();
+  if (!local_frame) {
+    return false;
+  }
+
+  const auto transform =
+      local_frame->metadata().transformation.value_or(media::kNoTransformation);
+  return transform.mirrored;
+}
+
 uint32_t VideoFrame::displayWidth() const {
   auto local_frame = handle_->frame();
   if (!local_frame)
@@ -1128,8 +1161,7 @@ uint32_t VideoFrame::displayWidth() const {
 
   const auto transform =
       local_frame->metadata().transformation.value_or(media::kNoTransformation);
-  if (transform == media::kNoTransformation ||
-      transform.rotation == media::VIDEO_ROTATION_0 ||
+  if (transform.rotation == media::VIDEO_ROTATION_0 ||
       transform.rotation == media::VIDEO_ROTATION_180) {
     return local_frame->natural_size().width();
   }
@@ -1140,10 +1172,10 @@ uint32_t VideoFrame::displayHeight() const {
   auto local_frame = handle_->frame();
   if (!local_frame)
     return 0;
+
   const auto transform =
       local_frame->metadata().transformation.value_or(media::kNoTransformation);
-  if (transform == media::kNoTransformation ||
-      transform.rotation == media::VIDEO_ROTATION_0 ||
+  if (transform.rotation == media::VIDEO_ROTATION_0 ||
       transform.rotation == media::VIDEO_ROTATION_180) {
     return local_frame->natural_size().height();
   }
@@ -1174,6 +1206,18 @@ VideoColorSpace* VideoFrame::colorSpace() {
         MakeGarbageCollected<VideoColorSpace>(local_frame->ColorSpace());
   }
   return color_space_.Get();
+}
+
+VideoFrameMetadata* VideoFrame::metadata(ExceptionState& exception_state) {
+  auto local_frame = handle_->frame();
+  if (!local_frame) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "VideoFrame is closed.");
+    return nullptr;
+  }
+
+  NOTIMPLEMENTED();
+  return VideoFrameMetadata::Create();
 }
 
 uint32_t VideoFrame::allocationSize(VideoFrameCopyToOptions* options,
@@ -1327,7 +1371,7 @@ ScriptPromise<IDLSequence<PlaneLayout>> VideoFrame::copyTo(
     }
     CopyMappablePlanes(*mapped_frame, src_rect, dest_layout, buffer);
   } else {
-    DCHECK(local_frame->HasTextures());
+    DCHECK(local_frame->HasSharedImage());
 
     if (base::FeatureList::IsEnabled(kVideoFrameAsyncCopyTo)) {
       if (CopyToAsync(resolver, local_frame, src_rect, destination,

@@ -10,7 +10,7 @@
 #include "base/check.h"
 #include "base/functional/callback.h"
 #include "components/saved_tab_groups/messaging/message.h"
-#include "components/saved_tab_groups/types.h"
+#include "components/saved_tab_groups/public/types.h"
 
 namespace tab_groups::messaging {
 
@@ -64,6 +64,13 @@ std::vector<PersistentMessage> MessagingBackendServiceImpl::GetMessages(
   // TODO(345856704): Implement this and DCHECK(IsInitialized()) and update
   // interface description.
   return {};
+}
+
+std::vector<ActivityLogItem> MessagingBackendServiceImpl::GetActivityLog(
+    const ActivityLogQueryParams& params) {
+  // TODO(345856704): Implement this and DCHECK(IsInitialized()) and update
+  // interface description.
+  return std::vector<ActivityLogItem>();
 }
 
 }  // namespace tab_groups::messaging

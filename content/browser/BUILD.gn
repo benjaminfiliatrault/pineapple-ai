@@ -14,6 +14,7 @@ import("//build/config/ui.gni")
 import("//chromeos/ash/components/assistant/assistant.gni")
 import("//components/viz/common/debugger/viz_debugger.gni")
 import("//content/common/features.gni")
+import("//content/public/common/features.gni")
 import("//content/public/common/zygote/features.gni")
 import("//device/bluetooth/emulation/buildflags.gni")
 import("//device/vr/buildflags/buildflags.gni")
@@ -44,8 +45,8 @@ if (is_android) {
     ]
     deps = [
       "//third_party/rust/font_types/v0_7:lib",
-      "//third_party/rust/read_fonts/v0_22:lib",
-      "//third_party/rust/skrifa/v0_22:lib",
+      "//third_party/rust/read_fonts/v0_23:lib",
+      "//third_party/rust/skrifa/v0_24:lib",
     ]
   }
 }
@@ -167,6 +168,7 @@ source_set("browser") {
     "//content/common:buildflags",
     "//content/common:mojo_bindings",
     "//content/public/browser:proto",
+    "//content/public/common:buildflags",
     "//content/public/common:common_sources",
     "//content/public/common:content_descriptor_keys",
     "//content/public/common/zygote:buildflags",
@@ -311,6 +313,7 @@ source_set("browser") {
     "//ui/gl",
     "//ui/gl:buildflags",
     "//ui/latency",
+    "//ui/menus",
     "//ui/native_theme",
     "//ui/native_theme:native_theme_browser",
     "//ui/resources",
@@ -333,6 +336,7 @@ source_set("browser") {
     "//third_party/leveldatabase",
     "//ui/base/cursor",
     "//ui/base/dragdrop/mojom:mojom_headers",
+    "//ui/base/mojom:ui_base_types",
   ]
 
   sources = [
@@ -458,9 +462,6 @@ source_set("browser") {
     "attribution_reporting/attribution_config.cc",
     "attribution_reporting/attribution_config.h",
     "attribution_reporting/attribution_constants.h",
-    "attribution_reporting/attribution_cookie_checker.h",
-    "attribution_reporting/attribution_cookie_checker_impl.cc",
-    "attribution_reporting/attribution_cookie_checker_impl.h",
     "attribution_reporting/attribution_data_host_manager.h",
     "attribution_reporting/attribution_data_host_manager_impl.cc",
     "attribution_reporting/attribution_data_host_manager_impl.h",
@@ -1113,6 +1114,8 @@ source_set("browser") {
     "gpu/gpu_process_host_receiver_bindings.cc",
     "gpu/peak_gpu_memory_tracker_impl.cc",
     "gpu/peak_gpu_memory_tracker_impl.h",
+    "guest_page_holder_impl.cc",
+    "guest_page_holder_impl.h",
     "handwriting/handwriting_recognition_service_factory.cc",
     "handwriting/handwriting_recognition_service_factory.h",
     "handwriting/handwriting_recognition_service_impl.cc",
@@ -1275,7 +1278,6 @@ source_set("browser") {
     "loader/url_loader_factory_utils.cc",
     "loader/url_loader_factory_utils.h",
     "loader/url_loader_throttles.cc",
-    "locks/lock_manager.cc",
     "locks/lock_manager.h",
     "log_console_message.cc",
     "log_console_message.h",
@@ -1308,6 +1310,12 @@ source_set("browser") {
     "media/capture/desktop_capture_device_uma_types.h",
     "media/capture/desktop_streams_registry_impl.cc",
     "media/capture/desktop_streams_registry_impl.h",
+
+    # TODO(crbug.com/202736352): This is built even if enable_screen_capture is
+    # false. Consider better separation of the screen capture and the other
+    # capture code so we can only build this if actually necessary.
+    "media/capture/native_screen_capture_picker.cc",
+    "media/capture/native_screen_capture_picker.h",
     "media/capture_handle_manager.cc",
     "media/capture_handle_manager.h",
     "media/cdm_registry_impl.cc",
@@ -1545,6 +1553,8 @@ source_set("browser") {
     "preloading/prefetch/proxy_lookup_client_impl.h",
     "preloading/prefetcher.cc",
     "preloading/prefetcher.h",
+    "preloading/preload_pipeline_info.cc",
+    "preloading/preload_pipeline_info.h",
     "preloading/preloading.cc",
     "preloading/preloading.h",
     "preloading/preloading_attempt_impl.cc",
@@ -1590,6 +1600,8 @@ source_set("browser") {
     "preloading/prerender/prerender_no_vary_search_hint_commit_deferring_condition.h",
     "preloading/prerender/prerender_subframe_navigation_throttle.cc",
     "preloading/prerender/prerender_subframe_navigation_throttle.h",
+    "preloading/prerender/prerender_url_loader_throttle.cc",
+    "preloading/prerender/prerender_url_loader_throttle.h",
     "preloading/prerenderer.h",
     "preloading/prerenderer_impl.cc",
     "preloading/prerenderer_impl.h",
@@ -1633,8 +1645,6 @@ source_set("browser") {
     "push_messaging/push_messaging_manager.h",
     "push_messaging/push_messaging_router.cc",
     "push_messaging/push_messaging_router.h",
-    "quota/quota_change_dispatcher.cc",
-    "quota/quota_change_dispatcher.h",
     "quota/quota_context.cc",
     "quota/quota_context.h",
     "quota/quota_internals_ui.cc",
@@ -1643,8 +1653,6 @@ source_set("browser") {
     "quota/quota_manager_host.h",
     "reduce_accept_language/reduce_accept_language_throttle.cc",
     "reduce_accept_language/reduce_accept_language_throttle.h",
-    "reduce_accept_language/reduce_accept_language_utils.cc",
-    "reduce_accept_language/reduce_accept_language_utils.h",
     "renderer_host/agent_scheduling_group_host.cc",
     "renderer_host/agent_scheduling_group_host.h",
     "renderer_host/agent_scheduling_group_host_factory.h",
@@ -2053,8 +2061,6 @@ source_set("browser") {
     "service_worker/service_worker_new_script_loader.h",
     "service_worker/service_worker_object_host.cc",
     "service_worker/service_worker_object_host.h",
-    "service_worker/service_worker_offline_capability_checker.cc",
-    "service_worker/service_worker_offline_capability_checker.h",
     "service_worker/service_worker_ping_controller.cc",
     "service_worker/service_worker_ping_controller.h",
     "service_worker/service_worker_process_manager.cc",
@@ -2104,6 +2110,8 @@ source_set("browser") {
     "shared_storage/shared_storage_header_observer.h",
     "shared_storage/shared_storage_render_thread_worklet_driver.cc",
     "shared_storage/shared_storage_render_thread_worklet_driver.h",
+    "shared_storage/shared_storage_saved_query_data.cc",
+    "shared_storage/shared_storage_saved_query_data.h",
     "shared_storage/shared_storage_url_loader_factory_proxy.cc",
     "shared_storage/shared_storage_url_loader_factory_proxy.h",
     "shared_storage/shared_storage_worklet_host.cc",
@@ -2169,12 +2177,8 @@ source_set("browser") {
     "synthetic_trial_syncer.cc",
     "theme_helper.cc",
     "theme_helper.h",
-    "tracing/background_tracing_active_scenario.cc",
-    "tracing/background_tracing_active_scenario.h",
     "tracing/background_tracing_agent_client_impl.cc",
     "tracing/background_tracing_agent_client_impl.h",
-    "tracing/background_tracing_config_impl.cc",
-    "tracing/background_tracing_config_impl.h",
     "tracing/background_tracing_manager_impl.cc",
     "tracing/background_tracing_manager_impl.h",
     "tracing/background_tracing_rule.cc",
@@ -2224,6 +2228,8 @@ source_set("browser") {
     "web_contents/file_chooser_impl.h",
     "web_contents/java_script_dialog_commit_deferring_condition.cc",
     "web_contents/java_script_dialog_commit_deferring_condition.h",
+    "web_contents/partitioned_popins_controller.cc",
+    "web_contents/partitioned_popins_controller.h",
     "web_contents/slow_web_preference_cache.cc",
     "web_contents/slow_web_preference_cache.h",
     "web_contents/web_contents_impl.cc",
@@ -2758,8 +2764,8 @@ source_set("browser") {
     sources += [
       "media/capture/frame_sink_video_capture_device.cc",
       "media/capture/frame_sink_video_capture_device.h",
-      "media/capture/native_screen_capture_picker.cc",
-      "media/capture/native_screen_capture_picker.h",
+      "media/capture/web_contents_auto_scaler.cc",
+      "media/capture/web_contents_auto_scaler.h",
       "media/capture/web_contents_frame_tracker.cc",
       "media/capture/web_contents_frame_tracker.h",
       "media/capture/web_contents_video_capture_device.cc",
@@ -2872,6 +2878,8 @@ source_set("browser") {
       "renderer_host/dwrite_font_file_util_win.h",
       "renderer_host/dwrite_font_proxy_impl_win.cc",
       "renderer_host/dwrite_font_proxy_impl_win.h",
+      "renderer_host/input/stylus_handwriting_controller_win.cc",
+      "renderer_host/input/stylus_handwriting_controller_win.h",
       "renderer_host/legacy_render_widget_host_win.cc",
       "renderer_host/legacy_render_widget_host_win.h",
       "renderer_host/virtual_keyboard_controller_win.cc",
@@ -2885,7 +2893,6 @@ source_set("browser") {
     deps += [
       "//components/app_launch_prefetch",
       "//content/utility:delegate_data",
-      "//services/screen_ai/public/cpp:utilities",
       "//third_party/blink/public/common:font_unique_name_table_proto",
       "//third_party/iaccessible2",
       "//third_party/isimpledom",
@@ -3255,7 +3262,6 @@ source_set("browser") {
     deps += [
       ":fontations_name_table_ffi",
       ":reflection_jni_headers",
-      "//build/config/freetype",
       "//cc/slim",
       "//components/tracing:graphics_provider",
       "//content/public/android:browser_jni",
@@ -3352,7 +3358,6 @@ source_set("browser") {
       "webauth/virtual_authenticator.h",
       "webauth/virtual_authenticator_manager_impl.cc",
       "webauth/virtual_authenticator_manager_impl.h",
-      "webauth/virtual_authenticator_mojom_traits.h",
       "webauth/virtual_discovery.cc",
       "webauth/virtual_discovery.h",
       "webauth/virtual_fido_discovery_factory.cc",

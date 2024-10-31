@@ -85,6 +85,10 @@ DEPS_FILE_OLD = ('http://src.chromium.org/viewvc/chrome/trunk/src/'
                  'DEPS?revision=%d')
 DEPS_FILE_NEW = ('https://chromium.googlesource.com/chromium/src/+/%s/DEPS')
 
+# Source Tag
+SOURCE_TAG_URL = ('https://chromium.googlesource.com/chromium/src/'
+                  '+/refs/tags/%s?format=JSON')
+
 
 DONE_MESSAGE_GOOD_MIN = ('You are probably looking for a change made after %s ('
                          'known good), but no later than %s (first known bad).')
@@ -470,7 +474,7 @@ def RunGsutilCommand(args, can_fail=False, ignore_fail=False):
       print('Warning: You might have an outdated .boto file. If this issue '
             'persists after running `gsutil.py config`, try removing your '
             '.boto, usually located in your home directory.')
-      sys.exit(1)
+      raise BisectException('gsutil credential error')
     elif can_fail:
       return stderr
     elif ignore_fail:
@@ -767,10 +771,11 @@ class ArchiveBuild(abc.ABC):
   def _launch_revision(self, tempdir, executables, args=()):
     args = [*self._get_extra_args(), *args]
     args_str = shlex.join(args)
-    command = (self.command.replace(r'%p', executables['chrome']).replace(
-        r'%s', args_str).replace(r'%a', args_str).replace(r'%t', tempdir))
+    command = (self.command.replace(r'%p', shlex.quote(
+        executables['chrome'])).replace(r'%s', args_str).replace(
+            r'%a', args_str).replace(r'%t', tempdir))
     if self.chromedriver:
-      command = command.replace(r'%d', executables['chromedriver'])
+      command = command.replace(r'%d', shlex.quote(executables['chromedriver']))
     return self._run(command, shell=True)
 
   def run_revision(self, download, tempdir, args=()):
@@ -1373,6 +1378,12 @@ class IOSSimulatorReleaseBuild(ReleaseBuild):
     self.device_id = options.device_id
     if not self.device_id:
       raise BisectException('--device-id is required for iOS Simulator.')
+    retcode, stdout, stderr = self._run(
+        ['xcrun', 'simctl', 'boot', self.device_id])
+    if retcode:
+      print(f'Warning: Boot Simulator error, code:{retcode}\n'
+            f'stdout:\n{stdout}\n'
+            f'stderr:\n{stderr}')
 
   def _get_release_bucket(self):
     return IOS_ARCHIVE_BASE_URL
@@ -1603,6 +1614,7 @@ class DownloadJob:
     self.name = name
 
     self.results = {}
+    self.exc_info = None  # capture exception from worker thread
     self.quit_event = threading.Event()
     self.progress_event = threading.Event()
     self.thread = None
@@ -1656,6 +1668,8 @@ class DownloadJob:
         self._fetch(url, tmp_file)
     except RuntimeError:
       pass
+    except BaseException:
+      self.exc_info = sys.exc_info()
 
   def start(self):
     """Start the download in a thread."""
@@ -1684,6 +1698,8 @@ class DownloadJob:
         # The parameter to join is needed to keep the main thread responsive to
         # signals. Without it, the program will not respond to interruptions.
         self.thread.join(1)
+      if self.exc_info:
+        raise self.exc_info[1].with_traceback(self.exc_info[2])
       if self.quit_event.is_set():
         raise Exception('The DownloadJob was stopped.')
       if self.is_multiple:
@@ -1763,8 +1779,10 @@ def Bisect(archive_build,
   prefetch = {}
   try:
     while len(rev_list) > 2:
+      # We are retaining the boundary elements in the rev_list, that should not
+      # count towards the steps when calculating the number the steps.
       print('You have %d revisions with about %d steps left.' %
-            (len(rev_list), (len(rev_list).bit_length() - 1)))
+            (len(rev_list), ((len(rev_list) - 2).bit_length())))
       print('Bisecting range [%s (bad), %s (good)].' %
             (rev_list[-1], rev_list[0]))
       # clean prefetch to keep only the valid fetches
@@ -1845,7 +1863,10 @@ def FetchJsonFromURL(url):
   # Allow retry for 3 times for unexpected network error
   for i in range(3):
     try:
-      return json.loads(urllib.request.urlopen(url).read())
+      data = urllib.request.urlopen(url).read()
+      # Remove the potential XSSI prefix from JSON output
+      data = data.lstrip(b")]}',\n")
+      return json.loads(data)
     except urllib.request.HTTPError as e:
       print(f'urlopen {url} HTTPError: {e}')
     except json.JSONDecodeError as e:
@@ -1871,6 +1892,26 @@ def IsVersionNumber(revision):
   return re.match(r'^\d+\.\d+\.\d+\.\d+$', revision) is not None
 
 
+def GetRevisionFromSourceTag(tag):
+  """Return Base Commit Position based on the commit message of a version tag"""
+  # Searching from commit message for
+  # Cr-Branched-From: (?P<githash>\w+)-refs/heads/master@{#857950}
+  # Cr-Commit-Position: refs/heads/main@{#992738}
+  revision_regex = re.compile(r'refs/heads/\w+@{#(\d+)}$')
+  source_url = SOURCE_TAG_URL % str(tag)
+  data = FetchJsonFromURL(source_url)
+  match = revision_regex.search(data.get('message', ''))
+  if not match:
+    # The commit message for version tag before M116 doesn't contains
+    # Cr-Branched-From and Cr-Commit-Position message lines. However they might
+    # exists in the parent commit.
+    source_url = SOURCE_TAG_URL % (str(tag) + '^')
+    data = FetchJsonFromURL(source_url)
+    match = revision_regex.search(data.get('message', ''))
+  if match:
+    return int(match.group(1))
+
+
 def GetRevisionFromVersion(version):
   """Returns Base Commit Position from a version number"""
   chromiumdash_url = VERSION_INFO_URL % str(version)
@@ -1885,10 +1926,13 @@ def GetRevisionFromVersion(version):
     # branch position from 127.0.6533.0 instead.
     chromiumdash_url = VERSION_INFO_URL % re.sub(r'\d+$', '0', str(version))
     data = FetchJsonFromURL(chromiumdash_url)
-  if data and 'chromium_main_branch_position' in data:
+  if data and data.get('chromium_main_branch_position'):
     return data['chromium_main_branch_position']
-  print('Something went wrong. The data we got from chromiumdash:\n%s' % data)
-  return None
+  revision_from_source_tag = GetRevisionFromSourceTag(version)
+  if revision_from_source_tag:
+    return revision_from_source_tag
+  raise BisectException(
+      f'Can not find revision for {version} from chromiumdash and source')
 
 
 def GetRevisionFromMilestone(milestone):
@@ -1898,7 +1942,7 @@ def GetRevisionFromMilestone(milestone):
   for m in milestones:
     if m['milestone'] == milestone:
       return m['chromium_main_branch_position']
-  return None
+  raise BisectException(f'Can not find revision for milestone {milestone}')
 
 
 def GetRevision(revision):
@@ -2067,11 +2111,18 @@ Tip: add "-- --no-first-run" to bypass the first run prompts.
 
   build_type_group = parser.add_mutually_exclusive_group()
   build_type_group.add_argument(
+      '-s',
+      dest='build_type',
+      action='store_const',
+      const='snapshot',
+      default='snapshot',
+      help='Bisect across Chromium snapshot archives (default).',
+  )
+  build_type_group.add_argument(
       '-r',
       dest='build_type',
       action='store_const',
       const='release',
-      default='snapshot',
       help='Bisect across release Chrome builds (internal only) instead of '
       'Chromium archives.',
   )
@@ -2269,9 +2320,15 @@ def ParseCommandLine(args=None):
       parser.error('Error: Missing required parameter: --archive')
 
   if opts.archive not in PATH_CONTEXT[opts.build_type]:
-    parser.error(
-        f'Bisecting on {opts.build_type} are only supported on these platforms '
-        f'(-a/--archive): {{{",".join(PATH_CONTEXT[opts.build_type].keys())}}}')
+    supported_build_types = [
+        "%s(%s)" % (b, BuildTypeToCommandLineArgument(b, omit_default=False))
+        for b, context in PATH_CONTEXT.items() if opts.archive in context
+    ]
+    parser.error(f'Bisecting on {opts.build_type} is only supported on these '
+                 'platforms (-a/--archive): '
+                 f'{{{",".join(PATH_CONTEXT[opts.build_type].keys())}}}\n'
+                 f'To bisect for {opts.archive}, please choose from '
+                 f'{", ".join(supported_build_types)}')
 
   if opts.signed and not (opts.archive.startswith('android-')
                           or opts.archive.startswith('ios')):
@@ -2312,6 +2369,23 @@ def ParseCommandLine(args=None):
   return opts
 
 
+def BuildTypeToCommandLineArgument(build_type, omit_default=True):
+  """Convert the build_type back to command line argument."""
+  if build_type == 'release':
+    return '-r'
+  elif build_type == 'official':
+    return '-o'
+  elif build_type == 'snapshot':
+    if not omit_default:
+      return '-s'
+    else:
+      return ''
+  elif build_type == 'asan':
+    return '--asan'
+  else:
+    raise ValueError(f'Unknown build type: {build_type}')
+
+
 def GenerateCommandLine(opts):
   """Generate a command line for bisect options.
 
@@ -2334,10 +2408,7 @@ def GenerateCommandLine(opts):
                                               action='store_true')
   _, remaining_args = parser_to_remove_known_options.parse_known_args()
   args = []
-  if opts.build_type == 'release':
-    args.append('-r')
-  elif opts.build_type == 'official':
-    args.append('-o')
+  args.append(BuildTypeToCommandLineArgument(opts.build_type))
   if opts.archive:
     args.extend(['-a', opts.archive])
   if opts.signed:

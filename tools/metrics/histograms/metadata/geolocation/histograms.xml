@@ -23,12 +23,24 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <histogram name="Geolocation.Android.LocationPermissionState"
-    enum="AndroidLocationPermissionState" expires_after="2025-01-26">
+    enum="AndroidLocationPermissionState" expires_after="2025-03-30">
   <owner>mattreynolds@chromium.org</owner>
   <owner>device-dev@chromium.org</owner>
   <summary>
     Android location permission state, recorded when the geolocation permission
     context is initialized.
+  </summary>
+</histogram>
+
+<histogram name="Geolocation.CoreLocationProvider.Accuracy" units="meter"
+    expires_after="2025-03-30">
+  <owner>alvinji@chromium.org</owner>
+  <owner>deviceapi-team@google.com</owner>
+  <summary>
+    Records the accuracy value (in meters) of a valid Geoposition. Values above
+    10000 meters are considered very inaccurate and are categorized into the
+    overflow bucket. This cap prioritizes accuracy resolution in the lower
+    range.
   </summary>
 </histogram>
 
@@ -39,6 +51,30 @@ chromium-metrics-reviews@google.com.
   <summary>
     Records an enumeration value corresponding to the specific error encountered
     by the CoreLocationProvider while obtaining the device's location.
+  </summary>
+</histogram>
+
+<histogram name="Geolocation.CoreLocationProvider.SessionResult"
+    enum="CoreLocationSessionResult" expires_after="2025-09-01">
+  <owner>alvinji@chromium.org</owner>
+  <owner>deviceapi-team@google.com</owner>
+  <summary>
+    Records the overall result of a geolocation session using the
+    CoreLocationProvider. This metric captures the CoreLocationSessionResult
+    representing the final outcome of the session, which could be a success
+    result or any error encountered that prevented the provider from obtaining a
+    valid position. If the session result is kCoreLocationError then the
+    specific error reported by the platform is recorded in the
+    Geolocation.CoreLocationProvider.ErrorCode metric.
+  </summary>
+</histogram>
+
+<histogram name="Geolocation.CoreLocationProvider.TimeToFirstPosition"
+    units="ms" expires_after="2025-07-01">
+  <owner>alvinji@chromium.org</owner>
+  <owner>deviceapi-team@google.com</owner>
+  <summary>
+    Records the time duration for getting the first valid Geoposition.
   </summary>
 </histogram>
 
@@ -92,7 +128,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Geolocation.LocationProviderWinrt.Accuracy" enum="Hresult"
+<histogram name="Geolocation.LocationProviderWinrt.Accuracy" units="meter"
     expires_after="2026-09-15">
   <owner>chengweih@chromium.org</owner>
   <owner>deviceapi-team@google.com</owner>
@@ -190,6 +226,16 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Geolocation.NetworkLocationRequest.Accuracy" units="meter"
+    expires_after="2026-10-15">
+  <owner>chengweih@chromium.org</owner>
+  <owner>deviceapi-team@google.com</owner>
+  <summary>
+    Records the accuracy value of a valid Geoposition from the
+    NetworkLocationProvider
+  </summary>
+</histogram>
+
 <histogram name="Geolocation.NetworkLocationRequest.Event"
     enum="NetworkLocationRequestEvent" expires_after="2025-03-09">
   <owner>mattreynolds@chromium.org</owner>
@@ -226,7 +272,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Geolocation.NetworkLocationRequest.Source"
-    enum="NetworkLocationRequestSource" expires_after="2025-02-23">
+    enum="NetworkLocationRequestSource" expires_after="2025-04-27">
   <owner>mattreynolds@chromium.org</owner>
   <owner>deviceapi-team@google.com</owner>
   <summary>

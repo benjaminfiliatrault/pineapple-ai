@@ -30,6 +30,9 @@ class MockPage : public data_sharing::mojom::Page {
               ReadGroups,
               (const std::vector<std::string>& group_ids,
                ReadGroupsCallback callback));
+  MOCK_METHOD(void,
+              DeleteGroup,
+              (const std::string& group_id, DeleteGroupCallback callback));
 
   mojo::Receiver<data_sharing::mojom::Page> receiver_{this};
 };
@@ -92,6 +95,19 @@ TEST_F(DataSharingPageHandlerUnitTest, GetShareLink) {
       base::BindLambdaForTesting(
           [&](const GURL& url) { ASSERT_TRUE(url.is_valid()); });
   handler()->GetShareLink("GROUP_ID", "ACCESS_TOKEN", std::move(callback));
+}
+
+TEST_F(DataSharingPageHandlerUnitTest, GetTabGroupPreview) {
+  data_sharing::mojom::PageHandler::GetTabGroupPreviewCallback callback =
+      base::BindLambdaForTesting(
+          [&](data_sharing::mojom::GroupPreviewPtr preview) {
+            EXPECT_EQ(preview->title, "");
+            EXPECT_EQ(preview->shared_tabs.size(), size_t(0));
+            EXPECT_EQ(preview->status_code,
+                      mojo_base::mojom::AbslStatusCode::kUnknown);
+          });
+  handler()->GetTabGroupPreview("GROUP_ID", "ACCESS_TOKEN",
+                                std::move(callback));
 }
 
 TEST_F(DataSharingPageHandlerUnitTest, OnAccessTokenFetched) {

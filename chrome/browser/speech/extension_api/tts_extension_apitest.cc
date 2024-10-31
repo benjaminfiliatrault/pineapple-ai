@@ -28,6 +28,7 @@
 #include "extensions/browser/extension_host_test_helper.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/mojom/view_type.mojom.h"
+#include "extensions/test/extension_test_message_listener.h"
 #include "net/base/network_change_notifier.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -55,6 +56,33 @@ int g_saved_utterance_id;
 
 namespace extensions {
 
+class MockUpdateLanguageStatusDelegate
+    : public content::UpdateLanguageStatusDelegate {
+ public:
+  MockUpdateLanguageStatusDelegate() = default;
+  ~MockUpdateLanguageStatusDelegate() override = default;
+
+  void OnUpdateLanguageStatus(const std::string& lang,
+                              content::LanguageInstallStatus install_status,
+                              const std::string& error) override {
+    this->on_update_language_status_params.lang = lang;
+    this->on_update_language_status_params.install_status = install_status;
+    this->on_update_language_status_params.error = error;
+  }
+
+  struct OnUpdateLanguageStatusParams {
+    std::string lang;
+    content::LanguageInstallStatus install_status;
+    std::string error;
+  };
+
+  OnUpdateLanguageStatusParams GetLastUpdateLanguageStatusParams() {
+    return on_update_language_status_params;
+  }
+
+ private:
+  OnUpdateLanguageStatusParams on_update_language_status_params;
+};
 class MockTtsPlatformImpl : public content::TtsPlatform {
  public:
   MockTtsPlatformImpl() : should_fake_get_voices_(false) {}
@@ -628,6 +656,62 @@ IN_PROC_BROWSER_TEST_P(TtsApiTest, PRE_VoicesAreCached) {
   ASSERT_TRUE(RunExtensionTest("tts_engine/call_update_voices")) << message_;
   EXPECT_TRUE(HasVoiceWithName("Dynamic Voice 1"));
   EXPECT_TRUE(HasVoiceWithName("Dynamic Voice 2"));
+}
+
+#if !BUILDFLAG(IS_CHROMEOS)
+IN_PROC_BROWSER_TEST_P(TtsApiTest, UpdateLanguageCallsDelegate) {
+  MockUpdateLanguageStatusDelegate delegate_;
+  content::TtsController::GetInstance()->AddUpdateLanguageStatusDelegate(
+      &delegate_);
+
+  ASSERT_TRUE(RunExtensionTest("tts_engine/call_update_language")) << message_;
+  ASSERT_EQ(delegate_.GetLastUpdateLanguageStatusParams().install_status,
+            content::LanguageInstallStatus::INSTALLING);
+  ASSERT_EQ(delegate_.GetLastUpdateLanguageStatusParams().lang, "fr");
+  ASSERT_EQ(delegate_.GetLastUpdateLanguageStatusParams().error, "");
+  content::TtsController::GetInstance()->RemoveUpdateLanguageStatusDelegate(
+      &delegate_);
+}
+#endif
+
+IN_PROC_BROWSER_TEST_P(TtsApiTest, LanguageInstallRequestEmitsEvent) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+
+  ExtensionTestMessageListener validate_lang_param_listener("lang:en");
+  ExtensionTestMessageListener validate_requestor_param_listener(
+      "requestor.id:client ID, requestor.source:chromefeature");
+
+  const Extension* extension = LoadExtension(
+      test_data_dir_.AppendASCII("tts_engine/language_install_request"));
+  ASSERT_TRUE(extension);
+
+  content::TtsController::GetInstance()->InstallLanguageRequest(
+      profile(), /* lang= */ "en", /* client_id= */ "client ID",
+      /* source= */
+      static_cast<int>(tts_engine_events::TtsClientSource::CHROMEFEATURE));
+
+  ASSERT_TRUE(validate_lang_param_listener.WaitUntilSatisfied());
+  ASSERT_TRUE(validate_requestor_param_listener.WaitUntilSatisfied());
+}
+
+IN_PROC_BROWSER_TEST_P(TtsApiTest, LanguageStatusRequestEmitsEvent) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+
+  ExtensionTestMessageListener validate_lang_param_listener("lang:br");
+  ExtensionTestMessageListener validate_requestor_param_listener(
+      "requestor.id:client ID 2, requestor.source:extension");
+
+  const Extension* extension = LoadExtension(
+      test_data_dir_.AppendASCII("tts_engine/language_status_request"));
+  ASSERT_TRUE(extension);
+
+  content::TtsController::GetInstance()->LanguageStatusRequest(
+      profile(), /* lang= */ "br", /* client_id= */ "client ID 2",
+      /* source= */
+      static_cast<int>(tts_engine_events::TtsClientSource::EXTENSION));
+
+  ASSERT_TRUE(validate_lang_param_listener.WaitUntilSatisfied());
+  ASSERT_TRUE(validate_requestor_param_listener.WaitUntilSatisfied());
 }
 
 IN_PROC_BROWSER_TEST_P(TtsApiTest, VoicesAreCached) {

@@ -41,6 +41,7 @@ import {
 } from '../core/utils/assert.js';
 
 import {CraIconButton} from './cra/cra-icon-button.js';
+import {withTooltip} from './directives/with-tooltip.js';
 
 /**
  * The title suggestion popup in playback page of Recorder App.
@@ -116,12 +117,6 @@ export class RecordingTitleSuggestion extends ReactiveLitElement {
       --background-color: var(--cros-sys-app_base_shaded);
 
       bottom: -8px;
-
-      /*
-       * TODO: b/361221415 - Remove the old properties when stable Chrome
-       * supports new one.
-       */
-      inset-area: top span-left;
       position: absolute;
       position-anchor: --footer;
       position-area: top span-left;
@@ -168,7 +163,8 @@ export class RecordingTitleSuggestion extends ReactiveLitElement {
   }
 
   private sendSuggestTitleEvent(
-    suggestionAccepted: boolean, acceptedIndex = -1
+    suggestionAccepted: boolean,
+    acceptedIndex = -1,
   ) {
     // Skip sending the event if there is no transcription or suggested titles.
     const suggestedTitle = this.suggestedTitles?.value;
@@ -209,7 +205,13 @@ export class RecordingTitleSuggestion extends ReactiveLitElement {
     return html`
       <div id="footer">
         ${i18n.genAiDisclaimerText}
-        <a href=${HELP_URL} target="_blank">${i18n.genAiLearnMoreLink}</a>
+        <a
+          href=${HELP_URL}
+          target="_blank"
+          aria-label=${i18n.genAiLearnMoreLinkTooltip}
+        >
+          ${i18n.genAiLearnMoreLink}
+        </a>
       </div>
       <genai-feedback-buttons .resultType=${GenaiResultType.TITLE_SUGGESTION}>
       </genai-feedback-buttons>
@@ -281,6 +283,7 @@ export class RecordingTitleSuggestion extends ReactiveLitElement {
           @click=${this.onCloseClick}
           aria-label=${i18n.closeDialogButtonTooltip}
           ${ref(this.closeButtonRef)}
+          ${withTooltip()}
         >
           <cra-icon slot="icon" name="close"></cra-icon>
         </cra-icon-button>

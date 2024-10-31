@@ -186,6 +186,8 @@ inline constexpr char kChromeUIOmniboxPopupHost[] = "omnibox-popup.top-chrome";
 inline constexpr char kChromeUIOmniboxPopupURL[] =
     "chrome://omnibox-popup.top-chrome/";
 inline constexpr char kChromeUIOmniboxURL[] = "chrome://omnibox/";
+inline constexpr char kChromeUIOnDeviceTranslationInternalsHost[] =
+    "on-device-translation-internals";
 inline constexpr char kChromeUIPasswordManagerCheckupURL[] =
     "chrome://password-manager/checkup?start=true";
 inline constexpr char kChromeUIPasswordManagerInternalsHost[] =
@@ -666,6 +668,8 @@ inline constexpr char kAdPrivacySubPage[] = "adPrivacy";
 inline constexpr char kAllSitesSettingsSubpage[] = "content/all";
 inline constexpr char kAppearanceSubPage[] = "appearance";
 inline constexpr char kAutofillSubPage[] = "autofill";
+inline constexpr char kAutofillPredictionImprovementsSubPage[] =
+    "autofillPredictionImprovements";
 inline constexpr char kClearBrowserDataSubPage[] = "clearBrowserData";
 inline constexpr char kContentSettingsSubPage[] = "content";
 inline constexpr char kCookieSettingsSubPage[] = "cookies";
@@ -682,6 +686,7 @@ inline constexpr char kLanguageOptionsSubPage[] = "languages";
 inline constexpr char kLanguagesSubPage[] = "languages/details";
 inline constexpr char kManageProfileSubPage[] = "manageProfile";
 inline constexpr char kOfferWritingHelpSubpage[] = "content/offerWritingHelp";
+inline constexpr char kAiHelpMeWriteSubpage[] = "ai/helpMeWrite";
 inline constexpr char kOnDeviceSiteDataSubpage[] = "content/siteData";
 inline constexpr char kOnStartupSubPage[] = "onStartup";
 inline constexpr char kPasskeysSubPage[] = "passkeys";

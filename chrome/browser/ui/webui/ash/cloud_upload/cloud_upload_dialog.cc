@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_dialog.h"
 
+#include "ash/constants/web_app_id_constants.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "base/containers/enum_set.h"
@@ -48,7 +49,6 @@
 #include "chrome/browser/ui/webui/ash/cloud_upload/hats_office_trigger.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/one_drive_upload_handler.h"
 #include "chrome/browser/ui/webui/ash/office_fallback/office_fallback_ui.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/webui_url_constants.h"
@@ -256,7 +256,7 @@ void OpenFileFromODFS(
               return;
             }
             auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile);
-            proxy->LaunchAppWithUrl(web_app::kMicrosoft365AppId,
+            proxy->LaunchAppWithUrl(ash::kMicrosoft365AppId,
                                     /*event_flags=*/ui::EF_NONE, url,
                                     apps::LaunchSource::kFromFileManager,
                                     /*window_info=*/nullptr);
@@ -264,7 +264,7 @@ void OpenFileFromODFS(
                     ::features::kHappinessTrackingOffice)) {
               ash::cloud_upload::HatsOfficeTrigger::Get()
                   .ShowSurveyAfterAppInactive(
-                      web_app::kMicrosoft365AppId,
+                      ash::kMicrosoft365AppId,
                       ash::cloud_upload::HatsOfficeLaunchingApp::kMS365);
             }
             std::move(callback).Run(OfficeOneDriveOpenErrors::kSuccess);

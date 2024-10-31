@@ -41,9 +41,9 @@ import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar.PrefObserver;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.safe_browsing.settings.SafeBrowsingSettingsFragment;
-import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
+import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
+import org.chromium.components.browser_ui.settings.SettingsNavigation;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -60,7 +60,7 @@ public class SafetyHubMagicStackMediatorTest {
     @Mock private MagicStackBridge mMagicStackBridge;
     @Mock private TabModelSelector mTabModelSelector;
     @Mock private ModuleDelegate mModuleDelegate;
-    @Mock private SettingsLauncher mSettingsLauncher;
+    @Mock private SettingsNavigation mSettingsNavigation;
     @Mock private PrefChangeRegistrar mPrefChangeRegistrar;
     @Mock private Supplier<ModalDialogManager> mModalDialogManagerSupplier;
     @Mock private View mView;
@@ -94,7 +94,7 @@ public class SafetyHubMagicStackMediatorTest {
                         mPrefChangeRegistrar,
                         mModalDialogManagerSupplier,
                         mShowSurveyCallback);
-        SettingsLauncherFactory.setInstanceForTesting(mSettingsLauncher);
+        SettingsNavigationFactory.setInstanceForTesting(mSettingsNavigation);
 
         mModalDialogManager =
                 new ModalDialogManager(
@@ -123,16 +123,14 @@ public class SafetyHubMagicStackMediatorTest {
         verify(mModuleDelegate).onDataReady(eq(ModuleType.SAFETY_HUB), eq(mModel));
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.HEADER),
-                mContext.getResources().getString(R.string.safety_hub_magic_stack_module_name));
+                mContext.getString(R.string.safety_hub_magic_stack_module_name));
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.TITLE),
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_safe_browsing_title));
+                mContext.getString(R.string.safety_hub_magic_stack_safe_browsing_title));
         assertEquals(mModel.get(SafetyHubMagicStackViewProperties.SUMMARY), DESCRIPTION);
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.BUTTON_TEXT),
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_safe_browsing_button_text));
+                mContext.getString(R.string.safety_hub_magic_stack_safe_browsing_button_text));
         assertEquals(
                 shadowOf(mModel.get(SafetyHubMagicStackViewProperties.ICON_DRAWABLE))
                         .getCreatedFromResId(),
@@ -141,8 +139,8 @@ public class SafetyHubMagicStackMediatorTest {
         OnClickListener onClickListener =
                 mModel.get(SafetyHubMagicStackViewProperties.BUTTON_ON_CLICK_LISTENER);
         onClickListener.onClick(mView);
-        verify(mSettingsLauncher)
-                .launchSettingsActivity(eq(mContext), eq(SafeBrowsingSettingsFragment.class));
+        verify(mSettingsNavigation)
+                .startSettings(eq(mContext), eq(SafeBrowsingSettingsFragment.class));
         verify(mModuleDelegate, times(1)).removeModule(ModuleType.SAFETY_HUB);
         verify(mMagicStackBridge, times(1)).dismissSafeBrowsingModule();
         verify(mShowSurveyCallback).onResult(MagicStackEntry.ModuleType.SAFE_BROWSING);
@@ -158,13 +156,12 @@ public class SafetyHubMagicStackMediatorTest {
         verify(mModuleDelegate).onDataReady(eq(ModuleType.SAFETY_HUB), eq(mModel));
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.HEADER),
-                mContext.getResources().getString(R.string.safety_hub_magic_stack_module_name));
+                mContext.getString(R.string.safety_hub_magic_stack_module_name));
         assertEquals(mModel.get(SafetyHubMagicStackViewProperties.TITLE), DESCRIPTION);
         assertNull(mModel.get(SafetyHubMagicStackViewProperties.SUMMARY));
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.BUTTON_TEXT),
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_safe_state_button_text));
+                mContext.getString(R.string.safety_hub_magic_stack_safe_state_button_text));
         assertEquals(
                 shadowOf(mModel.get(SafetyHubMagicStackViewProperties.ICON_DRAWABLE))
                         .getCreatedFromResId(),
@@ -173,7 +170,7 @@ public class SafetyHubMagicStackMediatorTest {
         OnClickListener onClickListener =
                 mModel.get(SafetyHubMagicStackViewProperties.BUTTON_ON_CLICK_LISTENER);
         onClickListener.onClick(mView);
-        verify(mSettingsLauncher).launchSettingsActivity(eq(mContext), eq(SafetyHubFragment.class));
+        verify(mSettingsNavigation).startSettings(eq(mContext), eq(SafetyHubFragment.class));
         verify(mShowSurveyCallback).onResult(MagicStackEntry.ModuleType.REVOKED_PERMISSIONS);
     }
 
@@ -188,16 +185,14 @@ public class SafetyHubMagicStackMediatorTest {
         verify(mModuleDelegate).onDataReady(eq(ModuleType.SAFETY_HUB), eq(mModel));
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.HEADER),
-                mContext.getResources().getString(R.string.safety_hub_magic_stack_module_name));
+                mContext.getString(R.string.safety_hub_magic_stack_module_name));
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.TITLE),
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_notifications_title));
+                mContext.getString(R.string.safety_hub_magic_stack_notifications_title));
         assertEquals(mModel.get(SafetyHubMagicStackViewProperties.SUMMARY), DESCRIPTION);
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.BUTTON_TEXT),
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_safe_state_button_text));
+                mContext.getString(R.string.safety_hub_magic_stack_safe_state_button_text));
         assertEquals(
                 shadowOf(mModel.get(SafetyHubMagicStackViewProperties.ICON_DRAWABLE))
                         .getCreatedFromResId(),
@@ -206,7 +201,7 @@ public class SafetyHubMagicStackMediatorTest {
         OnClickListener onClickListener =
                 mModel.get(SafetyHubMagicStackViewProperties.BUTTON_ON_CLICK_LISTENER);
         onClickListener.onClick(mView);
-        verify(mSettingsLauncher).launchSettingsActivity(eq(mContext), eq(SafetyHubFragment.class));
+        verify(mSettingsNavigation).startSettings(eq(mContext), eq(SafetyHubFragment.class));
         verify(mShowSurveyCallback).onResult(MagicStackEntry.ModuleType.NOTIFICATION_PERMISSIONS);
     }
 
@@ -220,16 +215,14 @@ public class SafetyHubMagicStackMediatorTest {
         verify(mModuleDelegate).onDataReady(eq(ModuleType.SAFETY_HUB), eq(mModel));
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.HEADER),
-                mContext.getResources().getString(R.string.safety_hub_magic_stack_module_name));
+                mContext.getString(R.string.safety_hub_magic_stack_module_name));
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.TITLE),
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_compromised_passwords_title));
+                mContext.getString(R.string.safety_hub_magic_stack_compromised_passwords_title));
         assertEquals(mModel.get(SafetyHubMagicStackViewProperties.SUMMARY), DESCRIPTION);
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.BUTTON_TEXT),
-                mContext.getResources()
-                        .getString(R.string.safety_hub_magic_stack_compromised_passwords_title));
+                mContext.getString(R.string.safety_hub_magic_stack_compromised_passwords_title));
         assertEquals(
                 shadowOf(mModel.get(SafetyHubMagicStackViewProperties.ICON_DRAWABLE))
                         .getCreatedFromResId(),

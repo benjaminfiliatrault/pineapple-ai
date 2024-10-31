@@ -20,7 +20,6 @@
 #include "base/timer/timer.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/extension_commands_global_registry.h"
 #include "chrome/browser/extensions/extension_keybinding_registry.h"
 #include "chrome/browser/ui/browser.h"
@@ -29,6 +28,7 @@
 #include "chrome/browser/ui/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/translate/partial_translate_bubble_model.h"
+#include "chrome/browser/ui/user_education/browser_user_education_interface.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views_context.h"
 #include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
@@ -45,8 +45,8 @@
 #include "components/enterprise/buildflags/buildflags.h"
 #include "components/infobars/core/infobar_container.h"
 #include "components/segmentation_platform/public/result.h"
-#include "components/user_education/common/feature_promo_controller.h"
-#include "components/user_education/common/feature_promo_handle.h"
+#include "components/user_education/common/feature_promo/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_handle.h"
 #include "components/webapps/browser/banners/app_banner_manager.h"
 #include "content/public/browser/page_user_data.h"
 #include "content/public/browser/permission_controller.h"
@@ -64,7 +64,7 @@
 #include "ui/views/widget/widget_observer.h"
 #include "ui/views/window/client_view.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ui/compositor/throughput_tracker.h"
 #endif
 
@@ -550,6 +550,8 @@ class BrowserView : public BrowserWindow,
       content::WebContents* contents,
       const gfx::Image& image) override;
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  // TODO(crbug.com/339262105): Clean up the old password promo methods after
+  // the generic promo launch.
   void VerifyUserEligibilityIOSPasswordPromoBubble() override;
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
   qrcode_generator::QRCodeGeneratorBubbleView* ShowQRCodeGeneratorBubble(
@@ -601,6 +603,7 @@ class BrowserView : public BrowserWindow,
       override;
   void ShowAvatarBubbleFromAvatarButton(bool is_source_accelerator) override;
   void MaybeShowProfileSwitchIPH() override;
+  void MaybeShowSupervisedUserProfileSignInIPH() override;
   void ShowHatsDialog(
       const std::string& site_id,
       const std::optional<std::string>& hats_histogram_name,
@@ -632,15 +635,16 @@ class BrowserView : public BrowserWindow,
       user_education::FeaturePromoParams params) override;
   bool MaybeShowStartupFeaturePromo(
       user_education::FeaturePromoParams params) override;
-  bool EndFeaturePromo(
-      const base::Feature& iph_feature,
-      user_education::EndFeaturePromoReason end_promo_reason) override;
+  bool AbortFeaturePromo(const base::Feature& iph_feature) override;
   user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
       const base::Feature& iph_feature) override;
-  void NotifyFeatureEngagementEvent(const char* event_name) override;
-  void NotifyPromoFeatureUsed(const base::Feature& feature) override;
+  bool NotifyFeaturePromoFeatureUsed(
+      const base::Feature& feature,
+      FeaturePromoFeatureUsedAction action) override;
+  void NotifyAdditionalConditionEvent(const char* event_name) override;
   user_education::DisplayNewBadge MaybeShowNewBadgeFor(
       const base::Feature& feature) override;
+  void NotifyNewBadgeFeatureUsed(const base::Feature& feature) override;
 
   void ShowIncognitoClearBrowsingDataDialog() override;
 
@@ -792,15 +796,18 @@ class BrowserView : public BrowserWindow,
       const;
 
   void CreateTabSearchBubble(
-      int tab_index = -1,
+      tab_search::mojom::TabSearchSection section =
+          tab_search::mojom::TabSearchSection::kNone,
       tab_search::mojom::TabOrganizationFeature organization_feature =
           tab_search::mojom::TabOrganizationFeature::kNone) override;
   // Closes the tab search bubble if open for the given browser instance.
   void CloseTabSearchBubble() override;
 
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   AccessibilityFocusHighlight* GetAccessibilityFocusHighlightForTesting() {
     return accessibility_focus_highlight_.get();
   }
+#endif
 
   bool should_show_window_controls_overlay_toggle() const {
     return should_show_window_controls_overlay_toggle_;
@@ -824,6 +831,7 @@ class BrowserView : public BrowserWindow,
   gfx::Point GetThemeOffsetFromBrowserView() const;
 
   void ApplyWatermarkSettings(const std::string& watermark_text);
+  void UpdateAccessibleNameForAllTabs();
 
 #if BUILDFLAG(ENTERPRISE_SCREENSHOT_PROTECTION)
   void ApplyScreenshotSettings(bool allow);
@@ -864,6 +872,7 @@ class BrowserView : public BrowserWindow,
   friend class TopControlsSlideControllerTest;
   FRIEND_TEST_ALL_PREFIXES(BrowserViewTest, BrowserView);
   FRIEND_TEST_ALL_PREFIXES(BrowserViewTest, AccessibleWindowTitle);
+  FRIEND_TEST_ALL_PREFIXES(PermissionChipUnitTest, AccessibleName);
   class AccessibilityModeObserver;
 
   // BrowserUserEducationInterface private methods:
@@ -894,6 +903,10 @@ class BrowserView : public BrowserWindow,
   void CreateJumpList();
 #endif
 
+  // Helper method, returns if we should show the IPHs anchored on the avatar
+  // toolbar.
+  bool ShouldShowAvatarToolbarIPH();
+
   // Returns the BrowserViewLayout.
   BrowserViewLayout* GetBrowserViewLayout() const;
 
@@ -913,11 +926,15 @@ class BrowserView : public BrowserWindow,
   bool MaybeShowInfoBar(content::WebContents* contents);
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  // TODO(crbug.com/339262105): Clean up the old password promo methods after
+  // the generic promo launch.
   // Decides whether to show the iOS Password Promo Bubble based on segmentation
   // platform classification results (is passed as a callback to the
   // segmentation API).
   void MaybeShowIOSPasswordPromoBubble(
       const segmentation_platform::ClassificationResult& result);
+  // TODO(crbug.com/339262105): Clean up the old password promo methods after
+  // the generic promo launch.
   // Shows the iOS Password Promo Bubble.
   void ShowIOSPasswordPromoBubble();
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -1064,10 +1081,12 @@ class BrowserView : public BrowserWindow,
   void UpdateFullscreenAllowedFromPolicy(bool allowed_without_policy);
 
   // The BrowserFrame that hosts this view.
-  raw_ptr<BrowserFrame, DanglingUntriaged> frame_ = nullptr;
+  raw_ptr<BrowserFrame> frame_ = nullptr;
 
   // The Browser object we are associated with.
   std::unique_ptr<Browser> browser_;
+
+  base::CallbackListSubscription chip_visibility_subscription_;
 
   // BrowserView layout (LTR one is pictured here).
   //
@@ -1098,29 +1117,25 @@ class BrowserView : public BrowserWindow,
   // The view that manages the tab strip, toolbar, and sometimes the bookmark
   // bar. Stacked top in the view hiearachy so it can be used to slide out
   // the top views in immersive fullscreen.
-  raw_ptr<TopContainerView, AcrossTasksDanglingUntriaged> top_container_ =
-      nullptr;
+  raw_ptr<TopContainerView> top_container_ = nullptr;
 
   // Menu button and page status icons. Only used by web-app windows.
-  raw_ptr<WebAppFrameToolbarView, DanglingUntriaged> web_app_frame_toolbar_ =
-      nullptr;
+  raw_ptr<WebAppFrameToolbarView> web_app_frame_toolbar_ = nullptr;
 
   // Normally the BrowserNonClientFrameView is responsible for rendering the
   // title of a window when appropriate. However for web applications the title
   // needs to be more integrated with other UI components part of BrowserView,
   // so have a title Label for them here.
-  raw_ptr<views::Label, DanglingUntriaged> web_app_window_title_ = nullptr;
+  raw_ptr<views::Label> web_app_window_title_ = nullptr;
 
   // The view that contains the tabstrip, new tab button, and grab handle space.
-  raw_ptr<TabStripRegionView, AcrossTasksDanglingUntriaged>
-      tab_strip_region_view_ = nullptr;
+  raw_ptr<TabStripRegionView> tab_strip_region_view_ = nullptr;
 
   // The TabStrip.
-  raw_ptr<TabStrip, AcrossTasksDanglingUntriaged> tabstrip_ = nullptr;
+  raw_ptr<TabStrip> tabstrip_ = nullptr;
 
   // the webui based tabstrip, when applicable. see https://crbug.com/989131.
-  raw_ptr<WebUITabStripContainerView, DanglingUntriaged> webui_tab_strip_ =
-      nullptr;
+  raw_ptr<WebUITabStripContainerView> webui_tab_strip_ = nullptr;
 
   // Allows us to react to changes in accessibility mode.
   // TODO(dfried): this is only used to disable WebUI tabstrip (see above) while
@@ -1130,7 +1145,7 @@ class BrowserView : public BrowserWindow,
   std::unique_ptr<AccessibilityModeObserver> accessibility_mode_observer_;
 
   // The Toolbar containing the navigation buttons, menus and the address bar.
-  raw_ptr<ToolbarView, AcrossTasksDanglingUntriaged> toolbar_ = nullptr;
+  raw_ptr<ToolbarView> toolbar_ = nullptr;
 
   // The OverlayView for the widget, which is used to host `top_container_`
   // during immersive reveal.
@@ -1160,57 +1175,47 @@ class BrowserView : public BrowserWindow,
   std::unique_ptr<BookmarkBarView> bookmark_bar_view_;
 
   // Separator between top container and contents.
-  raw_ptr<views::View, AcrossTasksDanglingUntriaged> contents_separator_ =
-      nullptr;
+  raw_ptr<views::View> contents_separator_ = nullptr;
 
   // Loading bar (part of top container for / WebUI tab strip).
-  raw_ptr<TopContainerLoadingBar, DanglingUntriaged> loading_bar_ = nullptr;
+  raw_ptr<TopContainerLoadingBar> loading_bar_ = nullptr;
 
   // The do-nothing view which controls the z-order of the find bar widget
   // relative to views which paint into layers and views with an associated
   // NativeView.
-  raw_ptr<View, AcrossTasksDanglingUntriaged> find_bar_host_view_ = nullptr;
+  raw_ptr<View> find_bar_host_view_ = nullptr;
 
   // The download shelf.
-  raw_ptr<DownloadShelf, DanglingUntriaged> download_shelf_ = nullptr;
+  raw_ptr<DownloadShelf> download_shelf_ = nullptr;
 
   // The InfoBarContainerView that contains InfoBars for the current tab.
-  raw_ptr<InfoBarContainerView, AcrossTasksDanglingUntriaged>
-      infobar_container_ = nullptr;
+  raw_ptr<InfoBarContainerView> infobar_container_ = nullptr;
 
   // The view that contains the selected WebContents.
-  raw_ptr<ContentsWebView, AcrossTasksDanglingUntriaged> contents_web_view_ =
-      nullptr;
+  raw_ptr<ContentsWebView> contents_web_view_ = nullptr;
 
   // The view that contains devtools window for the selected WebContents.
-  raw_ptr<views::WebView, AcrossTasksDanglingUntriaged> devtools_web_view_ =
-      nullptr;
+  raw_ptr<views::WebView> devtools_web_view_ = nullptr;
 
   // The view that overlays a watermark on the contents container.
   raw_ptr<enterprise_watermark::WatermarkView> watermark_view_ = nullptr;
 
   // The view managing the devtools and contents positions.
   // Handled by ContentsLayoutManager.
-  raw_ptr<views::View, AcrossTasksDanglingUntriaged> contents_container_ =
-      nullptr;
+  raw_ptr<views::View> contents_container_ = nullptr;
 
   // The side panel aligned to the left or the right side of the browser window
   // depending on the kSidePanelHorizontalAlignment pref's value.
   // Conceptually this member should exist if and only if the
   // side_panel_coordinator is created.
-  raw_ptr<SidePanel, AcrossTasksDanglingUntriaged> unified_side_panel_ =
-      nullptr;
-  raw_ptr<views::View, AcrossTasksDanglingUntriaged>
-      right_aligned_side_panel_separator_ = nullptr;
-  raw_ptr<views::View, AcrossTasksDanglingUntriaged>
-      left_aligned_side_panel_separator_ = nullptr;
-  raw_ptr<views::View, AcrossTasksDanglingUntriaged>
-      side_panel_rounded_corner_ = nullptr;
+  raw_ptr<SidePanel> unified_side_panel_ = nullptr;
+  raw_ptr<views::View> right_aligned_side_panel_separator_ = nullptr;
+  raw_ptr<views::View> left_aligned_side_panel_separator_ = nullptr;
+  raw_ptr<views::View> side_panel_rounded_corner_ = nullptr;
 
   // Provides access to the toolbar buttons this browser view uses. Buttons may
   // appear in a hosted app frame or in a tabbed UI toolbar.
-  raw_ptr<ToolbarButtonProvider, AcrossTasksDanglingUntriaged>
-      toolbar_button_provider_ = nullptr;
+  raw_ptr<ToolbarButtonProvider> toolbar_button_provider_ = nullptr;
 
   // The handler responsible for showing autofill bubbles.
   std::unique_ptr<autofill::AutofillBubbleHandler> autofill_bubble_handler_;
@@ -1311,14 +1316,16 @@ class BrowserView : public BrowserWindow,
   // The last bounds we notified about in TryNotifyWindowBoundsChanged().
   gfx::Rect last_widget_bounds_;
 
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   std::unique_ptr<AccessibilityFocusHighlight> accessibility_focus_highlight_;
+#endif
 
   std::unique_ptr<BrowserFeaturePromoController> feature_promo_controller_ =
       nullptr;
 
   OnLinkOpeningFromGestureCallbackList link_opened_from_gesture_callbacks_;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // |loading_animation_tracker_| is used to measure animation smoothness for
   // tab loading animation.
   std::optional<ui::ThroughputTracker> loading_animation_tracker_;

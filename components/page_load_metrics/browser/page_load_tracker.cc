@@ -200,6 +200,9 @@ void DispatchObserverTimingCallbacks(PageLoadMetricsObserverInterface* observer,
   if (new_timing.connect_start && !last_timing.connect_start) {
     observer->OnConnectStart(new_timing);
   }
+  if (new_timing.connect_end && !last_timing.connect_end) {
+    observer->OnConnectEnd(new_timing);
+  }
 }
 
 internal::PageLoadTrackerPageType CalculatePageType(
@@ -958,6 +961,11 @@ void PageLoadTracker::UpdatePageEndInternal(
 
   if (is_certainly_browser_timestamp) {
     ClampBrowserTimestampIfInterProcessTimeTickSkew(&page_end_time_);
+  }
+  if (page_end_reason_ == END_RENDER_PROCESS_GONE) {
+    for (const auto& observer : observers_) {
+      observer->OnPrimaryPageRenderProcessGone();
+    }
   }
 }
 

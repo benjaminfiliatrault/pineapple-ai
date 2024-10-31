@@ -29,8 +29,10 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver_with_tracker.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_audio_output_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_capture_handle_config.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_display_media_stream_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_device_kind.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_stream_constraints.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_constraints.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_supported_constraints.h"
@@ -54,6 +56,7 @@
 #include "third_party/blink/renderer/modules/mediastream/media_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/navigator_media_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/restriction_target.h"
+#include "third_party/blink/renderer/modules/mediastream/scoped_media_stream_tracer.h"
 #include "third_party/blink/renderer/modules/mediastream/sub_capture_target.h"
 #include "third_party/blink/renderer/modules/mediastream/user_media_client.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
@@ -81,10 +84,6 @@ BASE_FEATURE(kEnumerateDevicesRequestAudioCapabilities,
 
 namespace {
 
-const char kFeaturePolicyBlocked[] =
-    "Access to the feature \"display-capture\" is disallowed by permission "
-    "policy.";
-
 template <typename IDLResolvedType>
 class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
  public:
@@ -93,15 +92,20 @@ class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
       ScriptPromiseResolverWithTracker<UserMediaRequestResult, IDLResolvedType>*
           resolver,
       base::OnceCallback<void(const String&, CaptureController*)>
-          on_success_follow_up)
+          on_success_follow_up,
+      std::unique_ptr<ScopedMediaStreamTracer> tracer)
       : media_type_(media_type),
         resolver_(resolver),
-        on_success_follow_up_(std::move(on_success_follow_up)) {}
+        on_success_follow_up_(std::move(on_success_follow_up)),
+        tracer_(std::move(tracer)) {}
   ~PromiseResolverCallbacks() override = default;
 
   void OnSuccess(const MediaStreamVector& streams,
                  CaptureController* capture_controller) override {
     OnSuccessImpl<IDLResolvedType>(streams, capture_controller);
+    if (tracer_) {
+      tracer_->End();
+    }
   }
 
   template <typename T>
@@ -115,6 +119,9 @@ class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
       capture_controller->FinalizeFocusDecision();
     }
     resolver_->template Reject<V8MediaStreamError>(error, result);
+    if (tracer_) {
+      tracer_->End();
+    }
   }
 
   void Trace(Visitor* visitor) const override {
@@ -130,6 +137,7 @@ class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
       resolver_;
   base::OnceCallback<void(const String&, CaptureController*)>
       on_success_follow_up_;
+  std::unique_ptr<ScopedMediaStreamTracer> tracer_;
 };
 
 template <>
@@ -364,9 +372,6 @@ MediaStreamConstraints* ToMediaStreamConstraints(
   if (source->hasPreferCurrentTab()) {
     constraints->setPreferCurrentTab(source->preferCurrentTab());
   }
-  if (source->hasAutoSelectAllScreens()) {
-    constraints->setAutoSelectAllScreens(source->autoSelectAllScreens());
-  }
   if (source->hasController()) {
     constraints->setController(source->controller());
   }
@@ -441,6 +446,8 @@ ScriptPromise<IDLSequence<MediaDeviceInfo>> MediaDevices::enumerateDevices(
     return ScriptPromise<IDLSequence<MediaDeviceInfo>>();
   }
 
+  auto tracer = std::make_unique<ScopedMediaStreamTracer>(
+      "MediaDevices.EnumerateDevices");
   auto* result_tracker = MakeGarbageCollected<ScriptPromiseResolverWithTracker<
       EnumerateDevicesResult, IDLSequence<MediaDeviceInfo>>>(
       script_state, "Media.MediaDevices.EnumerateDevices", base::Seconds(4));
@@ -456,7 +463,7 @@ ScriptPromise<IDLSequence<MediaDeviceInfo>> MediaDevices::enumerateDevices(
       /*request_audio_input_capabilities=*/
       base::FeatureList::IsEnabled(kEnumerateDevicesRequestAudioCapabilities),
       WTF::BindOnce(&MediaDevices::DevicesEnumerated, WrapPersistent(this),
-                    WrapPersistent(result_tracker)));
+                    WrapPersistent(result_tracker), std::move(tracer)));
   return promise;
 }
 
@@ -470,6 +477,10 @@ ScriptPromise<MediaStream> MediaDevices::getUserMedia(
     const UserMediaStreamConstraints* options,
     ExceptionState& exception_state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  auto tracer =
+      std::make_unique<ScopedMediaStreamTracer>("MediaDevices.GetUserMedia");
+
   // This timeout of base::Seconds(8) is an initial value and based on the data
   // in Media.MediaDevices.GetUserMedia.Latency, it should be iterated upon.
   auto* resolver = MakeGarbageCollected<
@@ -489,7 +500,7 @@ ScriptPromise<MediaStream> MediaDevices::getUserMedia(
   }
 
   return SendUserMediaRequest(UserMediaRequestType::kUserMedia, resolver,
-                              constraints, exception_state);
+                              constraints, exception_state, std::move(tracer));
 }
 
 template <typename IDLResolvedType>
@@ -498,7 +509,8 @@ ScriptPromise<IDLResolvedType> MediaDevices::SendUserMediaRequest(
     ScriptPromiseResolverWithTracker<UserMediaRequestResult, IDLResolvedType>*
         resolver,
     const MediaStreamConstraints* options,
-    ExceptionState& exception_state) {
+    ExceptionState& exception_state,
+    std::unique_ptr<ScopedMediaStreamTracer> tracer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!exception_state.HadException());
 
@@ -539,7 +551,8 @@ ScriptPromise<IDLResolvedType> MediaDevices::SendUserMediaRequest(
 
   auto* callbacks =
       MakeGarbageCollected<PromiseResolverCallbacks<IDLResolvedType>>(
-          media_type, resolver, std::move(on_success_follow_up));
+          media_type, resolver, std::move(on_success_follow_up),
+          std::move(tracer));
 
   LocalDOMWindow* window = LocalDOMWindow::From(script_state);
   UserMediaClient* user_media_client = UserMediaClient::From(window);
@@ -557,9 +570,6 @@ ScriptPromise<IDLResolvedType> MediaDevices::SendUserMediaRequest(
   if (!request) {
     DCHECK(exception_state.HadException());
     resolver->RecordAndDetach(UserMediaRequestResult::kInvalidConstraints);
-    RecordIdentifiabilityMetric(
-        surface, GetExecutionContext(),
-        IdentifiabilityBenignStringToken(exception_state.Message()));
     return promise;
   }
 
@@ -585,6 +595,9 @@ ScriptPromise<IDLSequence<MediaStream>> MediaDevices::getAllScreensMedia(
     ScriptState* script_state,
     ExceptionState& exception_state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  auto tracer = std::make_unique<ScopedMediaStreamTracer>(
+      "MediaDevices.GetAllScreensMedia");
 
   // This timeout of base::Seconds(6) is an initial value and based on the data
   // in Media.MediaDevices.GetAllScreensMedia.Latency, it should be iterated
@@ -616,7 +629,9 @@ ScriptPromise<IDLSequence<MediaStream>> MediaDevices::getAllScreensMedia(
   if (context->IsIsolatedContext() && !capture_allowed_by_permissions_policy) {
     resolver->RecordAndThrowDOMException(
         exception_state, DOMExceptionCode::kNotAllowedError,
-        kFeaturePolicyBlocked, UserMediaRequestResult::kNotAllowedError);
+        "Access to the feature \"all-screenscapture\" is disallowed by "
+        "permissions policy.",
+        UserMediaRequestResult::kNotAllowedError);
     return promise;
   }
 
@@ -632,9 +647,8 @@ ScriptPromise<IDLSequence<MediaStream>> MediaDevices::getAllScreensMedia(
   MediaStreamConstraints* constraints = MediaStreamConstraints::Create();
   constraints->setVideo(
       MakeGarbageCollected<V8UnionBooleanOrMediaTrackConstraints>(true));
-  constraints->setAutoSelectAllScreens(true);
   return SendUserMediaRequest(UserMediaRequestType::kAllScreensMedia, resolver,
-                              constraints, exception_state);
+                              constraints, exception_state, std::move(tracer));
 }
 
 ScriptPromise<MediaStream> MediaDevices::getDisplayMedia(
@@ -643,6 +657,10 @@ ScriptPromise<MediaStream> MediaDevices::getDisplayMedia(
     ExceptionState& exception_state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   LocalDOMWindow* const window = DomWindow();
+
+  auto tracer =
+      std::make_unique<ScopedMediaStreamTracer>("MediaDevices.GetDisplayMedia");
+
   // Using timeout of base::Seconds(12) based on the
   // Media.MediaDevices.GetDisplayMedia.Latency values. With the earlier value
   // of base::Seconds(6), we got about 25% of results counted as kTimeout.
@@ -672,7 +690,9 @@ ScriptPromise<MediaStream> MediaDevices::getDisplayMedia(
   if (!capture_allowed_by_permissions_policy) {
     resolver->RecordAndThrowDOMException(
         exception_state, DOMExceptionCode::kNotAllowedError,
-        kFeaturePolicyBlocked, UserMediaRequestResult::kNotAllowedError);
+        "Access to the feature \"display-capture\" is disallowed by "
+        "permissions policy.",
+        UserMediaRequestResult::kNotAllowedError);
     return promise;
   }
 
@@ -681,15 +701,6 @@ ScriptPromise<MediaStream> MediaDevices::getDisplayMedia(
         exception_state, DOMExceptionCode::kInvalidStateError,
         "getDisplayMedia() requires transient activation (user gesture).",
         UserMediaRequestResult::kInvalidStateError);
-    return promise;
-  }
-
-  if (options->hasAutoSelectAllScreens() && options->autoSelectAllScreens()) {
-    resolver->RecordAndThrowTypeError(
-        exception_state,
-        "The autoSelectAllScreens property is not allowed for usage with "
-        "getDisplayMedia.",
-        UserMediaRequestResult::kInvalidConstraints);
     return promise;
   }
 
@@ -718,7 +729,91 @@ ScriptPromise<MediaStream> MediaDevices::getDisplayMedia(
   }
 
   return SendUserMediaRequest(UserMediaRequestType::kDisplayMedia, resolver,
-                              constraints, exception_state);
+                              constraints, exception_state, std::move(tracer));
+}
+
+ScriptPromise<MediaDeviceInfo> MediaDevices::selectAudioOutput(
+    ScriptState* script_state,
+    const AudioOutputOptions* options,
+    ExceptionState& exception_state) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  LocalDOMWindow* window = LocalDOMWindow::From(script_state);
+
+  if (!script_state->ContextIsValid() || !window || !window->GetFrame()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kAbortError,
+        "No local DOM window; is this a detached window?");
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolverWithTracker<
+      AudioOutputSelectionResult, MediaDeviceInfo>>(
+      script_state, "Media.MediaDevices.SelectAudioOutput", base::Seconds(8));
+
+  if (!LocalFrame::HasTransientUserActivation(window->GetFrame())) {
+    resolver->Reject<DOMException>(
+        MakeGarbageCollected<DOMException>(
+            DOMExceptionCode::kInvalidStateError,
+            "selectAudioOutput() requires transient "
+            "activation (user gesture)."),
+        AudioOutputSelectionResult::kInvalidStateError);
+    return resolver->Promise();
+  }
+
+  GetDispatcherHost(window->GetFrame())
+      .SelectAudioOutput(
+          options->deviceId(),
+          WTF::BindOnce(&MediaDevices::OnSelectAudioOutputResult,
+                        WrapPersistent(this), WrapPersistent(resolver)));
+
+  return resolver->Promise();
+}
+
+void MediaDevices::OnSelectAudioOutputResult(
+    ScriptPromiseResolverWithTracker<AudioOutputSelectionResult,
+                                     MediaDeviceInfo>* resolver,
+    mojom::blink::SelectAudioOutputResultPtr result) {
+  if (result->status == blink::mojom::AudioOutputStatus::kSuccess) {
+    MediaDeviceInfo* media_device_info = MakeGarbageCollected<MediaDeviceInfo>(
+        String::FromUTF8(result->device_info.device_id),
+        String::FromUTF8(result->device_info.label),
+        String::FromUTF8(result->device_info.group_id),
+        mojom::MediaDeviceType::kMediaAudioOutput);
+    resolver->Resolve(media_device_info, AudioOutputSelectionResult::kSuccess);
+    return;
+  } else {
+    String error_message;
+    DOMExceptionCode exception_code = DOMExceptionCode::kUnknownError;
+    AudioOutputSelectionResult result_enum =
+        AudioOutputSelectionResult::kOtherError;
+
+    switch (result->status) {
+      case blink::mojom::AudioOutputStatus::kNoPermission:
+        error_message = "Permission denied to select audio output.";
+        exception_code = DOMExceptionCode::kNotAllowedError;
+        result_enum = AudioOutputSelectionResult::kPermissionDenied;
+        break;
+      case blink::mojom::AudioOutputStatus::kNoDevices:
+        error_message = "No audio output devices found.";
+        exception_code = DOMExceptionCode::kNotFoundError;
+        result_enum = AudioOutputSelectionResult::kNoDevices;
+        break;
+      case blink::mojom::AudioOutputStatus::kNoUserActivation:
+        error_message =
+            "selectAudioOutput() requires transient activation (user gesture).";
+        exception_code = DOMExceptionCode::kInvalidStateError;
+        result_enum = AudioOutputSelectionResult::kInvalidStateError;
+        break;
+      default:
+        error_message =
+            "An unknown error occurred during audio output selection.";
+        exception_code = DOMExceptionCode::kUnknownError;
+        result_enum = AudioOutputSelectionResult::kOtherError;
+    }
+
+    resolver->Reject<DOMException>(
+        MakeGarbageCollected<DOMException>(exception_code, error_message),
+        result_enum);
+  }
 }
 
 void MediaDevices::setCaptureHandleConfig(ScriptState* script_state,
@@ -1075,7 +1170,8 @@ void RecordEnumeratedDevices(ScriptState* script_state,
   IdentifiableTokenBuilder builder;
   for (const auto& device_info : media_devices) {
     // Ignore device_id since that varies per-site.
-    builder.AddToken(IdentifiabilityBenignStringToken(device_info->kind()));
+    builder.AddToken(
+        IdentifiabilityBenignStringToken(device_info->kind().AsString()));
     builder.AddToken(IdentifiabilityBenignStringToken(device_info->label()));
     // Ignore group_id since that is varies per-site.
   }
@@ -1091,6 +1187,7 @@ void MediaDevices::DevicesEnumerated(
     ScriptPromiseResolverWithTracker<EnumerateDevicesResult,
                                      IDLSequence<MediaDeviceInfo>>*
         result_tracker,
+    std::unique_ptr<ScopedMediaStreamTracer> tracer,
     const Vector<Vector<WebMediaDeviceInfo>>& enumeration,
     Vector<mojom::blink::VideoInputDeviceCapabilitiesPtr>
         video_input_capabilities,
@@ -1163,6 +1260,7 @@ void MediaDevices::DevicesEnumerated(
 
   RecordEnumeratedDevices(result_tracker->GetScriptState(), media_devices);
   result_tracker->Resolve(media_devices);
+  tracer->End();
 }
 
 void MediaDevices::OnDispatcherHostConnectionError() {

@@ -15,9 +15,9 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
 
-import org.chromium.base.Callback;
 import org.chromium.chrome.browser.password_manager.PasswordManagerResourceProviderFactory;
 import org.chromium.chrome.browser.touch_to_fill.common.TouchToFillUtil;
+import org.chromium.chrome.browser.touch_to_fill.password_generation.TouchToFillPasswordGenerationCoordinator.GenerationCallback;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 
 /**
@@ -37,6 +37,8 @@ class TouchToFillPasswordGenerationView implements BottomSheetContent {
     TouchToFillPasswordGenerationView(Context context, View content) {
         mContext = context;
         mContent = content;
+
+        mContent.setOnGenericMotionListener((v, e) -> true); // Filter background interaction.
 
         ImageView sheetHeaderImage = mContent.findViewById(R.id.touch_to_fill_sheet_header_image);
         sheetHeaderImage.setImageDrawable(
@@ -78,12 +80,20 @@ class TouchToFillPasswordGenerationView implements BottomSheetContent {
                         generatedPassword));
     }
 
-    void setPasswordAcceptedCallback(Callback<String> callback) {
+    void setPasswordAcceptedCallback(GenerationCallback callback) {
         Button passwordAcceptedButton = mContent.findViewById(R.id.use_password_button);
         mPasswordView.setOnClickListener(
-                (v) -> callback.onResult(mPasswordView.getText().toString()));
+                (v) ->
+                        callback.onAccept(
+                                mPasswordView.getText().toString(),
+                                TouchToFillPasswordGenerationCoordinator.InteractionResult
+                                        .ACCEPTED_VIA_PASSWORD_VIEW));
         passwordAcceptedButton.setOnClickListener(
-                (v) -> callback.onResult(mPasswordView.getText().toString()));
+                (v) ->
+                        callback.onAccept(
+                                mPasswordView.getText().toString(),
+                                TouchToFillPasswordGenerationCoordinator.InteractionResult
+                                        .ACCEPTED_VIA_ACCEPT_BUTTON));
     }
 
     void setPasswordRejectedCallback(Runnable callback) {

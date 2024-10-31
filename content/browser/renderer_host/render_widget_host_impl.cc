@@ -124,6 +124,7 @@
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/ime/mojom/text_input_state.mojom.h"
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
@@ -789,8 +790,12 @@ void RenderWidgetHostImpl::WasHidden() {
     return;
   }
 
-  RejectPointerLockOrUnlockIfNecessary(
-      blink::mojom::PointerLockResult::kWrongDocument);
+  // Cancel pending pointer lock requests, unless there's an open user prompt.
+  // Prompts should remain open and functional across tab switches.
+  if (!delegate_->IsWaitingForPointerLockPrompt(this)) {
+    RejectPointerLockOrUnlockIfNecessary(
+        blink::mojom::PointerLockResult::kWrongDocument);
+  }
 
   TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::WasHidden");
   is_hidden_ = true;
@@ -1978,7 +1983,7 @@ void RenderWidgetHostImpl::SetCursor(const ui::Cursor& cursor) {
 
 void RenderWidgetHostImpl::ShowContextMenuAtPoint(
     const gfx::Point& point,
-    const ui::MenuSourceType source_type) {
+    const ui::mojom::MenuSourceType source_type) {
   if (GetRenderInputRouter()) {
     GetRenderInputRouter()->ShowContextMenuAtPoint(point, source_type);
   }
@@ -2986,26 +2991,42 @@ void RenderWidgetHostImpl::OnStartStylusWriting() {
   }
 }
 
-void RenderWidgetHostImpl::UpdateElementFocusForStylusWriting() {
+void RenderWidgetHostImpl::UpdateElementFocusForStylusWriting(
+#if BUILDFLAG(IS_WIN)
+    const gfx::Rect& focus_rect_in_widget
+#endif  // BUILDFLAG(IS_WIN)
+) {
   if (blink_frame_widget_) {
     auto callback = base::BindOnce(
         &RenderWidgetHostImpl::OnUpdateElementFocusForStylusWritingHandled,
         weak_factory_.GetWeakPtr());
-    blink_frame_widget_->OnStartStylusWriting(std::move(callback));
+    blink_frame_widget_->OnStartStylusWriting(
+#if BUILDFLAG(IS_WIN)
+        focus_rect_in_widget,
+#endif  // BUILDFLAG(IS_WIN)
+        std::move(callback));
   }
 }
 
 void RenderWidgetHostImpl::OnUpdateElementFocusForStylusWritingHandled(
-    const std::optional<gfx::Rect>& focused_edit_bounds,
-    const std::optional<gfx::Rect>& caret_bounds) {
-  if (view_) {
-    if (focused_edit_bounds.has_value() && caret_bounds.has_value()) {
-      view_->OnEditElementFocusedForStylusWriting(focused_edit_bounds.value(),
-                                                  caret_bounds.value());
-    } else {
-      view_->OnEditElementFocusClearedForStylusWriting();
+    blink::mojom::StylusWritingFocusResultPtr focus_result) {
+  if (!view_) {
+    return;
+  }
+#if BUILDFLAG(IS_WIN)
+  if (focus_result && focus_result->proximate_bounds) {
+    if (focus_result->proximate_bounds->range.length() !=
+        focus_result->proximate_bounds->bounds.size()) {
+      mojo::ReportBadMessage("mismatched range and bounds length received");
+      return;
+    }
+    if (focus_result->proximate_bounds->range.is_reversed()) {
+      mojo::ReportBadMessage("unexpected reversed range");
+      return;
     }
   }
+#endif  // BUILDFLAG(IS_WIN)
+  view_->OnEditElementFocusedForStylusWriting(std::move(focus_result));
 }
 
 void RenderWidgetHostImpl::PassImeRenderWidgetHost(

@@ -21,6 +21,7 @@
 #include "ash/system/time/calendar_unittest_utils.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wallpaper/views/wallpaper_widget_controller.h"
+#include "ash/wm/coral/coral_test_util.h"
 #include "ash/wm/overview/birch/birch_bar_context_menu_model.h"
 #include "ash/wm/overview/birch/birch_bar_controller.h"
 #include "ash/wm/overview/birch/birch_bar_menu_model_adapter.h"
@@ -94,11 +95,11 @@ class TestBirchItem : public BirchItem {
   std::string ToString() const override {
     return std::string("Test item ") + base::UTF16ToUTF8(title());
   }
-  void PerformAction(bool is_post_login) override {}
+  void PerformAction() override {}
   void LoadIcon(LoadIconCallback callback) const override {
     std::move(callback).Run(
-        ui::ImageModel::FromVectorIcon(kSettingsIcon, SK_ColorBLACK, 20),
-        SecondaryIconType::kNoIcon);
+        PrimaryIconType::kIcon, SecondaryIconType::kNoIcon,
+        ui::ImageModel::FromVectorIcon(kSettingsIcon, SK_ColorBLACK, 20));
   }
 };
 
@@ -112,7 +113,7 @@ class BirchBarTest : public AshTestBase {
   BirchBarTest() {
     feature_list_.InitWithFeatures(
         {features::kForestFeature, features::kBirchWeather,
-         features::kBirchCoral},
+         features::kCoralFeature},
         {});
   }
 
@@ -146,15 +147,6 @@ class BirchBarTest : public AshTestBase {
     weather_provider_ = weather_provider.get();
     birch_model->OverrideWeatherProviderForTest(std::move(weather_provider));
 
-    // TODO(make coral provider)
-    auto coral_provider =
-        std::make_unique<TestBirchDataProvider<BirchCoralItem>>(
-            base::BindRepeating(&BirchModel::SetCoralItems,
-                                base::Unretained(birch_model)),
-            prefs::kBirchUseCoral);
-    coral_provider_ = coral_provider.get();
-    birch_model->OverrideCoralProviderForTest(std::move(coral_provider));
-
     base::RunLoop run_loop;
     Shell::Get()
         ->birch_model()
@@ -169,7 +161,6 @@ class BirchBarTest : public AshTestBase {
   void TearDown() override {
     Shell::Get()->birch_model()->SetClientAndInit(nullptr);
     weather_provider_ = nullptr;
-    coral_provider_ = nullptr;
     birch_client_.reset();
     image_downloader_.reset();
     AshTestBase::TearDown();
@@ -305,29 +296,35 @@ class BirchBarTest : public AshTestBase {
 
   // Adds `num` coral items to data source.
   void SetCoralItems(size_t num) {
-    std::vector<BirchCoralItem> item_list;
+    // The number of coral items cannot exceed 2.
+    ASSERT_GE(2u, num);
 
-    std::vector<GURL> page_urls;
-    page_urls.emplace_back(("https://www.reddit.com/"));
-    page_urls.emplace_back(("https://www.figma.com/"));
-    page_urls.emplace_back(("https://www.notion.so/"));
-
-    std::vector<std::string> app_ids;
-    app_ids.emplace_back("lgnggepjiihbfdbedefdhcffnmhcahbm");
-
-    for (size_t i = 0; i < num; i++) {
-      item_list.emplace_back(
-          /*coral_title=*/u"coral_title",
-          /*coral_text=*/u"coral_text", /*page_urls=*/page_urls,
-          /*app_ids=*/app_ids,
-          /*cluster_id=*/0);
-      item_list.back().set_ranking(1.0f);
+    std::vector<coral::mojom::GroupPtr> test_groups;
+    if (num >= 1u) {
+      auto test_group =
+          CreateTestGroup({{"Reddit", GURL("https://www.reddit.com/")},
+                           {"Figma", GURL("https://www.figma.com/")},
+                           {"Notion", GURL("https://www.notion.so/")},
+                           {"Settings", "odknhmnlageboeamepcngndbggdpaobj"}},
+                          "Coral Group 1", base::Token(1, 2));
+      test_groups.push_back(std::move(test_group));
     }
-    coral_provider_->set_items(item_list);
+
+    if (num == 2u) {
+      auto test_group =
+          CreateTestGroup({{"IKEA", GURL("https://www.ikea.com/")},
+                           {"NHL", GURL("https://www.nhl.com/")},
+                           {"Google", GURL("https://www.google.com/")},
+                           {"Files", "fkiggjmkendpmbegkagpmagjepfkpmeb"}},
+                          "Coral Group 2", base::Token(2, 3));
+      test_groups.push_back(std::move(test_group));
+    }
+
+    OverrideTestResponse(std::move(test_groups));
   }
+
   std::unique_ptr<TestBirchClient> birch_client_;
   raw_ptr<TestBirchDataProvider<BirchWeatherItem>> weather_provider_;
-  raw_ptr<TestBirchDataProvider<BirchCoralItem>> coral_provider_;
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -366,6 +363,7 @@ TEST_F(BirchBarTest, RecordsHistogramWhenChipsShown) {
                      base::Time::Now() + base::Minutes(30), GURL(), GURL(),
                      std::string(), /*all_day_event=*/false);
   birch_client_->SetCalendarItems(items);
+  SetCoralItems(/*num=*/2);
 
   // Entering overview shows the birch bar.
   EnterOverview();
@@ -374,14 +372,17 @@ TEST_F(BirchBarTest, RecordsHistogramWhenChipsShown) {
   // One impression was recorded for the birch bar.
   histograms.ExpectBucketCount("Ash.Birch.Bar.Impression", true, 1);
 
-  // Two chips were shown.
-  histograms.ExpectBucketCount("Ash.Birch.ChipCount", 2, 1);
+  // Four chips were shown.
+  histograms.ExpectBucketCount("Ash.Birch.ChipCount", 4, 1);
 
   // One impression was recorded for each chip type.
   histograms.ExpectBucketCount("Ash.Birch.Chip.Impression",
                                BirchItemType::kFile, 1);
   histograms.ExpectBucketCount("Ash.Birch.Chip.Impression",
                                BirchItemType::kCalendar, 1);
+  histograms.ExpectBucketCount("Ash.Birch.Chip.Impression",
+                               BirchItemType::kCoral, 2);
+  histograms.ExpectBucketCount("Ash.Birch.Coral.ClusterCount", 2, 1);
 
   // Two rankings were recorded for the current time slot histogram.
   histograms.ExpectBucketCount("Ash.Birch.Ranking.1200to1700", 1, 1);
@@ -464,9 +465,9 @@ TEST_F(BirchBarTest, NoCrashOnSettingIconAfterShutdown) {
 
   // Create a set icon callback to simulate the case of setting icon after
   // shutting down the chip.
-  auto set_icon = base::BindOnce(&BirchChipButton::SetIconImage,
-                                 chip->weak_factory_.GetWeakPtr(),
-                                 ui::ImageModel(), SecondaryIconType::kNoIcon);
+  auto set_icon = base::BindOnce(
+      &BirchChipButton::SetIconImage, chip->weak_factory_.GetWeakPtr(),
+      PrimaryIconType::kIcon, SecondaryIconType::kNoIcon, ui::ImageModel());
 
   ExitOverview();
 
@@ -858,25 +859,25 @@ TEST_F(BirchBarMenuTest, CustomizeSuggestions) {
 
   base::flat_map<BirchItemType, views::MenuItemView*> type_to_item;
   auto* sub_menu = model_adapter->root_for_testing()->GetSubmenu();
-  auto* weather_item = sub_menu->GetMenuItemAt(1);
+  auto* weather_item = sub_menu->GetMenuItemAt(2);
   EXPECT_EQ(weather_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kWeatherSuggestions));
   type_to_item[BirchItemType::kWeather] = weather_item;
 
-  auto* calendar_item = sub_menu->GetMenuItemAt(2);
+  auto* calendar_item = sub_menu->GetMenuItemAt(3);
   EXPECT_EQ(calendar_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kCalendarSuggestions));
   type_to_item[BirchItemType::kCalendar] = calendar_item;
 
-  auto* file_item = sub_menu->GetMenuItemAt(3);
+  auto* file_item = sub_menu->GetMenuItemAt(4);
   EXPECT_EQ(file_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kDriveSuggestions));
   type_to_item[BirchItemType::kFile] = file_item;
 
-  auto* tab_item = sub_menu->GetMenuItemAt(4);
+  auto* tab_item = sub_menu->GetMenuItemAt(5);
   EXPECT_EQ(tab_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kChromeTabSuggestions));
@@ -936,7 +937,7 @@ TEST_F(BirchBarMenuTest, CustomizeSuggestionsExtended) {
   EXPECT_TRUE(model_adapter->IsShowingMenu());
 
   auto* sub_menu = model_adapter->root_for_testing()->GetSubmenu();
-  auto* tab_item = sub_menu->GetMenuItemAt(4);
+  auto* tab_item = sub_menu->GetMenuItemAt(5);
   EXPECT_EQ(tab_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kChromeTabSuggestions));
@@ -952,7 +953,7 @@ TEST_F(BirchBarMenuTest, CustomizeSuggestionsExtended) {
       bar_chips));
 
   // Find the media suggestions menu item.
-  auto* media_item = sub_menu->GetMenuItemAt(5);
+  auto* media_item = sub_menu->GetMenuItemAt(6);
   EXPECT_EQ(media_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kMediaSuggestions));
@@ -1004,7 +1005,7 @@ TEST_F(BirchBarMenuTest, CustomizeSuggestionsExtended2) {
   EXPECT_TRUE(model_adapter->IsShowingMenu());
 
   auto* sub_menu = model_adapter->root_for_testing()->GetSubmenu();
-  auto* coral_item = sub_menu->GetMenuItemAt(6);
+  auto* coral_item = sub_menu->GetMenuItemAt(1);
   EXPECT_EQ(coral_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kCoralSuggestions));
@@ -1252,7 +1253,7 @@ TEST_F(BirchBarMenuTest, NoCrashCustomizeSuggestionsByChipSubmenu) {
   LeftClickOn(customize_suggestions_item);
 
   auto* sub_menu = customize_suggestions_item->GetSubmenu();
-  auto* calendar_item = sub_menu->GetMenuItemAt(2);
+  auto* calendar_item = sub_menu->GetMenuItemAt(3);
   EXPECT_EQ(calendar_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kCalendarSuggestions));
@@ -1276,7 +1277,7 @@ TEST_F(BirchBarMenuTest, NoCrashCustomizeSuggestionsByChipSubmenu) {
       model_adapter->root_for_testing()->GetSubmenu()->GetMenuItemAt(2);
   LeftClickOn(customize_suggestions_item);
 
-  calendar_item = customize_suggestions_item->GetSubmenu()->GetMenuItemAt(2);
+  calendar_item = customize_suggestions_item->GetSubmenu()->GetMenuItemAt(3);
   calendar_checkbox =
       views::AsViewClass<Checkbox>(calendar_item->children()[0]);
 
@@ -1397,7 +1398,7 @@ TEST_F(BirchBarMenuTest, CheckboxAccessibleName) {
 
   // Ensure that the second item is a checkbox.
   views::MenuItemView* item_view =
-      model_adapter->root_for_testing()->GetSubmenu()->GetMenuItemAt(1);
+      model_adapter->root_for_testing()->GetSubmenu()->GetMenuItemAt(2);
   ASSERT_TRUE(views::IsViewClass<Checkbox>(item_view->children()[0]));
 
   // `views::MenuItemView` calculates its accessible name by calling
@@ -1476,7 +1477,7 @@ TEST_F(BirchBarMenuTest, CustomizeSuggestionsByTappingChipMenu) {
   GestureTapOn(customize_suggestions_item);
 
   auto* sub_menu = customize_suggestions_item->GetSubmenu();
-  auto* calendar_item = sub_menu->GetMenuItemAt(2);
+  auto* calendar_item = sub_menu->GetMenuItemAt(3);
   EXPECT_EQ(calendar_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kCalendarSuggestions));
@@ -1500,7 +1501,7 @@ TEST_F(BirchBarMenuTest, CustomizeSuggestionsByTappingChipMenu) {
       model_adapter->root_for_testing()->GetSubmenu()->GetMenuItemAt(2);
   GestureTapOn(customize_suggestions_item);
 
-  calendar_item = customize_suggestions_item->GetSubmenu()->GetMenuItemAt(2);
+  calendar_item = customize_suggestions_item->GetSubmenu()->GetMenuItemAt(3);
   calendar_checkbox =
       views::AsViewClass<Checkbox>(calendar_item->children()[0]);
 

@@ -12,6 +12,8 @@
 namespace chromeos::mahi {
 
 using ActionType = crosapi::mojom::MahiContextMenuActionType;
+using GetContentCallback =
+    base::OnceCallback<void(crosapi::mojom::MahiPageContentPtr)>;
 
 // Metrics:
 COMPONENT_EXPORT(MAHI_PUBLIC_CPP)
@@ -27,7 +29,8 @@ enum class COMPONENT_EXPORT(MAHI_PUBLIC_CPP) ButtonType {
   kOutline = 1,
   kSettings = 2,
   kQA = 3,
-  kMaxValue = kQA,
+  kElucidation = 4,
+  kMaxValue = kElucidation,
 };
 
 COMPONENT_EXPORT(MAHI_PUBLIC_CPP)

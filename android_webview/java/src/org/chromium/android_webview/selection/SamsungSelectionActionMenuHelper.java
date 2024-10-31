@@ -94,14 +94,13 @@ public class SamsungSelectionActionMenuHelper {
             List<ResolveInfo> textProcessActivities =
                     PackageManagerUtils.queryIntentActivities(createProcessTextIntent(), 0);
             // Identify and get ResolveInfo for Translate app.
-            ResolveInfo translateResolveInfo =
-                    textProcessActivities.stream()
-                            .filter(
-                                    resolveInfo ->
-                                            resolveInfo.activityInfo.packageName.equals(
-                                                    TRANSLATOR_PACKAGE_NAME))
-                            .findAny()
-                            .orElse(null);
+            ResolveInfo translateResolveInfo = null;
+            for (ResolveInfo resolveInfo : textProcessActivities) {
+                if (resolveInfo.activityInfo.packageName.equals(TRANSLATOR_PACKAGE_NAME)) {
+                    translateResolveInfo = resolveInfo;
+                    break;
+                }
+            }
             if (translateResolveInfo == null) {
                 // Do not add Translate menu if resolve info is not available.
                 return;
@@ -169,7 +168,8 @@ public class SamsungSelectionActionMenuHelper {
         for (int i = 0; i < supportedActivities.size(); i++) {
             ResolveInfo resolveInfo = supportedActivities.get(i);
             if (resolveInfo.activityInfo == null
-                    || !splitTextManagerApps.contains(resolveInfo.activityInfo.packageName)) {
+                    || (!splitTextManagerApps.contains(resolveInfo.activityInfo.packageName)
+                            && !splitTextManagerApps.contains(resolveInfo.activityInfo.name))) {
                 continue;
             }
             updatedSupportedItems.add(resolveInfo);
@@ -178,7 +178,7 @@ public class SamsungSelectionActionMenuHelper {
     }
 
     public static boolean shouldUseSamsungMenuItemOrdering() {
-        return Build.VERSION.SDK_INT <= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        return Build.VERSION.SDK_INT <= Build.VERSION_CODES.VANILLA_ICE_CREAM
                 && isSamsungDevice()
                 && ContentFeatureMap.isEnabled(ContentFeatures.SELECTION_MENU_ITEM_MODIFICATION);
     }
@@ -204,7 +204,8 @@ public class SamsungSelectionActionMenuHelper {
 
     public static boolean isManageAppsSupported() {
         if (!isSamsungDevice()
-                || Build.VERSION.SDK_INT != Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                || Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                || Build.VERSION.SDK_INT > Build.VERSION_CODES.VANILLA_ICE_CREAM
                 || !ContentFeatureMap.isEnabled(ContentFeatures.SELECTION_MENU_ITEM_MODIFICATION)) {
             return false;
         }

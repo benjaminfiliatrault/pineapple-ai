@@ -10,9 +10,9 @@
  * #include=cr-shared-style-lit
  * #css_wrapper_metadata_end */
 
- :host {
+:host {
    --scrollbar-width: 4px;
-   --batch-upload-dialog-padding: 16px;
+   --batch-upload-dialog-padding: 20px;
  }
 
 #batchUploadDialog {
@@ -35,11 +35,13 @@
   font-size: 1.125rem;
   font-weight: 500;
   margin-bottom: 16px;
+  margin-top: 0px;
 }
 
 #subtitle {
   color: var(--cr-secondary-text-color);
-  font-size: 1rem;
+  font-size: 0.8125rem;
+  line-height: 20px;
   margin-bottom: 16px;
 }
 

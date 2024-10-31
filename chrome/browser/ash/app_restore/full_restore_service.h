@@ -16,7 +16,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
-#include "chrome/browser/ash/crosapi/full_restore_ash.h"
 #include "chrome/browser/sessions/exit_type_service.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -88,6 +87,11 @@ class FullRestoreService : public KeyedService,
   FullRestoreService& operator=(const FullRestoreService&) = delete;
   ~FullRestoreService() override;
 
+  // If the last session was sanitized, skip showing any full restore UI. It is
+  // a static function since the pref gets reset before a `FullRestoreService`
+  // is created.
+  static void SetLastSessionSanitized();
+
   FullRestoreAppLaunchHandler* app_launch_handler() {
     return app_launch_handler_.get();
   }
@@ -136,8 +140,7 @@ class FullRestoreService : public KeyedService,
   //     first one is for apps, and the second one is for windows.
   //   - The data from session restore is a single vector.
   // We build a map to avoid doing a O(n) search each loop of the former.
-  using SessionWindowsMap =
-      base::flat_map<int, crosapi::mojom::SessionWindowPtr>;
+  using SessionWindowsMap = base::flat_map<int, sessions::SessionWindow*>;
 
   // KeyedService:
   void Shutdown() override;
@@ -176,8 +179,6 @@ class FullRestoreService : public KeyedService,
                        bool read_error);
   void OnGotAllSessionsAsh(
       const std::vector<SessionWindows>& all_session_windows);
-  void OnGotAllSessionsLacros(
-      std::vector<crosapi::mojom::SessionWindowPtr> all_session_windows);
 
   // Called when session information is ready to be processed. Constructs the
   // object needed to show the informed restore dialog. It will be passed to ash
@@ -188,6 +189,8 @@ class FullRestoreService : public KeyedService,
 
   // Shows the informed restore onboarding dialog when there is no restore data.
   void MaybeShowInformedRestoreOnboarding(bool restore_on);
+  void OnShouldShowInformedRestoreOnboarding(bool restore_on,
+                                             bool factory_test_running);
 
   raw_ptr<Profile> profile_ = nullptr;
   PrefChangeRegistrar pref_change_registrar_;

@@ -164,8 +164,14 @@ void BluetoothAdapterFloss::Shutdown() {
   FlossDBusManager::Get()->GetManagerClient()->RemoveObserver(this);
   dbus_is_shutdown_ = true;
 
-  for (const auto& [key, scanner] : scanners_) {
-    scanner->OnRelease();
+  // Copy scanners_ to avoid iterating over it while it's being modified.
+  std::map<device::BluetoothUUID,
+           base::WeakPtr<BluetoothLowEnergyScanSessionFloss>>
+      scanners_copy(scanners_);
+  for (const auto& [_, scanner] : scanners_copy) {
+    if (scanner) {
+      scanner->OnRelease();
+    }
   }
   scanners_.clear();
 }
@@ -1159,6 +1165,27 @@ void BluetoothAdapterFloss::AdapterDeviceConnected(
     NotifyDeviceChanged(device);
     NotifyDeviceConnectedStateChanged(device, true);
   }
+}
+
+void BluetoothAdapterFloss::AdapterDeviceConnectionFailed(
+    const FlossDeviceId& device_id,
+    uint32_t status) {
+  DCHECK(FlossDBusManager::Get());
+  DCHECK(IsPresent());
+
+  BLUETOOTH_LOG(EVENT) << __func__ << ": " << device_id
+                       << ", status: " << status;
+
+  BluetoothDeviceFloss* device =
+      static_cast<BluetoothDeviceFloss*>(GetDevice(device_id.address));
+  if (!device) {
+    LOG(WARNING) << "Connect failed for an unknown device "
+                 << device_id.address;
+    return;
+  }
+
+  device->OnDeviceConnectionFailed(
+      static_cast<FlossDBusClient::BtifStatus>(status));
 }
 
 std::optional<device::BluetoothDevice::BatteryType> variant_to_battery_type(

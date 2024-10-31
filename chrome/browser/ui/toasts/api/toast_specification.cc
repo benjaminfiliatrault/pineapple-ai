@@ -10,7 +10,7 @@
 #include "base/functional/callback.h"
 #include "base/functional/callback_forward.h"
 #include "base/types/pass_key.h"
-#include "ui/base/models/simple_menu_model.h"
+#include "ui/menus/simple_menu_model.h"
 
 ToastSpecification::Builder::Builder(const gfx::VectorIcon& icon,
                                      int body_string_id)
@@ -70,6 +70,12 @@ void ToastSpecification::Builder::ValidateSpecification() {
   if (toast_specification_->action_button_string_id().has_value()) {
     CHECK(toast_specification_->has_close_button());
     CHECK(!toast_specification_->menu_model());
+  }
+
+  // Toasts with a menu can't have a close button. If this behavior is needed,
+  // discuss with UX how to design this in a way that supports both.
+  if (toast_specification_->menu_model()) {
+    CHECK(!toast_specification_->has_close_button());
   }
 }
 

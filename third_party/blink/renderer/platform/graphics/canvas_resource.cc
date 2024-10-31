@@ -532,16 +532,6 @@ bool CanvasResourceSharedImage::IsValid() const {
   return !!owning_thread_data_.client_shared_image;
 }
 
-void CanvasResourceSharedImage::BeginReadAccess() {
-  RasterInterface()->BeginSharedImageAccessDirectCHROMIUM(
-      GetTextureIdForReadAccess(), GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM);
-}
-
-void CanvasResourceSharedImage::EndReadAccess() {
-  RasterInterface()->EndSharedImageAccessDirectCHROMIUM(
-      GetTextureIdForReadAccess());
-}
-
 void CanvasResourceSharedImage::BeginWriteAccess() {
   RasterInterface()->BeginSharedImageAccessDirectCHROMIUM(
       GetTextureIdForWriteAccess(),
@@ -660,18 +650,14 @@ scoped_refptr<StaticBitmapImage> CanvasResourceSharedImage::Bitmap() {
 
   SkImageInfo image_info = CreateSkImageInfo();
   if (!is_accelerated_) {
-    std::unique_ptr<gpu::ClientSharedImage::ScopedMapping> mapping;
-    void* memory = nullptr;
-    size_t stride = 0;
-    mapping = GetClientSharedImage()->Map();
+    std::unique_ptr<gpu::ClientSharedImage::ScopedMapping> mapping =
+        GetClientSharedImage()->Map();
     if (!mapping) {
       LOG(ERROR) << "MapSharedImage Failed.";
       return nullptr;
     }
-    memory = mapping->Memory(0);
-    stride = mapping->Stride(0);
-    SkPixmap pixmap(CreateSkImageInfo(), memory, stride);
-    auto sk_image = SkImages::RasterFromPixmapCopy(pixmap);
+    auto sk_image = SkImages::RasterFromPixmapCopy(
+        mapping->GetSkPixmapForPlane(0, CreateSkImageInfo()));
 
     // Unmap the underlying buffer.
     mapping.reset();
@@ -735,18 +721,15 @@ void CanvasResourceSharedImage::CopyRenderingResultsToGpuMemoryBuffer(
   }
   auto* sii =
       ContextProviderWrapper()->ContextProvider()->SharedImageInterface();
-  std::unique_ptr<gpu::ClientSharedImage::ScopedMapping> mapping;
-  void* memory = nullptr;
-  size_t stride = 0;
-  mapping = GetClientSharedImage()->Map();
+  std::unique_ptr<gpu::ClientSharedImage::ScopedMapping> mapping =
+      GetClientSharedImage()->Map();
   if (!mapping) {
     LOG(ERROR) << "MapSharedImage failed.";
     return;
   }
-  memory = mapping->Memory(0);
-  stride = mapping->Stride(0);
 
-  auto surface = SkSurfaces::WrapPixels(CreateSkImageInfo(), memory, stride);
+  auto surface = SkSurfaces::WrapPixels(
+      mapping->GetSkPixmapForPlane(0, CreateSkImageInfo()));
   SkPixmap pixmap;
   image->peekPixels(&pixmap);
   surface->writePixels(pixmap, 0, 0);

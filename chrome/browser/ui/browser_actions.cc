@@ -32,12 +32,10 @@
 #include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_utils.h"
-#include "chrome/browser/ui/translate_browser_action_listener.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
 #include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_toolbar_bubble_controller.h"
-#include "chrome/browser/ui/views/side_panel/companion/companion_utils.h"
 #include "chrome/browser/ui/views/side_panel/history_clusters/history_clusters_side_panel_utils.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_action_callback.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry_id.h"
@@ -57,10 +55,10 @@
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/actions/actions.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/models/simple_menu_model.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/gfx/vector_icon_types.h"
+#include "ui/menus/simple_menu_model.h"
 
 namespace {
 
@@ -115,7 +113,7 @@ std::u16string BrowserActions::GetCleanTitleAndTooltipText(
   const std::u16string ellipsis_unicode = u"\u2026";
   const std::u16string ellipsis_text = u"...";
 
-  auto remove_ellipsis = [&string](const std::u16string ellipsis) {
+  auto remove_ellipsis = [&string](const std::u16string& ellipsis) {
     size_t ellipsis_pos = string.find(ellipsis);
     if (ellipsis_pos != std::u16string::npos) {
       string.erase(ellipsis_pos);
@@ -217,29 +215,6 @@ void BrowserActions::InitializeBrowserActions() {
                 icon, ui::kColorIcon, ui::SimpleMenuModel::kDefaultIconSize))
             .SetProperty(actions::kActionItemPinnableKey, true)
             .Build());
-  } else if (companion::IsCompanionFeatureEnabled()) {
-    if (companion::IsSearchInCompanionSidePanelSupportedForProfile(
-            profile,
-            /*include_runtime_checks=*/false)) {
-      actions::ActionItem* companion_action_item = root_action_item_->AddChild(
-          SidePanelAction(
-              SidePanelEntryId::kSearchCompanion,
-              IDS_SIDE_PANEL_COMPANION_TITLE,
-              IDS_SIDE_PANEL_COMPANION_TOOLBAR_TOOLTIP,
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-              vector_icons::
-                  kGoogleSearchCompanionMonochromeLogoChromeRefreshIcon,
-#else
-              vector_icons::kSearchChromeRefreshIcon,
-#endif
-              kActionSidePanelShowSearchCompanion, browser, true)
-              .Build());
-
-      companion_action_item->SetVisible(
-          companion::IsSearchInCompanionSidePanelSupportedForProfile(
-              profile,
-              /*include_runtime_checks=*/true));
-    }
   }
 
   // Create the lens action item. The icon and text are set appropriately in the
@@ -480,6 +455,7 @@ void BrowserActions::InitializeBrowserActions() {
                 !sharing_hub::SharingIsDisabledByPolicy(browser->profile()))
             .Build());
 
+    if (base::FeatureList::IsEnabled(features::kPinnedCastButton)) {
     root_action_item_->AddChild(
         ChromeMenuAction(
             base::BindRepeating(
@@ -505,6 +481,7 @@ void BrowserActions::InitializeBrowserActions() {
             IDS_MEDIA_ROUTER_ICON_TOOLTIP_TEXT, kCastChromeRefreshIcon)
             .SetEnabled(chrome::CanRouteMedia(browser))
             .Build());
+    }
 
     AddListeners();
   }
@@ -543,13 +520,10 @@ void BrowserActions::InitializeBrowserActions() {
 }
 
 void BrowserActions::RemoveListeners() {
-  translate_browser_action_listener_.reset();
   browser_action_prefs_listener_.reset();
 }
 
 void BrowserActions::AddListeners() {
-  translate_browser_action_listener_ =
-      std::make_unique<TranslateBrowserActionListener>(browser_.get());
   browser_action_prefs_listener_ =
       std::make_unique<BrowserActionPrefsListener>(browser_.get());
 }

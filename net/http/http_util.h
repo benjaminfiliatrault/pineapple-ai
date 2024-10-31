@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -60,7 +61,7 @@ class NET_EXPORT HttpUtil {
   // content_type_str contains a mime type and charset value, respectively.  If
   // |boundary| is not null, then |*boundary| will be assigned the (unquoted)
   // value of the boundary parameter, if any.
-  static void ParseContentType(const std::string& content_type_str,
+  static void ParseContentType(std::string_view content_type_str,
                                std::string* mime_type,
                                std::string* charset,
                                bool* had_charset,
@@ -241,19 +242,28 @@ class NET_EXPORT HttpUtil {
 
   // Returns true if the parameters describe a response with a strong etag or
   // last-modified header.  See section 13.3.3 of RFC 2616.
-  // An empty string should be passed for missing headers.
-  static bool HasStrongValidators(HttpVersion version,
-                                  const std::string& etag_header,
-                                  const std::string& last_modified_header,
-                                  const std::string& date_header);
+  //
+  // Non-nullopt times will be converted to std::strings and parsed, which can
+  // be somewhat expensive.
+  //
+  // Note that HasStringValidators() being true for a set of headers implies
+  // HasValidators() is also true.
+  static bool HasStrongValidators(
+      HttpVersion version,
+      std::optional<std::string_view> etag_header,
+      std::optional<std::string_view> last_modified_header,
+      std::optional<std::string_view> date_header);
 
   // Returns true if this response has any validator (either a Last-Modified or
   // an ETag) regardless of whether it is strong or weak.  See section 13.3.3 of
   // RFC 2616.
-  // An empty string should be passed for missing headers.
-  static bool HasValidators(HttpVersion version,
-                            const std::string& etag_header,
-                            const std::string& last_modified_header);
+  //
+  // Non-nullopt times will be converted to std::strings and parsed, which can
+  // be somewhat expensive.
+  static bool HasValidators(
+      HttpVersion version,
+      std::optional<std::string_view> etag_header,
+      std::optional<std::string_view> last_modified_header);
 
   // Gets a vector of common HTTP status codes for histograms of status
   // codes.  Currently returns everything in the range [100, 600), plus 0
@@ -370,12 +380,7 @@ class NET_EXPORT HttpUtil {
     // is a next value.  Use value* methods to access the resultant value.
     bool GetNext();
 
-    std::string_view::const_iterator value_begin() const {
-      return value_.begin();
-    }
-    std::string_view::const_iterator value_end() const { return value_.end(); }
-    std::string value() const { return std::string(value_); }
-    std::string_view value_piece() const { return value_; }
+    std::string_view value() const { return value_; }
 
    private:
     base::StringViewTokenizer values_;
@@ -414,30 +419,31 @@ class NET_EXPORT HttpUtil {
     ~NameValuePairsIterator();
 
     // Advances the iterator to the next pair, if any.  Returns true if there
-    // is a next pair. Returns false and on error, and `valid()` starts
-    // returning false. Once GetNext() returns false Use name() and value()
-    // methods to access the resultant value.
+    // is a next pair. Returns false on completion or on error. In the error
+    // case, `valid()` will return false. Once GetNext() returns false, whether
+    // due to error or completion, it should not be called again. Use name() and
+    // value() methods to access the resultant value.
+    //
+    // Each call will invalidate the string views obtained through the previous
+    // GetNext() call, as they may point to temporary buffers.
     bool GetNext();
 
     // Returns false if there was a parse error.
     bool valid() const { return valid_; }
 
     // The name of the current name-value pair.
-    std::string name() const { return std::string(name_); }
-    std::string_view name_piece() const { return name_; }
+    std::string_view name() const { return name_; }
 
-    // The value of the current name-value pair.
-    std::string value() const {
-      return value_is_quoted_ ? unquoted_value_ : std::string(value_);
-    }
-    std::string_view value_piece() const {
+    // The value of the current name-value pair. Note that the returned
+    // string_view will be invalidated by the next GetNext() call.
+    std::string_view value() const LIFETIME_BOUND {
       return value_is_quoted_ ? unquoted_value_ : value_;
     }
 
     bool value_is_quoted() const { return value_is_quoted_; }
 
     // The value before unquoting (if any).
-    std::string raw_value() const { return std::string(value_); }
+    std::string_view raw_value() const LIFETIME_BOUND { return value_; }
 
    private:
     // Attempts to parse `name_value_pair`, populating `name_`, `value_`, and

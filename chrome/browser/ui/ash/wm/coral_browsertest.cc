@@ -2,17 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/birch/birch_coral_provider.h"
 #include "ash/birch/birch_item.h"
 #include "ash/birch/birch_model.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/coral_delegate.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_util.h"
+#include "ash/webui/system_apps/public/system_web_app_type.h"
+#include "ash/wm/coral/coral_controller.h"
+#include "ash/wm/coral/coral_test_util.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/overview/birch/birch_chip_button.h"
 #include "ash/wm/overview/birch/birch_chip_button_base.h"
 #include "ash/wm/overview/overview_test_util.h"
 #include "base/command_line.h"
@@ -22,12 +28,12 @@
 #include "chrome/browser/ash/app_restore/full_restore_app_launch_handler.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/birch/birch_test_util.h"
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/ash/util/ash_test_util.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/ash/services/coral/public/mojom/coral_service.mojom.h"
 #include "content/public/test/browser_test.h"
 #include "gmock/gmock.h"
@@ -56,15 +62,23 @@ std::vector<GURL> CollectTabURLsFromWindows(
   return tab_urls;
 }
 
+// Collects the app IDs from the given window list.
+std::vector<std::string> CollectAppIDsFromWindows(
+    const MruWindowTracker::WindowList& windows) {
+  std::vector<std::string> app_ids;
+  for (aura::Window* window : windows) {
+    if (auto* app_id = window->GetProperty(kAppIDKey)) {
+      app_ids.emplace_back(*app_id);
+    }
+  }
+  return app_ids;
+}
+
 }  // namespace
 
 class CoralBrowserTest : public InProcessBrowserTest {
  public:
-  CoralBrowserTest() {
-    set_launch_browser_for_testing(nullptr);
-    scoped_feature_list_.InitWithFeatures(
-        {features::kBirchCoral, features::kTabClusterUI}, {});
-  }
+  CoralBrowserTest() { set_launch_browser_for_testing(nullptr); }
   CoralBrowserTest(const CoralBrowserTest&) = delete;
   CoralBrowserTest& operator=(const CoralBrowserTest&) = delete;
   ~CoralBrowserTest() override = default;
@@ -84,11 +98,11 @@ class CoralBrowserTest : public InProcessBrowserTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     InProcessBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kForceBirchFakeCoral);
+    command_line->AppendSwitch(switches::kForceBirchFakeCoralGroup);
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
+  base::test::ScopedFeatureList scoped_feature_list_{features::kCoralFeature};
 };
 
 IN_PROC_BROWSER_TEST_F(CoralBrowserTest, PRE_PostLoginBrowser) {
@@ -101,6 +115,8 @@ IN_PROC_BROWSER_TEST_F(CoralBrowserTest, PRE_PostLoginBrowser) {
 // Launches a browser with the expected tabs when the post login coral chip is
 // clicked.
 IN_PROC_BROWSER_TEST_F(CoralBrowserTest, PostLoginBrowser) {
+  test::InstallSystemAppsForTesting(ProfileManager::GetActiveUserProfile());
+
   // Wait until the chip is visible, it may not be visible while data fetch is
   // underway or the overview animation is still running.
   EXPECT_TRUE(base::test::RunUntil([]() {
@@ -110,20 +126,34 @@ IN_PROC_BROWSER_TEST_F(CoralBrowserTest, PostLoginBrowser) {
 
   BirchChipButtonBase* coral_chip = GetBirchChipButton();
   ASSERT_EQ(coral_chip->GetItem()->GetType(), BirchItemType::kCoral);
-  ui_test_utils::BrowserChangeObserver observer(
-      nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
-  test::Click(coral_chip);
-  Browser* coral_browser = observer.Wait();
 
-  // TODO(sammiequon): This tabs are currently hardcoded in ash for
+  test::BrowsersWaiter waiter(/*expected_count=*/3);
+  test::Click(coral_chip);
+  waiter.Wait();
+
+  // TODO(sammiequon): These tabs and apps are currently hardcoded in ash for
   // `switches::kForceBirchFakeCoral`. Update to use a test coral provider
   // instead.
-  TabStripModel* tab_strip_model = coral_browser->tab_strip_model();
-  EXPECT_EQ(2, tab_strip_model->count());
-  EXPECT_EQ(GURL("https://www.ikea.com/"),
-            tab_strip_model->GetWebContentsAt(0)->GetVisibleURL());
-  EXPECT_EQ(GURL("https://www.nhl.com/"),
-            tab_strip_model->GetWebContentsAt(1)->GetVisibleURL());
+  EXPECT_TRUE(
+      base::ranges::any_of(*BrowserList::GetInstance(), [](Browser* browser) {
+        TabStripModel* tab_strip_model = browser->tab_strip_model();
+        return tab_strip_model->count() == 3 &&
+               tab_strip_model->GetWebContentsAt(0)->GetVisibleURL() ==
+                   GURL("https://www.reddit.com/") &&
+               tab_strip_model->GetWebContentsAt(1)->GetVisibleURL() ==
+                   GURL("https://www.figma.com/") &&
+               tab_strip_model->GetWebContentsAt(2)->GetVisibleURL() ==
+                   GURL("https://www.notion.so/");
+      }));
+  EXPECT_TRUE(
+      base::ranges::any_of(*BrowserList::GetInstance(), [](Browser* browser) {
+        return IsBrowserForSystemWebApp(browser, SystemWebAppType::SETTINGS);
+      }));
+  EXPECT_TRUE(
+      base::ranges::any_of(*BrowserList::GetInstance(), [](Browser* browser) {
+        return IsBrowserForSystemWebApp(browser,
+                                        SystemWebAppType::FILE_MANAGER);
+      }));
 }
 
 // Tests that clicking the in session coral button opens and activates a new
@@ -138,6 +168,11 @@ IN_PROC_BROWSER_TEST_F(CoralBrowserTest, DISABLED_OpenNewDesk) {
   base::RunLoop birch_data_fetch_waiter;
   Shell::Get()->birch_model()->SetDataFetchCallbackForTest(
       birch_data_fetch_waiter.QuitClosure());
+
+  // Create a test coral group with no tabs and apps.
+  std::vector<coral::mojom::GroupPtr> test_groups;
+  test_groups.push_back(CreateTestGroup({}, "Coral desk"));
+  OverrideTestResponse(std::move(test_groups));
 
   ToggleOverview();
   WaitForOverviewEntered();
@@ -158,10 +193,6 @@ IN_PROC_BROWSER_TEST_F(CoralBrowserTest, DISABLED_OpenNewDesk) {
   // has the coral title.
   EXPECT_EQ(2u, desks_controller->desks().size());
   EXPECT_EQ(1, desks_controller->GetActiveDeskIndex());
-
-  // TODO(sammiequon): This title is currently hardcoded in ash for
-  // `switches::kForceBirchFakeCoral`. Update to use a test coral provider
-  // instead.
   EXPECT_EQ(u"Coral desk", desks_controller->GetDeskName(
                                desks_controller->GetActiveDeskIndex()));
 }
@@ -183,13 +214,10 @@ IN_PROC_BROWSER_TEST_F(CoralBrowserTest, MoveTabsToNewDesk) {
 
   // Create a fake coral group which contains two tabs that are selected from
   // each of the two browsers created above.
-  coral::mojom::GroupPtr fake_group = coral::mojom::Group::New();
-  fake_group->title = "Coral desk";
-
-  fake_group->entities.push_back(
-      coral::mojom::EntityKey::NewTabUrl(GURL("https://youtube.com")));
-  fake_group->entities.push_back(
-      coral::mojom::EntityKey::NewTabUrl(GURL("https://maps.google.com")));
+  coral::mojom::GroupPtr fake_group =
+      CreateTestGroup({{"Youtube", GURL("https://youtube.com")},
+                       {"Google Maps", GURL("https://maps.google.com")}},
+                      "Coral desk");
 
   DeskSwitchAnimationWaiter waiter;
   Shell::Get()->coral_controller()->OpenNewDeskWithGroup(std::move(fake_group));
@@ -216,6 +244,129 @@ IN_PROC_BROWSER_TEST_F(CoralBrowserTest, MoveTabsToNewDesk) {
   EXPECT_THAT(tab_urls_on_last_active_desk,
               testing::UnorderedElementsAre(GURL("https://google.com"),
                                             GURL("https://mail.google.com")));
+}
+
+// Tests that the Coral controller could create a new desk and move the apps in
+// the group to the new desk.
+IN_PROC_BROWSER_TEST_F(CoralBrowserTest, MoveAppsToNewDesk) {
+  // Create two browsers with different tabs and urls.
+  Profile* primary_profile = ProfileManager::GetPrimaryUserProfile();
+
+  test::InstallSystemAppsForTesting(primary_profile);
+
+  // Open some SWA windows.
+  test::CreateSystemWebApp(primary_profile, SystemWebAppType::FILE_MANAGER);
+  test::CreateSystemWebApp(primary_profile, SystemWebAppType::SETTINGS);
+  test::CreateSystemWebApp(primary_profile, SystemWebAppType::HELP);
+
+  // Create a browser window.
+  CreateBrowser(primary_profile);
+
+  // Open some PWA windows.
+  test::InstallAndLaunchPWA(primary_profile, GURL("https://www.youtube.com/"),
+                            /*launch_in_browser=*/false,
+                            /*app_title=*/u"YouTube");
+  test::InstallAndLaunchPWA(primary_profile, GURL("https://www.gmail.com/"),
+                            /*launch_in_browser=*/false,
+                            /*app_title=*/u"Gmail");
+
+  // Create a fake coral group which contains four apps except the Files app and
+  // the browser.
+  coral::mojom::GroupPtr fake_group =
+      CreateTestGroup({{"Youtube", "adnlfjpnmidfimlkaohpidplnoimahfh"},
+                       {"Gmail", "gdkbjbkdgeggmfkjbfohmimchmkikbid"},
+                       {"Explore", "nbljnnecbjbmifnoehiemkgefbnpoeak"},
+                       {"Settings", "odknhmnlageboeamepcngndbggdpaobj"}},
+                      "Coral desk");
+
+  DeskSwitchAnimationWaiter waiter;
+  Shell::Get()->coral_controller()->OpenNewDeskWithGroup(std::move(fake_group));
+  waiter.Wait();
+
+  // We should have two desks and the new active desk has the coral title.
+  DesksController* desks_controller = DesksController::Get();
+  EXPECT_EQ(2u, desks_controller->desks().size());
+  EXPECT_EQ(1, desks_controller->GetActiveDeskIndex());
+  EXPECT_EQ(u"Coral desk", desks_controller->GetDeskName(
+                               desks_controller->GetActiveDeskIndex()));
+
+  // The active desk should have the four apps in the group.
+  std::vector<std::string> app_ids_on_active_desk = CollectAppIDsFromWindows(
+      Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk));
+  EXPECT_THAT(app_ids_on_active_desk, testing::UnorderedElementsAre(
+                                          "adnlfjpnmidfimlkaohpidplnoimahfh",
+                                          "gdkbjbkdgeggmfkjbfohmimchmkikbid",
+                                          "nbljnnecbjbmifnoehiemkgefbnpoeak",
+                                          "odknhmnlageboeamepcngndbggdpaobj"));
+}
+
+// Tests that the chip will get updated when the title is loaded by the backend.
+IN_PROC_BROWSER_TEST_F(CoralBrowserTest, AsyncGroupTitle) {
+  // Create a test coral group with a pending title.
+  std::vector<coral::mojom::GroupPtr> test_groups;
+  test_groups.push_back(CreateTestGroup({}));
+  OverrideTestResponse(std::move(test_groups));
+
+  // Set up a callback for a birch data fetch.
+  base::RunLoop birch_data_fetch_waiter;
+  Shell::Get()->birch_model()->SetDataFetchCallbackForTest(
+      birch_data_fetch_waiter.QuitClosure());
+
+  ToggleOverview();
+  WaitForOverviewEntered();
+
+  // Wait for fetch callback to complete.
+  birch_data_fetch_waiter.Run();
+
+  // The birch bar is created with a single chip.
+  BirchChipButton* coral_chip =
+      static_cast<BirchChipButton*>(GetBirchChipButton());
+  ASSERT_TRUE(coral_chip);
+
+  // The chip should hide title with title pending.
+  ASSERT_EQ(coral_chip->GetItem()->GetType(), BirchItemType::kCoral);
+  ASSERT_FALSE(coral_chip->title_->GetVisible());
+
+  // When the group title gets updated, the chip title will be shown with
+  // updated title.
+  BirchCoralProvider::Get()->TitleUpdated(base::Token(), "Updated Title");
+  ASSERT_TRUE(coral_chip->title_->GetVisible());
+  EXPECT_EQ(coral_chip->title_->GetText(), u"Updated Title");
+}
+
+// Tests that the chip will show placeholder title when corresponding group
+// title loading fails.
+IN_PROC_BROWSER_TEST_F(CoralBrowserTest, GroupTitleLoadingFail) {
+  // Create a test coral group with a pending title.
+  std::vector<coral::mojom::GroupPtr> test_groups;
+  test_groups.push_back(CreateTestGroup({}));
+  OverrideTestResponse(std::move(test_groups));
+
+  // Set up a callback for a birch data fetch.
+  base::RunLoop birch_data_fetch_waiter;
+  Shell::Get()->birch_model()->SetDataFetchCallbackForTest(
+      birch_data_fetch_waiter.QuitClosure());
+
+  ToggleOverview();
+  WaitForOverviewEntered();
+
+  // Wait for fetch callback to complete.
+  birch_data_fetch_waiter.Run();
+
+  // The birch bar is created with a single chip.
+  BirchChipButton* coral_chip =
+      static_cast<BirchChipButton*>(GetBirchChipButton());
+  ASSERT_TRUE(coral_chip);
+
+  // The chip should show placeholder title when receiving an empty title.
+  ASSERT_EQ(coral_chip->GetItem()->GetType(), BirchItemType::kCoral);
+  ASSERT_FALSE(coral_chip->title_->GetVisible());
+
+  // When the group title gets updated, the chip title will be shown with
+  // updated title.
+  BirchCoralProvider::Get()->TitleUpdated(base::Token(), "");
+  ASSERT_TRUE(coral_chip->title_->GetVisible());
+  EXPECT_EQ(coral_chip->title_->GetText(), u"Suggested Group");
 }
 
 }  // namespace ash

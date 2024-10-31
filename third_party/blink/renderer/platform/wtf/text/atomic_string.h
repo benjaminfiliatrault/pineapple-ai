@@ -69,9 +69,13 @@ class WTF_EXPORT AtomicString {
   explicit AtomicString(const char* chars)
       : AtomicString(reinterpret_cast<const LChar*>(chars)) {}
   AtomicString(const LChar* chars, unsigned length);
+  explicit AtomicString(base::span<const LChar> chars);
   AtomicString(
       const UChar* chars,
       unsigned length,
+      AtomicStringUCharEncoding encoding = AtomicStringUCharEncoding::kUnknown);
+  explicit AtomicString(
+      base::span<const UChar> chars,
       AtomicStringUCharEncoding encoding = AtomicStringUCharEncoding::kUnknown);
   explicit AtomicString(const UChar* chars);
 
@@ -186,7 +190,7 @@ class WTF_EXPORT AtomicString {
   template <typename IntegerType>
   static AtomicString Number(IntegerType number) {
     IntegerToStringConverter<IntegerType> converter(number);
-    return AtomicString(converter.Characters8(), converter.length());
+    return AtomicString(converter.Span());
   }
 
   static AtomicString Number(double, unsigned precision = 6);

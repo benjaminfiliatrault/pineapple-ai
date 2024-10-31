@@ -21,12 +21,19 @@ enum Direction {
 
 // Clients of the OCR service.
 enum OcrClientType {
+  // To be used only for testing.
   kTest,
+  // Used in PDF Viewer to convert images to interactble text.
   kPdfViewer,
+  // Used in ChromeOS Local Search to make stored images text searchable.
   kLocalSearch,
+  // Ued by ChromeOS Camera app to create interactable PDFs.
   kCameraApp,
-  kPdfSearchify,
+  // Used by ChromeOS Media app to make PDFs accessible.
   kMediaApp,
+  // Used by the ChromeOS screenshot tool to detect text in a user selected
+  // region.
+  kScreenshotTextDetection,
 };
 
 // A wrapper struct mirroring parts of the chrome_screen_ai.proto.
@@ -104,6 +111,11 @@ struct WordBox {
 
 // Main interface a client uses for visual annotation functions of the Screen AI
 // service.
+//
+// NOTE: Security approval for this interface is based on the fact that only
+// simple inputs (bitmaps) are sent to the service. If this needs changing in
+// future, we may need to switch to one service instance per site to keep site
+// content isolation.
 [RuntimeFeature=ax.mojom.features.kScreenAIOCREnabled]
 interface ScreenAIAnnotator {
   // Receives an image, such as a screenshot or a page from a PDF file, as well

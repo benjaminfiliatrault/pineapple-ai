@@ -19,6 +19,7 @@
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">Catalan</translation>
 <translation id="1168100932582989117">Server dei nomi Google</translation>
+<translation id="1170788066030116158">Data scatto</translation>
 <translation id="1172970565351728681">Tempo rimanente: circa <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Rinomina</translation>
 <translation id="1173916544412572294">Rete <ph name="NETWORK_INDEX" /> di <ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, intensità del segnale <ph name="SIGNAL_STRENGTH" />%, batteria del telefono <ph name="BATTERY_STATUS" />%, dettagli</translation>
@@ -580,6 +581,7 @@
 <translation id="5447680084201416734">Spazio di archiviazione insufficiente.</translation>
 <translation id="5449551289610225147">Password non valida</translation>
 <translation id="5459064203055649751">Esiste già un file chiamato "<ph name="FILENAME" />". Vuoi sostituirlo con quello da spostare?</translation>
+<translation id="5462378611565326489">OneDrive non è disponibile offline.</translation>
 <translation id="5463231940765244860">Inserisci</translation>
 <translation id="5469868506864199649">Italiano</translation>
 <translation id="5473333559083690127">Inserisci ancora il nuovo PIN</translation>

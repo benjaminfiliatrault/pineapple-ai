@@ -4,7 +4,6 @@
 
 #include "ash/birch/coral_item_remover.h"
 
-#include "ash/public/cpp/coral_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace ash {
@@ -42,7 +41,6 @@ TEST_F(CoralItemRemoverTest, FilterContent) {
   coral_item_remover_.FilterRemovedItems(&entities);
 
   // Check that `item2` is filtered out.
-  ASSERT_EQ(3u, entities.size());
   EXPECT_THAT(entities, ElementsAre(Eq(std::ref(item0)), Eq(std::ref(item1)),
                                     Eq(std::ref(item3))));
 
@@ -51,7 +49,6 @@ TEST_F(CoralItemRemoverTest, FilterContent) {
   coral_item_remover_.FilterRemovedItems(&entities);
 
   // Check that `item1` is filtered out.
-  ASSERT_EQ(2u, entities.size());
   EXPECT_THAT(entities, ElementsAre(Eq(std::ref(item0)), Eq(std::ref(item3))));
 }
 

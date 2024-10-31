@@ -159,6 +159,9 @@ class SyncServiceImpl : public SyncService,
       base::OnceCallback<void(std::map<DataType, LocalDataDescription>)>
           callback) override;
   void TriggerLocalDataMigration(DataTypeSet types) override;
+  void TriggerLocalDataMigration(
+      std::map<DataType, std::vector<syncer::LocalDataItemModel::DataId>> items)
+      override;
 
   // SyncEngineHost implementation.
   void OnEngineInitialized(bool success,
@@ -242,7 +245,7 @@ class SyncServiceImpl : public SyncService,
                                   create_http_post_provider_factory_cb);
 
   DataTypeSet GetRegisteredDataTypesForTest() const;
-  bool HasAnyDatatypeErrorForTest(DataTypeSet types) const;
+  bool HasAnyModelErrorForTest(DataTypeSet types) const;
 
   void GetThrottledDataTypesForTest(
       base::OnceCallback<void(DataTypeSet)> cb) const;
@@ -345,6 +348,11 @@ class SyncServiceImpl : public SyncService,
 
   // Tell the sync server that this client has disabled sync.
   void RemoveClientFromServer() const;
+
+  // Records histograms about the history opt-in state.
+  void RecordHistoryOptInStateOnSigninHistograms(
+      signin_metrics::AccessPoint access_point,
+      signin::ConsentLevel consent_level);
 
   // True if setup has been completed at least once and is not in progress.
   bool CanConfigureDataTypes(bool bypass_setup_in_progress_check) const;
@@ -460,10 +468,6 @@ class SyncServiceImpl : public SyncService,
   // This is the last |SyncProtocolError| we received from the server that had
   // an action set on it.
   SyncProtocolError last_actionable_error_;
-
-  // Tracks the set of failed data types (those that encounter an error
-  // or must delay loading for some reason).
-  DataTypeStatusTable::TypeErrorMap data_type_error_map_;
 
   CreateHttpPostProviderFactory create_http_post_provider_factory_cb_;
 

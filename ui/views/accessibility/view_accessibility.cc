@@ -11,9 +11,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/buildflag.h"
 #include "build/chromeos_buildflags.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/platform/ax_platform.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
 #include "ui/base/buildflags.h"
@@ -72,7 +74,7 @@ bool IsValidRoleForViews(ax::mojom::Role role) {
          "initialization of the accessibility cache. Instead, set the "  \
          "attributes directly on `AXNodeData` parameter.";
 
-#if !BUILDFLAG_INTERNAL_HAS_NATIVE_ACCESSIBILITY()
+#if !BUILDFLAG(HAS_NATIVE_ACCESSIBILITY)
 // static
 std::unique_ptr<ViewAccessibility> ViewAccessibility::Create(View* view) {
   // Cannot use std::make_unique because constructor is protected.
@@ -355,6 +357,15 @@ void ViewAccessibility::ClearTextOffsets() {
   data_.RemoveIntListAttribute(ax::mojom::IntListAttribute::kWordEnds);
 }
 
+void ViewAccessibility::SetClipsChildren(bool clips_children) {
+  data_.AddBoolAttribute(ax::mojom::BoolAttribute::kClipsChildren,
+                         clips_children);
+}
+
+void ViewAccessibility::SetClassName(const std::string& class_name) {
+  data_.AddStringAttribute(ax::mojom::StringAttribute::kClassName, class_name);
+}
+
 void ViewAccessibility::SetHasPopup(const ax::mojom::HasPopup has_popup) {
   data_.SetHasPopup(has_popup);
 }
@@ -501,6 +512,11 @@ void ViewAccessibility::SetRoleDescription(
 void ViewAccessibility::SetRoleDescription(
     const std::string& role_description) {
   SetRoleDescription(base::UTF8ToUTF16(role_description));
+}
+
+std::u16string ViewAccessibility::GetRoleDescription() const {
+  return data_.GetString16Attribute(
+      ax::mojom::StringAttribute::kRoleDescription);
 }
 
 void ViewAccessibility::RemoveRoleDescription() {
@@ -762,6 +778,15 @@ void ViewAccessibility::SetIsMultiselectable(bool multiselectable) {
   SetState(ax::mojom::State::kMultiselectable, multiselectable);
 }
 
+void ViewAccessibility::SetIsModal(bool modal) {
+  data_.AddBoolAttribute(ax::mojom::BoolAttribute::kModal, modal);
+}
+
+void ViewAccessibility::AddHTMLAttributes(
+    std::pair<std::string, std::string> attribute) {
+  data_.html_attributes.push_back(attribute);
+}
+
 void ViewAccessibility::SetIsIgnored(bool is_ignored) {
   if (is_ignored == should_be_ignored_) {
     return;
@@ -862,7 +887,7 @@ void ViewAccessibility::RemoveDefaultActionVerb() {
   data_.RemoveIntAttribute(ax::mojom::IntAttribute::kDefaultActionVerb);
 }
 
-void ViewAccessibility::SetAutoComplete(const std::string autocomplete) {
+void ViewAccessibility::SetAutoComplete(const std::string& autocomplete) {
   data_.AddStringAttribute(ax::mojom::StringAttribute::kAutoComplete,
                            autocomplete);
 }
@@ -928,6 +953,10 @@ void ViewAccessibility::SetChildTreeID(ui::AXTreeID tree_id) {
 ui::AXTreeID ViewAccessibility::GetChildTreeID() const {
   std::optional<ui::AXTreeID> child_tree_id = data_.GetChildTreeID();
   return child_tree_id ? child_tree_id.value() : ui::AXTreeIDUnknown();
+}
+
+void ViewAccessibility::RemoveChildTreeID() {
+  data_.RemoveStringAttribute(ax::mojom::StringAttribute::kChildTreeId);
 }
 
 void ViewAccessibility::SetChildTreeScaleFactor(float scale_factor) {
@@ -998,6 +1027,10 @@ void ViewAccessibility::set_accessibility_events_callback(
 
 void ViewAccessibility::CompleteCacheInitializationRecursive() {
   internal::ScopedChildrenLock lock(view_);
+  if (initialization_state_ == State::kInitialized) {
+    return;
+  }
+
   initialization_state_ = State::kInitializing;
 
   ui::AXNodeData data;
@@ -1078,6 +1111,10 @@ void ViewAccessibility::CompleteCacheInitialization() {
   }
 
   CompleteCacheInitializationRecursive();
+}
+
+bool ViewAccessibility::IsAccessibilityEnabled() const {
+  return ui::AXPlatform::GetInstance().GetMode() == ui::AXMode::kNativeAPIs;
 }
 
 void ViewAccessibility::PruneSubtree() {
@@ -1183,6 +1220,22 @@ void ViewAccessibility::SetState(ax::mojom::State state, bool is_enabled) {
     data_.RemoveState(state);
   }
 }
+
+void ViewAccessibility::SetBlockNotifyEvents(bool block) {
+  // Warning: This method should ONLY be used for special cases by the
+  // ScopedAccessibilityEventBlocker. Generally, we want to prevent
+  // notifications from being sent until the view is added to a Widget's Views
+  // tree, and we should only update `ready_to_notify_events_` when the view is
+  // added to the tree. However, there are special cases where we might need to
+  // set this variable to true or false at other times. For example, the
+  // RootView should always be ready to notify events, and the AnnounceTextView
+  // should NOT fire certain types of events due to its nature of being a hidden
+  // special view just for making announcements. As of right now, the only
+  // special cases are the root view and the announce text view, which is a
+  // child of the root view.
+  ready_to_notify_events_ = !block;
+}
+
 void ViewAccessibility::SetIsHovered(bool is_hovered) {
   if (is_hovered == GetIsHovered()) {
     return;
@@ -1282,6 +1335,35 @@ void ViewAccessibility::SetTextSelStart(int32_t text_sel_start) {
 
 void ViewAccessibility::SetTextSelEnd(int32_t text_sel_end) {
   data_.AddIntAttribute(ax::mojom::IntAttribute::kTextSelEnd, text_sel_end);
+}
+
+void ViewAccessibility::SetLiveAtomic(bool live_atomic) {
+  data_.AddBoolAttribute(ax::mojom::BoolAttribute::kLiveAtomic, live_atomic);
+}
+
+void ViewAccessibility::SetLiveStatus(const std::string& live_status) {
+  data_.AddStringAttribute(ax::mojom::StringAttribute::kLiveStatus,
+                           live_status);
+}
+
+void ViewAccessibility::SetLiveRelevant(const std::string& live_relevant) {
+  data_.AddStringAttribute(ax::mojom::StringAttribute::kLiveRelevant,
+                           live_relevant);
+}
+
+void ViewAccessibility::RemoveLiveRelevant() {
+  data_.RemoveStringAttribute(ax::mojom::StringAttribute::kLiveRelevant);
+}
+
+void ViewAccessibility::SetContainerLiveRelevant(
+    const std::string& live_relevant) {
+  data_.AddStringAttribute(ax::mojom::StringAttribute::kContainerLiveRelevant,
+                           live_relevant);
+}
+
+void ViewAccessibility::RemoveContainerLiveRelevant() {
+  data_.RemoveStringAttribute(
+      ax::mojom::StringAttribute::kContainerLiveRelevant);
 }
 
 }  // namespace views

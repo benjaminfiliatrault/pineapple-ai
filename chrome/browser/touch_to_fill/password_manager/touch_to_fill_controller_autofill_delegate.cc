@@ -4,6 +4,8 @@
 
 #include "chrome/browser/touch_to_fill/password_manager/touch_to_fill_controller_autofill_delegate.h"
 
+#include <memory>
+
 #include "base/base64.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
@@ -12,6 +14,8 @@
 #include "base/ranges/algorithm.h"
 #include "base/types/pass_key.h"
 #include "chrome/browser/password_manager/android/access_loss/password_access_loss_warning_bridge_impl.h"
+#include "chrome/browser/password_manager/android/grouped_affiliations/acknowledge_grouped_credential_sheet_bridge.h"
+#include "chrome/browser/password_manager/android/grouped_affiliations/acknowledge_grouped_credential_sheet_controller.h"
 #include "chrome/browser/password_manager/android/local_passwords_migration_warning_util.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,11 +27,13 @@
 #include "components/password_manager/core/browser/password_credential_filler.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
+#include "components/url_formatter/elide_url.h"
 #include "content/public/browser/web_contents.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace {
 
@@ -41,6 +47,20 @@ bool ContainsNonEmptyUsername(
   return base::ranges::any_of(credentials, [](const UiCredential& credential) {
     return !credential.username().empty();
   });
+}
+
+std::unique_ptr<AcknowledgeGroupedCredentialSheetController>
+CreateAcknowledgeGroupedCredentialSheetController(
+    content::WebContents* web_contents) {
+  auto bridge = std::make_unique<AcknowledgeGroupedCredentialSheetBridge>(
+      web_contents->GetTopLevelNativeWindow());
+  return std::make_unique<AcknowledgeGroupedCredentialSheetController>(
+      std::move(bridge));
+}
+
+std::string GetOrigin(const url::Origin& origin) {
+  return base::UTF16ToUTF8(url_formatter::FormatOriginForSecurityDisplay(
+      origin, url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
 }
 
 }  // namespace
@@ -58,7 +78,9 @@ TouchToFillControllerAutofillDelegate::TouchToFillControllerAutofillDelegate(
     autofill::FieldRendererId focused_field_renderer_id,
     ShowHybridOption should_show_hybrid_option,
     ShowPasswordMigrationWarningCallback show_password_migration_warning,
-    std::unique_ptr<PasswordAccessLossWarningBridge> data_loss_warning_bridge)
+    std::unique_ptr<PasswordAccessLossWarningBridge> data_loss_warning_bridge,
+    std::unique_ptr<AcknowledgeGroupedCredentialSheetController>
+        grouped_credential_sheet_controller)
     : password_client_(password_client),
       web_contents_(web_contents),
       authenticator_(std::move(authenticator)),
@@ -69,7 +91,9 @@ TouchToFillControllerAutofillDelegate::TouchToFillControllerAutofillDelegate(
       should_show_hybrid_option_(should_show_hybrid_option),
       show_password_migration_warning_(
           std::move(show_password_migration_warning)),
-      access_loss_warning_bridge_(std::move(data_loss_warning_bridge)) {}
+      access_loss_warning_bridge_(std::move(data_loss_warning_bridge)),
+      grouped_credential_sheet_controller_(
+          std::move(grouped_credential_sheet_controller)) {}
 
 TouchToFillControllerAutofillDelegate::TouchToFillControllerAutofillDelegate(
     ChromePasswordManagerClient* password_client,
@@ -96,6 +120,8 @@ TouchToFillControllerAutofillDelegate::TouchToFillControllerAutofillDelegate(
           base::BindRepeating(&local_password_migration::ShowWarning)),
       access_loss_warning_bridge_(
           std::make_unique<PasswordAccessLossWarningBridgeImpl>()),
+      grouped_credential_sheet_controller_(
+          CreateAcknowledgeGroupedCredentialSheetController(web_contents_)),
       source_id_(password_client->web_contents()
                      ->GetPrimaryMainFrame()
                      ->GetPageUkmSourceId()) {}
@@ -137,7 +163,7 @@ void TouchToFillControllerAutofillDelegate::OnCredentialSelected(
       .SetUserAction(static_cast<int64_t>(UserAction::kSelectedCredential))
       .Record(ukm::UkmRecorder::Get());
   if (!password_client_->IsReauthBeforeFillingRequired(authenticator_.get())) {
-    FillCredential(credential);
+    VerifyBeforeFilling(credential);
     return;
   }
   // `this` notifies the authenticator when it is destructed, resulting in
@@ -301,14 +327,44 @@ void TouchToFillControllerAutofillDelegate::OnReauthCompleted(
     return;
   }
 
+  VerifyBeforeFilling(credential);
+}
+
+void TouchToFillControllerAutofillDelegate::VerifyBeforeFilling(
+    const UiCredential& credential) {
+  CHECK(action_complete_);
+  CHECK(filler_);
+
+  if (credential.match_type() ==
+      password_manager_util::GetLoginMatchType::kGrouped) {
+    std::string current_origin = GetOrigin(url::Origin::Create(GetFrameUrl()));
+    std::string credential_origin = GetOrigin(credential.origin());
+    grouped_credential_sheet_controller_->ShowAcknowledgeSheet(
+        std::move(current_origin), std::move(credential_origin),
+        base::BindOnce(
+            [](TouchToFillControllerAutofillDelegate* delegate,
+               const UiCredential& credential, bool accepted) {
+              if (!accepted) {
+                // TODO(crbug.com/372635361): Introduce new bucket to report
+                // grouped credential filling metric.
+                delegate->CleanUpFillerAndReportOutcome(
+                    TouchToFillOutcome::kSheetDismissed,
+                    /*show_virtual_keyboard=*/false);
+                std::move(delegate->action_complete_).Run();
+                return;
+              }
+              delegate->FillCredential(credential);
+            },
+            // Using `base::Unretained` is safe here because the callback is
+            // passed into the controller owned by this class.
+            base::Unretained(this), credential));
+    return;
+  }
   FillCredential(credential);
 }
 
 void TouchToFillControllerAutofillDelegate::FillCredential(
     const UiCredential& credential) {
-  CHECK(action_complete_);
-  CHECK(filler_);
-
   // Do not trigger autosubmission if the password migration warning is being
   // shown because it interrupts the nomal workflow.
   Profile* profile =
@@ -319,8 +375,19 @@ void TouchToFillControllerAutofillDelegate::FillCredential(
       !local_password_migration::ShouldShowWarning(profile) &&
       !access_loss_warning_bridge_->ShouldShowAccessLossNoticeSheet(
           prefs, /*called_at_startup=*/false));
-  filler_->FillUsernameAndPassword(credential.username(),
-                                   credential.password());
+  filler_->FillUsernameAndPassword(
+      credential.username(), credential.password(),
+      base::BindOnce(
+          &TouchToFillControllerAutofillDelegate::OnFillingCredentialComplete,
+          base::Unretained(this), credential.username()));
+}
+
+void TouchToFillControllerAutofillDelegate::OnFillingCredentialComplete(
+    const std::u16string& username,
+    bool triggered_submission) {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents_->GetBrowserContext());
+  PrefService* prefs = profile->GetPrefs();
   if (access_loss_warning_bridge_->ShouldShowAccessLossNoticeSheet(
           prefs, /*called_at_startup=*/false)) {
     access_loss_warning_bridge_->MaybeShowAccessLossNoticeSheet(
@@ -333,11 +400,9 @@ void TouchToFillControllerAutofillDelegate::FillCredential(
     ShowPasswordMigrationWarningIfNeeded();
   }
 
-  if (ShouldTriggerSubmission()) {
-    password_client_->StartSubmissionTrackingAfterTouchToFill(
-        credential.username());
+  if (triggered_submission) {
+    password_client_->StartSubmissionTrackingAfterTouchToFill(username);
   }
-
   CleanUpFillerAndReportOutcome(TouchToFillOutcome::kCredentialFilled,
                                 /*show_virtual_keyboard=*/false);
   std::move(action_complete_).Run();

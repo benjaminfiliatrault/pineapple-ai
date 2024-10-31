@@ -77,6 +77,12 @@ NSString* const kPrerenderedPayloadKey = @"$";
 
 // Key for the client id in the payload.
 NSString* const kClientIdFieldKey = @"n";
+
+// The options to use when requestion notification authorization.
+const UNAuthorizationOptions kAuthorizationOptions =
+    UNAuthorizationOptionAlert | UNAuthorizationOptionBadge |
+    UNAuthorizationOptionSound;
+
 }  // namespace
 
 @implementation PushNotificationUtil
@@ -184,10 +190,14 @@ NSString* const kClientIdFieldKey = @"n";
   }
 }
 
-// This function updates the value stored in the prefService that represents the
-// user's iOS settings permission status for push notifications. If there is a
-// difference between the prefService's previous value and the new value, the
-// change is logged to UMA.
++ (void)updateAuthorizationStatusPref {
+  [PushNotificationUtil
+      getPermissionSettings:^(UNNotificationSettings* settings) {
+        [PushNotificationUtil
+            updateAuthorizationStatusPref:settings.authorizationStatus];
+      }];
+}
+
 + (void)updateAuthorizationStatusPref:(UNAuthorizationStatus)status {
   ApplicationContext* context = GetApplicationContext();
   PrefService* prefService = context->GetLocalState();
@@ -234,6 +244,10 @@ NSString* const kClientIdFieldKey = @"n";
       // The authorization status is this case Chrome can receive
       // notifications for a limited amount of time.
       return SettingsAuthorizationStatus::EPHEMERAL;
+      // Handles the case where the authorization status received from iOS is
+      // invalid/unknown.
+    default:
+      return SettingsAuthorizationStatus::INVALID;
   }
 }
 
@@ -282,12 +296,9 @@ NSString* const kClientIdFieldKey = @"n";
     }
     return;
   }
-  UNAuthorizationOptions options = UNAuthorizationOptionAlert |
-                                   UNAuthorizationOptionBadge |
-                                   UNAuthorizationOptionSound;
   UNUserNotificationCenter* center =
       UNUserNotificationCenter.currentNotificationCenter;
-  [center requestAuthorizationWithOptions:options
+  [center requestAuthorizationWithOptions:kAuthorizationOptions
                         completionHandler:^(BOOL granted, NSError* error) {
                           [PushNotificationUtil
                               requestAuthorizationResult:completion
@@ -312,8 +323,7 @@ NSString* const kClientIdFieldKey = @"n";
     return;
   }
   UNAuthorizationOptions options =
-      UNAuthorizationOptionProvisional | UNAuthorizationOptionBadge |
-      UNAuthorizationOptionAlert | UNAuthorizationOptionSound;
+      kAuthorizationOptions | UNAuthorizationOptionProvisional;
   UNUserNotificationCenter* center =
       UNUserNotificationCenter.currentNotificationCenter;
   [center requestAuthorizationWithOptions:options
@@ -345,6 +355,7 @@ NSString* const kClientIdFieldKey = @"n";
   if (completion) {
     completion(granted, YES, error);
   }
+  [PushNotificationUtil updateAuthorizationStatusPref];
 }
 
 // Reports the push notification permission prompt's outcome to metrics and
@@ -366,6 +377,7 @@ NSString* const kClientIdFieldKey = @"n";
   if (completion) {
     completion(granted, error);
   }
+  [PushNotificationUtil updateAuthorizationStatusPref];
 }
 
 // Logs the permission status, stored in iOS settings, the user has given for

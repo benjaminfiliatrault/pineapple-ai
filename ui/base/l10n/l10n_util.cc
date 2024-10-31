@@ -36,7 +36,6 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "third_party/icu/source/common/unicode/rbbi.h"
 #include "third_party/icu/source/common/unicode/uloc.h"
 #include "ui/base/l10n/l10n_util_collator.h"
@@ -302,7 +301,7 @@ bool IsDuplicateName(const std::string& locale_name) {
   // Skip all the es_Foo other than es_419 for now.
   if (base::StartsWith(locale_name, "es_",
                        base::CompareCase::INSENSITIVE_ASCII)) {
-    return !base::EndsWith(locale_name, "419", base::CompareCase::SENSITIVE);
+    return !locale_name.ends_with("419");
   }
   for (const char* duplicate_name : kDuplicateNames) {
     if (base::EqualsCaseInsensitiveASCII(duplicate_name, locale_name))
@@ -555,7 +554,7 @@ std::string GetApplicationLocaleInternalNonMac(const std::string& pref_locale) {
 
   // On Android, query java.util.Locale for the default locale.
   candidates.push_back(base::android::GetDefaultLocaleString());
-#elif defined(USE_GLIB) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#elif defined(USE_GLIB) && !BUILDFLAG(IS_CHROMEOS)
   // GLib implements correct environment variable parsing with
   // the precedence order: LANGUAGE, LC_ALL, LC_MESSAGES and LANG.
   // We used to use our custom parsing code along with ICU for this purpose.
@@ -679,7 +678,7 @@ std::u16string GetDisplayNameForLocale(std::string_view locale,
   // zh-Hant because the current Android Java API doesn't support scripts.
   // TODO(wangxianzhu): remove the special handling of zh-Hans and zh-Hant once
   // Android Java API supports scripts.
-  if (!base::StartsWith(locale_code, "zh-Han", base::CompareCase::SENSITIVE)) {
+  if (!locale_code.starts_with("zh-Han")) {
     display_name = GetDisplayNameForLocale(locale_code, display_locale_code);
   } else
 #endif  // BUILDFLAG(IS_ANDROID)

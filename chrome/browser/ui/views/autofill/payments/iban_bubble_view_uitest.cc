@@ -29,6 +29,7 @@
 #include "components/autofill/core/browser/metrics/payments/iban_metrics.h"
 #include "components/autofill/core/browser/payments/iban_save_manager.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
+#include "components/autofill/core/browser/payments/payments_network_interface.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/strike_databases/payments/iban_save_strike_database.h"
 #include "components/autofill/core/browser/strike_databases/strike_database_integrator_base.h"
@@ -43,6 +44,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/views/bubble/bubble_frame_view.h"
+#include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -478,7 +480,7 @@ IN_PROC_BROWSER_TEST_F(IbanBubbleViewFullFormBrowserTest,
       autofill_metrics::SaveIbanPromptOffer::kShown, 1);
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveIbanPromptResult.Local.FirstShow",
-      autofill_metrics::SaveIbanBubbleResult::kCancelled, 1);
+      autofill_metrics::SaveIbanPromptResult::kCancelled, 1);
 }
 
 // Tests the local save bubble. Ensures that clicking the [X] button
@@ -504,7 +506,7 @@ IN_PROC_BROWSER_TEST_F(IbanBubbleViewFullFormBrowserTest,
       autofill_metrics::SaveIbanPromptOffer::kShown, 1);
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveIbanPromptResult.Local.FirstShow",
-      autofill_metrics::SaveIbanBubbleResult::kClosed, 1);
+      autofill_metrics::SaveIbanPromptResult::kClosed, 1);
 }
 
 // Tests overall StrikeDatabase interaction with the local save bubble. Runs an
@@ -585,7 +587,7 @@ IN_PROC_BROWSER_TEST_F(IbanBubbleViewFullFormBrowserTest,
       autofill_metrics::SaveIbanPromptOffer::kShown, 1);
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveIbanPromptResult.Local.FirstShow",
-      autofill_metrics::SaveIbanBubbleResult::kAccepted, 1);
+      autofill_metrics::SaveIbanPromptResult::kAccepted, 1);
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveIbanPromptResult.Local.SavedWithNickname", false, 1);
 }
@@ -609,7 +611,7 @@ IN_PROC_BROWSER_TEST_F(IbanBubbleViewFullFormBrowserTest,
       autofill_metrics::SaveIbanPromptOffer::kShown, 1);
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveIbanPromptResult.Local.FirstShow",
-      autofill_metrics::SaveIbanBubbleResult::kAccepted, 1);
+      autofill_metrics::SaveIbanPromptResult::kAccepted, 1);
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveIbanPromptResult.Local.SavedWithNickname", true, 1);
 }
@@ -630,7 +632,7 @@ IN_PROC_BROWSER_TEST_F(IbanBubbleViewFullFormBrowserTest,
       autofill_metrics::SaveIbanPromptOffer::kShown, 1);
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveIbanPromptResult.Local.FirstShow",
-      autofill_metrics::SaveIbanBubbleResult::kClosed, 1);
+      autofill_metrics::SaveIbanPromptResult::kClosed, 1);
 }
 
 // Tests the local save bubble. Ensures that clicking the omnibox icon opens

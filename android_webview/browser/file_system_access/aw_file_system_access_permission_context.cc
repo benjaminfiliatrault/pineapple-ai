@@ -26,8 +26,8 @@ class FixedFileSystemAccessPermissionGrant
     : public content::FileSystemAccessPermissionGrant {
  public:
   FixedFileSystemAccessPermissionGrant(PermissionStatus status,
-                                       base::FilePath path)
-      : status_(status), path_(std::move(path)) {}
+                                       content::PathInfo path_info)
+      : status_(status), path_info_(std::move(path_info)) {}
 
   FixedFileSystemAccessPermissionGrant(
       const FixedFileSystemAccessPermissionGrant&) = delete;
@@ -38,7 +38,9 @@ class FixedFileSystemAccessPermissionGrant
   // FileSystemAccessPermissionGrant:
   PermissionStatus GetStatus() override { return status_; }
 
-  base::FilePath GetPath() override { return path_; }
+  base::FilePath GetPath() override { return path_info_.path; }
+
+  std::string GetDisplayName() override { return path_info_.display_name; }
 
   void RequestPermission(
       content::GlobalRenderFrameHostId frame_id,
@@ -51,7 +53,7 @@ class FixedFileSystemAccessPermissionGrant
   ~FixedFileSystemAccessPermissionGrant() override = default;
 
   const PermissionStatus status_;
-  const base::FilePath path_;
+  const content::PathInfo path_info_;
 };
 
 bool ShouldBlockAccessToPath(const base::FilePath& path) {
@@ -96,38 +98,37 @@ AwFileSystemAccessPermissionContext::~AwFileSystemAccessPermissionContext() =
 scoped_refptr<content::FileSystemAccessPermissionGrant>
 AwFileSystemAccessPermissionContext::GetReadPermissionGrant(
     const url::Origin& origin,
-    const base::FilePath& path,
+    const content::PathInfo& path_info,
     HandleType handle_type,
     UserAction user_action) {
   return base::MakeRefCounted<FixedFileSystemAccessPermissionGrant>(
       content::FileSystemAccessPermissionGrant::PermissionStatus::GRANTED,
-      path);
+      path_info);
 }
 
 scoped_refptr<content::FileSystemAccessPermissionGrant>
 AwFileSystemAccessPermissionContext::GetWritePermissionGrant(
     const url::Origin& origin,
-    const base::FilePath& path,
+    const content::PathInfo& path_info,
     HandleType handle_type,
     UserAction user_action) {
   return base::MakeRefCounted<FixedFileSystemAccessPermissionGrant>(
       content::FileSystemAccessPermissionGrant::PermissionStatus::GRANTED,
-      path);
+      path_info);
 }
 
 void AwFileSystemAccessPermissionContext::ConfirmSensitiveEntryAccess(
     const url::Origin& origin,
-    PathType path_type,
-    const base::FilePath& path,
+    const content::PathInfo& path_info,
     HandleType handle_type,
     UserAction user_action,
     content::GlobalRenderFrameHostId frame_id,
     base::OnceCallback<void(SensitiveEntryResult)> callback) {
   CheckPathAgainstBlocklist(
-      path,
+      path_info.path,
       base::BindOnce(
           &AwFileSystemAccessPermissionContext::DidCheckPathAgainstBlocklist,
-          weak_factory_.GetWeakPtr(), path, std::move(callback)));
+          weak_factory_.GetWeakPtr(), path_info.path, std::move(callback)));
 }
 
 void AwFileSystemAccessPermissionContext::PerformAfterWriteChecks(
@@ -135,6 +136,12 @@ void AwFileSystemAccessPermissionContext::PerformAfterWriteChecks(
     content::GlobalRenderFrameHostId frame_id,
     base::OnceCallback<void(AfterWriteCheckResult)> callback) {
   std::move(callback).Run(AfterWriteCheckResult::kAllow);
+}
+
+base::expected<void, std::string>
+AwFileSystemAccessPermissionContext::CanShowFilePicker(
+    content::RenderFrameHost* rfh) {
+  return base::ok();
 }
 
 bool AwFileSystemAccessPermissionContext::CanObtainReadPermission(
@@ -146,17 +153,21 @@ bool AwFileSystemAccessPermissionContext::CanObtainWritePermission(
   return true;
 }
 
+bool AwFileSystemAccessPermissionContext::IsFileTypeDangerous(
+    const base::FilePath& path,
+    const url::Origin& origin) {
+  return false;
+}
+
 void AwFileSystemAccessPermissionContext::SetLastPickedDirectory(
     const url::Origin& origin,
     const std::string& id,
-    const base::FilePath& path,
-    const PathType type) {}
+    const content::PathInfo& path_info) {}
 
-AwFileSystemAccessPermissionContext::PathInfo
-AwFileSystemAccessPermissionContext::GetLastPickedDirectory(
+content::PathInfo AwFileSystemAccessPermissionContext::GetLastPickedDirectory(
     const url::Origin& origin,
     const std::string& id) {
-  return PathInfo();
+  return content::PathInfo();
 }
 
 base::FilePath AwFileSystemAccessPermissionContext::GetWellKnownDirectoryPath(
@@ -172,15 +183,15 @@ std::u16string AwFileSystemAccessPermissionContext::GetPickerTitle(
 
 void AwFileSystemAccessPermissionContext::NotifyEntryMoved(
     const url::Origin& origin,
-    const base::FilePath& old_path,
-    const base::FilePath& new_path) {}
+    const content::PathInfo& old_path,
+    const content::PathInfo& new_path) {}
 
 void AwFileSystemAccessPermissionContext::OnFileCreatedFromShowSaveFilePicker(
     const GURL& file_picker_binding_context,
     const storage::FileSystemURL& url) {}
 
 void AwFileSystemAccessPermissionContext::CheckPathsAgainstEnterprisePolicy(
-    std::vector<PathInfo> entries,
+    std::vector<content::PathInfo> entries,
     content::GlobalRenderFrameHostId frame_id,
     EntriesAllowedByEnterprisePolicyCallback callback) {
   std::move(callback).Run(std::move(entries));

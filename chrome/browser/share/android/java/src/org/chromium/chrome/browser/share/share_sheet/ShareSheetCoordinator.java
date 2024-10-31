@@ -128,13 +128,11 @@ public class ShareSheetCoordinator
                         if (bottomSheet == mBottomSheet) {
                             mBottomSheet
                                     .getContentView()
-                                    .addOnLayoutChangeListener(
-                                            ShareSheetCoordinator.this::onLayoutChange);
+                                    .addOnLayoutChangeListener(ShareSheetCoordinator.this);
                         } else {
                             mBottomSheet
                                     .getContentView()
-                                    .removeOnLayoutChangeListener(
-                                            ShareSheetCoordinator.this::onLayoutChange);
+                                    .removeOnLayoutChangeListener(ShareSheetCoordinator.this);
                         }
                     }
                 };
@@ -278,7 +276,7 @@ public class ShareSheetCoordinator
         boolean shown = mBottomSheetController.requestShowContent(mBottomSheet, true);
         if (shown) {
             long delta = System.currentTimeMillis() - mShareStartTime;
-            RecordHistogram.recordMediumTimesHistogram(
+            RecordHistogram.deprecatedRecordMediumTimesHistogram(
                     "Sharing.SharingHubAndroid.TimeToShowShareSheet", delta);
         }
     }
@@ -428,7 +426,7 @@ public class ShareSheetCoordinator
     }
 
     private static void recordTimeToShare(long shareStartTime) {
-        RecordHistogram.recordMediumTimesHistogram(
+        RecordHistogram.deprecatedRecordMediumTimesHistogram(
                 "Sharing.SharingHubAndroid.TimeToShare",
                 System.currentTimeMillis() - shareStartTime);
     }

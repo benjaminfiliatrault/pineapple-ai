@@ -14,13 +14,15 @@
 #import "components/omnibox/browser/autocomplete_match.h"
 #import "components/omnibox/browser/omnibox_client.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_scheme_classifier_impl.h"
-#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 #import "ios/web/public/web_state_observer.h"
+
+class ProfileIOS;
 
 class WebLocationBar;
 namespace feature_engagement {
 class Tracker;
 }
+
 namespace web {
 class NavigationContext;
 class WebState;
@@ -30,7 +32,7 @@ class ChromeOmniboxClientIOS final : public OmniboxClient,
                                      public web::WebStateObserver {
  public:
   ChromeOmniboxClientIOS(WebLocationBar* location_bar,
-                         ChromeBrowserState* browser_state,
+                         ProfileIOS* profile,
                          feature_engagement::Tracker* tracker);
 
   ChromeOmniboxClientIOS(const ChromeOmniboxClientIOS&) = delete;
@@ -110,7 +112,7 @@ class ChromeOmniboxClientIOS final : public OmniboxClient,
     AutocompleteMatch match;
   };
   raw_ptr<WebLocationBar> location_bar_;
-  raw_ptr<ChromeBrowserState> browser_state_;
+  raw_ptr<ProfileIOS> profile_;
   AutocompleteSchemeClassifierImpl scheme_classifier_;
   raw_ptr<feature_engagement::Tracker> engagement_tracker_;
   // Stores observed navigations from the omnibox. Items are removed once

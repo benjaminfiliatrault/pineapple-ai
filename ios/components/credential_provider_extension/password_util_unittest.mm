@@ -100,12 +100,12 @@ TEST_F(PasswordUtilKeychainTest, CheckRestoreOfSavedPasswords) {
 
 // Tests retrieval of saved passwords, using an empty string as arg.
 TEST_F(PasswordUtilKeychainTest, EmptyArgument) {
-  EXPECT_NSEQ(PasswordWithKeychainIdentifier(@""), @"");
+  EXPECT_NSEQ(PasswordWithKeychainIdentifier(@""), nil);
 }
 
 // Tests retrieval of saved passwords, nil as arg.
 TEST_F(PasswordUtilKeychainTest, NilArgument) {
-  EXPECT_NSEQ(PasswordWithKeychainIdentifier(nil), @"");
+  EXPECT_NSEQ(PasswordWithKeychainIdentifier(nil), nil);
 }
 
 // Tests storing passwords with StorePassword.
@@ -128,6 +128,20 @@ TEST_F(PasswordUtilKeychainTest, CheckSavingPasswords) {
 // Tests storing a password with an empty identifier
 TEST_F(PasswordUtilKeychainTest, StoreEmptyIdentifier) {
   EXPECT_FALSE(StorePasswordInKeychain(kCredentialPassword1, @""));
+}
+
+// Tests storing and loading a gaia.
+TEST_F(PasswordUtilKeychainTest, StoreGaia) {
+  EXPECT_TRUE(StoreGaiaInKeychain(kCredentialKey1));
+  EXPECT_NSEQ(LoadGaiaFromKeychain(), kCredentialKey1);
+}
+
+// Tests updating an existing gaia.
+TEST_F(PasswordUtilKeychainTest, UpdateGaia) {
+  EXPECT_TRUE(StoreGaiaInKeychain(kCredentialKey1));
+  EXPECT_NSEQ(LoadGaiaFromKeychain(), kCredentialKey1);
+  EXPECT_TRUE(StoreGaiaInKeychain(kCredentialKey2));
+  EXPECT_NSEQ(LoadGaiaFromKeychain(), kCredentialKey2);
 }
 
 }  // credential_provider_extension

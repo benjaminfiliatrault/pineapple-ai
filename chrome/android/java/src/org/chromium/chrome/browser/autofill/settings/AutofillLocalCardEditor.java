@@ -56,6 +56,8 @@ public class AutofillLocalCardEditor extends AutofillCreditCardEditor {
     private static final String AMEX_NETWORK_NAME = "amex";
     static final String CARD_COUNT_BEFORE_ADDING_NEW_CARD_HISTOGRAM =
             "Autofill.PaymentMethods.SettingsPage.StoredCreditCardCountBeforeCardAdded";
+    static final String ADD_CARD_FLOW_HISTOGRAM =
+            "Autofill.PaymentMethodsSettingsPage.AddCardClicked";
 
     protected Button mDoneButton;
     private TextInputLayout mNameLabel;
@@ -134,6 +136,7 @@ public class AutofillLocalCardEditor extends AutofillCreditCardEditor {
 
         addCardDataToEditFields();
         initializeButtons(v);
+        RecordHistogram.recordBooleanHistogram(ADD_CARD_FLOW_HISTOGRAM, true);
         if (sObserverForTest != null) {
             sObserverForTest.onResult(this);
         }
@@ -291,10 +294,8 @@ public class AutofillLocalCardEditor extends AutofillCreditCardEditor {
             String expirationDate = mExpirationDate.getText().toString().trim();
             if (TextUtils.isEmpty(expirationDate)) {
                 mExpirationDate.setError(
-                        mContext.getResources()
-                                .getString(
-                                        R.string
-                                                .autofill_credit_card_editor_invalid_expiration_date));
+                        mContext.getString(
+                                R.string.autofill_credit_card_editor_invalid_expiration_date));
                 return false;
             }
             card.setMonth(AutofillLocalCardEditor.getExpirationMonth(expirationDate));
@@ -404,10 +405,8 @@ public class AutofillLocalCardEditor extends AutofillCreditCardEditor {
                 mNicknameLabel.setError(
                         mIsValidNickname
                                 ? ""
-                                : mContext.getResources()
-                                        .getString(
-                                                R.string
-                                                        .autofill_credit_card_editor_invalid_nickname));
+                                : mContext.getString(
+                                        R.string.autofill_credit_card_editor_invalid_nickname));
                 updateSaveButtonEnabled();
             }
         };
@@ -427,15 +426,13 @@ public class AutofillLocalCardEditor extends AutofillCreditCardEditor {
                 if (s.length() == VALID_DATE_LENGTH) {
                     if (!validExpirationDate(s.toString())) {
                         mExpirationDate.setError(
-                                mContext.getResources()
-                                        .getString(
-                                                R.string
-                                                        .autofill_credit_card_editor_invalid_expiration_date));
+                                mContext.getString(
+                                        R.string
+                                                .autofill_credit_card_editor_invalid_expiration_date));
                     } else if (!validFutureExpirationDate(s.toString())) {
                         mExpirationDate.setError(
-                                mContext.getResources()
-                                        .getString(
-                                                R.string.autofill_credit_card_editor_expired_card));
+                                mContext.getString(
+                                        R.string.autofill_credit_card_editor_expired_card));
                     } else if (mExpirationDate.getError() != null) {
                         // Removes error message if a previous error exists and the user inputs
                         // a valid date.

@@ -69,6 +69,7 @@
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/scroll/scroll_alignment.h"
 #include "third_party/blink/renderer/core/scroll/scroll_into_view_util.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "ui/base/ui_base_features.h"
 
@@ -104,6 +105,7 @@ class PopoverElementForAppearanceBase : public HTMLDivElement {
   explicit PopoverElementForAppearanceBase(Document& document)
       : HTMLDivElement(document) {
     CHECK(RuntimeEnabledFeatures::CustomizableSelectEnabled());
+    SetHasCustomStyleCallbacks();
   }
 
   void ShowPopoverInternal(Element* invoker,
@@ -166,23 +168,6 @@ class PopoverElementForAppearanceBase : public HTMLDivElement {
     }
   }
 
-  void ShowPopoverForSelectElement() {
-    if (popoverOpen()) {
-      // We can hit this case if focus is moved back to the select's invoker
-      // button and the user presses arrow keys which are supposed to show the
-      // picker.
-      return;
-    }
-    ShowPopoverInternal(/*invoker=*/nullptr, /*exception_state=*/nullptr);
-  }
-
-  void HidePopoverForSelectElement() {
-    HidePopoverInternal(
-        HidePopoverFocusBehavior::kFocusPreviousElement,
-        HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions,
-        /*exception_state=*/nullptr);
-  }
-
   InsertionNotificationRequest InsertedInto(ContainerNode& container) override {
     InsertionNotificationRequest return_value =
         HTMLDivElement::InsertedInto(container);
@@ -202,6 +187,16 @@ class PopoverElementForAppearanceBase : public HTMLDivElement {
       select->DecrementImplicitlyAnchoredElementCount();
     }
     HTMLDivElement::RemovedFrom(container);
+  }
+
+  void DidRecalcStyle(const StyleRecalcChange change) override {
+    HTMLDivElement::DidRecalcStyle(change);
+    if (auto* style = GetComputedStyle()) {
+      if (style->EffectiveAppearance() == ControlPart::kBaseSelectPart) {
+        UseCounter::Count(GetDocument(),
+                          WebFeature::kSelectElementPickerAppearanceBaseSelect);
+      }
+    }
   }
 
  private:
@@ -309,6 +304,37 @@ bool MenuListSelectType::DefaultEventHandler(const Event& event) {
   // the correct result below. An author event handler may have set display to
   // some element to none which will cause a layout tree detach.
   select_->GetDocument().UpdateStyleAndLayoutTree();
+
+  // The purpose of this method is to handle events on the in-page part of the
+  // select and determining whether they should toggle the picker. However, it
+  // will also pick up events on the base appearance picker popover, and we
+  // don't want to do anything about those events, so the following code will
+  // return early in the case that the events are targeting nodes in the picker.
+  if (IsAppearanceBasePicker() && event.HasEventPath()) {
+    bool target_is_button = false;
+    if (auto* button = SlottedButton()) {
+      // In this case, we should see SlottedButton in the event path. If it
+      // isn't there, then the target must have been in the picker.
+      for (unsigned i = 0; i < event.GetEventPath().size(); i++) {
+        Node& node = event.GetEventPath()[i].GetNode();
+        if (node == select_) {
+          break;
+        } else if (node == button) {
+          target_is_button = true;
+          break;
+        }
+      }
+    } else {
+      // In this case the in-page part of the select should not have any child
+      // elements which could be the event target, so if the target isn't the
+      // select itself then the target must have been in the picker.
+      target_is_button =
+          event.target() == select_ || event.target() == &InnerElement();
+    }
+    if (!target_is_button) {
+      return false;
+    }
+  }
 
   const int ignore_modifiers = WebInputEvent::kShiftKey |
                                WebInputEvent::kControlKey |
@@ -532,7 +558,9 @@ void MenuListSelectType::CreateShadowSubtree(ShadowRoot& root) {
     popover_ = MakeGarbageCollected<PopoverElementForAppearanceBase>(doc);
     popover_->SetShadowPseudoId(shadow_element_names::kPickerSelect);
     popover_->setAttribute(html_names::kPopoverAttr, AtomicString("auto"));
-    popover_->SetInternalImplicitAnchor(select_);
+    if (!RuntimeEnabledFeatures::PopoverAnchorRelationshipsEnabled()) {
+      popover_->SetImplicitAnchor(select_);
+    }
     root.appendChild(popover_);
 
     popover_options_slot_ = MakeGarbageCollected<HTMLSlotElement>(doc);
@@ -545,7 +573,9 @@ void MenuListSelectType::CreateShadowSubtree(ShadowRoot& root) {
             doc, select_);
     autofill_popover_->setAttribute(html_names::kPopoverAttr,
                                     keywords::kManual);
-    autofill_popover_->SetInternalImplicitAnchor(select_);
+    if (!RuntimeEnabledFeatures::PopoverAnchorRelationshipsEnabled()) {
+      autofill_popover_->SetImplicitAnchor(select_);
+    }
     autofill_popover_->SetShadowPseudoId(
         shadow_element_names::kSelectAutofillPreview);
     root.appendChild(autofill_popover_);
@@ -605,11 +635,17 @@ void MenuListSelectType::ManuallyAssignSlots() {
 
 HTMLButtonElement* MenuListSelectType::SlottedButton() const {
   if (!RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
-    CHECK(!button_slot_);
     return nullptr;
   }
-  CHECK(button_slot_);
-  return To<HTMLButtonElement>(button_slot_->FirstAssignedNode());
+  // This code may be called while slot recalc is forbidden, so instead of
+  // looking at button_slot_'s FirstAssignedNode, just return the first button.
+  for (auto* child = select_->firstChild(); child;
+       child = child->nextSibling()) {
+    if (auto* button = DynamicTo<HTMLButtonElement>(child)) {
+      return button;
+    }
+  }
+  return nullptr;
 }
 
 HTMLElement* MenuListSelectType::PopoverForAppearanceBase() const {
@@ -665,7 +701,7 @@ void MenuListSelectType::ShowPopup(PopupMenu::ShowEventType type) {
   }
 
   if (IsAppearanceBasePicker()) {
-    popover_->ShowPopoverForSelectElement();
+    popover_->ShowPopoverInternal(select_, /*exception_state=*/nullptr);
     return;
   }
 
@@ -736,7 +772,10 @@ void MenuListSelectType::ShowPopup(PopupMenu::ShowEventType type) {
 
 void MenuListSelectType::HidePopup() {
   if (IsAppearanceBasePicker()) {
-    popover_->HidePopoverForSelectElement();
+    popover_->HidePopoverInternal(
+        HidePopoverFocusBehavior::kFocusPreviousElement,
+        HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions,
+        /*exception_state=*/nullptr);
     return;
   }
   if (popup_)
@@ -853,7 +892,7 @@ void MenuListSelectType::DidSetSuggestedOption(HTMLOptionElement* option) {
   }
   if (IsAppearanceBaseButton()) {
     if (option) {
-      autofill_popover_->showPopover(ASSERT_NO_EXCEPTION);
+      autofill_popover_->ShowPopoverInternal(select_, &ASSERT_NO_EXCEPTION);
       autofill_popover_text_->setInnerText(option->label());
     } else {
       autofill_popover_text_->setInnerText(g_empty_string);
@@ -893,6 +932,10 @@ void MenuListSelectType::DidRecalcStyle(const StyleRecalcChange change) {
       // instead of the <select> itself.
       select_->GetShadowRoot()->SetDelegatesFocus(is_appearance_base_select &&
                                                   SlottedButton());
+    }
+    if (is_appearance_base_select) {
+      UseCounter::Count(select_->GetDocument(),
+                        WebFeature::kSelectElementAppearanceBaseSelect);
     }
   }
 

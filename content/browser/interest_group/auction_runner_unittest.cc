@@ -59,6 +59,7 @@
 #include "content/browser/interest_group/mock_auction_process_manager.h"
 #include "content/browser/interest_group/test_interest_group_manager_impl.h"
 #include "content/browser/interest_group/test_interest_group_private_aggregation_manager.h"
+#include "content/browser/interest_group/test_same_process_auction_process_manager.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/auction_result.h"
 #include "content/public/browser/page.h"
@@ -103,24 +104,12 @@
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom.h"
 #include "third_party/blink/public/mojom/private_aggregation/private_aggregation_host.mojom.h"
 #include "third_party/zlib/google/compression_utils.h"
+#include "url/origin.h"
 
 using auction_worklet::TestDevToolsAgentClient;
 using testing::HasSubstr;
 
 namespace content {
-class ProcessHandleTestPeer {
- public:
-  explicit ProcessHandleTestPeer(
-      const AuctionProcessManager::ProcessHandle* handle)
-      : handle_(handle) {}
-
-  void CallOnLaunchedWithPidForCurrentProcess() {
-    handle_->OnBaseProcessLaunchedForTesting(base::Process::Current());
-  }
-
- private:
-  raw_ptr<const AuctionProcessManager::ProcessHandle> handle_;
-};
 
 namespace {
 
@@ -1441,81 +1430,6 @@ CreateBiddingAndAuctionEncryptionContext() {
   return std::move(request).ReleaseContext();
 }
 
-class SameProcessAuctionProcessManager : public AuctionProcessManager {
- public:
-  SameProcessAuctionProcessManager() = default;
-  SameProcessAuctionProcessManager(const SameProcessAuctionProcessManager&) =
-      delete;
-  SameProcessAuctionProcessManager& operator=(
-      const SameProcessAuctionProcessManager&) = delete;
-  ~SameProcessAuctionProcessManager() override = default;
-
-  // Resume all worklets paused waiting for debugger on startup.
-  void ResumeAllPaused() {
-    for (const auto& svc : auction_worklet_services_) {
-      for (const auto& v8_helper : svc->AuctionV8HelpersForTesting()) {
-        v8_helper->v8_runner()->PostTask(
-            FROM_HERE,
-            base::BindOnce(
-                [](scoped_refptr<auction_worklet::AuctionV8Helper> v8_helper) {
-                  v8_helper->ResumeAllForTesting();
-                },
-                v8_helper));
-      }
-    }
-  }
-
-  int NumBidderWorklets() const {
-    int total = 0;
-    for (const auto& svc : auction_worklet_services_) {
-      total += svc->NumBidderWorkletsForTesting();
-    }
-    return total;
-  }
-
-  int NumSellerWorklets() const {
-    int total = 0;
-    for (const auto& svc : auction_worklet_services_) {
-      total += svc->NumSellerWorkletsForTesting();
-    }
-    return total;
-  }
-
- private:
-  scoped_refptr<WorkletProcess> LaunchProcess(
-      const ProcessHandle* process_handle,
-      const std::string& display_name) override {
-    // Create one AuctionWorkletServiceImpl per Mojo pipe, just like in
-    // production code. Don't bother to delete the service on pipe close,
-    // though; just keep it in a vector instead.
-    mojo::PendingRemote<auction_worklet::mojom::AuctionWorkletService> service;
-    auction_worklet_services_.push_back(
-        auction_worklet::AuctionWorkletServiceImpl::CreateForService(
-            service.InitWithNewPipeAndPassReceiver()));
-    return base::MakeRefCounted<WorkletProcess>(
-        this, /*render_process_host=*/nullptr, std::move(service),
-        process_handle->worklet_type(), process_handle->origin(),
-        /*uses_shared_process=*/false);
-  }
-
-  void OnNewProcessAssigned(const ProcessHandle* handle) override {
-    ProcessHandleTestPeer(handle).CallOnLaunchedWithPidForCurrentProcess();
-  }
-
-  scoped_refptr<SiteInstance> MaybeComputeSiteInstance(
-      SiteInstance* frame_site_instance,
-      const url::Origin& worklet_origin) override {
-    return nullptr;
-  }
-
-  bool TryUseSharedProcess(ProcessHandle* process_handle) override {
-    return false;
-  }
-
-  std::vector<std::unique_ptr<auction_worklet::AuctionWorkletServiceImpl>>
-      auction_worklet_services_;
-};
-
 MATCHER_P2(HasMetricWithValue, key, matcher, "") {
   if (!arg.contains(key)) {
     *result_listener << "which does not contain " << key;
@@ -1972,7 +1886,7 @@ class AuctionRunnerTest : public RenderViewHostTestHarness,
 
     if (!auction_process_manager_) {
       auto same_process_auction_process_manager =
-          std::make_unique<SameProcessAuctionProcessManager>();
+          std::make_unique<TestSameProcessAuctionProcessManager>();
       same_process_auction_process_manager_ =
           same_process_auction_process_manager.get();
       auction_process_manager_ =
@@ -2075,7 +1989,8 @@ class AuctionRunnerTest : public RenderViewHostTestHarness,
                             base::Unretained(this)),
         private_aggregation_manager_.GetLogPrivateAggregationRequestsCallback(),
         std::move(auction_config), top_frame_origin_, frame_origin_,
-        GetClientSecurityState(), dummy_report_shared_url_loader_factory_,
+        /*user_agent_override=*/std::nullopt, GetClientSecurityState(),
+        dummy_report_shared_url_loader_factory_,
         IsInterestGroupApiAllowedCallback(), std::move(attestation_callback),
         abortable_ad_auction_.BindNewPipeAndPassReceiver(),
         base::BindOnce(&AuctionRunnerTest::OnAuctionComplete,
@@ -2504,6 +2419,13 @@ class AuctionRunnerTest : public RenderViewHostTestHarness,
   }
   std::optional<std::string> GetCookieDeprecationLabel() override {
     return std::nullopt;
+  }
+  void GetBiddingAndAuctionServerKey(
+      const std::optional<url::Origin>& coordinator,
+      base::OnceCallback<void(base::expected<BiddingAndAuctionServerKey,
+                                             std::string>)> callback) override {
+    // Not implemented because this method is not called in this test fixture.
+    NOTREACHED();
   }
 
   // DebuggableAuctionWorkletTracker::Observer implementation
@@ -3431,9 +3353,9 @@ class AuctionRunnerTest : public RenderViewHostTestHarness,
 
   // This is used (and consumed) when starting an auction, if non-null. Allows
   // either using a MockAuctionProcessManager instead of a
-  // SameProcessAuctionProcessManager, or using a
-  // SameProcessAuctionProcessManager that has already vended processes. If
-  // nullptr, a new SameProcessAuctionProcessManager() is created when an
+  // TestSameProcessAuctionProcessManager, or using a
+  // TestSameProcessAuctionProcessManager that has already vended processes. If
+  // nullptr, a new TestSameProcessAuctionProcessManager() is created when an
   // auction is started.
   std::unique_ptr<AuctionProcessManager> auction_process_manager_;
 
@@ -3442,10 +3364,10 @@ class AuctionRunnerTest : public RenderViewHostTestHarness,
   // InterestGroupManager.
   raw_ptr<MockAuctionProcessManager> mock_auction_process_manager_ = nullptr;
 
-  // If StartAuction() created a SameProcessAuctionProcessManager for
+  // If StartAuction() created a TestSameProcessAuctionProcessManager for
   // `auction_process_manager_`, this alises it.
   // Reset by other things that set `auction_process_manager_`.
-  raw_ptr<SameProcessAuctionProcessManager>
+  raw_ptr<TestSameProcessAuctionProcessManager>
       same_process_auction_process_manager_ = nullptr;
 
   // The TestInterestGroupManager is recreated and repopulated for each auction.
@@ -7601,7 +7523,7 @@ TEST_F(AuctionRunnerTest, PromiseAuctionSignalsDeliveredBeforeWorklet) {
   // Create AuctionProcessManager in advance of starting the auction so can
   // create worklets before the auction starts.
   auction_process_manager_ =
-      std::make_unique<SameProcessAuctionProcessManager>();
+      std::make_unique<TestSameProcessAuctionProcessManager>();
 
   std::vector<std::unique_ptr<AuctionProcessManager::ProcessHandle>>
       busy_processes;
@@ -10204,7 +10126,7 @@ TEST_F(AuctionRunnerTest, ProcessManagerBlocksWorkletCreation) {
       // Create AuctionProcessManager in advance of starting the auction so can
       // create worklets before the auction starts.
       auction_process_manager_ =
-          std::make_unique<SameProcessAuctionProcessManager>();
+          std::make_unique<TestSameProcessAuctionProcessManager>();
 
       AuctionProcessManager* auction_process_manager =
           auction_process_manager_.get();
@@ -10396,7 +10318,7 @@ TEST_F(AuctionRunnerTest, ComponentAuctionProcessManagerBlocksWorkletCreation) {
       // Create AuctionProcessManager in advance of starting the auction so can
       // create worklets before the auction starts.
       auction_process_manager_ =
-          std::make_unique<SameProcessAuctionProcessManager>();
+          std::make_unique<TestSameProcessAuctionProcessManager>();
 
       AuctionProcessManager* auction_process_manager =
           auction_process_manager_.get();
@@ -10607,7 +10529,7 @@ TEST_F(AuctionRunnerTest, SellerLoadErrorWhileWaitingForBidders) {
   // Create AuctionProcessManager in advance of starting the auction so can
   // create worklets before the auction starts.
   auction_process_manager_ =
-      std::make_unique<SameProcessAuctionProcessManager>();
+      std::make_unique<TestSameProcessAuctionProcessManager>();
 
   // Make kMaxBidderProcesses bidder worklet requests for different origins.
   std::list<std::unique_ptr<AuctionProcessManager::ProcessHandle>>
@@ -10691,7 +10613,7 @@ TEST_F(AuctionRunnerTest,
           /*bid_from_component_auction_wins=*/true));
 
   auction_process_manager_ =
-      std::make_unique<SameProcessAuctionProcessManager>();
+      std::make_unique<TestSameProcessAuctionProcessManager>();
 
   // Take up all but 1 of the seller worklet process slots.
   std::list<std::unique_ptr<AuctionProcessManager::ProcessHandle>> sellers;
@@ -15143,7 +15065,7 @@ TEST_F(AuctionRunnerTest,
 // Test the phase metrics for the WorkletCreation phase.
 TEST_F(AuctionRunnerTest, VerifyWorkletCreationPhaseMetrics) {
   auto same_process_auction_process_manager =
-      std::make_unique<SameProcessAuctionProcessManager>();
+      std::make_unique<TestSameProcessAuctionProcessManager>();
   same_process_auction_process_manager_ =
       same_process_auction_process_manager.get();
   auction_process_manager_ = std::move(same_process_auction_process_manager);
@@ -17178,6 +17100,10 @@ TEST_F(AuctionRunnerTest, PrivateAggregationTimeMetricsPerParticipant) {
                                                            /*value=*/95),
                             BuildPrivateAggregationRequest(/*bucket=*/60,
                                                            /*value=*/400)))));
+
+  histogram_tester_->ExpectUniqueSample(
+      "Ads.InterestGroup.Auction.PABaseValueUsed",
+      auction_worklet::mojom::BaseValue::kAverageCodeFetchTime, 5);
 }
 
 TEST_F(AuctionRunnerTest, PrivateAggregationMetricsPerParticipant) {
@@ -17474,6 +17400,30 @@ TEST_F(AuctionRunnerTest, PrivateAggregationMetricsPerParticipant) {
                                                            /*value=*/0),
                             BuildPrivateAggregationRequest(/*bucket=*/61,
                                                            /*value=*/100)))));
+
+  // Things that are requested on 2 buyers, seller, plus 2 reporting occur
+  // 5 times; even if some of those reports are 0 because they're not computed
+  // for some clients.
+  //
+  // Those that are per-generateBid() occur 2 times.
+  //
+  // The list below is not exhaustive.
+  histogram_tester_->ExpectBucketCount(
+      "Ads.InterestGroup.Auction.PABaseValueUsed",
+      auction_worklet::mojom::BaseValue::kParticipatingInterestGroupCount, 5);
+  histogram_tester_->ExpectBucketCount(
+      "Ads.InterestGroup.Auction.PABaseValueUsed",
+      auction_worklet::mojom::BaseValue::kPercentScriptsTimeout, 5);
+  histogram_tester_->ExpectBucketCount(
+      "Ads.InterestGroup.Auction.PABaseValueUsed",
+      auction_worklet::mojom::BaseValue::kRegularInterestGroupsUsed, 2);
+  histogram_tester_->ExpectBucketCount(
+      "Ads.InterestGroup.Auction.PABaseValueUsed",
+      auction_worklet::mojom::BaseValue::kPercentRegularInterestGroupQuotaUsed,
+      2);
+  histogram_tester_->ExpectBucketCount(
+      "Ads.InterestGroup.Auction.PABaseValueUsed",
+      auction_worklet::mojom::BaseValue::kBidRejectReason, 0);
 }
 
 TEST_F(AuctionRunnerTest, ComponentAuctionPrivateAggregationTimeMetrics) {
@@ -24658,6 +24608,8 @@ TEST_P(AuctionRunnerKAnonTest, SelectedReportingIdMustBeKAnonForReporting) {
       std::string(R"(
         function generateBid(interestGroup, auctionSignals, perBuyerSignals,
                          trustedBiddingSignals, browserSignals) {
+          // This is in place for the re-run during a k-anon enforced
+          // generate bid.
           if (interestGroup.ads[0].selectableBuyerAndSellerReportingIds.length
               === 0) {
             return;
@@ -24719,6 +24671,161 @@ TEST_P(AuctionRunnerKAnonTest, SelectedReportingIdMustBeKAnonForReporting) {
       ASSERT_TRUE(result_.ad_descriptor.has_value());
       EXPECT_EQ(GURL("https://ad1.com"), result_.ad_descriptor->url);
       EXPECT_THAT(result_.errors, testing::ElementsAre());
+    }
+  }
+}
+
+// This test verifies all the reporting ids are where we expect them to be in
+// different scenerios involving k-anon.
+//
+// For all cases we expect the following ids to be present when selectable
+// reporting ids are present, and once is selected within generateBid:
+//
+//  - generateBid:
+//    - selectableBuyerAndSellerReportingIds
+//    - buyerReportingId
+//    - buyerAndSellerReportingId
+//  - scoreAd:
+//    - selectedBuyerAndSellerReportingId
+//    - buyerAndSellerReportingId
+//
+// When all of the following conditions are true:
+//   - selectableBuyerAndSellerReportingIds are present
+//   - one is selected within generateBid
+//   - k-anon is enforced
+//   - authorize_reporting_kanon is false
+// neither reportWin nor reportResult will be called.
+
+// When selectableBuyerAndSellerReportingIds are not present, or one is not
+// selected within generateBid, both reportWin and reportResult will be called.
+// The remaining reporting ids will be passed to reportWin and reportResult only
+// if k-anon is not enforced or authorize_reporting_kanon is true.
+TEST_P(AuctionRunnerKAnonTest,
+       SelectedReportingIdNotKAnonVerifyPassedReportingIds) {
+  constexpr char kBiddingLogicScript[] = R"(
+  function generateBid(
+      interestGroup, unusedAuctionSignals, unusedPerBuyerSignals,
+      unusedTrustedBiddingSignals, unusedBrowserSignals) {
+      const ad = interestGroup.ads[0];
+    // This is in place for the re-run during a k-anon enforced generate bid.
+    if (ad.selectableBuyerAndSellerReportingIds.length
+                === 0) {
+      if (ad.buyerReportingId !== "brid" ||
+          ad.buyerAndSellerReportingId !== "bsid" ) {
+            throw "generateBid does not contain valid reporting ids";
+      }
+      return;
+    }
+    // Verify all of these are present in generate bid,
+    // if selectableBuyerAndSellerReportingIds is present.
+    if (ad.selectableBuyerAndSellerReportingIds.length !== 2 ||
+        ad.selectableBuyerAndSellerReportingIds[0] !== "selectable_id1" ||
+        ad.selectableBuyerAndSellerReportingIds[1] !== "selectable_id2" ||
+        ad.buyerReportingId !== "brid" ||
+        ad.buyerAndSellerReportingId !== "bsid" ) {
+      throw "generateBid does not contain valid reporting ids";
+    }
+    selectedReportingId = ad.selectableBuyerAndSellerReportingIds[0];
+    return {'ad': ad, 'bid': 1, 'render': ad.renderURL,
+            'selectedBuyerAndSellerReportingId': selectedReportingId};
+  }
+
+  function reportWin(unusedAuctionSignals, unusedPerBuyerSignals,
+                      unusedSellerSignals, browserSignals) {
+    // This function will not be called if k-anon is enforced and
+    // authorize_reporting_kanon is false, as there will be no auction
+    // winner in that case. We don't need to check that here because other
+    // tests already verify that reportWin is only called when the auction
+    // has a winner.
+    if(browserSignals.selectedBuyerAndSellerReportingId !== undefined){
+      throw "reportWin saw " + browserSignals.selectedBuyerAndSellerReportingId +
+        " " + browserSignals.buyerAndSellerReportingId+ " " +
+        browserSignals.buyerReportingId;
+    }
+  }
+  )";
+
+  constexpr char kDecisionLogicScript[] = R"(
+  function scoreAd(
+      adMetadata, bid, auctionConfig, unusedTrustedScoringSignals,
+      browserSignals) {
+    if (browserSignals.selectedBuyerAndSellerReportingId !== "selectable_id1" ||
+        browserSignals.buyerAndSellerReportingId !== "bsid") {
+      throw "scoreAd does not contain valid reporting ids";
+    }
+    return bid;
+  }
+
+  function reportResult(auctionConfig, browserSignals) {
+    // This function will not be called if k-anon is enforced and
+    // authorize_reporting_kanon is false, as there will be no auction
+    // winner in that case. We don't need to check that here because other
+    // tests already verify that reportResult is only called when the auction
+    // has a winner.
+    if(browserSignals.selectedBuyerAndSellerReportingId !== undefined){
+      throw "reportResult saw " + browserSignals.selectedBuyerAndSellerReportingId +
+        " " + browserSignals.buyerAndSellerReportingId;
+    }
+  }
+  )";
+
+  auction_worklet::AddJavascriptResponse(
+      &url_loader_factory_, kBidder1Url,
+      // bidding script tries to bid with ad that is not k-anonymous.
+      kBiddingLogicScript);
+  auction_worklet::AddJavascriptResponse(&url_loader_factory_, kSellerUrl,
+                                         kDecisionLogicScript);
+
+  for (bool authorize_reporting_kanon : {false, true}) {
+    SCOPED_TRACE(authorize_reporting_kanon);
+    std::vector<StorageInterestGroup> bidders;
+    bidders.emplace_back(MakeInterestGroup(
+        kBidder1, kBidder1Name, kBidder1Url,
+        /*trusted_bidding_signals_url=*/std::nullopt,
+        /*trusted_bidding_signals_keys=*/{}, GURL("https://ad1.com")));
+    bidders[0].interest_group.ads.value()[0].buyer_reporting_id = "brid";
+    bidders[0].interest_group.ads.value()[0].buyer_and_seller_reporting_id =
+        "bsid";
+    bidders[0]
+        .interest_group.ads.value()[0]
+        .selectable_buyer_and_seller_reporting_ids = {"selectable_id1",
+                                                      "selectable_id2"};
+    AuthorizeKAnonAd(bidders[0].interest_group.ads.value()[0],
+                     "https://ad1.com/", bidders[0]);
+    if (authorize_reporting_kanon) {
+      AuthorizeKAnonReporting(bidders[0].interest_group.ads.value()[0],
+                              "https://ad1.com/", bidders[0],
+                              std::string("selectable_id1"));
+    }
+
+    StartAuction(kSellerUrl, bidders);
+    auction_run_loop_->Run();
+    // Have to spin all message loops to flush any k-anon set join events.
+    task_environment()->RunUntilIdle();
+    EXPECT_THAT(interest_group_manager_->TakeJoinedKAnonSets(),
+                testing::UnorderedElementsAre(
+                    blink::HashedKAnonKeyForAdBid(
+                        bidders[0].interest_group,
+                        bidders[0].interest_group.ads.value()[0].render_url()),
+                    blink::HashedKAnonKeyForAdNameReporting(
+                        bidders[0].interest_group,
+                        bidders[0].interest_group.ads.value()[0],
+                        std::string("selectable_id1"))));
+
+    if (kanon_mode() == KAnonMode::kEnforce && !authorize_reporting_kanon) {
+      // When k-anon is enforced and the reporting ID is not authorized, the
+      // bid is rejected because the reporting ID cannot be made k-anonymous.
+      EXPECT_FALSE(result_.ad_descriptor.has_value());
+      EXPECT_THAT(result_.errors, testing::ElementsAre());
+    } else {
+      ASSERT_TRUE(result_.ad_descriptor.has_value());
+      EXPECT_EQ(GURL("https://ad1.com"), result_.ad_descriptor->url);
+      EXPECT_THAT(result_.errors,
+                  testing::UnorderedElementsAre(
+                      "https://adstuff.publisher1.com/auction.js:19 "
+                      "Uncaught reportResult saw selectable_id1 bsid.",
+                      "https://adplatform.com/offers.js:37 Uncaught "
+                      "reportWin saw selectable_id1 bsid brid."));
     }
   }
 }

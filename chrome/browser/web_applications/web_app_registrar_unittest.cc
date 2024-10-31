@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "ash/constants/web_app_id_constants.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
@@ -42,7 +43,6 @@
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
@@ -243,7 +243,7 @@ TEST_F(WebAppRegistrarTest, InitWithApps) {
   auto web_app = std::make_unique<WebApp>(app_id);
   auto web_app2 = std::make_unique<WebApp>(app_id2);
 
-  web_app->AddSource(WebAppManagement::kSync);
+  web_app->AddSource(WebAppManagement::kUserInstalled);
   web_app->SetDisplayMode(DisplayMode::kStandalone);
   web_app->SetUserDisplayMode(mojom::UserDisplayMode::kStandalone);
   web_app->SetName(name);
@@ -902,10 +902,11 @@ TEST_F(WebAppRegistrarTest, CountUserInstalledApps) {
 
   // User-installed apps have one of the following types:
   // - `WebAppManagement::kSync`
+  // - `WebAppManagement::kUserInstalled`
   // - `WebAppManagement::kWebAppStore`
   // - `WebAppManagement::kOneDriveIntegration`
   // - `WebAppManagement::kIwaUserInstalled`
-  EXPECT_EQ(4, registrar().CountUserInstalledApps());
+  EXPECT_EQ(5, registrar().CountUserInstalledApps());
 }
 
 TEST_F(WebAppRegistrarTest, CountUserInstalledAppsDiy) {

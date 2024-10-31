@@ -7,9 +7,12 @@
 
 #import <AuthenticationServices/AuthenticationServices.h>
 
+#import <vector>
+
 @protocol Credential;
 
-typedef void (^FetchKeyCompletionBlock)(NSData* security_domain_secret);
+typedef void (^FetchSecurityDomainSecretCompletionBlock)(
+    NSArray<NSData*>* security_domain_secrets);
 
 // A handler to allow children to communicate selected credentials back to the
 // parent. This is essentially a wrapper for
@@ -29,6 +32,9 @@ typedef void (^FetchKeyCompletionBlock)(NSData* security_domain_secret);
 - (void)userCancelledRequestWithErrorCode:(ASExtensionErrorCode)errorCode;
 
 - (void)completeExtensionConfigurationRequest;
+
+// Returns the gaia for the account used for credential creation.
+- (NSString*)gaia;
 
 @end
 

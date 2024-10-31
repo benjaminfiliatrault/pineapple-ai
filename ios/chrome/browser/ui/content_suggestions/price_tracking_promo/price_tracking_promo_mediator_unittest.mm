@@ -8,12 +8,16 @@
 #import <UserNotifications/UserNotifications.h>
 
 #import "base/strings/sys_string_conversions.h"
+#import "components/bookmarks/browser/bookmark_model.h"
+#import "components/bookmarks/test/test_bookmark_client.h"
 #import "components/commerce/core/mock_shopping_service.h"
 #import "components/commerce/core/pref_names.h"
+#import "components/image_fetcher/core/image_data_fetcher.h"
 #import "components/prefs/pref_registry_simple.h"
 #import "components/prefs/testing_pref_service.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
@@ -22,6 +26,7 @@
 #import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity_manager.h"
+#import "ios/chrome/browser/ui/content_suggestions/price_tracking_promo/price_tracking_promo_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/price_tracking_promo/price_tracking_promo_mediator+testing.h"
 #import "ios/chrome/browser/ui/content_suggestions/price_tracking_promo/price_tracking_promo_prefs.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
@@ -37,17 +42,13 @@
 class PriceTrackingPromoMediatorTest : public PlatformTest {
  public:
   PriceTrackingPromoMediatorTest() {
-    TestChromeBrowserState::Builder builder;
+    TestProfileIOS::Builder builder;
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        AuthenticationServiceFactory::GetDefaultFactory());
-    browser_state_ = std::move(builder).Build();
-    AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
-        browser_state_.get(),
-        std::make_unique<FakeAuthenticationServiceDelegate>());
-    auth_service_ = static_cast<AuthenticationService*>(
-        AuthenticationServiceFactory::GetInstance()->GetForBrowserState(
-            browser_state_.get()));
+        AuthenticationServiceFactory::GetFactoryWithDelegate(
+            std::make_unique<FakeAuthenticationServiceDelegate>()));
+    profile_ = std::move(builder).Build();
+    auth_service_ = AuthenticationServiceFactory::GetForProfile(profile_.get());
     identity_ = [FakeSystemIdentity fakeIdentity1];
     FakeSystemIdentityManager* system_identity_manager =
         FakeSystemIdentityManager::FromSystemIdentityManager(
@@ -58,10 +59,21 @@ class PriceTrackingPromoMediatorTest : public PlatformTest {
                           signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
 
     shopping_service_ = std::make_unique<commerce::MockShoppingService>();
+    bookmark_model_ = bookmarks::TestBookmarkClient::CreateModel();
     push_notification_service_ = ios::provider::CreatePushNotificationService();
+    pref_service_.registry()->RegisterDictionaryPref(
+        prefs::kFeaturePushNotificationPermissions);
+    local_state_.registry()->RegisterDictionaryPref(
+        prefs::kAppLevelPushNotificationPermissions);
+
     mediator_ = [[PriceTrackingPromoMediator alloc]
         initWithShoppingService:shopping_service_.get()
-                    prefService:&pref_service_
+                  bookmarkModel:bookmark_model_.get()
+                   imageFetcher:std::make_unique<
+                                    image_fetcher::ImageDataFetcher>(
+                                    profile_->GetSharedURLLoaderFactory())
+                    prefService:pref_service()
+                     localState:&local_state_
         pushNotificationService:push_notification_service_.get()
           authenticationService:auth_service_];
     // Mock notifications settings response.
@@ -81,6 +93,14 @@ class PriceTrackingPromoMediatorTest : public PlatformTest {
 
   ~PriceTrackingPromoMediatorTest() override {}
 
+  void TearDown() override {
+    pref_service_.ClearPref(prefs::kFeaturePushNotificationPermissions);
+    pref_service_.ClearPref(commerce::kPriceEmailNotificationsEnabled);
+    pref_service_.ClearPref(kPriceTrackingPromoDisabled);
+    local_state_.ClearPref(prefs::kAppLevelPushNotificationPermissions);
+    [mediator_ disconnect];
+  }
+
   PriceTrackingPromoMediator* mediator() { return mediator_; }
 
   PrefService* pref_service() { return &pref_service_; }
@@ -91,16 +111,20 @@ class PriceTrackingPromoMediatorTest : public PlatformTest {
 
   NSString* gaia_id() { return identity_.gaiaID; }
 
+  bookmarks::BookmarkModel* bookmark_model() { return bookmark_model_.get(); }
+
  protected:
   std::unique_ptr<PushNotificationService> push_notification_service_;
   TestingPrefServiceSimple pref_service_;
+  TestingPrefServiceSimple local_state_;
   web::WebTaskEnvironment task_environment_;
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   TestProfileManagerIOS profile_manager_;
-  std::unique_ptr<TestChromeBrowserState> browser_state_;
+  std::unique_ptr<TestProfileIOS> profile_;
   raw_ptr<AuthenticationService> auth_service_;
   id<SystemIdentity> identity_;
   std::unique_ptr<commerce::MockShoppingService> shopping_service_;
+  std::unique_ptr<bookmarks::BookmarkModel> bookmark_model_;
   PriceTrackingPromoMediator* mediator_;
   std::unique_ptr<ScopedBlockSwizzler> notification_center_swizzler_;
   id mock_notification_center_;
@@ -124,12 +148,26 @@ TEST_F(PriceTrackingPromoMediatorTest, TestAllowPriceTrackingNotifications) {
 // Test disconnecting the mediator.
 TEST_F(PriceTrackingPromoMediatorTest, TestDisconnect) {
   EXPECT_NE(nil, mediator().shoppingServiceForTesting);
+  EXPECT_NE(nil, mediator().bookmarkModelForTesting);
+  EXPECT_NE(nil, mediator().prefServiceForTesting);
+  EXPECT_NE(nil, mediator().pushNotificationServiceForTesting);
+  EXPECT_NE(nil, mediator().authenticationServiceForTesting);
+  EXPECT_NE(nil, mediator().imageFetcherForTesting);
+  EXPECT_NE(nil, mediator().notificationsSettingsObserverForTesting);
   [mediator() disconnect];
   EXPECT_EQ(nil, mediator().shoppingServiceForTesting);
+  EXPECT_EQ(nil, mediator().bookmarkModelForTesting);
+  EXPECT_EQ(nil, mediator().prefServiceForTesting);
+  EXPECT_EQ(nil, mediator().pushNotificationServiceForTesting);
+  EXPECT_EQ(nil, mediator().authenticationServiceForTesting);
+  EXPECT_EQ(nil, mediator().imageFetcherForTesting);
+  EXPECT_EQ(nil, mediator().notificationsSettingsObserverForTesting);
 }
 
 // Resets card and fetches most recent subscription, if available.
 TEST_F(PriceTrackingPromoMediatorTest, TestReset) {
+  PriceTrackingPromoItem* item = [[PriceTrackingPromoItem alloc] init];
+  [mediator() setPriceTrackingPromoItemForTesting:item];
   EXPECT_NE(nil, mediator().priceTrackingPromoItemForTesting);
   [mediator() reset];
   EXPECT_EQ(nil, mediator().priceTrackingPromoItemForTesting);
@@ -139,6 +177,7 @@ TEST_F(PriceTrackingPromoMediatorTest, TestGetSnackbarMessage) {
   MDCSnackbarMessage* snackbarMessage = [mediator() snackbarMessageForTesting];
   EXPECT_NSEQ(@"Price tracking notifications turned on", snackbarMessage.text);
   EXPECT_NSEQ(@"Manage", snackbarMessage.action.title);
+  EXPECT_NSEQ(@"Manage", snackbarMessage.action.accessibilityLabel);
 }
 
 TEST_F(PriceTrackingPromoMediatorTest, TestPriceTrackingSettings) {
@@ -171,4 +210,30 @@ TEST_F(PriceTrackingPromoMediatorTest,
   mediator().dispatcher = mockDispatcher;
   OCMExpect([mockDispatcher showSnackbarMessage:[OCMArg isNotNil]]);
   [mediator() enablePriceTrackingSettingsAndShowSnackbar];
+}
+
+TEST_F(PriceTrackingPromoMediatorTest, TestDenyPriceTrackingNotifications) {
+  id settings = OCMClassMock([UNNotificationSettings class]);
+  OCMStub([mock_notification_center_
+      getNotificationSettingsWithCompletionHandler:
+          ([OCMArg invokeBlockWithArgs:settings, nil])]);
+  OCMStub([settings authorizationStatus])
+      .andReturn(UNAuthorizationStatusAuthorized);
+  id mockDelegate =
+      OCMStrictProtocolMock(@protocol(PriceTrackingPromoMediatorDelegate));
+  OCMExpect([mockDelegate removePriceTrackingPromo]);
+  mediator().delegate = mockDelegate;
+  EXPECT_FALSE(pref_service()->GetBoolean(kPriceTrackingPromoDisabled));
+  [mediator() requestPushNotificationDoneWithGrantedForTesting:NO
+                                                   promptShown:YES
+                                                         error:nil];
+  EXPECT_TRUE(pref_service()->GetBoolean(kPriceTrackingPromoDisabled));
+}
+
+TEST_F(PriceTrackingPromoMediatorTest, TestPriceTrackingPromoDisabled) {
+  id mockDelegate =
+      OCMStrictProtocolMock(@protocol(PriceTrackingPromoMediatorDelegate));
+  OCMExpect([mockDelegate removePriceTrackingPromo]);
+  mediator().delegate = mockDelegate;
+  pref_service()->SetBoolean(kPriceTrackingPromoDisabled, true);
 }

@@ -165,6 +165,10 @@ MATCHER_P(CreateReportMaxAggregatableReportsLimitIs, matcher, "") {
   return ExplainMatchResult(matcher, value, result_listener);
 }
 
+MATCHER_P(SourceTimeIs, matcher, "") {
+  return ExplainMatchResult(matcher, arg.source_time(), result_listener);
+}
+
 }  // namespace
 
 // Unit test suite for the AttributionResolver interface. All
@@ -954,7 +958,7 @@ TEST_F(AttributionResolverTest, ClearDataOutsideRange_NoDelete) {
   storage()->StoreSource(impression);
 
   storage()->ClearData(now + base::Minutes(10), now + base::Minutes(20),
-                       GetMatcher(impression.common_info().source_origin()));
+                       GetMatcher(impression.common_info().reporting_origin()));
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
             MaybeCreateAndStoreEventLevelReport(DefaultTrigger()));
 }
@@ -1063,7 +1067,7 @@ TEST_F(AttributionResolverTest, ClearDataRangeBetweenEvents) {
             MaybeCreateAndStoreEventLevelReport(conversion));
 
   storage()->ClearData(start + base::Minutes(1), start + base::Minutes(10),
-                       GetMatcher(impression.common_info().source_origin()));
+                       GetMatcher(impression.common_info().reporting_origin()));
 
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()), SizeIs(1u));
 }
@@ -1084,8 +1088,8 @@ TEST_F(AttributionResolverTest, ClearDataWithMultiTouch) {
 
   // Only the first impression should overlap with this time range, but all the
   // impressions should share the origin.
-  storage()->ClearData(start, start,
-                       GetMatcher(impression1.common_info().source_origin()));
+  storage()->ClearData(
+      start, start, GetMatcher(impression1.common_info().reporting_origin()));
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()), SizeIs(1));
 }
 
@@ -2975,13 +2979,13 @@ TEST_F(AttributionResolverTest, GetAttributionDataKeysSet) {
 
 TEST_F(AttributionResolverTest, SourceDebugKey_RoundTrips) {
   storage()->StoreSource(
-      SourceBuilder().SetDebugKey(33).SetDebugCookieSet(true).Build());
+      SourceBuilder().SetDebugKey(33).SetCookieBasedDebugAllowed(true).Build());
   EXPECT_THAT(storage()->GetActiveSources(), ElementsAre(SourceDebugKeyIs(33)));
 }
 
 TEST_F(AttributionResolverTest, TriggerDebugKey_RoundTrips) {
   storage()->StoreSource(
-      SourceBuilder().SetDebugKey(22).SetDebugCookieSet(true).Build());
+      SourceBuilder().SetDebugKey(22).SetCookieBasedDebugAllowed(true).Build());
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
             MaybeCreateAndStoreEventLevelReport(
                 TriggerBuilder().SetDebugKey(33).Build()));
@@ -3026,7 +3030,7 @@ TEST_F(AttributionResolverTest, MaxReportingOriginsPerSource) {
       SourceBuilder()
           .SetReportingOrigin(*SuitableOrigin::Deserialize("https://r1.test"))
           .SetDebugKey(1)
-          .SetDebugCookieSet(true)
+          .SetCookieBasedDebugAllowed(true)
           .Build());
   ASSERT_EQ(result.status(), StorableSource::Result::kSuccess);
 
@@ -3034,7 +3038,7 @@ TEST_F(AttributionResolverTest, MaxReportingOriginsPerSource) {
       SourceBuilder()
           .SetReportingOrigin(*SuitableOrigin::Deserialize("https://r2.test"))
           .SetDebugKey(2)
-          .SetDebugCookieSet(true)
+          .SetCookieBasedDebugAllowed(true)
           .Build());
   ASSERT_EQ(result.status(), StorableSource::Result::kSuccess);
 
@@ -3044,7 +3048,7 @@ TEST_F(AttributionResolverTest, MaxReportingOriginsPerSource) {
       SourceBuilder()
           .SetReportingOrigin(*SuitableOrigin::Deserialize("https://r3.test"))
           .SetDebugKey(3)
-          .SetDebugCookieSet(true)
+          .SetCookieBasedDebugAllowed(true)
           .Build());
   delegate()->set_randomized_response(std::nullopt);
   ASSERT_EQ(result.status(),
@@ -4190,24 +4194,21 @@ TEST_F(AttributionResolverTest,
   EXPECT_THAT(result.min_null_aggregatable_report_time(),
               Optional(now + kReportDelay));
 
-  EXPECT_THAT(
-      storage()->GetAttributionReports(base::Time::Max()),
-      UnorderedElementsAre(
-          AggregatableAttributionDataIs(SourceRegistrationTimeConfigIs(
-              attribution_reporting::mojom::SourceRegistrationTimeConfig::
-                  kInclude)),
-          NullAggregatableDataIs(AllOf(
-              SourceRegistrationTimeConfigIs(
-                  attribution_reporting::mojom::SourceRegistrationTimeConfig::
-                      kInclude),
-              Field(&AttributionReport::NullAggregatableData::fake_source_time,
-                    now - base::Days(1)))),
-          NullAggregatableDataIs(AllOf(
-              SourceRegistrationTimeConfigIs(
-                  attribution_reporting::mojom::SourceRegistrationTimeConfig::
-                      kInclude),
-              Field(&AttributionReport::NullAggregatableData::fake_source_time,
-                    now - base::Days(30))))));
+  EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()),
+              UnorderedElementsAre(
+                  AggregatableAttributionDataIs(SourceRegistrationTimeConfigIs(
+                      attribution_reporting::mojom::
+                          SourceRegistrationTimeConfig::kInclude)),
+                  NullAggregatableDataIs(
+                      AllOf(SourceRegistrationTimeConfigIs(
+                                attribution_reporting::mojom::
+                                    SourceRegistrationTimeConfig::kInclude),
+                            SourceTimeIs(now - base::Days(1)))),
+                  NullAggregatableDataIs(
+                      AllOf(SourceRegistrationTimeConfigIs(
+                                attribution_reporting::mojom::
+                                    SourceRegistrationTimeConfig::kInclude),
+                            SourceTimeIs(now - base::Days(30))))));
 }
 
 TEST_F(
@@ -4229,25 +4230,21 @@ TEST_F(
 
   EXPECT_THAT(
       storage()->GetAttributionReports(base::Time::Max()),
-      UnorderedElementsAre(
-          NullAggregatableDataIs(AllOf(
-              SourceRegistrationTimeConfigIs(
-                  attribution_reporting::mojom::SourceRegistrationTimeConfig::
-                      kInclude),
-              Field(&AttributionReport::NullAggregatableData::fake_source_time,
-                    now))),
-          NullAggregatableDataIs(AllOf(
-              SourceRegistrationTimeConfigIs(
-                  attribution_reporting::mojom::SourceRegistrationTimeConfig::
-                      kInclude),
-              Field(&AttributionReport::NullAggregatableData::fake_source_time,
-                    now - base::Days(1)))),
-          NullAggregatableDataIs(AllOf(
-              SourceRegistrationTimeConfigIs(
-                  attribution_reporting::mojom::SourceRegistrationTimeConfig::
-                      kInclude),
-              Field(&AttributionReport::NullAggregatableData::fake_source_time,
-                    now - base::Days(30))))));
+      UnorderedElementsAre(NullAggregatableDataIs(AllOf(
+                               SourceRegistrationTimeConfigIs(
+                                   attribution_reporting::mojom::
+                                       SourceRegistrationTimeConfig::kInclude),
+                               SourceTimeIs(now))),
+                           NullAggregatableDataIs(AllOf(
+                               SourceRegistrationTimeConfigIs(
+                                   attribution_reporting::mojom::
+                                       SourceRegistrationTimeConfig::kInclude),
+                               SourceTimeIs(now - base::Days(1)))),
+                           NullAggregatableDataIs(AllOf(
+                               SourceRegistrationTimeConfigIs(
+                                   attribution_reporting::mojom::
+                                       SourceRegistrationTimeConfig::kInclude),
+                               SourceTimeIs(now - base::Days(30))))));
 }
 
 TEST_F(
@@ -4291,14 +4288,12 @@ TEST_F(
   EXPECT_THAT(result.min_null_aggregatable_report_time(),
               Optional(now + kReportDelay));
 
-  EXPECT_THAT(
-      storage()->GetAttributionReports(base::Time::Max()),
-      UnorderedElementsAre(NullAggregatableDataIs(AllOf(
-          SourceRegistrationTimeConfigIs(
-              attribution_reporting::mojom::SourceRegistrationTimeConfig::
-                  kExclude),
-          Field(&AttributionReport::NullAggregatableData::fake_source_time,
-                now)))));
+  EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()),
+              UnorderedElementsAre(NullAggregatableDataIs(
+                  AllOf(SourceRegistrationTimeConfigIs(
+                            attribution_reporting::mojom::
+                                SourceRegistrationTimeConfig::kExclude),
+                        SourceTimeIs(now)))));
 }
 
 TEST_F(AttributionResolverTest,
@@ -5318,6 +5313,82 @@ TEST_F(AttributionResolverTest, TriggerAttributesOnMatchingScope) {
       storage()->GetAttributionReports(/*max_report_time=*/base::Time::Max()),
       ElementsAre(EventLevelDataIs(
           Field(&AttributionReport::EventLevelData::source_event_id, 1u))));
+}
+
+TEST_F(AttributionResolverTest, DebugKey) {
+  const struct {
+    std::optional<uint64_t> source_debug_key;
+    std::optional<uint64_t> trigger_debug_key;
+    int expected_metric;
+  } kTestCases[] = {
+      {
+          std::nullopt, std::nullopt,
+          0,  // kNone
+      },
+      {
+          1, std::nullopt,
+          1,  // kSourceOnly
+      },
+      {
+          std::nullopt, 1,
+          2,  // kTriggerOnly
+      },
+      {
+          1, 2,
+          3,  // kBoth
+      },
+  };
+
+  for (const auto& test_case : kTestCases) {
+    base::HistogramTester histograms;
+    storage()->StoreSource(TestAggregatableSourceProvider()
+                               .GetBuilder()
+                               .SetDebugKey(test_case.source_debug_key)
+                               .SetCookieBasedDebugAllowed(true)
+                               .Build());
+    storage()->MaybeCreateAndStoreReport(
+        DefaultAggregatableTriggerBuilder()
+            .SetDebugKey(test_case.trigger_debug_key)
+            .Build());
+    histograms.ExpectBucketCount("Conversions.AttributionReportDebugKeyUsage",
+                                 test_case.expected_metric, 2);
+  }
+}
+
+TEST_F(AttributionResolverTest,
+       UniqueReportingOriginsPerSiteForAttributionMetric) {
+  base::HistogramTester histogram_tester;
+
+  storage()->StoreSource(
+      SourceBuilder()
+          .SetDestinationSites(
+              {net::SchemefulSite::Deserialize("https://d.test")})
+          .SetReportingOrigin(*SuitableOrigin::Deserialize("https://a.r.test"))
+          .Build());
+  storage()->StoreSource(
+      TestAggregatableSourceProvider()
+          .GetBuilder()
+          .SetDestinationSites(
+              {net::SchemefulSite::Deserialize("https://d.test")})
+          .SetReportingOrigin(*SuitableOrigin::Deserialize("https://b.r.test"))
+          .Build());
+
+  storage()->MaybeCreateAndStoreReport(
+      TriggerBuilder()
+          .SetDestinationOrigin(*SuitableOrigin::Deserialize("https://d.test"))
+          .SetReportingOrigin(*SuitableOrigin::Deserialize("https://a.r.test"))
+          .Build());
+  storage()->MaybeCreateAndStoreReport(
+      DefaultAggregatableTriggerBuilder()
+          .SetDestinationOrigin(*SuitableOrigin::Deserialize("https://d.test"))
+          .SetReportingOrigin(*SuitableOrigin::Deserialize("https://b.r.test"))
+          .Build(/*generate_event_trigger_data=*/false));
+  // No histogram recorded as no attribution report was created.
+  storage()->MaybeCreateAndStoreReport(TriggerBuilder().Build());
+
+  EXPECT_THAT(histogram_tester.GetAllSamples(
+                  "Conversions.UniqueReportingOriginsPerSiteForAttribution"),
+              base::BucketsAre(base::Bucket(1, 1), base::Bucket(2, 1)));
 }
 
 }  // namespace content

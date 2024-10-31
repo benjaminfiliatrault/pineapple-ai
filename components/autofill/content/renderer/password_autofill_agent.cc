@@ -408,7 +408,7 @@ bool IsInCrossOriginIframeOrEmbeddedFrame(const WebInputElement& element) {
     if (element.GetDocument().GetFrame()->IsInFencedFrameTree()) {
       return true;
     } else {
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
     }
   }
   return false;
@@ -871,9 +871,12 @@ void PasswordAutofillAgent::NotifyPasswordManagerAboutFieldModification(
   std::u16string id_attribute = element.GetIdAttribute().Utf16();
   static base::NoDestructor<WebString> kLabel("label");
   std::u16string label_attribute = element.GetAttribute(*kLabel).Utf16();
+  autofill::mojom::FormControlType type_attribute =
+      form_util::ToAutofillFormControlType(
+          element.FormControlTypeForAutofill());
 
   if (!password_manager::util::CanFieldBeConsideredAsSingleUsername(
-          name_attribute, id_attribute, label_attribute) ||
+          name_attribute, id_attribute, label_attribute, type_attribute) ||
       !password_manager::util::CanValueBeConsideredAsSingleUsername(
           element_value)) {
     return;
@@ -905,9 +908,11 @@ void PasswordAutofillAgent::TrackAutofilledElement(
 
 void PasswordAutofillAgent::FillPasswordSuggestion(
     const std::u16string& username,
-    const std::u16string& password) {
+    const std::u16string& password,
+    base::OnceCallback<void(bool)> callback) {
   auto focused_element = last_queried_element().DynamicTo<WebInputElement>();
   if (!focused_element || !IsElementEditable(focused_element)) {
+    std::move(callback).Run(/*success=*/false);
     return;
   }
   WebInputElement username_element;
@@ -916,6 +921,7 @@ void PasswordAutofillAgent::FillPasswordSuggestion(
   if (!HasElementsToFill(focused_element, UseFallbackData(true),
                          &username_element, &password_element,
                          &password_info)) {
+    std::move(callback).Run(/*success=*/false);
     return;
   }
   if (focused_element.FormControlTypeForAutofill() == kInputPassword) {
@@ -923,8 +929,9 @@ void PasswordAutofillAgent::FillPasswordSuggestion(
     password_info->password_field_suggestion_was_accepted = true;
     password_info->password_field = FieldRef(password_element);
   }
-  FillUsernameAndPasswordElements(username_element, password_element, username,
-                                  password);
+  bool success = FillUsernameAndPasswordElements(
+      username_element, password_element, username, password);
+  std::move(callback).Run(success);
 }
 
 void PasswordAutofillAgent::FillPasswordSuggestionById(
@@ -943,7 +950,7 @@ void PasswordAutofillAgent::FillPasswordSuggestionById(
       username, password);
 }
 
-void PasswordAutofillAgent::FillUsernameAndPasswordElements(
+bool PasswordAutofillAgent::FillUsernameAndPasswordElements(
     blink::WebInputElement username_element,
     blink::WebInputElement password_element,
     const std::u16string& username,
@@ -984,6 +991,11 @@ void PasswordAutofillAgent::FillUsernameAndPasswordElements(
   }
   auto length = base::checked_cast<unsigned>(focused_element.Value().length());
   focused_element.SetSelectionRange(length, length);
+
+  // Returns whether the fields were filled with the requested values
+  // successfully.
+  return (!username_element || username_element.Value().Utf16() == username) &&
+         (!password_element || password_element.Value().Utf16() == password);
 }
 
 void PasswordAutofillAgent::FillIntoFocusedField(
@@ -1553,8 +1565,6 @@ void PasswordAutofillAgent::ReadyToCommitNavigation(
   CleanupOnDocumentShutdown();
 }
 
-void PasswordAutofillAgent::OnProbablyFormSubmitted() {}
-
 // mojom::PasswordAutofillAgent:
 void PasswordAutofillAgent::SetPasswordFillData(
     const PasswordFormFillData& form_data) {
@@ -1894,21 +1904,14 @@ void PasswordAutofillAgent::ShowSuggestionPopup(
   FindPasswordInfoForElement(user_input, UseFallbackData(false),
                              &username_element, &password_element,
                              &password_info);
-  size_t username_element_index = GetIndexOfElement(form, username_element);
-  if (!username_element || !IsElementEditable(username_element)) {
-    username_element_index = form.fields().size();
-  }
-  size_t password_element_index = GetIndexOfElement(form, password_element);
-  if (!password_element || !IsElementEditable(password_element)) {
-    password_element_index = form.fields().size();
-  }
 
   const bool show_webauthn_credentials =
       field.parsed_autocomplete() && field.parsed_autocomplete()->webauthn;
   GetPasswordManagerDriver().ShowPasswordSuggestions(PasswordSuggestionRequest(
-      field.renderer_id(), form, trigger_source, username_element_index,
-      password_element_index, field.text_direction(), typed_username,
-      show_webauthn_credentials,
+      field.renderer_id(), form, trigger_source,
+      GetIndexOfElement(form, username_element),
+      GetIndexOfElement(form, password_element), field.text_direction(),
+      typed_username, show_webauthn_credentials,
       gfx::RectF(render_frame()->ConvertViewportToWindow(
           user_input.BoundsInWidget()))));
 }
@@ -2102,20 +2105,6 @@ void PasswordAutofillAgent::LogPrefilledUsernameFillOutcome(
                             outcome);
 }
 
-void PasswordAutofillAgent::OnProvisionallySaveForm(
-    const WebFormElement& form,
-    const WebFormControlElement& element,
-    SaveFormReason source) {
-  // SaveFormReason::kTextFieldChanged is handled in
-  // AutofillAgent::OnTextFieldDidChange(). For the sake of code clarity, please
-  // don't add handling for SaveFormReason::kTextFieldChanged here if
-  // possible.
-  if (source == SaveFormReason::kWillSendSubmitEvent) {
-    WebInputElement input_element = element.DynamicTo<WebInputElement>();
-    InformBrowserAboutUserInput(form, input_element);
-  }
-}
-
 void PasswordAutofillAgent::FireHostSubmitEvent(
     FormRendererId form_id,
     mojom::SubmissionSource source) {
@@ -2166,36 +2155,6 @@ void PasswordAutofillAgent::OnFormSubmitted(const WebFormElement& form) {
       submitted_form_data->ExtractFields(), field_data_manager()));
 
   GetPasswordManagerDriver().PasswordFormSubmitted(*submitted_form_data);
-}
-
-void PasswordAutofillAgent::OnInferredFormSubmission(SubmissionSource source) {
-  switch (source) {
-    case mojom::SubmissionSource::NONE:
-    case mojom::SubmissionSource::PROBABLY_FORM_SUBMITTED:
-    case mojom::SubmissionSource::FORM_SUBMISSION:
-      NOTREACHED();
-    case mojom::SubmissionSource::FRAME_DETACHED:
-      // If a sub frame has been destroyed while the user was entering
-      // information into a password form, try to save the data. See
-      // https://crbug.com/450806 or examples of sites that perform login using
-      // this technique. We are treating primary main frame and the root of
-      // embedded frames the same on purpose.
-      if (FrameCanAccessPasswordManager() &&
-          render_frame()->GetWebFrame()->Parent()) {
-        GetPasswordManagerDriver().DynamicFormSubmission(
-            SubmissionIndicatorEvent::FRAME_DETACHED);
-      }
-      CleanupOnDocumentShutdown();
-      return;
-    case mojom::SubmissionSource::SAME_DOCUMENT_NAVIGATION:
-    case mojom::SubmissionSource::XHR_SUCCEEDED:
-    case mojom::SubmissionSource::DOM_MUTATION_AFTER_AUTOFILL:
-      if (FrameCanAccessPasswordManager()) {
-        GetPasswordManagerDriver().DynamicFormSubmission(
-            ToSubmissionIndicatorEvent(source));
-      }
-      return;
-  }
 }
 
 void PasswordAutofillAgent::HidePopup() {

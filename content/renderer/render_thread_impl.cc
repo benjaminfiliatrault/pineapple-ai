@@ -149,7 +149,6 @@
 #include "skia/ext/skia_memory_dump_provider.h"
 #include "third_party/blink/public/common/origin_trials/origin_trials_settings_provider.h"
 #include "third_party/blink/public/common/page/launching_process_state.h"
-#include "third_party/blink/public/common/performance/performance_scenarios.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/origin_trials/origin_trials_settings.mojom.h"
@@ -593,7 +592,7 @@ void RenderThreadImpl::Init() {
   cc::SetClientNameForMetrics("Renderer");
 
   is_threaded_animation_enabled_ =
-      !command_line.HasSwitch(cc::switches::kDisableThreadedAnimation);
+      !command_line.HasSwitch(switches::kDisableThreadedAnimation);
 
   is_elastic_overscroll_enabled_ = switches::IsElasticOverscrollEnabled();
 
@@ -1018,7 +1017,7 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
 
   const bool enable_video_decode_accelerator =
 #if BUILDFLAG(IS_LINUX)
-      base::FeatureList::IsEnabled(media::kVaapiVideoDecodeLinux) &&
+      base::FeatureList::IsEnabled(media::kAcceleratedVideoDecodeLinux) &&
 #endif  // BUILDFLAG(IS_LINUX)
       !cmd_line->HasSwitch(switches::kDisableAcceleratedVideoDecode) &&
       (gpu_channel_host->gpu_feature_info()
@@ -1027,7 +1026,7 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
 
   const bool enable_video_encode_accelerator =
 #if BUILDFLAG(IS_LINUX)
-      base::FeatureList::IsEnabled(media::kVaapiVideoEncodeLinux) &&
+      base::FeatureList::IsEnabled(media::kAcceleratedVideoEncodeLinux) &&
 #else
       !cmd_line->HasSwitch(switches::kDisableAcceleratedVideoEncode) &&
 #endif  // BUILDFLAG(IS_LINUX)
@@ -1213,7 +1212,7 @@ scoped_refptr<DCOMPTextureFactory> RenderThreadImpl::GetDCOMPTextureFactory() {
   return dcomp_texture_factory_;
 }
 
-OverlayStateServiceProvider*
+scoped_refptr<OverlayStateServiceProvider>
 RenderThreadImpl::GetOverlayStateServiceProvider() {
   DCHECK(IsMainThread());
   // Only set 'overlay_state_service_provider_' if Media Foundation for clear
@@ -1227,11 +1226,12 @@ RenderThreadImpl::GetOverlayStateServiceProvider() {
         return nullptr;
       }
       overlay_state_service_provider_ =
-          std::make_unique<OverlayStateServiceProviderImpl>(std::move(channel));
+          base::MakeRefCounted<OverlayStateServiceProviderImpl>(
+              std::move(channel));
     }
   }
 
-  return overlay_state_service_provider_.get();
+  return overlay_state_service_provider_;
 }
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -1482,46 +1482,26 @@ void RenderThreadImpl::CreateAssociatedAgentSchedulingGroup(
       *this, std::move(agent_scheduling_group)));
 }
 
-void RenderThreadImpl::TransferSharedMemoryRegions(
-    base::ReadOnlySharedMemoryRegion last_foreground_time_region,
-    base::ReadOnlySharedMemoryRegion performance_scenario_region,
-    base::ReadOnlySharedMemoryRegion global_performance_scenario_region) {
+void RenderThreadImpl::TransferSharedLastForegroundTime(
+    base::ReadOnlySharedMemoryRegion last_foreground_time_region) {
   if (!last_foreground_time_mapping_.has_value()) {
     last_foreground_time_mapping_ =
         base::AtomicSharedMemory<base::TimeTicks>::MapReadOnlyRegion(
             std::move(last_foreground_time_region));
   }
 
-  // The result of ReadOnlyPtr() will only be valid until
-  // `last_foreground_time_mapping_` is unmapped. In multi-process mode, that's
-  // on process exit, so it's safe to save the pointer and never reset it. In
-  // single-process mode, it's important that other threads not have a copy of
-  // the pointer after `this` is destroyed. But also, since base stores the
-  // pointer in a per-process global, in single-process-mode each
-  // RenderThreadImpl would overwrite it and the stored value would be wrong for
-  // most "renderers" anyway. So the easiest way to avoid accessing the pointer
-  // after it's unmapped is to never set it in the first place.
-  const bool is_single_process = IsSingleProcess();
-  if (!is_single_process && last_foreground_time_mapping_.has_value()) {
+  if (!IsSingleProcess()) {
+    // The pointer will only be valid until `last_foreground_time_mapping_` is
+    // unmapped. In multi-process mode, that's on process exit, so it's safe to
+    // save the pointer and never reset it. In single-process mode, it's
+    // important that other threads not have a copy of the pointer after `this`
+    // is destroyed. But also, since base stores the pointer in a per-process
+    // global, in single-process-mode each RenderThreadImpl would overwrite it
+    // and the stored value would be wrong for most "renderers" anyway. So the
+    // easiest way to avoid accessing the pointer after it's unmapped is to
+    // never set it in the first place.
     base::internal::SetSharedLastForegroundTimeForMetrics(
         last_foreground_time_mapping_->ReadOnlyPtr());
-  }
-
-  // Only map the per-process scenario region when the renderer is not running
-  // in the browser process.
-  if (!is_single_process) {
-    performance_scenario_memory_.emplace(
-        blink::performance_scenarios::Scope::kCurrentProcess,
-        std::move(performance_scenario_region));
-  }
-
-  // The global scenario region is the same for every process, but it should
-  // already be mapped by the browser process so no need to map it here in
-  // single-process mode.
-  if (!is_single_process) {
-    global_performance_scenario_memory_.emplace(
-        blink::performance_scenarios::Scope::kGlobal,
-        std::move(global_performance_scenario_region));
   }
 }
 
@@ -1635,7 +1615,14 @@ void RenderThreadImpl::OnMemoryPressure(
     blink::WebMemoryPressureListener::OnMemoryPressure(memory_pressure_level);
   if (memory_pressure_level ==
       base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
-    ReleaseFreeMemory();
+    discardable_memory_allocator_->ReleaseFreeMemory();
+
+    // Do not call into blink if it is not initialized.
+    if (blink_platform_impl_) {
+      // Purge Skia font cache, resource cache, and image filter.
+      SkGraphics::PurgeAllCaches();
+      blink::WebMemoryPressureListener::OnPurgeMemory();
+    }
   }
 }
 
@@ -1773,18 +1760,6 @@ void RenderThreadImpl::OnRendererForegrounded() {
   process_foregrounded_count_++;
 }
 
-void RenderThreadImpl::ReleaseFreeMemory() {
-  TRACE_EVENT0("blink", "RenderThreadImpl::ReleaseFreeMemory()");
-  discardable_memory_allocator_->ReleaseFreeMemory();
-
-  // Do not call into blink if it is not initialized.
-  if (blink_platform_impl_) {
-    // Purge Skia font cache, resource cache, and image filter.
-    SkGraphics::PurgeAllCaches();
-    blink::WebMemoryPressureListener::OnPurgeMemory();
-  }
-}
-
 void RenderThreadImpl::OnSyncMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
   v8::MemoryPressureLevel v8_memory_pressure_level =
@@ -1798,7 +1773,10 @@ void RenderThreadImpl::OnSyncMemoryPressure(
     v8_memory_pressure_level = v8::MemoryPressureLevel::kModerate;
 #endif  // !BUILDFLAG(ALLOW_CRITICAL_MEMORY_PRESSURE_HANDLING_IN_FOREGROUND)
 
-  blink::MemoryPressureNotificationToAllIsolates(v8_memory_pressure_level);
+  if (base::FeatureList::IsEnabled(
+          features::kForwardMemoryPressureToBlinkIsolates)) {
+    blink::MemoryPressureNotificationToAllIsolates(v8_memory_pressure_level);
+  }
 }
 
 void RenderThreadImpl::OnRendererInterfaceReceiver(

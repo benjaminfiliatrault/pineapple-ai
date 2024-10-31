@@ -12,6 +12,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
+#include "base/test/values_test_util.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/sync_mode.h"
@@ -33,6 +34,7 @@ namespace {
 
 using testing::_;
 using testing::ElementsAre;
+using testing::IsEmpty;
 using testing::Pair;
 using testing::UnorderedElementsAre;
 
@@ -62,40 +64,25 @@ class MockDataTypeManagerObserver : public DataTypeManagerObserver {
   MOCK_METHOD(void, OnConfigureStart, (), (override));
 };
 
-MATCHER_P(ConfigureSucceededWithFailedTypes, error_map, "") {
+MATCHER(ConfigureSucceeded, "") {
   if (arg.status != DataTypeManager::OK) {
     *result_listener << "Status not OK: "
                      << DataTypeManager::ConfigureStatusToString(arg.status);
     return false;
   }
-  return testing::ExplainMatchResult(
-      error_map, arg.data_type_status_table.GetAllErrors(), result_listener);
-}
-
-MATCHER(ConfigureSucceeded, "") {
-  return testing::ExplainMatchResult(
-      ConfigureSucceededWithFailedTypes(testing::IsEmpty()), arg,
-      result_listener);
+  return true;
 }
 
 MATCHER(ConfigureAborted, "") {
   return arg.status == DataTypeManager::ABORTED;
 }
 
-MATCHER(IsCryptoError, "") {
-  return arg.error_type() == SyncError::CRYPTO_ERROR;
-}
-
-MATCHER(IsDataTypeError, "") {
-  return arg.error_type() == SyncError::DATATYPE_ERROR;
-}
-
-MATCHER(IsPolicyError, "") {
-  return arg.error_type() == SyncError::DATATYPE_POLICY_ERROR;
-}
-
-MATCHER(IsUnreadyError, "") {
-  return arg.error_type() == SyncError::UNREADY_ERROR;
+MATCHER_P(MatchesDictionary, dict_matcher, "") {
+  if (!arg.is_dict()) {
+    *result_listener << "Not a dictionary";
+    return false;
+  }
+  return dict_matcher.MatchAndExplain(arg.GetDict(), result_listener);
 }
 
 // Fake DataTypeConfigurer implementation that allows the test body to control
@@ -122,12 +109,17 @@ class FakeDataTypeConfigurer : public DataTypeConfigurer {
     connected_types_.Remove(type);
   }
 
+  void ClearNigoriDataForMigration() override { clear_nigori_data_count_++; }
+
   void RecordNigoriMemoryUsageAndCountsHistograms() override {
     // Not implemented but also not needed for these tests.
   }
 
   void GetNigoriNodeForDebugging(AllNodesCallback callback) override {
-    // Not implemented but also not needed for these tests.
+    // Set up one dummy Nigori node, using an empty dictionary.
+    base::Value::List nigori_nodes;
+    nigori_nodes.Append(base::Value::Dict());
+    std::move(callback).Run(std::move(nigori_nodes));
   }
 
   // Completes any ongoing download request and returns the set of types that
@@ -155,11 +147,13 @@ class FakeDataTypeConfigurer : public DataTypeConfigurer {
   bool has_ongoing_configuration() const {
     return !last_params_.ready_task.is_null();
   }
+  int clear_nigori_data_count() const { return clear_nigori_data_count_; }
 
  private:
   DataTypeSet connected_types_;
   int configure_call_count_ = 0;
   ConfigureParams last_params_;
+  int clear_nigori_data_count_ = 0;
 };
 
 class FakeDataTypeEncryptionHandler : public DataTypeEncryptionHandler {
@@ -261,11 +255,13 @@ class DataTypeManagerImplTest : public testing::Test {
   // been previously added via InitDataTypeManager().
   FakeDataTypeController* GetController(DataType data_type) const {
     CHECK(dtm_);
-    auto it = dtm_->GetControllerMap().find(data_type);
-    if (it == dtm_->GetControllerMap().end()) {
-      return nullptr;
-    }
-    return static_cast<FakeDataTypeController*>(it->second.get());
+    return static_cast<FakeDataTypeController*>(
+        dtm_->GetControllerForTest(data_type));
+  }
+
+  // Returns the number of times NIGORI was cleared (aka purged).
+  int clear_nigori_data_count() const {
+    return configurer_.clear_nigori_data_count();
   }
 
   // Gets the batch uploader for the given type, which should have
@@ -311,10 +307,12 @@ TEST_F(DataTypeManagerImplTest, NoControllers) {
   EXPECT_EQ(DataTypeSet(), FinishDownload());  // Control types.
   EXPECT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
   EXPECT_EQ(DataTypeSet(), dtm_->GetRegisteredDataTypes());
+  EXPECT_EQ(0, clear_nigori_data_count());
 
   dtm_->Stop(SyncStopMetadataFate::KEEP_METADATA);
   EXPECT_EQ(DataTypeManager::STOPPED, dtm_->state());
   EXPECT_EQ(DataTypeSet(), dtm_->GetRegisteredDataTypes());
+  EXPECT_EQ(0, clear_nigori_data_count());
 }
 
 // Set up a DTM with a single controller, configure it, finish
@@ -343,12 +341,14 @@ TEST_F(DataTypeManagerImplTest, ConfigureOne) {
   EXPECT_EQ(1U, configurer_.connected_types().size());
   EXPECT_TRUE(dtm_->GetTypesWithPendingDownloadForInitialSync().empty());
   EXPECT_EQ(DataTypeSet{BOOKMARKS}, dtm_->GetRegisteredDataTypes());
+  EXPECT_EQ(0, clear_nigori_data_count());
 
   dtm_->Stop(SyncStopMetadataFate::KEEP_METADATA);
   EXPECT_EQ(DataTypeManager::STOPPED, dtm_->state());
   EXPECT_TRUE(configurer_.connected_types().empty());
   EXPECT_EQ(0, GetController(BOOKMARKS)->model()->clear_metadata_count());
   EXPECT_EQ(DataTypeSet{BOOKMARKS}, dtm_->GetRegisteredDataTypes());
+  EXPECT_EQ(0, clear_nigori_data_count());
 }
 
 TEST_F(DataTypeManagerImplTest, ConfigureOneThatSkipsEngineConnection) {
@@ -469,12 +469,13 @@ TEST_F(DataTypeManagerImplTest, OneWaitingForCrypto) {
 
   // Step 4.
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(PASSWORDS, IsCryptoError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
   Configure({PASSWORDS});
   EXPECT_EQ(DataTypeManager::CONFIGURING, dtm_->state());
   EXPECT_EQ(DataTypeSet(), FinishDownload());  // Control types.
   EXPECT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+  EXPECT_FALSE(dtm_->GetActiveDataTypes().Has(PASSWORDS));
+  EXPECT_EQ(DataTypeController::NOT_RUNNING, GetController(PASSWORDS)->state());
 
   // Step 5.
   dtm_->Stop(SyncStopMetadataFate::KEEP_METADATA);
@@ -746,24 +747,26 @@ TEST_F(DataTypeManagerImplTest, MigrateAll) {
 
   // Initial setup.
   Configure({PRIORITY_PREFERENCES});
-  EXPECT_EQ(DataTypeSet(), FinishDownload());  // Control types.
-  EXPECT_EQ(AddControlTypesTo({PRIORITY_PREFERENCES}), FinishDownload());
+  ASSERT_EQ(DataTypeSet(), FinishDownload());  // Control types.
+  ASSERT_EQ(AddControlTypesTo({PRIORITY_PREFERENCES}), FinishDownload());
 
   // We've now configured priority prefs and (implicitly) the control types.
-  EXPECT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+  ASSERT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
 
   // Pretend we were told to migrate all types.
   DataTypeSet to_migrate;
   to_migrate.Put(PRIORITY_PREFERENCES);
   to_migrate.PutAll(ControlTypes());
 
-  EXPECT_EQ(
+  ASSERT_EQ(0, clear_nigori_data_count());
+  ASSERT_EQ(
       0, GetController(PRIORITY_PREFERENCES)->model()->clear_metadata_count());
 
   EXPECT_CALL(observer_, OnConfigureStart());
   EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
   dtm_->PurgeForMigration(to_migrate);
   EXPECT_EQ(DataTypeManager::CONFIGURING, dtm_->state());
+  EXPECT_EQ(1, clear_nigori_data_count());
   EXPECT_EQ(
       1, GetController(PRIORITY_PREFERENCES)->model()->clear_metadata_count());
 
@@ -778,6 +781,7 @@ TEST_F(DataTypeManagerImplTest, MigrateAll) {
   EXPECT_EQ(ControlTypes(), FinishDownload());
   EXPECT_EQ(AddControlTypesTo({PRIORITY_PREFERENCES}), FinishDownload());
   EXPECT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+  EXPECT_EQ(1, clear_nigori_data_count());
   EXPECT_EQ(
       1, GetController(PRIORITY_PREFERENCES)->model()->clear_metadata_count());
 }
@@ -791,17 +795,20 @@ TEST_F(DataTypeManagerImplTest, ConfigureDuringPurge) {
   EXPECT_CALL(observer_, OnConfigureStart());
   EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
   Configure({BOOKMARKS});
-  EXPECT_EQ(DataTypeSet(), FinishDownload());  // Control types.
-  EXPECT_EQ(AddControlTypesTo({BOOKMARKS}), FinishDownload());
-  EXPECT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+  ASSERT_EQ(DataTypeSet(), FinishDownload());  // Control types.
+  ASSERT_EQ(AddControlTypesTo({BOOKMARKS}), FinishDownload());
+  ASSERT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+  ASSERT_EQ(1, GetController(PREFERENCES)->model()->clear_metadata_count());
+  ASSERT_EQ(0, clear_nigori_data_count());
 
   // Purge the Nigori type.
   EXPECT_CALL(observer_, OnConfigureStart());
   dtm_->PurgeForMigration(ControlTypes());
-  EXPECT_EQ(DataTypeManager::CONFIGURING, dtm_->state());
+  ASSERT_EQ(DataTypeManager::CONFIGURING, dtm_->state());
+  ASSERT_EQ(1, clear_nigori_data_count());
 
   // Called during the first call to Configure() and during PurgeForMigration().
-  EXPECT_EQ(2, GetController(PREFERENCES)->model()->clear_metadata_count());
+  ASSERT_EQ(2, GetController(PREFERENCES)->model()->clear_metadata_count());
 
   // Before the backend configuration completes, ask for a different
   // set of types.  This request asks for
@@ -981,8 +988,7 @@ TEST_F(DataTypeManagerImplTest, PrioritizedConfigurationDownloadError) {
   // failure.
   testing::InSequence seq;
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsDataTypeError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   // Initially only PRIORITY_PREFERENCES is configured.
   Configure({BOOKMARKS, PRIORITY_PREFERENCES});
@@ -1040,13 +1046,13 @@ TEST_F(DataTypeManagerImplTest, FailingPreconditionKeepData) {
   // Bookmarks is never started due to failing preconditions.
   testing::InSequence seq;
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsUnreadyError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   Configure({BOOKMARKS});
   EXPECT_EQ(DataTypeSet(), FinishDownload());
-  EXPECT_EQ(DataTypeController::NOT_RUNNING, GetController(BOOKMARKS)->state());
   EXPECT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+  EXPECT_FALSE(dtm_->GetActiveDataTypes().Has(BOOKMARKS));
+  EXPECT_EQ(DataTypeController::NOT_RUNNING, GetController(BOOKMARKS)->state());
   EXPECT_EQ(0U, configurer_.connected_types().size());
 
   // Bookmarks should start normally now.
@@ -1079,14 +1085,14 @@ TEST_F(DataTypeManagerImplTest, FailingPreconditionClearData) {
   // Bookmarks is never started due to failing preconditions.
   testing::InSequence seq;
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsPolicyError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   Configure({BOOKMARKS});
   EXPECT_EQ(DataTypeSet(), FinishDownload());
 
-  EXPECT_EQ(DataTypeController::NOT_RUNNING, GetController(BOOKMARKS)->state());
   EXPECT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+  EXPECT_FALSE(dtm_->GetActiveDataTypes().Has(BOOKMARKS));
+  EXPECT_EQ(DataTypeController::NOT_RUNNING, GetController(BOOKMARKS)->state());
   EXPECT_EQ(0U, configurer_.connected_types().size());
 
   EXPECT_EQ(1, GetController(BOOKMARKS)->model()->clear_metadata_count());
@@ -1102,8 +1108,7 @@ TEST_F(DataTypeManagerImplTest, UnreadyTypeResetReconfigure) {
   // Bookmarks is never started due to failing preconditions.
   testing::InSequence seq;
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsUnreadyError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   Configure({BOOKMARKS});
   // Second Configure sets a flag to perform reconfiguration after the first one
@@ -1116,8 +1121,9 @@ TEST_F(DataTypeManagerImplTest, UnreadyTypeResetReconfigure) {
   // Reconfiguration should update unready errors. Bookmarks shouldn't start.
   EXPECT_EQ(DataTypeSet(), FinishDownload());
   EXPECT_EQ(DataTypeSet(), FinishDownload());  // regular types
-  EXPECT_EQ(DataTypeController::NOT_RUNNING, GetController(BOOKMARKS)->state());
   EXPECT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+  EXPECT_FALSE(dtm_->GetActiveDataTypes().Has(BOOKMARKS));
+  EXPECT_EQ(DataTypeController::NOT_RUNNING, GetController(BOOKMARKS)->state());
   EXPECT_EQ(0U, configurer_.connected_types().size());
 }
 
@@ -1129,13 +1135,13 @@ TEST_F(DataTypeManagerImplTest, UnreadyTypeLaterReady) {
   // Bookmarks is never started due to failing preconditions.
   testing::InSequence seq;
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsUnreadyError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   Configure({BOOKMARKS});
   EXPECT_EQ(DataTypeSet(), FinishDownload());
-  ASSERT_EQ(DataTypeController::NOT_RUNNING, GetController(BOOKMARKS)->state());
   ASSERT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+  ASSERT_FALSE(dtm_->GetActiveDataTypes().Has(BOOKMARKS));
+  ASSERT_EQ(DataTypeController::NOT_RUNNING, GetController(BOOKMARKS)->state());
   ASSERT_EQ(0U, configurer_.connected_types().size());
 
   // Bookmarks should start normally now.
@@ -1152,6 +1158,8 @@ TEST_F(DataTypeManagerImplTest, UnreadyTypeLaterReady) {
   EXPECT_EQ(AddControlTypesTo({BOOKMARKS}), FinishDownload());
 
   EXPECT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+  EXPECT_TRUE(dtm_->GetActiveDataTypes().Has(BOOKMARKS));
+  EXPECT_EQ(DataTypeController::RUNNING, GetController(BOOKMARKS)->state());
   EXPECT_EQ(1U, configurer_.connected_types().size());
 }
 
@@ -1166,17 +1174,16 @@ TEST_F(DataTypeManagerImplTest, MultipleUnreadyTypesLaterReadyAtTheSameTime) {
   // Both types are never started due to failing preconditions.
   testing::InSequence seq;
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_,
-              OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                  UnorderedElementsAre(Pair(BOOKMARKS, IsUnreadyError()),
-                                       Pair(PREFERENCES, IsUnreadyError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   Configure({BOOKMARKS, PREFERENCES});
   EXPECT_EQ(DataTypeSet(), FinishDownload());
+  ASSERT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+  ASSERT_FALSE(dtm_->GetActiveDataTypes().Has(BOOKMARKS));
+  ASSERT_FALSE(dtm_->GetActiveDataTypes().Has(PREFERENCES));
   ASSERT_EQ(DataTypeController::NOT_RUNNING, GetController(BOOKMARKS)->state());
   ASSERT_EQ(DataTypeController::NOT_RUNNING,
             GetController(PREFERENCES)->state());
-  ASSERT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
   ASSERT_EQ(0U, configurer_.connected_types().size());
 
   // Both types should start normally now.
@@ -1215,10 +1222,7 @@ TEST_F(DataTypeManagerImplTest, MultipleUnreadyTypesLaterOneOfThemReady) {
   // Both types are never started due to failing preconditions.
   testing::InSequence seq;
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_,
-              OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                  UnorderedElementsAre(Pair(BOOKMARKS, IsUnreadyError()),
-                                       Pair(PREFERENCES, IsUnreadyError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   Configure({BOOKMARKS, PREFERENCES});
   EXPECT_EQ(DataTypeSet(), FinishDownload());
@@ -1238,9 +1242,7 @@ TEST_F(DataTypeManagerImplTest, MultipleUnreadyTypesLaterOneOfThemReady) {
             GetController(PREFERENCES)->state());
 
   // Set the expectations for the reconfiguration - just prefs are unready now.
-  EXPECT_CALL(observer_,
-              OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                  ElementsAre(Pair(PREFERENCES, IsUnreadyError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   EXPECT_EQ(DataTypeSet(), FinishDownload());
   EXPECT_EQ(AddControlTypesTo({BOOKMARKS}), FinishDownload());
@@ -1258,8 +1260,7 @@ TEST_F(DataTypeManagerImplTest,
   // Bookmarks is never started due to failing preconditions.
   testing::InSequence seq;
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsUnreadyError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   Configure({BOOKMARKS});
   EXPECT_EQ(DataTypeSet(), FinishDownload());
@@ -1303,13 +1304,13 @@ TEST_F(DataTypeManagerImplTest, ModelLoadError) {
   // Bookmarks is never started due to hitting a model load error.
   testing::InSequence seq;
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsDataTypeError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   Configure({BOOKMARKS});
   EXPECT_EQ(DataTypeSet(), FinishDownload());
   // No need to finish the download of BOOKMARKS since it was never started.
   EXPECT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+  EXPECT_FALSE(dtm_->GetActiveDataTypes().Has(BOOKMARKS));
   EXPECT_EQ(DataTypeController::FAILED, GetController(BOOKMARKS)->state());
 
   EXPECT_EQ(0U, configurer_.connected_types().size());
@@ -1337,11 +1338,11 @@ TEST_F(DataTypeManagerImplTest, ErrorBeforeStartup) {
   EXPECT_CALL(observer_, OnConfigureStart());
   Configure({BOOKMARKS, PREFERENCES});
 
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsDataTypeError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   EXPECT_EQ(DataTypeSet(), FinishDownload());
   EXPECT_EQ(AddControlTypesTo({PREFERENCES}), FinishDownload());
+  EXPECT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
 
   EXPECT_TRUE(dtm_->GetActiveDataTypes().Has(PREFERENCES));
   EXPECT_FALSE(dtm_->GetActiveDataTypes().Has(BOOKMARKS));
@@ -1506,6 +1507,9 @@ TEST_F(DataTypeManagerImplTest, StopWithDisableSync) {
   EXPECT_EQ(DataTypeManager::STOPPED, dtm_->state());
   EXPECT_TRUE(configurer_.connected_types().empty());
   EXPECT_EQ(1, GetController(BOOKMARKS)->model()->clear_metadata_count());
+  // Clearing of Nigori in this case happens outside of DataTypeManager, namely
+  // via SyncEngine::Shutdown().
+  EXPECT_EQ(0, clear_nigori_data_count());
 }
 
 TEST_F(DataTypeManagerImplTest, PurgeDataOnStarting) {
@@ -1543,8 +1547,6 @@ TEST_F(DataTypeManagerImplTest, PurgeDataOnStarting) {
   ASSERT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
   ASSERT_EQ(1U, configurer_.connected_types().size());
 
-  // This should have purged the data for the excluded type.
-  EXPECT_TRUE(configurer_.last_params().to_purge.Has(BOOKMARKS));
   // Stop(CLEAR_METADATA) is called if (re)started without the type.
   EXPECT_EQ(1, GetController(BOOKMARKS)->model()->clear_metadata_count());
 }
@@ -1577,9 +1579,8 @@ TEST_F(DataTypeManagerImplTest, PurgeDataOnReconfiguring) {
   EXPECT_EQ(DataTypeSet(), FinishDownload());
   ASSERT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
   ASSERT_EQ(1U, configurer_.connected_types().size());
+  ASSERT_EQ(0, clear_nigori_data_count());
 
-  // This should have purged the data for the excluded type.
-  EXPECT_TRUE(configurer_.last_params().to_purge.Has(BOOKMARKS));
   // Also Stop(CLEAR_METADATA) has been called on the controller since the type
   // is no longer enabled.
   EXPECT_EQ(1, GetController(BOOKMARKS)->model()->clear_metadata_count());
@@ -1673,11 +1674,12 @@ TEST_F(DataTypeManagerImplTest, ShouldDoNothingForAlreadyStoppedTypes) {
   // Bookmarks is never started due to failing preconditions.
   testing::InSequence seq;
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsPolicyError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   Configure({BOOKMARKS});
-  EXPECT_EQ(DataTypeSet(), FinishDownload());
+  ASSERT_EQ(DataTypeSet(), FinishDownload());
+  ASSERT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+
   // No need to finish the download of BOOKMARKS since it was never started.
   ASSERT_EQ(DataTypeController::NOT_RUNNING, GetController(BOOKMARKS)->state());
 
@@ -1701,8 +1703,7 @@ TEST_F(DataTypeManagerImplTest, ShouldDoNothingForAlreadyFailedTypes) {
       ModelError(FROM_HERE, "test error"));
   ASSERT_EQ(DataTypeController::FAILED, GetController(BOOKMARKS)->state());
 
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsDataTypeError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   // Data type error should cause re-configuration.
   task_environment_.RunUntilIdle();
@@ -1727,8 +1728,7 @@ TEST_F(DataTypeManagerImplTest, ShouldFinishConfigureIfSomeTypesTimeout) {
 
   testing::InSequence seq;
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsDataTypeError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   Configure({BOOKMARKS, PREFERENCES});
 
@@ -1843,8 +1843,7 @@ TEST_F(DataTypeManagerImplTest, ShouldHandleStoppingTypesFailure) {
   ASSERT_EQ(GetController(BOOKMARKS)->state(), DataTypeController::FAILED);
 
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsDataTypeError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   // BOOKMARKS should not be started since it is in a FAILED state.
   Configure({BOOKMARKS});
@@ -1877,8 +1876,7 @@ TEST_F(DataTypeManagerImplTest, ShouldHandleStoppedTypesFailure) {
 
   testing::InSequence seq;
   EXPECT_CALL(observer_, OnConfigureStart());
-  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceededWithFailedTypes(
-                             ElementsAre(Pair(BOOKMARKS, IsDataTypeError())))));
+  EXPECT_CALL(observer_, OnConfigureDone(ConfigureSucceeded()));
 
   // BOOKMARKS should not be started since it is in a FAILED state.
   Configure({BOOKMARKS});
@@ -2061,11 +2059,81 @@ TEST_F(DataTypeManagerImplTest,
 
   // Only the controller for bookmarks should be exercised, because reading list
   // is not active.
-  EXPECT_CALL(*GetBatchUploader(READING_LIST), TriggerLocalDataMigration)
+  EXPECT_CALL(*GetBatchUploader(READING_LIST), TriggerLocalDataMigration())
       .Times(0);
-  EXPECT_CALL(*GetBatchUploader(BOOKMARKS), TriggerLocalDataMigration);
+  EXPECT_CALL(*GetBatchUploader(BOOKMARKS), TriggerLocalDataMigration());
 
-  dtm_->TriggerLocalDataMigration({BOOKMARKS, READING_LIST});
+  dtm_->TriggerLocalDataMigration(DataTypeSet{BOOKMARKS, READING_LIST});
+}
+
+TEST_F(DataTypeManagerImplTest,
+       ShouldOnlyMigrateActiveTypesUponTriggerLocalDataMigrationWithItems) {
+  InitDataTypeManager(
+      /*types_without_transport_mode_support=*/{},
+      /*types_with_transport_mode_support=*/{PASSWORDS, READING_LIST},
+      /*types_with_batch_uploader=*/{PASSWORDS, READING_LIST});
+  Configure({PASSWORDS});
+  FinishAllDownloadsUntilIdle();
+  ASSERT_EQ(dtm_->GetActiveDataTypes(), AddControlTypesTo({PASSWORDS}));
+
+  // Only the controller for passwords should be exercised, because reading list
+  // is not active.
+  EXPECT_CALL(*GetBatchUploader(READING_LIST),
+              TriggerLocalDataMigration(testing::_))
+      .Times(0);
+  std::vector<syncer::LocalDataItemModel::DataId> password_ids{"p1", "p2"};
+  std::map<DataType, std::vector<syncer::LocalDataItemModel::DataId>> items{
+      {DataType::PASSWORDS, password_ids},
+      {DataType::READING_LIST, {"rl1", "rl2"}}};
+  EXPECT_CALL(*GetBatchUploader(PASSWORDS),
+              TriggerLocalDataMigration(password_ids));
+
+  dtm_->TriggerLocalDataMigration(items);
+}
+
+TEST_F(DataTypeManagerImplTest, ShouldGetAllNodesForDebugging) {
+  InitDataTypeManager({BOOKMARKS});
+  Configure({BOOKMARKS});
+  FinishAllDownloadsUntilIdle();
+  ASSERT_EQ(DataTypeSet{BOOKMARKS}, dtm_->GetRegisteredDataTypes());
+  ASSERT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
+
+  // Set up three dummy bookmark nodes. Three is only chosen to rule out that
+  // the test passes based on the number of bookmark nodes.
+  base::Value::List bookmark_nodes;
+  bookmark_nodes.Append(base::Value::Dict());
+  bookmark_nodes.Append(base::Value::Dict());
+  bookmark_nodes.Append(base::Value::Dict());
+  GetController(BOOKMARKS)->model()->SetNodesForDebugging(
+      std::move(bookmark_nodes));
+
+  // The result should include two entries: one for bookmarks and one for
+  // Nigori.
+  base::MockCallback<base::OnceCallback<void(base::Value::List)>>
+      mock_completion_callback;
+  EXPECT_CALL(
+      mock_completion_callback,
+      Run(UnorderedElementsAre(MatchesDictionary(base::test::DictionaryHasValue(
+                                   "type", base::Value("Encryption Keys"))),
+                               MatchesDictionary(base::test::DictionaryHasValue(
+                                   "type", base::Value("Bookmarks"))))));
+
+  dtm_->GetAllNodesForDebugging(mock_completion_callback.Get());
+}
+
+// Regression test for crbug.com/374401600.
+TEST_F(DataTypeManagerImplTest, ShouldReturnNoDebuggingNodesWhileConfiguring) {
+  InitDataTypeManager({BOOKMARKS});
+  Configure({BOOKMARKS});
+  ASSERT_EQ(DataTypeSet{BOOKMARKS}, dtm_->GetRegisteredDataTypes());
+  ASSERT_EQ(DataTypeManager::CONFIGURING, dtm_->state());
+
+  // While configuring, an empty list of nodes should be returned.
+  base::MockCallback<base::OnceCallback<void(base::Value::List)>>
+      mock_completion_callback;
+  EXPECT_CALL(mock_completion_callback, Run(IsEmpty()));
+
+  dtm_->GetAllNodesForDebugging(mock_completion_callback.Get());
 }
 
 }  // namespace

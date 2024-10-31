@@ -8,7 +8,9 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/constants/web_app_id_constants.h"
 #include "base/check.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_functions.h"
@@ -30,7 +32,6 @@
 #include "chrome/browser/ui/webui/settings/settings_secure_dns_handler.h"
 #include "chrome/browser/ui/webui/settings/shared_settings_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/webui_util.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/branded_strings.h"
@@ -692,7 +693,7 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddString("geolocationAccuracyLearnMoreUrl",
                          chrome::kPrivacyHubGeolocationAccuracyLearnMoreURL);
 
-  html_source->AddString("osSettingsAppId", web_app::kOsSettingsAppId);
+  html_source->AddString("osSettingsAppId", ash::kOsSettingsAppId);
 
   html_source->AddString(
       "authPrompt",
@@ -866,9 +867,9 @@ void PrivacySection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::SearchResultIcon::kGeolocation,
       mojom::SearchResultDefaultRank::kMedium,
       mojom::kPrivacyHubGeolocationAdvancedSubpagePath);
-  RegisterNestedSettingBulk(mojom::Subpage::kPrivacyHubGeolocation,
-                            {{mojom::Setting::kGeolocationAdvanced}},
-                            generator);
+  RegisterNestedSettingBulk(
+      mojom::Subpage::kPrivacyHubGeolocation,
+      base::span_from_ref(mojom::Setting::kGeolocationAdvanced), generator);
 
   // Privacy hub camera.
   generator->RegisterNestedSubpage(

@@ -103,12 +103,14 @@
 #include "chrome/browser/ash/borealis/borealis_types.mojom.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_installer.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_service.h"
+#include "chrome/browser/ash/bruschetta/bruschetta_service_factory.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_util.h"
 #include "chrome/browser/ash/crosapi/automation_ash.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/crostini/crostini_export_import.h"
+#include "chrome/browser/ash/crostini/crostini_export_import_factory.h"
 #include "chrome/browser/ash/crostini/crostini_features.h"
 #include "chrome/browser/ash/crostini/crostini_installer.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
@@ -476,8 +478,6 @@ api::autotest_private::AppWindowType GetAppWindowType(chromeos::AppType type) {
       return api::autotest_private::AppWindowType::kExtensionApp;
     case chromeos::AppType::BROWSER:
       return api::autotest_private::AppWindowType::kBrowser;
-    case chromeos::AppType::LACROS:
-      return api::autotest_private::AppWindowType::kLacros;
     case chromeos::AppType::NON_APP:
       return api::autotest_private::AppWindowType::kNone;
       // TODO(oshima): Investigate if we want to have "extension" type.
@@ -1477,7 +1477,7 @@ ExtensionFunction::ResponseAction AutotestPrivateLoginStatusFunction::Run() {
       result.Set("isRegularUser",
                  user_manager->IsLoggedInAsUserWithGaiaAccount());
       result.Set("isGuest", user_manager->IsLoggedInAsGuest());
-      result.Set("isKiosk", user_manager->IsLoggedInAsKioskApp());
+      result.Set("isKiosk", user_manager->IsLoggedInAsAnyKioskApp());
 
       const user_manager::User* user = user_manager->GetActiveUser();
       result.Set("email", user->GetAccountId().GetUserEmail());
@@ -2077,26 +2077,12 @@ AutotestPrivateGetLacrosInfoFunction::ToLacrosState(
   switch (state) {
     case crosapi::BrowserManager::State::NOT_INITIALIZED:
       return api::autotest_private::LacrosState::kNotInitialized;
-    case crosapi::BrowserManager::State::RELOADING:
-      return api::autotest_private::LacrosState::kReloading;
     case crosapi::BrowserManager::State::MOUNTING:
       return api::autotest_private::LacrosState::kMounting;
     case crosapi::BrowserManager::State::UNAVAILABLE:
       return api::autotest_private::LacrosState::kUnavailable;
     case crosapi::BrowserManager::State::STOPPED:
       return api::autotest_private::LacrosState::kStopped;
-    case crosapi::BrowserManager::State::PREPARING_FOR_LAUNCH:
-      return api::autotest_private::LacrosState::kPreparingForLaunch;
-    case crosapi::BrowserManager::State::PRE_LAUNCHED:
-      return api::autotest_private::LacrosState::kPreLaunched;
-    case crosapi::BrowserManager::State::STARTING:
-      return api::autotest_private::LacrosState::kStarting;
-    case crosapi::BrowserManager::State::RUNNING:
-      return api::autotest_private::LacrosState::kRunning;
-    case crosapi::BrowserManager::State::WAITING_FOR_MOJO_DISCONNECTED:
-      return api::autotest_private::LacrosState::kWaitingForMojoDisconnected;
-    case crosapi::BrowserManager::State::WAITING_FOR_PROCESS_TERMINATED:
-      return api::autotest_private::LacrosState::kWaitingForProcessTerminated;
   }
 }
 
@@ -2717,11 +2703,13 @@ ExtensionFunction::ResponseAction AutotestPrivateExportCrostiniFunction::Run() {
     return RespondNow(Error("Invalid export path must not reference parent"));
   }
 
-  crostini::CrostiniExportImport::GetForProfile(profile)->ExportContainer(
-      crostini::DefaultContainerId(),
-      file_manager::util::GetDownloadsFolderForProfile(profile).Append(path),
-      base::BindOnce(&AutotestPrivateExportCrostiniFunction::CrostiniExported,
-                     this));
+  crostini::CrostiniExportImportFactory::GetForProfile(profile)
+      ->ExportContainer(
+          crostini::DefaultContainerId(),
+          file_manager::util::GetDownloadsFolderForProfile(profile).Append(
+              path),
+          base::BindOnce(
+              &AutotestPrivateExportCrostiniFunction::CrostiniExported, this));
 
   return RespondLater();
 }
@@ -2758,11 +2746,13 @@ ExtensionFunction::ResponseAction AutotestPrivateImportCrostiniFunction::Run() {
   if (path.ReferencesParent()) {
     return RespondNow(Error("Invalid import path must not reference parent"));
   }
-  crostini::CrostiniExportImport::GetForProfile(profile)->ImportContainer(
-      crostini::DefaultContainerId(),
-      file_manager::util::GetDownloadsFolderForProfile(profile).Append(path),
-      base::BindOnce(&AutotestPrivateImportCrostiniFunction::CrostiniImported,
-                     this));
+  crostini::CrostiniExportImportFactory::GetForProfile(profile)
+      ->ImportContainer(
+          crostini::DefaultContainerId(),
+          file_manager::util::GetDownloadsFolderForProfile(profile).Append(
+              path),
+          base::BindOnce(
+              &AutotestPrivateImportCrostiniFunction::CrostiniImported, this));
 
   return RespondLater();
 }
@@ -3071,7 +3061,7 @@ void AutotestPrivateGetPrinterListFunction::RespondWithSuccess() {
     return;
   }
 
-  timeout_timer_.AbandonAndStop();
+  timeout_timer_.Stop();
   DestroyPrintersManager();
   Respond(WithArguments(std::move(results_)));
 }
@@ -3299,7 +3289,7 @@ void AutotestPrivateSetAssistantEnabledFunction::OnAssistantStatusChanged(
 
   Respond(NoArguments());
   enabled_.reset();
-  timeout_timer_.AbandonAndStop();
+  timeout_timer_.Stop();
 }
 
 void AutotestPrivateSetAssistantEnabledFunction::Timeout() {
@@ -3581,7 +3571,7 @@ void AutotestPrivateSendAssistantTextQueryFunction::
 
   // |timeout_timer_| need to be hold until |Respond(.)| is called to avoid
   // |this| being destructed.
-  timeout_timer_.AbandonAndStop();
+  timeout_timer_.Stop();
 }
 
 void AutotestPrivateSendAssistantTextQueryFunction::Timeout() {
@@ -3666,7 +3656,7 @@ void AutotestPrivateWaitForAssistantQueryStatusFunction::
 
   // |timeout_timer_| need to be hold until |Respond(.)| is called to avoid
   // |this| being destructed.
-  timeout_timer_.AbandonAndStop();
+  timeout_timer_.Stop();
 }
 
 void AutotestPrivateWaitForAssistantQueryStatusFunction::Timeout() {
@@ -4960,7 +4950,7 @@ void AutotestPrivateInstallPWAForCurrentURLFunction::PWAInstalled(
     const webapps::AppId& app_id) {
   web_app::SetAutoAcceptPWAInstallConfirmationForTesting(false);
   Respond(WithArguments(app_id));
-  timeout_timer_.AbandonAndStop();
+  timeout_timer_.Stop();
 }
 
 void AutotestPrivateInstallPWAForCurrentURLFunction::PWATimeout() {
@@ -5862,7 +5852,7 @@ AutotestPrivateStopSmoothnessTrackingFunction::Run() {
   if (!tracker->Stop(base::BindOnce(
           &AutotestPrivateStopSmoothnessTrackingFunction::OnReportData, this,
           tracker->start_time()))) {
-    timeout_timer_.AbandonAndStop();
+    timeout_timer_.Stop();
     trackers->erase(it);
     return RespondNow(
         Error("No smoothness report, GPU process may have crashed"));
@@ -5890,7 +5880,7 @@ void AutotestPrivateStopSmoothnessTrackingFunction::OnReportData(
     return;
   }
 
-  timeout_timer_.AbandonAndStop();
+  timeout_timer_.Stop();
 
   std::vector<int> jank_timestamps;  // In milliseconds.
   std::vector<int> jank_durations;   // In milliseconds.
@@ -6390,7 +6380,7 @@ void AutotestPrivateGetAccessTokenFunction::OnAccessToken(
     GoogleServiceAuthError error,
     signin::AccessTokenInfo token_info) {
   access_token_fetcher_.reset();
-  timeout_timer_.AbandonAndStop();
+  timeout_timer_.Stop();
   if (did_respond()) {
     return;
   }
@@ -6864,7 +6854,7 @@ AutotestPrivateRemoveBruschettaFunction::Run() {
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
 
-  auto* service = bruschetta::BruschettaService::GetForProfile(profile);
+  auto* service = bruschetta::BruschettaServiceFactory::GetForProfile(profile);
   if (!service) {
     return RespondNow(Error("Couldn't get BruschettaService instance"));
   }

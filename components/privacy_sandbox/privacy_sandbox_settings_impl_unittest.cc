@@ -338,29 +338,29 @@ TEST_F(PrivacySandboxSettingsTest, OnRelatedWebsiteSetsEnabledChanged) {
   // pref changes.
   privacy_sandbox_test_util::MockPrivacySandboxObserver observer;
   privacy_sandbox_settings()->AddObserver(&observer);
-  EXPECT_CALL(observer, OnFirstPartySetsEnabledChanged(/*enabled=*/true));
+  EXPECT_CALL(observer, OnRelatedWebsiteSetsEnabledChanged(/*enabled=*/true));
 
   prefs()->SetBoolean(prefs::kPrivacySandboxRelatedWebsiteSetsEnabled, true);
   testing::Mock::VerifyAndClearExpectations(&observer);
 
-  EXPECT_CALL(observer, OnFirstPartySetsEnabledChanged(/*enabled=*/false));
+  EXPECT_CALL(observer, OnRelatedWebsiteSetsEnabledChanged(/*enabled=*/false));
   prefs()->SetBoolean(prefs::kPrivacySandboxRelatedWebsiteSetsEnabled, false);
   testing::Mock::VerifyAndClearExpectations(&observer);
 }
 
-TEST_F(PrivacySandboxSettingsTest, OnFirstPartySetsEnabledChanged3pcd) {
+TEST_F(PrivacySandboxSettingsTest, OnRelatedWebsiteSetsEnabledChanged3pcd) {
   privacy_sandbox_test_util::MockPrivacySandboxObserver observer;
   privacy_sandbox_settings()->AddObserver(&observer);
 
-  EXPECT_CALL(observer, OnFirstPartySetsEnabledChanged(/*enabled=*/false));
+  EXPECT_CALL(observer, OnRelatedWebsiteSetsEnabledChanged(/*enabled=*/false));
   prefs()->SetBoolean(prefs::kPrivacySandboxRelatedWebsiteSetsEnabled, false);
   testing::Mock::VerifyAndClearExpectations(&observer);
 
-  EXPECT_CALL(observer, OnFirstPartySetsEnabledChanged(/*enabled=*/true));
+  EXPECT_CALL(observer, OnRelatedWebsiteSetsEnabledChanged(/*enabled=*/true));
   prefs()->SetBoolean(prefs::kTrackingProtection3pcdEnabled, true);
   testing::Mock::VerifyAndClearExpectations(&observer);
 
-  EXPECT_CALL(observer, OnFirstPartySetsEnabledChanged(/*enabled=*/false));
+  EXPECT_CALL(observer, OnRelatedWebsiteSetsEnabledChanged(/*enabled=*/false));
   prefs()->SetBoolean(prefs::kTrackingProtection3pcdEnabled, false);
   testing::Mock::VerifyAndClearExpectations(&observer);
 }
@@ -1681,9 +1681,9 @@ TEST_P(PrivacySandboxAttestationsTest, AttestationsFileNotYetChecked) {
       TestOutput{
           {MultipleOutputKeys{
                kIsTopicsAllowedForContext, kIsAttributionReportingAllowed,
-               kMaySendAttributionReport, kIsFledgeJoinAllowed,
-               kIsFledgeLeaveAllowed, kIsFledgeUpdateAllowed,
-               kIsFledgeSellAllowed, kIsFledgeBuyAllowed,
+               kIsFledgeJoinAllowed, kIsFledgeLeaveAllowed,
+               kIsFledgeUpdateAllowed, kIsFledgeSellAllowed,
+               kIsFledgeBuyAllowed,
                kIsEventReportingDestinationAttestedForFledge,
                kIsEventReportingDestinationAttestedForSharedStorage,
                kIsSharedStorageAllowed, kIsPrivateAggregationAllowed,
@@ -1692,8 +1692,7 @@ TEST_P(PrivacySandboxAttestationsTest, AttestationsFileNotYetChecked) {
            IsAttestationsDefaultAllowed()},
           {MultipleOutputKeys{
                kIsTopicsAllowedForContextMetric,
-               kIsAttributionReportingAllowedMetric,
-               kMaySendAttributionReportMetric, kIsFledgeJoinAllowedMetric,
+               kIsAttributionReportingAllowedMetric, kIsFledgeJoinAllowedMetric,
                kIsFledgeLeaveAllowedMetric, kIsFledgeUpdateAllowedMetric,
                kIsFledgeSellAllowedMetric, kIsFledgeBuyAllowedMetric,
                kIsSharedStorageAllowedMetric,
@@ -1704,6 +1703,8 @@ TEST_P(PrivacySandboxAttestationsTest, AttestationsFileNotYetChecked) {
            static_cast<int>(IsAttestationsDefaultAllowed()
                                 ? Status::kAllowed
                                 : Status::kAttestationsFileNotYetChecked)},
+          {kMaySendAttributionReport, true},
+          {kMaySendAttributionReportMetric, static_cast<int>(Status::kAllowed)},
           {MultipleOutputKeys{kIsSharedStorageBlockSiteSettingSpecific,
                               kIsPrivateAggregationBlockSiteSettingSpecific},
            &kFalse_}});
@@ -2685,19 +2686,19 @@ class PrivacySandboxSettingsCookieControlsModeTest
 };
 
 TEST_F(PrivacySandboxSettingsCookieControlsModeTest,
-       OnFirstPartySetsEnabledChangedCalledWhen3pcBlockingChanges) {
+       OnRelatedWebsiteSetsEnabledChangedCalledWhen3pcBlockingChanges) {
   prefs()->SetBoolean(prefs::kPrivacySandboxRelatedWebsiteSetsEnabled, false);
 
   privacy_sandbox_test_util::MockPrivacySandboxObserver observer;
   privacy_sandbox_settings()->AddObserver(&observer);
 
-  EXPECT_CALL(observer, OnFirstPartySetsEnabledChanged(/*enabled=*/true));
+  EXPECT_CALL(observer, OnRelatedWebsiteSetsEnabledChanged(/*enabled=*/true));
   prefs()->SetInteger(
       prefs::kCookieControlsMode,
       static_cast<int>(content_settings::CookieControlsMode::kLimited));
   testing::Mock::VerifyAndClearExpectations(&observer);
 
-  EXPECT_CALL(observer, OnFirstPartySetsEnabledChanged(/*enabled=*/false));
+  EXPECT_CALL(observer, OnRelatedWebsiteSetsEnabledChanged(/*enabled=*/false));
   prefs()->SetInteger(
       prefs::kCookieControlsMode,
       static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));

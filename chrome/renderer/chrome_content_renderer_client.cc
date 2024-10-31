@@ -50,7 +50,6 @@
 #include "chrome/grit/renderer_resources.h"
 #include "chrome/renderer/benchmarking_extension.h"
 #include "chrome/renderer/browser_exposed_renderer_interfaces.h"
-#include "chrome/renderer/cart/commerce_hint_agent.h"
 #include "chrome/renderer/chrome_content_settings_agent_delegate.h"
 #include "chrome/renderer/chrome_render_frame_observer.h"
 #include "chrome/renderer/chrome_render_thread_observer.h"
@@ -76,7 +75,6 @@
 #include "components/autofill/content/renderer/password_generation_agent.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/commerce/content/renderer/commerce_web_extractor.h"
-#include "components/commerce/core/commerce_feature_list.h"
 #include "components/content_capture/common/content_capture_features.h"
 #include "components/content_capture/renderer/content_capture_sender.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -90,6 +88,9 @@
 #include "components/error_page/common/error.h"
 #include "components/error_page/common/localized_error.h"
 #include "components/feed/feed_feature_list.h"
+#include "components/fingerprinting_protection_filter/common/fingerprinting_protection_filter_features.h"
+#include "components/fingerprinting_protection_filter/renderer/renderer_agent.h"
+#include "components/fingerprinting_protection_filter/renderer/unverified_ruleset_dealer.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/heap_profiling/in_process/heap_profiler_controller.h"
 #include "components/history_clusters/core/config.h"
@@ -473,6 +474,13 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   subresource_filter_ruleset_dealer_ =
       std::make_unique<subresource_filter::UnverifiedRulesetDealer>();
 
+  if (fingerprinting_protection_filter::features::
+          IsFingerprintingProtectionFeatureEnabled()) {
+    fingerprinting_protection_ruleset_dealer_ = std::make_unique<
+        fingerprinting_protection_filter::UnverifiedRulesetDealer>();
+    thread->AddObserver(fingerprinting_protection_ruleset_dealer_.get());
+  }
+
   phishing_model_setter_ =
       std::make_unique<safe_browsing::PhishingModelSetterImpl>();
 
@@ -748,6 +756,15 @@ void ChromeContentRendererClient::RenderFrameCreated(
     subresource_filter_agent->Initialize();
   }
 
+  if (fingerprinting_protection_filter::features::
+          IsFingerprintingProtectionFeatureEnabled() &&
+      fingerprinting_protection_ruleset_dealer_) {
+    auto* fingerprinting_protection_renderer_agent =
+        new fingerprinting_protection_filter::RendererAgent(
+            render_frame, fingerprinting_protection_ruleset_dealer_.get());
+    fingerprinting_protection_renderer_agent->Initialize();
+  }
+
 #if !BUILDFLAG(IS_ANDROID)
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kInstantProcess) &&
@@ -755,18 +772,6 @@ void ChromeContentRendererClient::RenderFrameCreated(
     new SearchBox(render_frame);
   }
 #endif
-
-// We should create CommerceHintAgent only for a main frame except a fenced
-// frame that is the main frame as well, so we should check if |render_frame|
-// is the fenced frame.
-#if !BUILDFLAG(IS_ANDROID)
-  if (command_line->HasSwitch(commerce::switches::kEnableChromeCart) &&
-#else
-  if (base::FeatureList::IsEnabled(commerce::kCommerceHintAndroid) &&
-#endif  // !BUILDFLAG(IS_ANDROID)
-      render_frame->GetWebFrame()->IsOutermostMainFrame()) {
-    new cart::CommerceHintAgent(render_frame);
-  }
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   new SpellCheckProvider(render_frame, spellcheck_.get());

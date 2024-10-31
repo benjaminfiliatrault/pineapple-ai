@@ -91,7 +91,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
-#include "ui/base/models/simple_menu_model.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
@@ -101,6 +100,7 @@
 #include "ui/gfx/selection_model.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/gfx/text_utils.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
@@ -209,6 +209,14 @@ OmniboxViewViews::OmniboxViewViews(std::unique_ptr<OmniboxClient> client,
   } else {
     GetViewAccessibility().SetIsEditable(true);
   }
+  GetViewAccessibility().SetAutoComplete("both");
+  GetViewAccessibility().AddHTMLAttributes(std::make_pair("type", "url"));
+  // Expose keyboard shortcut where it makes sense.
+#if BUILDFLAG(IS_MAC)
+  GetViewAccessibility().SetKeyShortcuts("⌘L");
+#else
+  GetViewAccessibility().SetKeyShortcuts("Ctrl+L");
+#endif
 }
 
 OmniboxViewViews::~OmniboxViewViews() {
@@ -317,20 +325,18 @@ void OmniboxViewViews::InstallPlaceholderText() {
   // has placeholder text. Use that instead of the DSE placeholder text.
   if (!model()->keyword_placeholder().empty()) {
     SetPlaceholderText(model()->keyword_placeholder());
-    return;
-  }
-
-  // Otherwise, if a DSE is set, use the DSE placeholder text.
-  const TemplateURL* const default_provider = controller()
-                                                  ->client()
-                                                  ->GetTemplateURLService()
-                                                  ->GetDefaultSearchProvider();
-  if (default_provider) {
+  } else if (const auto* default_provider = controller()
+                                                ->client()
+                                                ->GetTemplateURLService()
+                                                ->GetDefaultSearchProvider()) {
+    // Otherwise, if a DSE is set, use the DSE placeholder text.
     SetPlaceholderText(l10n_util::GetStringFUTF16(
         IDS_OMNIBOX_PLACEHOLDER_TEXT, default_provider->short_name()));
   } else {
     SetPlaceholderText(std::u16string());
   }
+
+  UpdatePlaceholderTextColor();
 }
 
 bool OmniboxViewViews::GetSelectionAtEnd() const {
@@ -630,8 +636,7 @@ void OmniboxViewViews::UpdateSchemeStyle(const gfx::Range& range) {
 void OmniboxViewViews::OnThemeChanged() {
   views::Textfield::OnThemeChanged();
 
-  set_placeholder_text_color(
-      GetColorProvider()->GetColor(kColorOmniboxTextDimmed));
+  UpdatePlaceholderTextColor();
   SetSelectionBackgroundColor(
       GetColorProvider()->GetColor(kColorOmniboxSelectionBackground));
   SetSelectionTextColor(
@@ -1274,17 +1279,6 @@ bool OmniboxViewViews::SkipDefaultKeyEventProcessing(
 
 void OmniboxViewViews::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   Textfield::GetAccessibleNodeData(node_data);
-  node_data->AddStringAttribute(ax::mojom::StringAttribute::kAutoComplete,
-                                "both");
-// Expose keyboard shortcut where it makes sense.
-#if BUILDFLAG(IS_MAC)
-  node_data->AddStringAttribute(ax::mojom::StringAttribute::kKeyShortcuts,
-                                "⌘L");
-#else
-  node_data->AddStringAttribute(ax::mojom::StringAttribute::kKeyShortcuts,
-                                "Ctrl+L");
-#endif
-  node_data->html_attributes.push_back(std::make_pair("type", "url"));
 
   if (model()->PopupIsOpen()) {
     popup_view_->AddPopupAccessibleNodeData(node_data);
@@ -1362,8 +1356,10 @@ void OmniboxViewViews::OnFocus() {
   GetRenderText()->SetElideBehavior(gfx::NO_ELIDE);
 
 #if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
-  // The text offsets are no longer valid when the elide behavior changes.
-  SetNeedsAccessibleTextOffsetsUpdate();
+  // The text offsets are no longer valid when the elide behavior changes, even
+  // if the accessible value is technically still the same. Therefore we are
+  // forcing the update.
+  UpdateAccessibleTextOffsetsIfNeeded();
 #endif  // BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
 
   if (location_bar_view_)
@@ -1431,7 +1427,7 @@ void OmniboxViewViews::OnBlur() {
 
 #if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
   // The text offsets are no longer valid when the elide behavior changes.
-  SetNeedsAccessibleTextOffsetsUpdate();
+  UpdateAccessibleTextOffsetsIfNeeded();
 #endif  // BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
 
   // In cases where there's a lot of whitespace in the text being shown, we want
@@ -1570,6 +1566,10 @@ void OmniboxViewViews::UpdateAccessibleValue() {
     // Braille display routing keys or other assistive technologies.
     GetViewAccessibility().SetValue(friendly_suggestion_text_);
   }
+
+#if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
+  UpdateAccessibleTextOffsetsIfNeeded();
+#endif  // BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -2002,6 +2002,18 @@ void OmniboxViewViews::OnPopupOpened() {
   // crbug.com/332769403 for examples.
   BrowserFeaturePromoController::MaybeCloseOverlappingHelpBubbles(this);
 #endif
+}
+
+void OmniboxViewViews::UpdatePlaceholderTextColor() {
+  // Keyword placeholders are dim to differentiate from user input. DSE
+  // placeholders are not dim to draw attention to the omnibox and because the
+  // omnibox is unfocused so there's less risk of confusion with user input.
+  // Null in tests.
+  if (!GetColorProvider())
+    return;
+  set_placeholder_text_color(GetColorProvider()->GetColor(
+      model()->keyword_placeholder().empty() ? kColorOmniboxText
+                                             : kColorOmniboxTextDimmed));
 }
 
 BEGIN_METADATA(OmniboxViewViews)

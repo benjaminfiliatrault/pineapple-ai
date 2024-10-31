@@ -17,7 +17,6 @@
 #include "chrome/browser/ash/bruschetta/bruschetta_launcher.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_mount_provider.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_pref_names.h"
-#include "chrome/browser/ash/bruschetta/bruschetta_service_factory.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_util.h"
 #include "chrome/browser/ash/guest_os/guest_id.h"
 #include "chrome/browser/ash/guest_os/guest_os_pref_names.h"
@@ -26,6 +25,7 @@
 #include "chrome/browser/ash/guest_os/guest_os_share_path.h"
 #include "chrome/browser/ash/guest_os/guest_os_share_path_factory.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_service.h"
+#include "chrome/browser/ash/guest_os/public/guest_os_service_factory.h"
 #include "chrome/browser/ash/guest_os/public/types.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chromeos/ash/components/dbus/dlcservice/dlcservice_client.h"
@@ -90,10 +90,6 @@ BruschettaService::~BruschettaService() {
   }
 }
 
-BruschettaService* BruschettaService::GetForProfile(Profile* profile) {
-  return BruschettaServiceFactory::GetForProfile(profile);
-}
-
 void BruschettaService::OnPolicyChanged() {
   for (auto guest_id :
        guest_os::GetContainers(profile_, guest_os::VmType::BRUSCHETTA)) {
@@ -124,8 +120,9 @@ void BruschettaService::OnPolicyChanged() {
 
   // Any change to policy may change the display name of a config, so sync the
   // terminal prefs.
-  auto* terminal_registry = guest_os::GuestOsService::GetForProfile(profile_)
-                                ->TerminalProviderRegistry();
+  auto* terminal_registry =
+      guest_os::GuestOsServiceFactory::GetForProfile(profile_)
+          ->TerminalProviderRegistry();
   for (const auto& it : terminal_providers_) {
     auto id = it.second;
     terminal_registry->SyncPrefs(id);
@@ -167,7 +164,7 @@ void BruschettaService::AllowLaunch(guest_os::GuestId guest_id) {
 
   auto launcher =
       std::make_unique<BruschettaLauncher>(guest_id.vm_name, profile_);
-  auto mount_id = guest_os::GuestOsService::GetForProfile(profile_)
+  auto mount_id = guest_os::GuestOsServiceFactory::GetForProfile(profile_)
                       ->MountProviderRegistry()
                       ->Register(std::make_unique<BruschettaMountProvider>(
                           profile_, std::move(guest_id)));
@@ -187,7 +184,7 @@ void BruschettaService::BlockLaunch(guest_os::GuestId guest_id) {
     return;
   }
 
-  guest_os::GuestOsService::GetForProfile(profile_)
+  guest_os::GuestOsServiceFactory::GetForProfile(profile_)
       ->MountProviderRegistry()
       ->Unregister(it->second.mount_id);
 
@@ -245,7 +242,7 @@ void BruschettaService::RegisterWithTerminal(
     const guest_os::GuestId& guest_id) {
   DCHECK(!terminal_providers_.contains(guest_id.vm_name));
   terminal_providers_[guest_id.vm_name] =
-      guest_os::GuestOsService::GetForProfile(profile_)
+      guest_os::GuestOsServiceFactory::GetForProfile(profile_)
           ->TerminalProviderRegistry()
           ->Register(
               std::make_unique<BruschettaTerminalProvider>(profile_, guest_id));
@@ -346,14 +343,14 @@ void BruschettaService::OnUninstallAllDlcs(
   guest_os::RemoveContainerFromPrefs(profile_, guest_id);
   auto terminal_iter = terminal_providers_.find(guest_id.vm_name);
   if (terminal_iter != terminal_providers_.end()) {
-    guest_os::GuestOsService::GetForProfile(profile_)
+    guest_os::GuestOsServiceFactory::GetForProfile(profile_)
         ->TerminalProviderRegistry()
         ->Unregister(terminal_iter->second);
     terminal_providers_.erase(terminal_iter);
   }
   auto vm = runnable_vms_.find(guest_id.vm_name);
   if (vm != runnable_vms_.end()) {
-    guest_os::GuestOsService::GetForProfile(profile_)
+    guest_os::GuestOsServiceFactory::GetForProfile(profile_)
         ->MountProviderRegistry()
         ->Unregister(vm->second.mount_id);
     runnable_vms_.erase(vm);

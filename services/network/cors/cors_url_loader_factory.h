@@ -102,6 +102,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
   // network context.
   void ClearBindings();
 
+  // Exposed for use by PrefetchMatchingURLLoaderFactory.
+  int32_t process_id() const { return process_id_; }
+  const std::optional<url::Origin>& request_initiator_origin_lock() const {
+    return request_initiator_origin_lock_;
+  }
+
   mojom::CrossOriginEmbedderPolicyReporter* coep_reporter() {
     return coep_reporter_ ? coep_reporter_.get() : nullptr;
   }
@@ -110,6 +116,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
   url_loaders() {
     return url_loaders_;
   }
+
+  const net::IsolationInfo& isolation_info() const { return isolation_info_; }
 
   mojom::SharedDictionaryAccessObserver* GetSharedDictionaryAccessObserver()
       const;
@@ -134,6 +142,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
   void CancelRequestsIfNonceMatchesAndUrlNotExempted(
       const base::UnguessableToken& nonce,
       const std::set<GURL>& exemptions);
+
+  // Returns whether CORS preflight request flowing through this
+  // URLLoaderFactory should represent an error or not.
+  bool IsCorsPreflighLoadOptionAllowed() const;
 
  private:
   class FactoryOverride;

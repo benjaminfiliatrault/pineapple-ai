@@ -312,11 +312,11 @@ std::unique_ptr<ImageDecoder> ImageDecoder::CreateByMimeType(
     if (base::FeatureList::IsEnabled(blink::features::kCrabbyAvif)) {
       decoder = std::make_unique<CrabbyAVIFImageDecoder>(
           alpha_option, high_bit_depth_decoding_option, color_behavior,
-          max_decoded_bytes, animation_option);
+          aux_image, max_decoded_bytes, animation_option);
     } else {
       decoder = std::make_unique<AVIFImageDecoder>(
           alpha_option, high_bit_depth_decoding_option, color_behavior,
-          max_decoded_bytes, animation_option);
+          aux_image, max_decoded_bytes, animation_option);
     }
 #endif
   }
@@ -353,7 +353,7 @@ bool ImageDecoder::HasSufficientDataToSniffMimeType(const SharedBuffer& data) {
     } box;
     static_assert(sizeof(box) == 8, "");
     static_assert(8 <= kLongestSignatureLength, "");
-    bool ok = data.GetBytes(&box, 8u);
+    bool ok = data.GetBytes(base::byte_span_from_ref(box));
     DCHECK(ok);
     if (base::span(box.type) == base::span({'f', 't', 'y', 'p'})) {
       // Returns whether we have received the File Type Box in its entirety.

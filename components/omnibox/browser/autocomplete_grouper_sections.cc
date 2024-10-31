@@ -182,10 +182,20 @@ void AndroidNonZPSSection::InitFromMatches(ACMatches& matches) {
   above_keyboard_group.set_limit(above_keyboard_group.limit() - 1);
 }
 
+AndroidHubZPSSection::AndroidHubZPSSection(
+    omnibox::GroupConfigMap& group_configs)
+    : Section(5,
+              {{5, omnibox::GROUP_MOBILE_OPEN_TABS}},
+              group_configs,
+              omnibox::GroupConfig_SideType_DEFAULT_PRIMARY) {}
+
 AndroidHubNonZPSSection::AndroidHubNonZPSSection(
     omnibox::GroupConfigMap& group_configs)
-    : Section(30,
-              {{30, omnibox::GROUP_MOBILE_OPEN_TABS}},
+    : Section(25,
+              // Reserve most of the spots for open tabs.
+              {{20, omnibox::GROUP_MOBILE_OPEN_TABS},
+               // Fallback to search suggestions at the bottom of the reuslts.
+               {5, omnibox::GROUP_SEARCH}},
               group_configs,
               omnibox::GroupConfig_SideType_DEFAULT_PRIMARY) {}
 
@@ -294,9 +304,9 @@ DesktopWebZpsSection::DesktopWebZpsSection(
 
 DesktopLensContextualZpsSection::DesktopLensContextualZpsSection(
     omnibox::GroupConfigMap& group_configs)
-    : ZpsSection(8,
+    : ZpsSection(5,
                  {
-                     {8, omnibox::GROUP_VISITED_DOC_RELATED},
+                     {5, omnibox::GROUP_CONTEXTUAL_SEARCH},
                  },
                  group_configs) {}
 
@@ -420,6 +430,14 @@ IOSWebZpsSection::IOSWebZpsSection(omnibox::GroupConfigMap& group_configs)
                                 {20, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST},
                             },
                             group_configs) {}
+
+IOSLensMultimodalZpsSection::IOSLensMultimodalZpsSection(
+    omnibox::GroupConfigMap& group_configs)
+    : ZpsSection(10,
+                 {
+                     {10, omnibox::GROUP_MULTIMODAL},
+                 },
+                 group_configs) {}
 
 IOSIpadNTPZpsSection::IOSIpadNTPZpsSection(
     omnibox::GroupConfigMap& group_configs)

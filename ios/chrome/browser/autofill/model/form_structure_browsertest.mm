@@ -29,8 +29,8 @@
 #import "components/autofill/ios/browser/autofill_agent.h"
 #import "components/autofill/ios/browser/autofill_driver_ios.h"
 #import "components/autofill/ios/browser/autofill_driver_ios_factory.h"
+#import "components/autofill/ios/browser/autofill_util.h"
 #import "components/autofill/ios/browser/test_autofill_manager_injector.h"
-#import "components/autofill/ios/form_util/form_util_java_script_feature.h"
 #import "components/password_manager/core/browser/password_manager_test_utils.h"
 #import "components/password_manager/core/browser/password_store/mock_password_store_interface.h"
 #import "components/sync_user_events/fake_user_event_service.h"
@@ -207,6 +207,7 @@ FormStructureBrowserTest::FormStructureBrowserTest()
           // TODO(crbug.com/40741721): Remove once shared labels are launched.
           features::kAutofillEnableSupportForParsingWithSharedLabels,
           features::kAutofillPageLanguageDetection,
+          features::kAutofillFixValueSemantics,
           // TODO(crbug.com/40220393): Remove once launched.
           features::kAutofillEnableSupportForPhoneNumberTrunkTypes,
           features::kAutofillInferCountryCallingCode,
@@ -256,7 +257,8 @@ void FormStructureBrowserTest::SetUp() {
 
   std::string locale("en");
   autofill::AutofillDriverIOSFactory::CreateForWebState(
-      web_state(), autofill_client_.get(), /*autofill_agent=*/nil, locale);
+      web_state(), autofill_client_.get(), /*autofill_agent=*/autofill_agent_,
+      locale);
 
   autofill_manager_injector_ =
       std::make_unique<TestAutofillManagerInjector<TestAutofillManager>>(
@@ -275,11 +277,9 @@ bool FormStructureBrowserTest::LoadHtmlWithoutSubresourcesAndInitRendererIds(
     return false;
   }
 
-  autofill::FormUtilJavaScriptFeature* feature =
-      autofill::FormUtilJavaScriptFeature::GetInstance();
   return WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool {
     web::WebFramesManager* frames_manager =
-        feature->GetWebFramesManager(web_state());
+        GetWebFramesManagerForAutofill(web_state());
     return frames_manager->GetMainWebFrame() != nullptr;
   });
 }
@@ -370,6 +370,20 @@ const auto& GetFailingTestNames() {
       "115_checkout_walgreens.com.html",
       "116_cc_checkout_walgreens.com.html",
       "150_checkout_venus.com_search_field.html",
+      // TODO(crbug.com/320965828): Infering labels from default options of
+      // <select> elements is not implemented on iOS.
+      "040_checkout_urbanoutfitters.com.html",
+      "061_register_myspace.com.html",
+      "105_checkout_m_lowes.com.html",
+      "106_checkout_m_amazon.com.html",
+      "109_checkout_m_nordstroms.com.html",
+      "112_checkout_m_llbean.com.html",
+      "132_bug_469012.html",
+      "144_cc_checkout_m_jcp.com.html",
+      // TODO(crbug.com/360322019): Even though the page language detection
+      // feature is enabled, is it not triggered properly for this test on iOS.
+      "153_fmm-en_inm.gob.mx.html",
+      "155_fmm-ja_inm.gob.mx.html",
   };
   return failing_test_names;
 }

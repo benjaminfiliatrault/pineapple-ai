@@ -4,12 +4,14 @@
 
 #include "components/data_sharing/internal/group_data_model.h"
 
+#include <cstdint>
 #include <memory>
 
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
+#include "build/build_config.h"
 #include "components/data_sharing/internal/collaboration_group_sync_bridge.h"
 #include "components/data_sharing/public/group_data.h"
 #include "components/data_sharing/test_support/fake_data_sharing_sdk_delegate.h"
@@ -32,11 +34,11 @@ using testing::Optional;
 // entities to test utils files, they are used across multiple files.
 sync_pb::CollaborationGroupSpecifics MakeSpecifics(
     const GroupId& id,
-    const base::Time& changed_at = base::Time::Now()) {
+    const int64_t& changed_at_millis_since_unix_epoch) {
   sync_pb::CollaborationGroupSpecifics result;
   result.set_collaboration_id(id.value());
   result.set_changed_at_timestamp_millis_since_unix_epoch(
-      changed_at.InMillisecondsSinceUnixEpoch());
+      changed_at_millis_since_unix_epoch);
   return result;
 }
 
@@ -94,7 +96,7 @@ class GroupDataModelTest : public testing::Test {
   GroupDataModelTest()
       : data_type_store_(
             syncer::DataTypeStoreTestUtil::CreateInMemoryStoreForTest()) {
-    EXPECT_TRUE(profile_dir_.CreateUniqueTempDir());
+    EXPECT_TRUE(data_sharing_dir_.CreateUniqueTempDir());
   }
 
   ~GroupDataModelTest() override = default;
@@ -116,15 +118,15 @@ class GroupDataModelTest : public testing::Test {
         collaboration_group_bridge_->CreateMetadataChangeList(),
         syncer::EntityChangeList());
 
-    model_ = std::make_unique<GroupDataModel>(profile_dir_.GetPath(),
+    model_ = std::make_unique<GroupDataModel>(data_sharing_dir_.GetPath(),
                                               collaboration_group_bridge_.get(),
                                               &sdk_delegate_);
     model_->AddObserver(&observer_);
   }
 
   void TearDown() override {
-    // Needed to ensure that `profile_dir_` outlives DB tasks, that runs on a
-    // dedicated sequence.
+    // Needed to ensure that `data_sharing_dir_` outlives DB tasks, that runs on
+    // a dedicated sequence.
     ShutdownModel();
   }
 
@@ -146,7 +148,8 @@ class GroupDataModelTest : public testing::Test {
     const GroupId id = sdk_delegate_.AddGroupAndReturnId(display_name);
 
     syncer::EntityChangeList entity_changes;
-    entity_changes.push_back(EntityChangeAddFromSpecifics(MakeSpecifics(id)));
+    entity_changes.push_back(EntityChangeAddFromSpecifics(
+        MakeSpecifics(id, next_changed_at_millis_since_unix_epoch_++)));
     collaboration_group_bridge_->ApplyIncrementalSyncChanges(
         collaboration_group_bridge_->CreateMetadataChangeList(),
         std::move(entity_changes));
@@ -166,8 +169,8 @@ class GroupDataModelTest : public testing::Test {
     sdk_delegate_.AddMember(group_id, member_gaia_id);
 
     syncer::EntityChangeList entity_changes;
-    entity_changes.push_back(
-        EntityChangeUpdateFromSpecifics(MakeSpecifics(group_id)));
+    entity_changes.push_back(EntityChangeUpdateFromSpecifics(
+        MakeSpecifics(group_id, next_changed_at_millis_since_unix_epoch_++)));
     collaboration_group_bridge_->ApplyIncrementalSyncChanges(
         collaboration_group_bridge_->CreateMetadataChangeList(),
         std::move(entity_changes));
@@ -184,8 +187,8 @@ class GroupDataModelTest : public testing::Test {
     sdk_delegate_.RemoveGroup(group_id);
 
     syncer::EntityChangeList entity_changes;
-    entity_changes.push_back(
-        EntityChangeDeleteFromSpecifics(MakeSpecifics(group_id)));
+    entity_changes.push_back(EntityChangeDeleteFromSpecifics(
+        MakeSpecifics(group_id, next_changed_at_millis_since_unix_epoch_++)));
     collaboration_group_bridge_->ApplyIncrementalSyncChanges(
         collaboration_group_bridge_->CreateMetadataChangeList(),
         std::move(entity_changes));
@@ -203,7 +206,7 @@ class GroupDataModelTest : public testing::Test {
   }
 
   void RestartModel() {
-    model_ = std::make_unique<GroupDataModel>(profile_dir_.GetPath(),
+    model_ = std::make_unique<GroupDataModel>(data_sharing_dir_.GetPath(),
                                               collaboration_group_bridge_.get(),
                                               &sdk_delegate_);
     model_->AddObserver(&observer_);
@@ -212,7 +215,7 @@ class GroupDataModelTest : public testing::Test {
  private:
   base::test::TaskEnvironment task_environment_;
 
-  base::ScopedTempDir profile_dir_;
+  base::ScopedTempDir data_sharing_dir_;
 
   std::unique_ptr<syncer::DataTypeStore> data_type_store_;
   testing::NiceMock<syncer::MockDataTypeLocalChangeProcessor> mock_processor_;
@@ -220,6 +223,11 @@ class GroupDataModelTest : public testing::Test {
 
   FakeDataSharingSDKDelegate sdk_delegate_;
   std::unique_ptr<GroupDataModel> model_;
+
+  // Used to ensure that changed_at_timestamp_millis_since_unix_epoch is always
+  // advanced when changes are made (base::Time::Now() doesn't guarantee that in
+  // some cases).
+  int64_t next_changed_at_millis_since_unix_epoch_ = 1000;
 
   testing::NiceMock<MockModelObserver> observer_;
 };

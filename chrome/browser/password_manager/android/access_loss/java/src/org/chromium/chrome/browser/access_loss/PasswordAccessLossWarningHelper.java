@@ -70,8 +70,8 @@ public class PasswordAccessLossWarningHelper {
         coordinator.showSheet(model);
     }
 
-    @Nullable
     /** Creates the model that has the text and functionality appropriate for the warning type. */
+    @Nullable
     PropertyModel getModelForWarningType(@PasswordAccessLossWarningType int warningType) {
         switch (warningType) {
             case PasswordAccessLossWarningType.NO_GMS_CORE:
@@ -134,7 +134,10 @@ public class PasswordAccessLossWarningHelper {
                         SHEET_TEXT,
                         getBottomSheetTextWithLink(
                                 mActivity.getString(
-                                        R.string.pwd_access_loss_warning_update_gms_core_text),
+                                        warningType == PasswordAccessLossWarningType.NO_UPM
+                                                ? R.string.pwd_access_loss_warning_no_upm_text
+                                                : R.string
+                                                        .pwd_access_loss_warning_update_gms_core_text),
                                 (unusedView) -> {
                                     mHelpUrlLauncher.showHelpArticle(
                                             mActivity,

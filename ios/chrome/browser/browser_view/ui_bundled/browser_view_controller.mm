@@ -1302,7 +1302,7 @@ enum HeaderBehaviour {
   [_fakeStatusBarView setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
     if (IsModernTabStripOrRaccoonEnabled()) {
-      _fakeStatusBarView.backgroundColor = [TabStripHelper backgroundColor];
+      _fakeStatusBarView.backgroundColor = TabStripHelper.backgroundColor;
       // Force the UserInterfaceStyle update in incognito.
       _fakeStatusBarView.overrideUserInterfaceStyle =
           _isOffTheRecord ? UIUserInterfaceStyleDark
@@ -2335,6 +2335,14 @@ enum HeaderBehaviour {
     [strongSelf executeAndClearForegroundTabWasAddedCompletionBlock:YES];
   };
 
+  // Skip animation if animations are disabled (e.g. new search action from
+  // toolbar).
+  if (!UIView.areAnimationsEnabled) {
+    [toolbarSnapshot removeFromSuperview];
+    commonCompletion();
+    return;
+  }
+
   CGPoint origin = [self lastTapPoint];
 
   CGRect frame = [self.contentArea convertRect:self.view.bounds
@@ -2410,6 +2418,32 @@ enum HeaderBehaviour {
   }
 }
 
+- (void)setItemsRequireAuthentication:(BOOL)require
+                withPrimaryButtonText:(NSString*)text
+                   accessibilityLabel:(NSString*)accessibilityLabel {
+  [self setItemsRequireAuthentication:require];
+  if (require) {
+    [self.blockingView setAuthenticateButtonText:text
+                              accessibilityLabel:accessibilityLabel];
+
+    base::WeakPtr<WebStateList> webStateList = _webStateList;
+    id<IncognitoReauthCommands> reauthHandler = self.reauthHandler;
+    [self.blockingView.exitIncognitoButton
+               addAction:[UIAction actionWithHandler:^(UIAction* action) {
+                 if (webStateList) {
+                   CloseAllWebStates(*(webStateList),
+                                     WebStateList::CLOSE_USER_ACTION);
+                 }
+                 [reauthHandler manualAuthenticationOverride];
+               }]
+        forControlEvents:UIControlEventTouchUpInside];
+  } else {
+    // No primary button text or accessibility label should be set when
+    // authentication is not required.
+    CHECK(!text);
+    CHECK(!accessibilityLabel);
+  }
+}
 #pragma mark - UIGestureRecognizerDelegate
 
 // Always return yes, as this tap should work with various recognizers,

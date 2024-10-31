@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "base/types/pass_key.h"
 #include "chrome/browser/password_manager/android/access_loss/mock_password_access_loss_warning_bridge.h"
+#include "chrome/browser/password_manager/android/grouped_affiliations/acknowledge_grouped_credential_sheet_controller_test_helper.h"
 #include "chrome/browser/password_manager/android/password_manager_launcher_android.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/profiles/profile.h"
@@ -43,6 +44,7 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/android/window_android.h"
 #include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -193,12 +195,14 @@ class TouchToFillControllerAutofillTest
     std::unique_ptr<MockPasswordAccessLossWarningBridge> mock_bridge =
         std::make_unique<MockPasswordAccessLossWarningBridge>();
     mock_access_loss_warning_bridge_ = mock_bridge.get();
+
     return std::make_unique<TouchToFillControllerAutofillDelegate>(
         base::PassKey<TouchToFillControllerAutofillTest>(), &client_,
         web_contents(), std::move(authenticator_),
         webauthn_credentials_delegate_.AsWeakPtr(), std::move(filler),
         form_to_fill, focused_field_renderer_id, should_show_hybrid_option,
-        show_password_migration_warning().Get(), std::move(mock_bridge));
+        show_password_migration_warning().Get(), std::move(mock_bridge),
+        grouped_credential_sheet_helper_.CreateController());
   }
 
   password_manager::MockWebAuthnCredentialsDelegate&
@@ -221,6 +225,11 @@ class TouchToFillControllerAutofillTest
 
   MockPasswordAccessLossWarningBridge* mock_access_loss_warning_bridge() {
     return mock_access_loss_warning_bridge_;
+  }
+
+  AcknowledgeGroupedCredentialSheetControllerTestHelper&
+  acknowledge_grouped_credential_sheet_helper() {
+    return grouped_credential_sheet_helper_;
   }
 
   void SetUp() override {
@@ -258,6 +267,8 @@ class TouchToFillControllerAutofillTest
   raw_ptr<MockPasswordAccessLossWarningBridge> mock_access_loss_warning_bridge_;
   raw_ptr<MockPasswordCredentialFiller> weak_filler_;
   password_manager::PasswordForm form_to_fill_;
+  AcknowledgeGroupedCredentialSheetControllerTestHelper
+      grouped_credential_sheet_helper_;
 };
 
 TEST_F(TouchToFillControllerAutofillTest, Show_Fill_And_Submit) {
@@ -282,7 +293,8 @@ TEST_F(TouchToFillControllerAutofillTest, Show_Fill_And_Submit) {
 
   EXPECT_CALL(*last_mock_filler(),
               FillUsernameAndPassword(std::u16string(u"alice"),
-                                      std::u16string(u"p4ssw0rd")));
+                                      std::u16string(u"p4ssw0rd"), _))
+      .WillOnce(RunOnceCallback<2>(/*trigger_submission=*/true));
 
   EXPECT_CALL(client(), StartSubmissionTrackingAfterTouchToFill(Eq(u"alice")));
 
@@ -311,7 +323,8 @@ TEST_F(TouchToFillControllerAutofillTest, Show_Fill_And_Dont_Submit) {
 
   EXPECT_CALL(*last_mock_filler(),
               FillUsernameAndPassword(std::u16string(u"alice"),
-                                      std::u16string(u"p4ssw0rd")));
+                                      std::u16string(u"p4ssw0rd"), _))
+      .WillOnce(RunOnceCallback<2>(/*trigger_submission=*/false));
 
   EXPECT_CALL(client(), StartSubmissionTrackingAfterTouchToFill(_)).Times(0);
 
@@ -348,7 +361,8 @@ TEST_F(TouchToFillControllerAutofillTest,
 
   EXPECT_CALL(*last_mock_filler(),
               FillUsernameAndPassword(std::u16string(u"alice"),
-                                      std::u16string(u"p4ssw0rd")));
+                                      std::u16string(u"p4ssw0rd"), _))
+      .WillOnce(RunOnceCallback<2>(/*trigger_submission=*/false));
   EXPECT_CALL(*last_mock_filler(), UpdateTriggerSubmission(false));
   EXPECT_CALL(client(), StartSubmissionTrackingAfterTouchToFill(_)).Times(0);
   EXPECT_CALL(show_password_migration_warning(),
@@ -383,7 +397,8 @@ TEST_F(TouchToFillControllerAutofillTest, FillingShowsAccessLossWarning) {
 
   EXPECT_CALL(*last_mock_filler(),
               FillUsernameAndPassword(std::u16string(u"alice"),
-                                      std::u16string(u"p4ssw0rd")));
+                                      std::u16string(u"p4ssw0rd"), _))
+      .WillOnce(RunOnceCallback<2>(/*trigger_submission=*/false));
   EXPECT_CALL(*last_mock_filler(), UpdateTriggerSubmission(false));
   EXPECT_CALL(client(), StartSubmissionTrackingAfterTouchToFill(_)).Times(0);
   EXPECT_CALL(*mock_access_loss_warning_bridge(),
@@ -427,7 +442,8 @@ TEST_F(TouchToFillControllerAutofillTest, Dont_Submit_With_Empty_Username) {
   EXPECT_CALL(*last_mock_filler(), UpdateTriggerSubmission(false));
   EXPECT_CALL(*last_mock_filler(),
               FillUsernameAndPassword(std::u16string(u""),
-                                      std::u16string(u"p4ssw0rd")));
+                                      std::u16string(u"p4ssw0rd"), _))
+      .WillOnce(RunOnceCallback<2>(/*trigger_submission=*/false));
   EXPECT_CALL(client(), StartSubmissionTrackingAfterTouchToFill(_)).Times(0);
 
   touch_to_fill_controller().OnCredentialSelected(credentials[0]);
@@ -458,7 +474,8 @@ TEST_F(TouchToFillControllerAutofillTest,
 
   EXPECT_CALL(*last_mock_filler(),
               FillUsernameAndPassword(std::u16string(u""),
-                                      std::u16string(u"p4ssw0rd")));
+                                      std::u16string(u"p4ssw0rd"), _))
+      .WillOnce(RunOnceCallback<2>(/*trigger_submission=*/false));
   EXPECT_CALL(*last_mock_filler(), UpdateTriggerSubmission(false));
   EXPECT_CALL(client(), StartSubmissionTrackingAfterTouchToFill(_)).Times(0);
 
@@ -485,7 +502,7 @@ TEST_F(TouchToFillControllerAutofillTest, Show_And_Fill_No_Auth_Available) {
   // Test that we correctly log the absence of an Android credential.
   EXPECT_CALL(*last_mock_filler(),
               FillUsernameAndPassword(std::u16string(u"alice"),
-                                      std::u16string(u"p4ssw0rd")));
+                                      std::u16string(u"p4ssw0rd"), _));
   ON_CALL(client(), IsReauthBeforeFillingRequired).WillByDefault(Return(false));
 
   touch_to_fill_controller().OnCredentialSelected(credentials[0]);
@@ -524,7 +541,8 @@ TEST_F(TouchToFillControllerAutofillTest,
       .WillByDefault(Return(true));
   EXPECT_CALL(*last_mock_filler(),
               FillUsernameAndPassword(std::u16string(u"alice"),
-                                      std::u16string(u"p4ssw0rd")));
+                                      std::u16string(u"p4ssw0rd"), _))
+      .WillOnce(RunOnceCallback<2>(/*trigger_submission=*/true));
 
   ON_CALL(client(), IsReauthBeforeFillingRequired).WillByDefault(Return(true));
   EXPECT_CALL(*authenticator_ptr, AuthenticateWithMessage)
@@ -553,7 +571,7 @@ TEST_F(TouchToFillControllerAutofillTest,
           TouchToFillControllerAutofillDelegate::ShowHybridOption(false)),
       /*cred_man_delegate=*/nullptr, /*frame_driver=*/nullptr);
 
-  EXPECT_CALL(*last_mock_filler(), FillUsernameAndPassword(_, _)).Times(0);
+  EXPECT_CALL(*last_mock_filler(), FillUsernameAndPassword(_, _, _)).Times(0);
 
   ON_CALL(client(), IsReauthBeforeFillingRequired).WillByDefault(Return(true));
   EXPECT_CALL(*authenticator_ptr, AuthenticateWithMessage)
@@ -634,7 +652,7 @@ TEST_F(TouchToFillControllerAutofillTest, Show_And_Fill_Android_Credential) {
   // Test that we correctly log the presence of an Android credential.
   EXPECT_CALL(*last_mock_filler(),
               FillUsernameAndPassword(std::u16string(u"bob"),
-                                      std::u16string(u"s3cr3t")));
+                                      std::u16string(u"s3cr3t"), _));
   ON_CALL(client(), IsReauthBeforeFillingRequired).WillByDefault(Return(false));
   touch_to_fill_controller().OnCredentialSelected(credentials[1]);
 
@@ -810,7 +828,7 @@ TEST_F(TouchToFillControllerAutofillTest, ShowWebAuthnCredential) {
   EXPECT_CALL(webauthn_credentials_delegate(),
               SelectPasskey(base::Base64Encode(credential.credential_id()), _));
   EXPECT_CALL(*last_mock_filler(), Dismiss(ToShowVirtualKeyboard(false)));
-  EXPECT_CALL(*last_mock_filler(), FillUsernameAndPassword(_, _)).Times(0);
+  EXPECT_CALL(*last_mock_filler(), FillUsernameAndPassword(_, _, _)).Times(0);
   touch_to_fill_controller().OnPasskeyCredentialSelected(credentials[0]);
   histogram_tester().ExpectUniqueSample(
       "PasswordManager.TouchToFill.Outcome",
@@ -926,6 +944,40 @@ TEST_F(TouchToFillControllerAutofillTest,
           TouchToFillControllerAutofillDelegate::ShowHybridOption(false)),
       &cred_man_delegate, /*frame_driver=*/nullptr);
   EXPECT_FALSE(is_shown);
+}
+
+TEST_F(TouchToFillControllerAutofillTest,
+       TriggersAcknowledgeDialogBeforeFillingGroupedCredential) {
+  // Test multiple credentials with one of them being an Android credential.
+  UiCredential credentials[] = {
+      MakeUiCredential({
+          .username = "bob",
+          .password = "s3cr3t",
+          .origin = "",
+          .match_type = password_manager_util::GetLoginMatchType::kGrouped,
+          .time_since_last_use = base::Minutes(3),
+      }),
+  };
+
+  touch_to_fill_controller().Show(
+      credentials, /*passkey_credentials=*/{},
+      MakeTouchToFillControllerDelegate(
+          autofill::mojom::SubmissionReadinessState::kNoInformation,
+          CreateMockFiller(), form_to_fill(),
+          form_to_fill()->password_element_renderer_id,
+          TouchToFillControllerAutofillDelegate::ShowHybridOption(false)),
+      /*cred_man_delegate=*/nullptr, /*frame_driver=*/nullptr);
+
+  EXPECT_CALL(*last_mock_filler(), FillUsernameAndPassword).Times(0);
+  EXPECT_CALL(*(acknowledge_grouped_credential_sheet_helper().jni_bridge()),
+              Show);
+  ON_CALL(client(), IsReauthBeforeFillingRequired).WillByDefault(Return(false));
+  touch_to_fill_controller().OnCredentialSelected(credentials[0]);
+
+  // `FillUsernameAndPassword` should be called if acknowledge grouped
+  // credential sheet is accepted.
+  EXPECT_CALL(*last_mock_filler(), FillUsernameAndPassword);
+  acknowledge_grouped_credential_sheet_helper().DismissSheet(/*accepted=*/true);
 }
 
 class TouchToFillControllerAutofillTestWithSubmissionReadinessVariationTest

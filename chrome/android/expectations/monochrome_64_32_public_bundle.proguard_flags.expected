@@ -378,10 +378,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
--keepclassmembers class org.chromium.android_webview.AwPdfExporter {
-    android.view.ViewGroup mContainerView;
-}
-
 # Keep the factory and its public members; it's the main entry point used by the
 # framework. Also keep the factory's constructors as some things are using them
 # via reflection; crbug.com/1462346
@@ -861,7 +857,7 @@
 # We keep all fields for every generated proto file as the runtime uses
 # reflection over them that ProGuard cannot detect. Without this keep
 # rule, fields may be removed that would cause runtime failures.
--keepclassmembers class * extends com.google.android.gms.internal.auth.zzer {
+-keepclassmembers class * extends com.google.android.gms.internal.auth.zzev {
   <fields>;
 }
 

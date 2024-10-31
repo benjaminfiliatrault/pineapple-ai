@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <numbers>
+#include <string_view>
 
 #include "base/bit_cast.h"
 #include "base/functional/bind.h"
@@ -122,7 +123,7 @@ bool VideoEffectsProcessorWebGpu::Initialize() {
   auto* request_adapter_callback = gpu::webgpu::BindWGPUOnceCallback(
       [](base::WeakPtr<VideoEffectsProcessorWebGpu> processor,
          wgpu::RequestAdapterStatus status, wgpu::Adapter adapter,
-         char const* message) {
+         wgpu::StringView message) {
         if (processor) {
           processor->OnRequestAdapter(status, std::move(adapter), message);
         }
@@ -536,7 +537,7 @@ void VideoEffectsProcessorWebGpu::QueryDone(
 void VideoEffectsProcessorWebGpu::OnRequestAdapter(
     wgpu::RequestAdapterStatus status,
     wgpu::Adapter adapter,
-    char const* message) {
+    wgpu::StringView message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (status != wgpu::RequestAdapterStatus::Success || !adapter) {
@@ -553,9 +554,10 @@ void VideoEffectsProcessorWebGpu::OnRequestAdapter(
 
   auto* device_lost_callback = gpu::webgpu::BindWGPUOnceCallback(
       [](base::WeakPtr<VideoEffectsProcessorWebGpu> processor,
-         WGPUDeviceLostReason reason, char const* message) {
+         const wgpu::Device& device, wgpu::DeviceLostReason reason,
+         wgpu::StringView message) {
         if (processor) {
-          processor->OnDeviceLost(reason, message);
+          processor->OnDeviceLost(device, reason, message);
         }
       },
       weak_ptr_factory_.GetWeakPtr());
@@ -565,13 +567,15 @@ void VideoEffectsProcessorWebGpu::OnRequestAdapter(
   descriptor.defaultQueue = {
       .label = "VideoEffectsProcessorDefaultQueue",
   };
-  descriptor.deviceLostCallback = device_lost_callback->UnboundCallback();
-  descriptor.deviceLostUserdata = device_lost_callback->AsUserdata();
+  descriptor.SetDeviceLostCallback(wgpu::CallbackMode::AllowSpontaneous,
+                                   device_lost_callback->UnboundCallback(),
+                                   device_lost_callback->AsUserdata());
+  descriptor.SetUncapturedErrorCallback(&ErrorCallback);
 
   auto* request_device_callback = gpu::webgpu::BindWGPUOnceCallback(
       [](base::WeakPtr<VideoEffectsProcessorWebGpu> processor,
          wgpu::RequestDeviceStatus status, wgpu::Device device,
-         char const* message) {
+         wgpu::StringView message) {
         if (processor) {
           processor->OnRequestDevice(status, std::move(device), message);
         }
@@ -586,7 +590,7 @@ void VideoEffectsProcessorWebGpu::OnRequestAdapter(
 void VideoEffectsProcessorWebGpu::OnRequestDevice(
     wgpu::RequestDeviceStatus status,
     wgpu::Device device,
-    char const* message) {
+    wgpu::StringView message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (status != wgpu::RequestDeviceStatus::Success || !device) {
@@ -595,7 +599,6 @@ void VideoEffectsProcessorWebGpu::OnRequestDevice(
   }
 
   device_ = device;
-  device_.SetUncapturedErrorCallback(&ErrorCallback, nullptr);
   device_.SetLoggingCallback(&LoggingCallback, nullptr);
 
 #if MEDIAPIPE_USE_WEBGPU
@@ -721,8 +724,9 @@ fn postProcess(@builtin(global_invocation_id) id: vec3<u32>) {
   return device_.CreateComputePipeline(&compute_pipeline_descriptor);
 }
 
-void VideoEffectsProcessorWebGpu::OnDeviceLost(WGPUDeviceLostReason reason,
-                                               char const* message) {
+void VideoEffectsProcessorWebGpu::OnDeviceLost(const wgpu::Device& device,
+                                               wgpu::DeviceLostReason reason,
+                                               wgpu::StringView message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
 #if MEDIAPIPE_USE_WEBGPU
@@ -748,24 +752,24 @@ void VideoEffectsProcessorWebGpu::MaybeCallOnUnrecoverableError() {
 }
 
 // static
-void VideoEffectsProcessorWebGpu::ErrorCallback(WGPUErrorType type,
-                                                char const* message,
-                                                void* userdata) {
+void VideoEffectsProcessorWebGpu::ErrorCallback(const wgpu::Device& device,
+                                                wgpu::ErrorType type,
+                                                wgpu::StringView message) {
   LOG(ERROR) << "VideoEffectsProcessor encountered a WebGPU error. type: "
-             << type << ", message: " << (message ? message : "(unavailable)");
+             << type << ", message: \"" << message << "\"";
 }
 
 // static
 void VideoEffectsProcessorWebGpu::LoggingCallback(WGPULoggingType type,
-                                                  char const* message,
+                                                  WGPUStringView message,
                                                   void* userdata) {
+  std::string_view messageView = {message.data, message.length};
   auto log_line = base::StringPrintf(
       "VideoEffectsProcessor received WebGPU log message. message: %s",
-      (message ? message : "(unavailable)"));
+      messageView);
 
   switch (type) {
     case WGPULoggingType_Verbose:
-      [[fallthrough]];
     case WGPULoggingType_Info:
       VLOG(1) << log_line;
       break;

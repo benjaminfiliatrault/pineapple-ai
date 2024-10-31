@@ -109,6 +109,14 @@ void TestingApplicationContext::OnAppEnterBackground() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
+void TestingApplicationContext::OnAppStartedBackgroundProcessing() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+}
+
+void TestingApplicationContext::OnAppFinishedBackgroundProcessing() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+}
+
 bool TestingApplicationContext::WasLastShutdownClean() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return was_last_shutdown_clean_;
@@ -134,8 +142,7 @@ TestingApplicationContext::GetSharedURLLoaderFactory() {
 network::mojom::NetworkContext*
 TestingApplicationContext::GetSystemNetworkContext() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 const std::string& TestingApplicationContext::GetApplicationLocale() {
@@ -271,8 +278,8 @@ SystemIdentityManager* TestingApplicationContext::GetSystemIdentityManager() {
 AccountProfileMapper* TestingApplicationContext::GetAccountProfileMapper() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!account_profile_mapper_) {
-    account_profile_mapper_ =
-        std::make_unique<AccountProfileMapper>(GetSystemIdentityManager());
+    account_profile_mapper_ = std::make_unique<AccountProfileMapper>(
+        GetSystemIdentityManager(), GetProfileManager());
   }
   return account_profile_mapper_.get();
 }
@@ -310,3 +317,12 @@ TestingApplicationContext::GetAdditionalFeaturesController() {
   }
   return additional_features_controller_.get();
 }
+
+#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
+optimization_guide::OnDeviceModelServiceController*
+TestingApplicationContext::GetOnDeviceModelServiceController(
+    base::WeakPtr<optimization_guide::OnDeviceModelComponentStateManager>
+        on_device_component_manager) {
+  return nullptr;
+}
+#endif  // BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE

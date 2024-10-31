@@ -5,14 +5,17 @@
 #ifndef IOS_CHROME_BROWSER_DRIVE_FILE_PICKER_COORDINATOR_DRIVE_FILE_PICKER_MEDIATOR_H_
 #define IOS_CHROME_BROWSER_DRIVE_FILE_PICKER_COORDINATOR_DRIVE_FILE_PICKER_MEDIATOR_H_
 
+#import <UIKit/UIKit.h>
+
 #import <memory>
 
 #import "ios/chrome/browser/drive_file_picker/ui/drive_file_picker_mutator.h"
 
 @protocol DriveFilePickerMediatorDelegate;
-@protocol SystemIdentity;
+@class DriveFilePickerMetricsHelper;
 @protocol DriveFilePickerConsumer;
 @protocol DriveFilePickerCommands;
+@protocol SystemIdentity;
 
 namespace drive {
 class DriveService;
@@ -39,11 +42,16 @@ class ChromeAccountManagerService;
 // Drive file picker handler.
 @property(nonatomic, weak) id<DriveFilePickerCommands> driveFilePickerHandler;
 
+// Whether the mediator is active (a.k.a at the top of the navigation stack).
+@property(nonatomic, assign, getter=isActive) BOOL active;
+
 // Initializes the mediator with a given `webState`.
 - (instancetype)
          initWithWebState:(web::WebState*)webState
                  identity:(id<SystemIdentity>)identity
                     title:(NSString*)title
+            imagesPending:(NSMutableSet<NSString*>*)imagesPending
+               imageCache:(NSCache<NSString*, UIImage*>*)imageCache
            collectionType:(DriveFilePickerCollectionType)collectionType
          folderIdentifier:(NSString*)folderIdentifier
                    filter:(DriveFilePickerFilter)filter
@@ -54,6 +62,7 @@ class ChromeAccountManagerService;
     accountManagerService:(ChromeAccountManagerService*)accountManagerService
              imageFetcher:
                  (std::unique_ptr<image_fetcher::ImageDataFetcher>)imageFetcher
+            metricsHelper:(DriveFilePickerMetricsHelper*)metricsHelper
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
@@ -62,6 +71,13 @@ class ChromeAccountManagerService;
 
 // Sets the identity to `selectedIdentity`.
 - (void)setSelectedIdentity:(id<SystemIdentity>)selectedIdentity;
+
+// Sets a pending filter or sorting criteria. This will take effect when the
+// mediator is set to active.
+- (void)setPendingFilter:(DriveFilePickerFilter)filter
+         sortingCriteria:(DriveItemsSortingType)sortingCriteria
+        sortingDirection:(DriveItemsSortingOrder)sortingDirection
+     ignoreAcceptedTypes:(BOOL)ignoreAcceptedTypes;
 
 @end
 

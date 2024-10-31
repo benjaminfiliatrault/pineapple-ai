@@ -66,21 +66,14 @@ const char kFormCardExpirationYear[] = "CCExpiresYear";
   [MetricsAppInterface overrideMetricsAndCrashReportingForTesting];
 }
 
-- (void)tearDown {
+- (void)tearDownHelper {
   [AutofillAppInterface clearCreditCardStore];
   [AutofillAppInterface clearMockReauthenticationModule];
 
   [MetricsAppInterface stopOverridingMetricsAndCrashReportingForTesting];
   GREYAssertNil([MetricsAppInterface releaseHistogramTester],
                 @"Failed to release histogram tester.");
-  [super tearDown];
-}
-
-- (AppLaunchConfiguration)appConfigurationForTestCase {
-  AppLaunchConfiguration config;
-  config.features_enabled.push_back(
-      autofill::features::kAutofillEnableVirtualCards);
-  return config;
+  [super tearDownHelper];
 }
 
 // Matcher for the bottom sheet's "Continue" button.

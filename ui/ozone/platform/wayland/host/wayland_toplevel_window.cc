@@ -312,12 +312,6 @@ void WaylandToplevelWindow::Restore() {
 
 void WaylandToplevelWindow::ActivateWithToken(std::string token) {
   DCHECK(connection()->xdg_activation());
-  // xdg-activation implementation in some compositors is still buggy and
-  // Mutter crashes were observed when windows are activated during window
-  // dragging sessions. See https://crbug.com/1366504.
-  if (connection()->IsDragInProgress()) {
-    return;
-  }
   connection()->xdg_activation()->Activate(root_surface()->surface(), token);
 }
 
@@ -865,8 +859,7 @@ void WaylandToplevelWindow::HideTooltip() {
 bool WaylandToplevelWindow::IsClientControlledWindowMovementSupported() const {
   auto* window_drag_controller = connection()->window_drag_controller();
   DCHECK(window_drag_controller);
-  return window_drag_controller->IsExtendedDragAvailable() ||
-         window_drag_controller->IsXdgToplevelDragAvailable();
+  return window_drag_controller->IsWindowDragProtocolAvailable();
 }
 
 bool WaylandToplevelWindow::ShouldReleaseCaptureForDrag(

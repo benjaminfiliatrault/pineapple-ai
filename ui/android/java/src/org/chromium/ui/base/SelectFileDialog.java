@@ -339,9 +339,25 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         mAllowMultiple = multiple;
         mWindowAndroid = (sWindowAndroidForTesting == null) ? window : sWindowAndroidForTesting;
 
-        // No mime types or extra choosers needed for open-directory.
-        if (Intent.ACTION_OPEN_DOCUMENT_TREE.equals(mIntentAction)) {
+        // FileSystemAccess API uses intent actions OPEN_DOCUMENT (showOpenFilePicker),
+        // OPEN_DOCUMENT_TREE (showDirectoryPicker), and CREATE_DOCUMENT (showSaveFilePicker),
+        // and launches the intents directoy without the chooser or media pickers.
+        // All other code uses GET_CONTENT and CHOOSER.
+        if (Intent.ACTION_OPEN_DOCUMENT.equals(mIntentAction)
+                || Intent.ACTION_OPEN_DOCUMENT_TREE.equals(mIntentAction)
+                || Intent.ACTION_CREATE_DOCUMENT.equals(mIntentAction)) {
             Intent intent = new Intent(mIntentAction);
+            // No mime types for open-directory.
+            if (!Intent.ACTION_OPEN_DOCUMENT_TREE.equals(mIntentAction)) {
+                intent.setType(ALL_TYPES);
+                if (!mMimeTypes.isEmpty()) {
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, mMimeTypes.toArray(new String[0]));
+                }
+                if (mAllowMultiple) {
+                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                }
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+            }
             if (!mWindowAndroid.showIntent(intent, this, R.string.low_memory_error)) {
                 onFileNotSelected();
             }
@@ -572,12 +588,9 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         // Set to all types, and restrict further by MIME-type below.
         getContentIntent.setType(ALL_TYPES);
 
-        if (mMimeTypes.size() > 0) {
-            // If some of the extensions are generic, just let user selectall files.
-            List<String> types =
-                    mMimeTypes.contains(GENERIC_TYPE)
-                            ? new ArrayList<>()
-                            : new ArrayList<>(mMimeTypes);
+        // If some of the extensions are generic, just let user select all files.
+        if (mMimeTypes.size() > 0 && !mMimeTypes.contains(GENERIC_TYPE)) {
+            List<String> types = new ArrayList<>(mMimeTypes);
             // Calls to ACTION_GET_CONTENT can result in the MediaPicker hijacking the call and
             // showing itself instead of the Files app, when only images or videos are provided.
             // This flow is not only confusing for the user (a MediaPicker on top of a MediaPicker?)
@@ -587,10 +600,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
             if (shouldShowImageTypes() || shouldShowVideoTypes()) {
                 types.add("type/nonexistent");
             }
-
-            if (!types.isEmpty()) {
-                getContentIntent.putExtra(Intent.EXTRA_MIME_TYPES, types.toArray(new String[0]));
-            }
+            getContentIntent.putExtra(Intent.EXTRA_MIME_TYPES, types.toArray(new String[0]));
         }
 
         ArrayList<Intent> extraIntents = new ArrayList<Intent>();
@@ -690,14 +700,18 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
 
     /**
      * Determines whether the photo picker should be used for this select file request. To be
-     * applicable for the photo picker, the following must be true:
-     * 1.) Only media types were requested in the file request
-     * 2.) The file request did not explicitly ask to capture camera directly.
-     * 3.) The photo picker is supported by the embedder (i.e. Chrome).
-     * 4.) There is a valid Android Activity associated with the file request.
+     * applicable for the photo picker, the following must be true: 1.) Only media types were
+     * requested in the file request 2.) The file request did not explicitly ask to capture camera
+     * directly. 3.) The photo picker is supported by the embedder (i.e. Chrome). 4.) There is a
+     * valid Android Activity associated with the file request.
      */
     private boolean shouldUsePhotoPicker() {
+        boolean isSupportedVideoType =
+                !UiAndroidFeatureMap.isEnabled(
+                                UiAndroidFeatures.DISABLE_PHOTO_PICKER_FOR_VIDEO_CAPTURE)
+                        || !captureVideo();
         return !captureImage()
+                && isSupportedVideoType
                 && isSupportedPhotoPickerTypes(mMimeTypes)
                 && shouldShowPhotoPicker()
                 && mWindowAndroid.getActivity().get() != null;

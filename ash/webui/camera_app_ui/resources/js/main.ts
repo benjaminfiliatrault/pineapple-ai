@@ -27,7 +27,7 @@ import * as dom from './dom.js';
 import {reportError} from './error.js';
 import {Flag} from './flag.js';
 import {Intent} from './intent.js';
-import * as Comlink from './lib/comlink.js';
+import * as comlink from './lib/comlink.js';
 import {startMeasuringMemoryUsage} from './memory_usage.js';
 import * as metrics from './metrics.js';
 import * as filesystem from './models/file_system.js';
@@ -319,7 +319,7 @@ async function setupMultiWindowHandling(
   const multiWindowManagerWorker = new SharedWorker(
       getSanitizedScriptUrl('/js/multi_window_manager.js'), {type: 'module'});
   const windowInstance =
-      Comlink.wrap<WindowInstance>(multiWindowManagerWorker.port);
+      comlink.wrap<WindowInstance>(multiWindowManagerWorker.port);
   addUnloadCallback(() => {
     windowInstance.onWindowClosed().catch((e) => {
       reportError(
@@ -328,7 +328,7 @@ async function setupMultiWindowHandling(
     });
   });
   await windowInstance.init(
-      Comlink.proxy(handleSuspend), Comlink.proxy(handleResume));
+      comlink.proxy(handleSuspend), comlink.proxy(handleResume));
   await ChromeHelper.getInstance().initCameraWindowController();
   windowController.addWindowStateListener((states) => {
     const isMinimizing = states.includes(WindowStateType.kMinimized);
@@ -421,12 +421,20 @@ async function main() {
   // There are three possible cases:
   // 1. Regular instance
   //      (intent === null)
-  // 2. STILL_CAPTURE_CAMERA and VIDEO_CAMERA intents
+  // 2. Intents within [INTENT_ACTION_STILL_IMAGE_CAMERA,
+  //                    INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE,
+  //                    INTENT_ACTION_VIDEO_CAMERA]
   //      (intent !== null && shouldHandleResult === false)
-  // 3. Other intents
+  // 3. Intents within [ACTION_STILL_IMAGE_CAMERA,
+  //                    ACTION_STILL_IMAGE_CAMERA_SECURE,
+  //                    ACTION_VIDEO_CAMERA]
   //      (intent !== null && shouldHandleResult === true)
-  // `shouldHandleIntentResult` will be false in (1) and (2), and gallery
-  // button will be shown on the UI.
+  //
+  // For 1. and 2., CCA is opened in a normal window and there's no need of
+  // handling capture result and passed it back to ARC.
+  //
+  // For 3., CCA is opened in a system dialog, gallery button won't be shown,
+  // and camera folder won't be accessible. (See http://b/374629916#comment16)
   const shouldHandleIntentResult = intent?.shouldHandleResult === true;
   state.set(state.State.SHOULD_HANDLE_INTENT_RESULT, shouldHandleIntentResult);
 
@@ -502,9 +510,9 @@ async function main() {
   const cameraStartSuccessful = await cameraManager.reconfigure();
 
   try {
-    await filesystem.initialize();
-    const cameraDir = filesystem.getCameraDirectory();
+    await filesystem.initialize(shouldHandleIntentResult);
     if (!shouldHandleIntentResult) {
+      const cameraDir = filesystem.getCameraDirectory();
       await resultSaver.initialize(cameraDir);
     }
   } catch (error) {

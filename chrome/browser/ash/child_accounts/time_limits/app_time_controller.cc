@@ -29,6 +29,7 @@
 #include "chrome/browser/ash/child_accounts/time_limits/app_types.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/notifications/notification_display_service.h"
+#include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
@@ -445,7 +446,7 @@ base::Time AppTimeController::GetNextResetTime() const {
 
 void AppTimeController::ScheduleForTimeLimitReset() {
   if (reset_timer_.IsRunning())
-    reset_timer_.AbandonAndStop();
+    reset_timer_.Stop();
 
   base::TimeDelta time_until_reset = GetNextResetTime() - base::Time::Now();
   reset_timer_.Start(FROM_HERE, time_until_reset,
@@ -585,7 +586,7 @@ void AppTimeController::ShowNotificationForApp(
   }
 
   auto* notification_display_service =
-      NotificationDisplayService::GetForProfile(profile_);
+      NotificationDisplayServiceFactory::GetForProfile(profile_);
   if (!notification_display_service)
     return;
 

@@ -28,6 +28,7 @@
 
 #include <utility>
 
+#include "third_party/blink/renderer/core/css/post_style_update_scope.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_containment_scope_tree.h"
 #include "third_party/blink/renderer/core/dom/element_rare_data_vector.h"
@@ -38,6 +39,8 @@
 #include "third_party/blink/renderer/core/dom/scroll_marker_pseudo_element.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_option_element.h"
+#include "third_party/blink/renderer/core/html/html_quote_element.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/generated_children.h"
 #include "third_party/blink/renderer/core/layout/layout_counter.h"
@@ -79,6 +82,16 @@ PseudoId ResolvePseudoIdAlias(PseudoId pseudo_id) {
 PseudoElement* PseudoElement::Create(Element* parent,
                                      PseudoId pseudo_id,
                                      const AtomicString& view_transition_name) {
+  if (pseudo_id == kPseudoIdCheck) {
+    CHECK(RuntimeEnabledFeatures::CustomizableSelectEnabled());
+
+    if (!IsA<HTMLOptionElement>(parent)) {
+      // The `::check` pseudo element should only be created for option
+      // elements.
+      return nullptr;
+    }
+  }
+
   if (pseudo_id == kPseudoIdFirstLetter) {
     return MakeGarbageCollected<FirstLetterPseudoElement>(parent);
   } else if (IsTransitionPseudoElement(pseudo_id)) {
@@ -97,8 +110,8 @@ PseudoElement* PseudoElement::Create(Element* parent,
     return MakeGarbageCollected<ScrollButtonPseudoElement>(parent, pseudo_id);
   }
   DCHECK(pseudo_id == kPseudoIdAfter || pseudo_id == kPseudoIdBefore ||
-         pseudo_id == kPseudoIdBackdrop || pseudo_id == kPseudoIdMarker ||
-         pseudo_id == kPseudoIdColumn);
+         pseudo_id == kPseudoIdCheck || pseudo_id == kPseudoIdBackdrop ||
+         pseudo_id == kPseudoIdMarker || pseudo_id == kPseudoIdColumn);
   return MakeGarbageCollected<PseudoElement>(parent, pseudo_id,
                                              view_transition_name);
 }
@@ -112,6 +125,10 @@ const QualifiedName& PseudoElementTagName(PseudoId pseudo_id) {
     case kPseudoIdBefore: {
       DEFINE_STATIC_LOCAL(QualifiedName, before, (AtomicString("::before")));
       return before;
+    }
+    case kPseudoIdCheck: {
+      DEFINE_STATIC_LOCAL(QualifiedName, check, (AtomicString("::check")));
+      return check;
     }
     case kPseudoIdBackdrop: {
       DEFINE_STATIC_LOCAL(QualifiedName, backdrop,
@@ -262,9 +279,16 @@ const ComputedStyle* PseudoElement::CustomStyleForLayoutObject(
   // originating element.
   DCHECK(!IsHighlightPseudoElement(pseudo_id_));
   Element* parent = ParentOrShadowHostElement();
-  return parent->StyleForPseudoElement(
+  if (!RuntimeEnabledFeatures::CSSNestedPseudoElementsEnabled()) {
+    return parent->StyleForPseudoElement(
+        style_recalc_context,
+        StyleRequest(GetPseudoIdForStyling(), parent->GetComputedStyle(),
+                     /* originating_element_style */ nullptr,
+                     view_transition_name_));
+  }
+  return StyleForPseudoElement(
       style_recalc_context,
-      StyleRequest(GetPseudoIdForStyling(), parent->GetComputedStyle(),
+      StyleRequest(kPseudoIdNone, parent->GetComputedStyle(),
                    /* originating_element_style */ nullptr,
                    view_transition_name_));
 }
@@ -369,6 +393,7 @@ void PseudoElement::AttachLayoutTree(AttachContext& context) {
         return;
       }
       break;
+    case kPseudoIdCheck:
     case kPseudoIdBefore:
     case kPseudoIdAfter:
       break;
@@ -421,6 +446,7 @@ void PseudoElement::AttachLayoutTree(AttachContext& context) {
 bool PseudoElement::CanGenerateContent() const {
   switch (GetPseudoIdForStyling()) {
     case kPseudoIdMarker:
+    case kPseudoIdCheck:
     case kPseudoIdBefore:
     case kPseudoIdAfter:
     case kPseudoIdScrollMarker:
@@ -440,10 +466,16 @@ bool PseudoElement::LayoutObjectIsNeeded(const DisplayStyle& style) const {
 
 bool PseudoElement::CanGeneratePseudoElement(PseudoId pseudo_id) const {
   switch (GetPseudoId()) {
+    case kPseudoIdCheck:
     case kPseudoIdBefore:
     case kPseudoIdAfter:
       if (pseudo_id != kPseudoIdMarker)
         return false;
+      break;
+    case kPseudoIdColumn:
+      if (pseudo_id != kPseudoIdScrollMarker) {
+        return false;
+      }
       break;
     default:
       return false;
@@ -464,11 +496,11 @@ void PseudoElement::AccessKeyAction(
   // tech can still attempt to interact with pseudo elements if they are in
   // the AX tree (usually due to their text/image content).
   // Just pass this request to the originating element.
-  DCHECK(OriginatingElement());
-  OriginatingElement()->AccessKeyAction(creation_scope);
+  DCHECK(UltimateOriginatingElement());
+  UltimateOriginatingElement()->AccessKeyAction(creation_scope);
 }
 
-Element* PseudoElement::OriginatingElement() const {
+Element* PseudoElement::UltimateOriginatingElement() const {
   auto* parent = parentElement();
 
   while (parent && parent->IsPseudoElement())
@@ -502,7 +534,9 @@ bool PseudoElementLayoutObjectIsNeeded(PseudoId pseudo_id,
     case kPseudoIdViewTransitionImagePair:
     case kPseudoIdViewTransitionNew:
     case kPseudoIdViewTransitionOld:
+    case kPseudoIdColumn:
       return true;
+    case kPseudoIdCheck:
     case kPseudoIdBefore:
     case kPseudoIdAfter:
       return !pseudo_style.ContentPreventsBoxGeneration();

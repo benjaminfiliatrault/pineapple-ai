@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '../strings.m.js';
+import '/strings.m.js';
 import './commerce/shopping_list.js';
 import './icons.html.js';
 import './power_bookmarks_context_menu.js';
@@ -24,7 +24,7 @@ import '//resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import '//resources/cr_elements/cr_toast/cr_toast.js';
 import '//resources/cr_elements/cr_toolbar/cr_toolbar_search_field.js';
 import '//resources/cr_elements/cr_toolbar/cr_toolbar_selection_overlay.js';
-import '//resources/cr_elements/icons_lit.html.js';
+import '//resources/cr_elements/icons.html.js';
 import '//resources/polymer/v3_0/iron-list/iron-list.js';
 
 import type {SpEmptyStateElement} from '//bookmarks-side-panel.top-chrome/shared/sp_empty_state.js';

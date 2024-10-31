@@ -18,6 +18,9 @@
 [submodule "third_party/libunwind/src"]
 	path = third_party/libunwind/src
 	url = https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libunwind
+[submodule "third_party/llvm-libc/src"]
+	path = third_party/llvm-libc/src
+	url = https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libc
 [submodule "chrome/test/data/autofill/captured_sites/artifacts"]
 	path = chrome/test/data/autofill/captured_sites/artifacts
 	url = https://chrome-internal.googlesource.com/chrome/test/captured_sites/autofill
@@ -39,6 +42,7 @@
 	path = clank
 	url = https://chrome-internal.googlesource.com/clank/internal/apps
 	gclient-condition = checkout_android and checkout_src_internal
+	gclient-recursedeps = true
 [submodule "docs/website"]
 	path = docs/website
 	url = https://chromium.googlesource.com/website
@@ -125,6 +129,7 @@
 [submodule "third_party/angle"]
 	path = third_party/angle
 	url = https://chromium.googlesource.com/angle/angle
+	gclient-recursedeps = true
 [submodule "third_party/anonymous_tokens/src"]
 	path = third_party/anonymous_tokens/src
 	url = https://chromium.googlesource.com/external/github.com/google/anonymous-tokens
@@ -137,6 +142,7 @@
 [submodule "third_party/dawn"]
 	path = third_party/dawn
 	url = https://dawn.googlesource.com/dawn
+	gclient-recursedeps = true
 [submodule "third_party/highway/src"]
 	path = third_party/highway/src
 	url = https://chromium.googlesource.com/external/github.com/google/highway
@@ -199,20 +205,18 @@
 [submodule "third_party/crossbench"]
 	path = third_party/crossbench
 	url = https://chromium.googlesource.com/crossbench
-[submodule "third_party/crubit/src"]
-	path = third_party/crubit/src
-	url = https://chromium.googlesource.com/external/github.com/google/crubit
-	gclient-condition = checkout_crubit
 [submodule "third_party/depot_tools"]
 	path = third_party/depot_tools
 	url = https://chromium.googlesource.com/chromium/tools/depot_tools
 [submodule "third_party/devtools-frontend/src"]
 	path = third_party/devtools-frontend/src
 	url = https://chromium.googlesource.com/devtools/devtools-frontend
+	gclient-recursedeps = true
 [submodule "third_party/devtools-frontend-internal"]
 	path = third_party/devtools-frontend-internal
 	url = https://chrome-internal.googlesource.com/devtools/devtools-internal
 	gclient-condition = checkout_src_internal
+	gclient-recursedeps = true
 [submodule "third_party/dom_distiller_js/dist"]
 	path = third_party/dom_distiller_js/dist
 	url = https://chromium.googlesource.com/chromium/dom-distiller/dist
@@ -273,6 +277,7 @@
 	path = third_party/instrumented_libs
 	url = https://chromium.googlesource.com/chromium/third_party/instrumented_libraries
 	gclient-condition = checkout_instrumented_libraries
+	gclient-recursedeps = true
 [submodule "third_party/jszip/src"]
 	path = third_party/jszip/src
 	url = https://chromium.googlesource.com/external/github.com/Stuk/jszip
@@ -461,6 +466,7 @@
 [submodule "third_party/openscreen/src"]
 	path = third_party/openscreen/src
 	url = https://chromium.googlesource.com/openscreen
+	gclient-recursedeps = true
 [submodule "third_party/openxr/src"]
 	path = third_party/openxr/src
 	url = https://chromium.googlesource.com/external/github.com/KhronosGroup/OpenXR-SDK
@@ -754,6 +760,7 @@
 	path = components/optimization_guide/internal
 	url = https://chrome-internal.googlesource.com/chrome/components/optimization_guide
 	gclient-condition = checkout_src_internal
+	gclient-recursedeps = true
 [submodule "components/plus_addresses/resources/internal"]
 	path = components/plus_addresses/resources/internal
 	url = https://chrome-internal.googlesource.com/chrome/components/plus_addresses/resources
@@ -778,6 +785,10 @@
 	path = components/test/data/autofill/heuristics-json/internal
 	url = https://chrome-internal.googlesource.com/chrome/test/autofill/structured_forms
 	gclient-condition = checkout_chromium_autofill_test_dependencies
+[submodule "components/test/data/autofill/label-doms/internal"]
+	path = components/test/data/autofill/label-doms/internal
+	url = https://chrome-internal.googlesource.com/chrome/test/autofill/field_labels
+	gclient-condition = checkout_chromium_autofill_test_dependencies
 [submodule "components/vector_icons/google_chrome"]
 	path = components/vector_icons/google_chrome
 	url = https://chrome-internal.googlesource.com/chrome/vector_icons/google_chrome
@@ -794,6 +805,7 @@
 	path = ios_internal
 	url = https://chrome-internal.googlesource.com/chrome/ios_internal
 	gclient-condition = checkout_ios and checkout_src_internal
+	gclient-recursedeps = true
 [submodule "remoting/host/installer/linux/internal"]
 	path = remoting/host/installer/linux/internal
 	url = https://chrome-internal.googlesource.com/chrome/remoting/host/installer/linux/internal

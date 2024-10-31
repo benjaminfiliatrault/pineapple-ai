@@ -29,9 +29,9 @@ gfx::GpuMemoryBufferHandle GetGpuMemoryBufferHandle(
       return media_frame->GetGpuMemoryBufferHandle();
     case VideoFrame::STORAGE_OPAQUE: {
       CHECK(mailbox_frame_registry);
-      CHECK(media_frame->HasTextures());
+      CHECK(media_frame->metadata().tracking_token.has_value());
       auto frame_resource = mailbox_frame_registry->AccessFrame(
-          media_frame->mailbox_holder(0).mailbox);
+          *media_frame->metadata().tracking_token);
       CHECK(frame_resource);
       return frame_resource->CreateGpuMemoryBufferHandle();
     }
@@ -355,7 +355,7 @@ void StableVideoDecoderService::OnWaiting(WaitingReason reason) {
 void StableVideoDecoderService::RequestOverlayInfo(
     bool restart_for_transitions) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void StableVideoDecoderService::AddLogRecord(const MediaLogRecord& event) {

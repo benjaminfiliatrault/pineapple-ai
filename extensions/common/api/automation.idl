@@ -476,8 +476,9 @@
     caption,
     contents,
     cssAltText,
+    interestTarget,
     placeholder,
-    popoverAttribute,
+    popoverTarget,
     prohibited,
     prohibitedAndRedundant,
     relatedElement,
@@ -489,7 +490,8 @@
     ariaDescription,
     attributeExplicitlyEmpty,
     buttonLabel,
-    popoverAttribute,
+    interestTarget,
+    popoverTarget,
     prohibitedNameRepair,
     relatedElement,
     rubyAnnotation,
@@ -1277,10 +1279,6 @@ enum PositionType {
 
     // Marks this subtree as modal.
     boolean? modal;
-
-    // A map containing all HTML attributes and their values
-    // <jsexterns>@type {Object<string>}</jsexterns>
-    object? htmlAttributes;
 
     // The input type of a text field, such as "text" or "email".
     DOMString? inputType;

@@ -229,12 +229,11 @@ std::optional<uint64_t> ColumnUint64OrNull(sql::Statement& statement, int col) {
 constexpr int kSourceColumnCount = 21;
 
 int64_t GetStorageFileSizeKB(const base::FilePath& path_to_database) {
-  int64_t file_size = -1;
-  if (!path_to_database.empty() &&
-      base::GetFileSize(path_to_database, &file_size)) {
-    file_size = file_size / 1024;
+  std::optional<int64_t> file_size = base::GetFileSize(path_to_database);
+  if (!file_size.has_value()) {
+    return -1;
   }
-  return file_size;
+  return file_size.value() / 1024;
 }
 
 }  // namespace
@@ -425,11 +424,12 @@ AttributionStorageSql::ReadSourceFromStatement(sql::Statement& statement) {
       trigger_data_matching = TriggerDataMatching::kModulus;
       break;
   }
-  // If "debug_cookie_set" field was not set in earlier versions, set the
-  // value to whether the debug key was set for the source.
-  bool debug_cookie_set = read_only_source_data_msg->has_debug_cookie_set()
-                              ? read_only_source_data_msg->debug_cookie_set()
-                              : debug_key.has_value();
+  // If "cookie_based_debug_allowed" field was not set in earlier versions, set
+  // the value to whether the debug key was set for the source.
+  bool cookie_based_debug_allowed =
+      read_only_source_data_msg->has_cookie_based_debug_allowed()
+          ? read_only_source_data_msg->cookie_based_debug_allowed()
+          : debug_key.has_value();
 
   absl::uint128 aggregatable_debug_key_piece = absl::MakeUint128(
       read_only_source_data_msg->aggregatable_debug_key_piece().high_bits(),
@@ -449,7 +449,7 @@ AttributionStorageSql::ReadSourceFromStatement(sql::Statement& statement) {
 
   std::optional<StoredSource> stored_source = StoredSource::Create(
       CommonSourceInfo(*std::move(source_origin), *std::move(reporting_origin),
-                       *source_type, debug_cookie_set),
+                       *source_type, cookie_based_debug_allowed),
       source_event_id, *std::move(destination_set), source_time, expiry_time,
       *std::move(trigger_specs), aggregatable_report_window_time, priority,
       *std::move(filter_data), debug_key, *std::move(aggregation_keys),
@@ -693,10 +693,11 @@ std::optional<StoredSource> AttributionStorageSql::InsertSource(
   statement.BindBlob(15, SerializeAggregationKeys(reg.aggregation_keys));
   statement.BindBlob(16, SerializeFilterData(reg.filter_data));
   statement.BindBlob(
-      17, SerializeReadOnlySourceData(
-              reg.trigger_specs, randomized_response_rate,
-              reg.trigger_data_matching, common_info.debug_cookie_set(),
-              reg.aggregatable_debug_reporting_config.config().key_piece));
+      17,
+      SerializeReadOnlySourceData(
+          reg.trigger_specs, randomized_response_rate,
+          reg.trigger_data_matching, common_info.cookie_based_debug_allowed(),
+          reg.aggregatable_debug_reporting_config.config().key_piece));
   statement.BindInt(18, remaining_aggregatable_debug_budget);
 
   if (reg.attribution_scopes_data.has_value()) {
@@ -1296,6 +1297,7 @@ AttributionStorageSql::ReadReportFromStatement(sql::Statement& statement) {
   }
 
   std::optional<AttributionReport::Data> data;
+  std::optional<uint64_t> source_debug_key;
 
   switch (base::span<const uint8_t> metadata = statement.ColumnBlob(col++);
           *report_type) {
@@ -1309,6 +1311,7 @@ AttributionStorageSql::ReadReportFromStatement(sql::Statement& statement) {
       if (!data.has_value()) {
         corruptions.status_set.Put(ReportCorruptionStatus::kInvalidMetadata);
       }
+      source_debug_key = source_data->source.debug_key();
       break;
     }
     case AttributionReport::Type::kAggregatableAttribution: {
@@ -1322,6 +1325,7 @@ AttributionStorageSql::ReadReportFromStatement(sql::Statement& statement) {
       if (!data.has_value()) {
         corruptions.status_set.Put(ReportCorruptionStatus::kInvalidMetadata);
       }
+      source_debug_key = source_data->source.debug_key();
       break;
     }
     case AttributionReport::Type::kNullAggregatable:
@@ -1350,7 +1354,8 @@ AttributionStorageSql::ReadReportFromStatement(sql::Statement& statement) {
                                            *std::move(context_origin)),
                            report_id, report_time, initial_report_time,
                            std::move(external_report_id), failed_send_attempts,
-                           *std::move(data), *std::move(reporting_origin));
+                           *std::move(data), *std::move(reporting_origin),
+                           source_debug_key);
 }
 
 std::vector<AttributionReport> AttributionStorageSql::GetAttributionReports(
@@ -2522,12 +2527,11 @@ bool AttributionStorageSql::ClearReportsForSourceIds(
 
 namespace {
 
-RateLimitResult AggregatableAttributionAllowedForBudgetLimit(
-    const AttributionReport::AggregatableAttributionData&
-        aggregatable_attribution,
+bool AggregatableAttributionAllowedForBudgetLimit(
+    const AttributionReport::AggregatableData& aggregatable_attribution,
     int remaining_aggregatable_attribution_budget) {
   if (remaining_aggregatable_attribution_budget <= 0) {
-    return RateLimitResult::kNotAllowed;
+    return false;
   }
 
   const base::CheckedNumeric<int64_t> budget_required =
@@ -2535,10 +2539,10 @@ RateLimitResult AggregatableAttributionAllowedForBudgetLimit(
   if (!budget_required.IsValid() ||
       budget_required.ValueOrDie() >
           remaining_aggregatable_attribution_budget) {
-    return RateLimitResult::kNotAllowed;
+    return false;
   }
 
-  return RateLimitResult::kAllowed;
+  return true;
 }
 
 }  // namespace
@@ -2680,8 +2684,7 @@ AttributionStorageSql::MaybeStoreAggregatableAttributionReportData(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const auto* aggregatable_attribution =
-      absl::get_if<AttributionReport::AggregatableAttributionData>(
-          &report.data());
+      absl::get_if<AttributionReport::AggregatableData>(&report.data());
   DCHECK(aggregatable_attribution);
 
   if (num_aggregatable_attribution_reports >=
@@ -2691,14 +2694,10 @@ AttributionStorageSql::MaybeStoreAggregatableAttributionReportData(
     return AggregatableResult::kExcessiveReports;
   }
 
-  switch (AggregatableAttributionAllowedForBudgetLimit(
-      *aggregatable_attribution, remaining_aggregatable_attribution_budget)) {
-    case RateLimitResult::kAllowed:
-      break;
-    case RateLimitResult::kNotAllowed:
-      return AggregatableResult::kInsufficientBudget;
-    case RateLimitResult::kError:
-      return AggregatableResult::kInternalError;
+  if (!AggregatableAttributionAllowedForBudgetLimit(
+          *aggregatable_attribution,
+          remaining_aggregatable_attribution_budget)) {
+    return AggregatableResult::kInsufficientBudget;
   }
 
   sql::Transaction transaction(&db_);
@@ -2959,6 +2958,14 @@ bool AttributionStorageSql::DeleteAttributionRateLimit(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return rate_limit_table_.DeleteAttributionRateLimit(&db_, scope, report_id);
+}
+
+int64_t AttributionStorageSql::CountUniqueReportingOriginsPerSiteForAttribution(
+    const AttributionTrigger& trigger,
+    const base::Time now) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return rate_limit_table_.CountUniqueReportingOriginsPerSiteForAttribution(
+      &db_, trigger, now);
 }
 
 }  // namespace content

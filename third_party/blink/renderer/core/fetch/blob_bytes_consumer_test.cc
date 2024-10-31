@@ -72,9 +72,8 @@ TEST_F(BlobBytesConsumerTest, TwoPhaseRead) {
   EXPECT_EQ(PublicState::kReadableOrWaiting, consumer->GetPublicState());
   EXPECT_FALSE(DidStartLoading());
 
-  const char* buffer = nullptr;
-  size_t available = 0;
-  EXPECT_EQ(Result::kShouldWait, consumer->BeginRead(&buffer, &available));
+  base::span<const char> buffer;
+  EXPECT_EQ(Result::kShouldWait, consumer->BeginRead(buffer));
   EXPECT_TRUE(DidStartLoading());
   EXPECT_FALSE(consumer->DrainAsBlobDataHandle(
       BytesConsumer::BlobSizePolicy::kAllowBlobWithInvalidSize));
@@ -98,9 +97,8 @@ TEST_F(BlobBytesConsumerTest, CancelBeforeStarting) {
 
   consumer->Cancel();
 
-  const char* buffer = nullptr;
-  size_t available;
-  EXPECT_EQ(Result::kDone, consumer->BeginRead(&buffer, &available));
+  base::span<const char> buffer;
+  EXPECT_EQ(Result::kDone, consumer->BeginRead(buffer));
   EXPECT_EQ(PublicState::kClosed, consumer->GetPublicState());
   EXPECT_FALSE(DidStartLoading());
   EXPECT_EQ(0, client->NumOnStateChangeCalled());
@@ -114,15 +112,14 @@ TEST_F(BlobBytesConsumerTest, CancelAfterStarting) {
       MakeGarbageCollected<BlobBytesConsumerTestClient>();
   consumer->SetClient(client);
 
-  const char* buffer = nullptr;
-  size_t available;
-  EXPECT_EQ(Result::kShouldWait, consumer->BeginRead(&buffer, &available));
+  base::span<const char> buffer;
+  EXPECT_EQ(Result::kShouldWait, consumer->BeginRead(buffer));
   EXPECT_EQ(PublicState::kReadableOrWaiting, consumer->GetPublicState());
   EXPECT_EQ(0, client->NumOnStateChangeCalled());
 
   consumer->Cancel();
   EXPECT_EQ(PublicState::kClosed, consumer->GetPublicState());
-  EXPECT_EQ(Result::kDone, consumer->BeginRead(&buffer, &available));
+  EXPECT_EQ(Result::kDone, consumer->BeginRead(buffer));
   EXPECT_EQ(0, client->NumOnStateChangeCalled());
   EXPECT_TRUE(DidStartLoading());
 }
@@ -195,10 +192,9 @@ TEST_F(BlobBytesConsumerTest, DrainAsFormData) {
   ASSERT_TRUE(result);
   ASSERT_EQ(1u, result->Elements().size());
   ASSERT_EQ(FormDataElement::kEncodedBlob, result->Elements()[0].type_);
-  ASSERT_TRUE(result->Elements()[0].optional_blob_data_handle_);
-  EXPECT_EQ(body.length(),
-            result->Elements()[0].optional_blob_data_handle_->size());
-  EXPECT_EQ(blob_data_handle->Uuid(), result->Elements()[0].blob_uuid_);
+  ASSERT_TRUE(result->Elements()[0].blob_data_handle_);
+  EXPECT_EQ(body.length(), result->Elements()[0].blob_data_handle_->size());
+  EXPECT_EQ(blob_data_handle, result->Elements()[0].blob_data_handle_);
   EXPECT_EQ(PublicState::kClosed, consumer->GetPublicState());
   EXPECT_FALSE(DidStartLoading());
 }
@@ -206,10 +202,9 @@ TEST_F(BlobBytesConsumerTest, DrainAsFormData) {
 TEST_F(BlobBytesConsumerTest, ConstructedFromNullHandle) {
   BlobBytesConsumer* consumer =
       MakeGarbageCollected<BlobBytesConsumer>(GetFrame().DomWindow(), nullptr);
-  const char* buffer = nullptr;
-  size_t available;
+  base::span<const char> buffer;
   EXPECT_EQ(BytesConsumer::PublicState::kClosed, consumer->GetPublicState());
-  EXPECT_EQ(Result::kDone, consumer->BeginRead(&buffer, &available));
+  EXPECT_EQ(Result::kDone, consumer->BeginRead(buffer));
 }
 
 }  // namespace

@@ -247,6 +247,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoAutofillSelected,
     kPseudoBackdrop,
     kPseudoBefore,
+    kPseudoCheck,
     kPseudoChecked,
     kPseudoCornerPresent,
     kPseudoCurrent,
@@ -270,6 +271,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoFocusVisible,
     kPseudoFocusWithin,
     kPseudoFullPageMedia,
+    kPseudoHasSlotted,
     kPseudoHorizontal,
     kPseudoHover,
     kPseudoIncrement,
@@ -294,6 +296,8 @@ class CORE_EXPORT CSSSelector {
     kPseudoOptional,
     kPseudoParent,  // Written as & (in nested rules).
     kPseudoPart,
+    kPseudoPermissionElementInvalidStyle,
+    kPseudoPermissionElementOccluded,
     kPseudoPermissionGranted,
     kPseudoPlaceholder,
     kPseudoPlaceholderShown,
@@ -311,6 +315,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoScrollbarTrack,
     kPseudoScrollbarTrackPiece,
     kPseudoSearchText,
+    kPseudoSelectArrow,
     kPseudoSelectHasChildButton,
     kPseudoPicker,
     kPseudoSelection,
@@ -498,6 +503,11 @@ class CORE_EXPORT CSSSelector {
                                .contains_complex_logical_combinations_
                          : false;
   }
+  bool HasArgumentMatchInShadowTree() const {
+    return HasRareData()
+               ? data_.rare_data_->bits_.has_.argument_match_in_shadow_tree_
+               : false;
+  }
 
 #if DCHECK_IS_ON()
   void Show() const;
@@ -511,6 +521,7 @@ class CORE_EXPORT CSSSelector {
   void SetIdentList(std::unique_ptr<Vector<AtomicString>>);
   void SetContainsPseudoInsideHasPseudoClass();
   void SetContainsComplexLogicalCombinationsInsideHasPseudoClass();
+  void SetHasArgumentMatchInShadowTree();
 
   void SetNth(int a, int b, CSSSelectorList* sub_selector);
   bool MatchNth(unsigned count) const;
@@ -590,6 +601,8 @@ class CORE_EXPORT CSSSelector {
   bool MatchesPseudoElement() const;
   bool IsAllowedInParentPseudo() const;
   bool IsTreeAbidingPseudoElement() const;
+  bool IsElementBackedPseudoElement() const;
+  static bool IsElementBackedPseudoElement(CSSSelector::PseudoType pseudo);
   bool IsAllowedAfterPart() const;
 
   // Returns true if the immediately preceding simple selector is ::part.
@@ -707,6 +720,11 @@ class CORE_EXPORT CSSSelector {
         // Used for :has() with logical combinations (:is(), :where(), :not())
         // containing complex selector in its argument. e.g. :has(:is(.a .b))
         bool contains_complex_logical_combinations_;
+
+        // Used for :has() next to :host() (e.g. ':host:has(.a)') so that the
+        // :has() argument is tested on the elements in shadow tree of the host
+        // element.
+        bool argument_match_in_shadow_tree_;
       } has_;
 
       // See GetNestingType.

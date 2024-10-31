@@ -10,12 +10,13 @@
 #include "ash/accelerators/accelerator_controller_impl.h"
 #include "ash/accessibility/a11y_feature_type.h"
 #include "ash/accessibility/accessibility_observer.h"
-#include "ash/accessibility/disable_trackpad_event_rewriter.h"
+#include "ash/accessibility/disable_touchpad_event_rewriter.h"
 #include "ash/accessibility/filter_keys_event_rewriter.h"
 #include "ash/accessibility/flash_screen_controller.h"
 #include "ash/accessibility/magnifier/docked_magnifier_controller.h"
 #include "ash/accessibility/sticky_keys/sticky_keys_controller.h"
 #include "ash/accessibility/test_accessibility_controller_client.h"
+#include "ash/accessibility/ui/accessibility_confirmation_dialog.h"
 #include "ash/constants/ash_constants.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
@@ -29,6 +30,7 @@
 #include "ash/session/test_pref_service_provider.h"
 #include "ash/shell.h"
 #include "ash/system/toast/anchored_nudge_manager_impl.h"
+#include "ash/system/toast/toast_manager_impl.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/test/ash_test_base.h"
@@ -50,6 +52,9 @@
 #include "ui/gfx/animation/animation_test_api.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_types.h"
+#include "ui/native_theme/native_theme.h"
+#include "ui/native_theme/native_theme_features.h"
 
 using message_center::MessageCenter;
 
@@ -60,25 +65,27 @@ namespace {
 constexpr char kDictationLanguageUpgradedNudgeId[] =
     "dictation_language_upgraded.nudge_id";
 
+const std::string kAccessibilityToast = "AccessibilityToast";
+const int kDialogTimeoutSeconds = 30;
+const int kInternalTouchpadDeviceId = 30;
 const int kUsbMouseDeviceId = 20;
-const int kInternalTrackpadDeviceId = 30;
 
 ui::InputDevice GetSampleMouseUsb() {
   return {kUsbMouseDeviceId, ui::INPUT_DEVICE_USB, "SampleMouseUsb"};
 }
 
-ui::TouchpadDevice GetSampleTrackpadInternal() {
-  return {kInternalTrackpadDeviceId, ui::INPUT_DEVICE_INTERNAL, "touchpad"};
+ui::TouchpadDevice GetSampleTouchpadInternal() {
+  return {kInternalTouchpadDeviceId, ui::INPUT_DEVICE_INTERNAL, "touchpad"};
 }
 
-void SimulateOnlyInternalTrackpadConnected() {
+void SimulateOnlyInternalTouchpadConnected() {
   ui::DeviceDataManagerTestApi().SetTouchpadDevices(
-      {GetSampleTrackpadInternal()});
+      {GetSampleTouchpadInternal()});
 }
 
 void SimulateExternalMouseConnected() {
   ui::DeviceDataManagerTestApi().SetMouseDevices({GetSampleMouseUsb()});
-  SimulateOnlyInternalTrackpadConnected();
+  SimulateOnlyInternalTouchpadConnected();
 }
 
 }  // namespace
@@ -150,7 +157,8 @@ class AccessibilityControllerTest : public AshTestBase {
                               ::features::kAccessibilityMouseKeys,
                               ::features::
                                   kAccessibilityCaretBlinkIntervalSetting,
-                              ::features::kAccessibilityFlashScreenFeature},
+                              ::features::kAccessibilityFlashScreenFeature,
+                              ::features::kOverlayScrollbarsOSSetting},
         /*disabled_features=*/{});
     AshTestBase::SetUp();
   }
@@ -336,8 +344,6 @@ TEST_F(AccessibilityControllerTest, PrefsAreRegistered) {
       prefs->FindPreference(prefs::kAccessibilityFaceGazeCursorSpeedLeft));
   EXPECT_TRUE(
       prefs->FindPreference(prefs::kAccessibilityFaceGazeCursorSpeedRight));
-  EXPECT_TRUE(
-      prefs->FindPreference(prefs::kAccessibilityFaceGazeCursorSmoothing));
   EXPECT_TRUE(prefs->FindPreference(
       prefs::kAccessibilityFaceGazeCursorUseAcceleration));
   EXPECT_TRUE(
@@ -359,6 +365,32 @@ TEST_F(AccessibilityControllerTest, PrefsAreRegistered) {
       prefs->FindPreference(prefs::kAccessibilityFlashNotificationsEnabled));
   EXPECT_TRUE(
       prefs->FindPreference(prefs::kAccessibilityFlashNotificationsColor));
+  EXPECT_TRUE(
+      prefs->FindPreference(prefs::kAccessibilityOverlayScrollbarEnabled));
+}
+
+TEST_F(AccessibilityControllerTest, SetAlwaysShowScrollbarEnabled) {
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+  EXPECT_FALSE(controller->always_show_scrollbar().enabled());
+
+  TestAccessibilityObserver observer;
+  controller->AddObserver(&observer);
+  EXPECT_EQ(0, observer.status_changed_count_);
+
+  controller->always_show_scrollbar().SetEnabled(true);
+  EXPECT_TRUE(controller->always_show_scrollbar().enabled());
+  EXPECT_EQ(1, observer.status_changed_count_);
+  ExpectSessionDurationMetricCount("CrosAlwaysShowScrollbar", 0);
+  EXPECT_TRUE(ui::NativeTheme::GetPrefersAlwaysShowScrollbar());
+
+  controller->always_show_scrollbar().SetEnabled(false);
+  EXPECT_FALSE(controller->always_show_scrollbar().enabled());
+  EXPECT_EQ(2, observer.status_changed_count_);
+  ExpectSessionDurationMetricCount("CrosAlwaysShowScrollbar", 1);
+  EXPECT_FALSE(ui::NativeTheme::GetPrefersAlwaysShowScrollbar());
+
+  controller->RemoveObserver(&observer);
 }
 
 TEST_F(AccessibilityControllerTest, SetAutoclickEnabled) {
@@ -1848,6 +1880,17 @@ TEST_F(AccessibilityControllerTest, DoesNotFlashSilentNotifications) {
   ExpectFlashNotificationNotShown();
 }
 
+TEST_F(AccessibilityControllerTest, DoesNotLowPriorityNotifications) {
+  auto* accessibility_controller = Shell::Get()->accessibility_controller();
+  accessibility_controller->flash_notifications().SetEnabled(true);
+
+  message_center::RichNotificationData data =
+      message_center::RichNotificationData();
+  data.priority = message_center::LOW_PRIORITY;
+  ShowNotification(data);
+  ExpectFlashNotificationNotShown();
+}
+
 TEST_F(AccessibilityControllerTest, DoesNotFlashWhenInQuietMode) {
   auto* accessibility_controller = Shell::Get()->accessibility_controller();
   accessibility_controller->flash_notifications().SetEnabled(true);
@@ -1950,18 +1993,18 @@ TEST_F(AccessibilityControllerTest, LogsDurationAtShutdown) {
   ExpectSessionDurationMetricCount("CrosLargeCursor", 1);
 }
 
-// Verifies that the DisableTrackpadEventRewriter isn't initialized, since the
+// Verifies that the DisableTouchpadEventRewriter isn't initialized, since the
 // feature flag is off in this test suite.
 TEST_F(AccessibilityControllerTest,
-       DisableTrackpadEventRewriterNotInitialized) {
+       DisableTouchpadEventRewriterNotInitialized) {
   // Initialize the EventRewriterController manually so that all EventRewriters
   // get initialized.
   EventRewriterController::Get()->Initialize(nullptr, nullptr);
   AccessibilityController* controller =
       Shell::Get()->accessibility_controller();
   // AccessibilityController shouldn't have a reference to the
-  // DisableTrackpadEventRewriter.
-  ASSERT_EQ(nullptr, controller->GetDisableTrackpadEventRewriterForTest());
+  // DisableTouchpadEventRewriter.
+  ASSERT_EQ(nullptr, controller->GetDisableTouchpadEventRewriterForTest());
 }
 
 // Verifies that the FilterKeysEventRewriter isn't initialized, since the
@@ -2262,21 +2305,12 @@ class AccessibilityControllerSelectToSpeakKeyboardShortcutTest
   ~AccessibilityControllerSelectToSpeakKeyboardShortcutTest() override =
       default;
 
-  void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        ::features::kAccessibilitySelectToSpeakShortcut);
-    AshTestBase::SetUp();
-  }
-
   void SetDialogAcceptedPref(bool accepted) {
     PrefService* prefs =
         Shell::Get()->session_controller()->GetLastActiveUserPrefService();
     prefs->SetBoolean(prefs::kSelectToSpeakAcceleratorDialogHasBeenAccepted,
                       accepted);
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(AccessibilityControllerSelectToSpeakKeyboardShortcutTest,
@@ -2357,14 +2391,15 @@ TEST_F(AccessibilityControllerSelectToSpeakKeyboardShortcutTest,
   ASSERT_FALSE(controller->select_to_speak().enabled());
 }
 
-class AccessibilityControllerDisableTrackpadTest : public AshTestBase {
+class AccessibilityControllerDisableTouchpadTest : public AshTestBase {
  protected:
-  AccessibilityControllerDisableTrackpadTest() = default;
-  AccessibilityControllerDisableTrackpadTest(
-      const AccessibilityControllerDisableTrackpadTest&) = delete;
-  AccessibilityControllerDisableTrackpadTest& operator=(
-      const AccessibilityControllerDisableTrackpadTest&) = delete;
-  ~AccessibilityControllerDisableTrackpadTest() override = default;
+  AccessibilityControllerDisableTouchpadTest()
+      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+  AccessibilityControllerDisableTouchpadTest(
+      const AccessibilityControllerDisableTouchpadTest&) = delete;
+  AccessibilityControllerDisableTouchpadTest& operator=(
+      const AccessibilityControllerDisableTouchpadTest&) = delete;
+  ~AccessibilityControllerDisableTouchpadTest() override = default;
 
   void SetUp() override {
     scoped_feature_list_.InitAndEnableFeature(
@@ -2373,8 +2408,8 @@ class AccessibilityControllerDisableTrackpadTest : public AshTestBase {
     AshTestBase::SetUp();
 
     EventRewriterController::Get()->Initialize(nullptr, nullptr);
-    ASSERT_NE(disable_trackpad_event_rewriter(), nullptr);
-    ASSERT_FALSE(disable_trackpad_event_rewriter()->IsEnabled());
+    ASSERT_NE(disable_touchpad_event_rewriter(), nullptr);
+    ASSERT_FALSE(disable_touchpad_event_rewriter()->IsEnabled());
   }
 
   AccessibilityController* controller() {
@@ -2385,118 +2420,296 @@ class AccessibilityControllerDisableTrackpadTest : public AshTestBase {
     return Shell::Get()->session_controller()->GetLastActiveUserPrefService();
   }
 
-  DisableTrackpadEventRewriter* disable_trackpad_event_rewriter() {
+  base::RepeatingTimer& confirmation_dialog_timer() {
     return Shell::Get()
         ->accessibility_controller()
-        ->GetDisableTrackpadEventRewriterForTest();
+        ->GetConfirmationDialogForTest()
+        ->timer_;
+  }
+
+  DisableTouchpadEventRewriter* disable_touchpad_event_rewriter() {
+    return Shell::Get()
+        ->accessibility_controller()
+        ->GetDisableTouchpadEventRewriterForTest();
   }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-TEST_F(AccessibilityControllerDisableTrackpadTest,
+TEST_F(AccessibilityControllerDisableTouchpadTest,
        PrefChangesEventRewriterEnabledState) {
-  // Verify that the disable trackpad feature is off by default.
+  // Verify that the disable touchpad feature is off by default.
   ASSERT_FALSE(
       prefs()->GetBoolean(prefs::kAccessibilityDisableTrackpadEnabled));
-  ASSERT_FALSE(controller()->disable_trackpad().enabled());
+  ASSERT_FALSE(controller()->disable_touchpad().enabled());
   ASSERT_EQ(prefs()->GetInteger(prefs::kAccessibilityDisableTrackpadMode),
-            static_cast<int>(DisableTrackpadMode::kNever));
+            static_cast<int>(DisableTouchpadMode::kNever));
 
   // AccessibilityController should have a reference to the
-  // DisableTrackpadEventRewriter and it should also be off by default.
-  ASSERT_NE(disable_trackpad_event_rewriter(), nullptr);
-  ASSERT_FALSE(disable_trackpad_event_rewriter()->IsEnabled());
+  // DisableTouchpadEventRewriter and it should also be off by default.
+  ASSERT_NE(disable_touchpad_event_rewriter(), nullptr);
+  ASSERT_FALSE(disable_touchpad_event_rewriter()->IsEnabled());
 
-  // Enabling the disable trackpad feature should enable the
-  // DisableTrackpadEventRewriter.
+  // Enabling the disable touchpad feature should enable the
+  // DisableTouchpadEventRewriter.
   prefs()->SetBoolean(prefs::kAccessibilityDisableTrackpadEnabled, true);
-  ASSERT_TRUE(controller()->disable_trackpad().enabled());
-  ASSERT_TRUE(disable_trackpad_event_rewriter()->IsEnabled());
+  ASSERT_TRUE(controller()->disable_touchpad().enabled());
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
 
   // Disabling the feature should disable the event rewriter.
   prefs()->SetBoolean(prefs::kAccessibilityDisableTrackpadEnabled, false);
-  ASSERT_FALSE(controller()->disable_trackpad().enabled());
-  ASSERT_FALSE(disable_trackpad_event_rewriter()->IsEnabled());
+  ASSERT_FALSE(controller()->disable_touchpad().enabled());
+  ASSERT_FALSE(disable_touchpad_event_rewriter()->IsEnabled());
 }
 
-TEST_F(AccessibilityControllerDisableTrackpadTest, NoDialogOnNeverMode) {
+TEST_F(AccessibilityControllerDisableTouchpadTest, NoDialogOnNeverMode) {
   prefs()->SetInteger(prefs::kAccessibilityDisableTrackpadMode,
-                      static_cast<int>(DisableTrackpadMode::kNever));
+                      static_cast<int>(DisableTouchpadMode::kNever));
 
   ASSERT_EQ(nullptr, controller()->GetConfirmationDialogForTest());
-  ASSERT_FALSE(disable_trackpad_event_rewriter()->IsEnabled());
+  ASSERT_FALSE(disable_touchpad_event_rewriter()->IsEnabled());
 }
 
-TEST_F(AccessibilityControllerDisableTrackpadTest,
+TEST_F(AccessibilityControllerDisableTouchpadTest,
        DialogShowsWhenSetToAlwaysMode) {
   prefs()->SetInteger(prefs::kAccessibilityDisableTrackpadMode,
-                      static_cast<int>(DisableTrackpadMode::kAlways));
+                      static_cast<int>(DisableTouchpadMode::kAlways));
 
   ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
-  ASSERT_TRUE(disable_trackpad_event_rewriter()->IsEnabled());
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
 }
 
-TEST_F(AccessibilityControllerDisableTrackpadTest,
+TEST_F(AccessibilityControllerDisableTouchpadTest,
        EventRewriterDisabledWhenDialogDismissed) {
   prefs()->SetInteger(prefs::kAccessibilityDisableTrackpadMode,
-                      static_cast<int>(DisableTrackpadMode::kAlways));
+                      static_cast<int>(DisableTouchpadMode::kAlways));
 
   ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
-  ASSERT_TRUE(disable_trackpad_event_rewriter()->IsEnabled());
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
 
-  controller()->DismissDisableTrackpadDialogForTesting();
-  ASSERT_FALSE(disable_trackpad_event_rewriter()->IsEnabled());
+  controller()->DismissDisableTouchpadDialogForTesting();
+  ASSERT_FALSE(disable_touchpad_event_rewriter()->IsEnabled());
 }
 
-TEST_F(AccessibilityControllerDisableTrackpadTest,
+TEST_F(AccessibilityControllerDisableTouchpadTest,
        EventRewriterEnabledWhenDialogAccepted) {
   prefs()->SetInteger(prefs::kAccessibilityDisableTrackpadMode,
-                      static_cast<int>(DisableTrackpadMode::kAlways));
+                      static_cast<int>(DisableTouchpadMode::kAlways));
 
   ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
-  ASSERT_TRUE(disable_trackpad_event_rewriter()->IsEnabled());
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
 
-  controller()->AcceptDisableTrackpadDialogForTesting();
-  ASSERT_TRUE(disable_trackpad_event_rewriter()->IsEnabled());
+  controller()->AcceptDisableTouchpadDialogForTesting();
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
 }
 
-TEST_F(AccessibilityControllerDisableTrackpadTest,
+TEST_F(AccessibilityControllerDisableTouchpadTest,
        DialogShowsWhenExternalMouseAlreadyConnected) {
   SimulateExternalMouseConnected();
   prefs()->SetInteger(
       prefs::kAccessibilityDisableTrackpadMode,
-      static_cast<int>(DisableTrackpadMode::kOnExternalMouseConnected));
+      static_cast<int>(DisableTouchpadMode::kOnExternalMouseConnected));
 
   ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
-  ASSERT_TRUE(disable_trackpad_event_rewriter()->IsEnabled());
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
 }
 
-TEST_F(AccessibilityControllerDisableTrackpadTest,
+TEST_F(AccessibilityControllerDisableTouchpadTest,
        NoDialogWithNoExternalMouseConnected) {
-  SimulateOnlyInternalTrackpadConnected();
+  SimulateOnlyInternalTouchpadConnected();
   prefs()->SetInteger(
       prefs::kAccessibilityDisableTrackpadMode,
-      static_cast<int>(DisableTrackpadMode::kOnExternalMouseConnected));
+      static_cast<int>(DisableTouchpadMode::kOnExternalMouseConnected));
 
   ASSERT_EQ(nullptr, controller()->GetConfirmationDialogForTest());
-  ASSERT_FALSE(disable_trackpad_event_rewriter()->IsEnabled());
+  ASSERT_FALSE(disable_touchpad_event_rewriter()->IsEnabled());
 }
 
-TEST_F(AccessibilityControllerDisableTrackpadTest,
-       DialogShowsWhenExternalMouseLaterConnected) {
-  SimulateOnlyInternalTrackpadConnected();
-  prefs()->SetInteger(
-      prefs::kAccessibilityDisableTrackpadMode,
-      static_cast<int>(DisableTrackpadMode::kOnExternalMouseConnected));
+TEST_F(AccessibilityControllerDisableTouchpadTest,
+       ShowNotificationWhenDialogAccepted) {
+  message_center::NotificationList::Notifications notifications =
+      MessageCenter::Get()->GetVisibleNotifications();
+
+  ASSERT_EQ(0u, notifications.size());
+
+  SimulateOnlyInternalTouchpadConnected();
+  prefs()->SetInteger(prefs::kAccessibilityDisableTrackpadMode,
+                      static_cast<int>(DisableTouchpadMode::kAlways));
+
+  ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
+
+  controller()->AcceptDisableTouchpadDialogForTesting();
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
+
+  const std::u16string kTouchpadDisabled = u"Built-in touchpad is disabled";
+  const std::u16string kPressEscape =
+      u"Press Esc 5 times to enable the touchpad";
+
+  notifications = MessageCenter::Get()->GetVisibleNotifications();
+
+  ASSERT_EQ(1u, notifications.size());
+  EXPECT_EQ(kTouchpadDisabled, (*notifications.begin())->title());
+  EXPECT_EQ(kPressEscape, (*notifications.begin())->message());
+}
+
+TEST_F(AccessibilityControllerDisableTouchpadTest,
+       NoNotificationWhenDialogRejected) {
+  prefs()->SetInteger(prefs::kAccessibilityDisableTrackpadMode,
+                      static_cast<int>(DisableTouchpadMode::kAlways));
+
+  ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
+
+  controller()->DismissDisableTouchpadDialogForTesting();
+  ASSERT_FALSE(disable_touchpad_event_rewriter()->IsEnabled());
+
+  message_center::NotificationList::Notifications notifications =
+      MessageCenter::Get()->GetVisibleNotifications();
+  ASSERT_EQ(0u, notifications.size());
+}
+
+TEST_F(AccessibilityControllerDisableTouchpadTest,
+       ToastShowsWhenPrefIsSwitchedToNeverMode) {
+  // Default kNever mode should not show a toast.
+  ASSERT_EQ(static_cast<int>(DisableTouchpadMode::kNever),
+            prefs()->GetInteger(prefs::kAccessibilityDisableTrackpadMode));
+
+  auto* toast_manager = Shell::Get()->toast_manager();
+  ASSERT_FALSE(toast_manager->IsToastShown(kAccessibilityToast));
+
+  // Switch the mode to kAlways, then back to kNever.
+  prefs()->SetInteger(prefs::kAccessibilityDisableTrackpadMode,
+                      static_cast<int>(DisableTouchpadMode::kAlways));
+
+  ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
+  ASSERT_FALSE(toast_manager->IsToastShown(kAccessibilityToast));
+
+  controller()->DismissDisableTouchpadDialogForTesting();
+  ASSERT_FALSE(disable_touchpad_event_rewriter()->IsEnabled());
 
   ASSERT_EQ(nullptr, controller()->GetConfirmationDialogForTest());
-  ASSERT_FALSE(disable_trackpad_event_rewriter()->IsEnabled());
+  ASSERT_TRUE(toast_manager->IsToastShown(kAccessibilityToast));
+}
+
+TEST_F(AccessibilityControllerDisableTouchpadTest,
+       DialogShowsWhenExternalMouseLaterConnected) {
+  SimulateOnlyInternalTouchpadConnected();
+  prefs()->SetInteger(
+      prefs::kAccessibilityDisableTrackpadMode,
+      static_cast<int>(DisableTouchpadMode::kOnExternalMouseConnected));
+
+  ASSERT_EQ(nullptr, controller()->GetConfirmationDialogForTest());
+  ASSERT_FALSE(disable_touchpad_event_rewriter()->IsEnabled());
 
   SimulateExternalMouseConnected();
   ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
-  ASSERT_TRUE(disable_trackpad_event_rewriter()->IsEnabled());
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
+}
+
+TEST_F(AccessibilityControllerDisableTouchpadTest, DialogClosesAfter30Seconds) {
+  SimulateOnlyInternalTouchpadConnected();
+  // Ensure confirmation dialog closes after 30 seconds when trackpad mode
+  // is set to "on mouse connected".
+  prefs()->SetInteger(
+      prefs::kAccessibilityDisableTrackpadMode,
+      static_cast<int>(DisableTouchpadMode::kOnExternalMouseConnected));
+
+  ASSERT_FALSE(disable_touchpad_event_rewriter()->IsEnabled());
+
+  SimulateExternalMouseConnected();
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
+  ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
+  ASSERT_TRUE(confirmation_dialog_timer().IsRunning());
+
+  for (int i = 0; i < kDialogTimeoutSeconds; ++i) {
+    ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
+    task_environment()->FastForwardBy(base::Seconds(1));
+  }
+
+  ASSERT_FALSE(disable_touchpad_event_rewriter()->IsEnabled());
+  ASSERT_EQ(nullptr, controller()->GetConfirmationDialogForTest());
+
+  // Ensure confirmation dialog closes after 30 seconds when trackpad mode
+  // is set to "always".
+  prefs()->SetInteger(prefs::kAccessibilityDisableTrackpadMode,
+                      static_cast<int>(DisableTouchpadMode::kAlways));
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
+  ASSERT_TRUE(confirmation_dialog_timer().IsRunning());
+
+  for (int i = 0; i < kDialogTimeoutSeconds; ++i) {
+    ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
+    task_environment()->FastForwardBy(base::Seconds(1));
+  }
+
+  ASSERT_FALSE(disable_touchpad_event_rewriter()->IsEnabled());
+  ASSERT_EQ(nullptr, controller()->GetConfirmationDialogForTest());
+}
+
+TEST_F(AccessibilityControllerDisableTouchpadTest,
+       TouchpadDisabledNotificationRemovedWhenTouchpadEnabledToastIsShown) {
+  // Default kNever mode should not show a toast.
+  ASSERT_EQ(static_cast<int>(DisableTouchpadMode::kNever),
+            prefs()->GetInteger(prefs::kAccessibilityDisableTrackpadMode));
+
+  auto* toast_manager = Shell::Get()->toast_manager();
+  ASSERT_FALSE(toast_manager->IsToastShown(kAccessibilityToast));
+
+  // Switch the mode to kAlways, then back to kNever.
+  prefs()->SetInteger(prefs::kAccessibilityDisableTrackpadMode,
+                      static_cast<int>(DisableTouchpadMode::kAlways));
+
+  // Accept the confirmation dialog to disable the touchpad.
+  ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
+  ASSERT_FALSE(toast_manager->IsToastShown(kAccessibilityToast));
+  controller()->AcceptDisableTouchpadDialogForTesting();
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
+
+  // Ensure touchpad disabled notification shows up.
+  auto notifications = MessageCenter::Get()->GetVisibleNotifications();
+  ASSERT_EQ(1u, notifications.size());
+
+  // Switch the mode back to kNever.
+  prefs()->SetInteger(prefs::kAccessibilityDisableTrackpadMode,
+                      static_cast<int>(DisableTouchpadMode::kNever));
+
+  // Ensure touchpad disabled notification is removed, and toast shows up.
+  ASSERT_TRUE(toast_manager->IsToastShown(kAccessibilityToast));
+  ASSERT_EQ(0u, MessageCenter::Get()->GetVisibleNotifications().size());
+}
+
+TEST_F(AccessibilityControllerDisableTouchpadTest,
+       TouchpadEnabledToastRemovedWhenConfirmationDialogIsShown) {
+  // Note the disable touchpad pref's default state is kNever,
+  // but explicitly calling `SetInteger`triggers an update.
+
+  // Switch the disabled touchpad mode to kNever.
+  prefs()->SetInteger(prefs::kAccessibilityDisableTrackpadMode,
+                      static_cast<int>(DisableTouchpadMode::kNever));
+
+  // Ensure enable touchpad toast shows up, and disable notification touchpad
+  // is invisible.
+  auto notifications = MessageCenter::Get()->GetVisibleNotifications();
+  auto* toast_manager = Shell::Get()->toast_manager();
+
+  ASSERT_TRUE(toast_manager->IsToastShown(kAccessibilityToast));
+  ASSERT_EQ(0u, notifications.size());
+
+  // Switch the disabled touchpad mode to kAlways.
+  prefs()->SetInteger(prefs::kAccessibilityDisableTrackpadMode,
+                      static_cast<int>(DisableTouchpadMode::kAlways));
+
+  // Ensure the enabled touchpad toast is removed, and the confirmation dialog
+  // is shown.
+  ASSERT_NE(nullptr, controller()->GetConfirmationDialogForTest());
+  ASSERT_TRUE(disable_touchpad_event_rewriter()->IsEnabled());
+  ASSERT_FALSE(toast_manager->IsToastShown(kAccessibilityToast));
+
+  controller()->AcceptDisableTouchpadDialogForTesting();
+  notifications = MessageCenter::Get()->GetVisibleNotifications();
+  ASSERT_EQ(1u, notifications.size());
 }
 
 }  // namespace ash

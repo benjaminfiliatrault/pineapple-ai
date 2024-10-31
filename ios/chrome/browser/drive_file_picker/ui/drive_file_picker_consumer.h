@@ -41,11 +41,17 @@
            nextPageAvailable:(BOOL)nextPageAvailable
                     animated:(BOOL)animated;
 
+// If `nextPageAvailable` is YES then scrolling to the end of the list of items
+// should fetch the next page.
+- (void)setNextPageAvailable:(BOOL)nextPageAvailable;
+
 // Sets the consumer's emails menu.
 - (void)setEmailsMenu:(UIMenu*)emailsMenu;
 
-// Sets the icon to `iconImage` for item with identifier `itemIdentifier`.
-- (void)setIcon:(UIImage*)iconImage forItem:(NSString*)itemIdentifier;
+// Sets the icon to `iconImage` for items with identifier in `itemIdentifiers`.
+- (void)setFetchedIcon:(UIImage*)iconImage
+              forItems:(NSSet<NSString*>*)itemIdentifiers
+           isThumbnail:(BOOL)isThumbnail;
 
 // Reconfigures items matching `identifiers`.
 - (void)reconfigureItemsWithIdentifiers:(NSArray<NSString*>*)identifiers;
@@ -62,10 +68,17 @@
 // Sets which filter should appear as enabled.
 - (void)setFilter:(DriveFilePickerFilter)filter;
 
+// Sets whether the filter menu is enabled.
+- (void)setFilterMenuEnabled:(BOOL)enabled;
+
 // Sets which sorting criteria and direction appear as enabled.
 - (void)setSortingCriteria:(DriveItemsSortingType)criteria
                  direction:(DriveItemsSortingOrder)direction;
 
+// Sets whether the sorting menu is enabled.
+- (void)setSortingMenuEnabled:(BOOL)enabled;
+
+// Sets the identity displayed in the bottom bar.
 - (void)setSelectedItemIdentifier:(NSString*)selectedIdentifier;
 
 // Sets whether the search bar is focused and the text it contains.
@@ -73,6 +86,14 @@
 
 // Sets whether the leading "Cancel" button should be visible.
 - (void)setCancelButtonVisible:(BOOL)visible;
+
+// Sets whether the consumer should request icon fetching for `itemIdentifiers`.
+- (void)setShouldFetchIcon:(BOOL)shouldFetchIcon
+                  forItems:(NSSet<NSString*>*)itemIdentifiers;
+
+// Shows an alert to indicate that the selected file could not be downloaded,
+// asking whether to try again or not.
+- (void)showDownloadFailureAlertWithRetryBlock:(ProceduralBlock)retryBlock;
 
 @end
 

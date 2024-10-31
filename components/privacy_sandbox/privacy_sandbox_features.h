@@ -135,10 +135,6 @@ extern const char kPrivacySandboxEnrollmentOverrides[];
 COMPONENT_EXPORT(PRIVACY_SANDBOX_FEATURES)
 BASE_DECLARE_FEATURE(kPrivacySandboxAttestationsLoadPreInstalledComponent);
 
-// Enables Privacy Sandbox Proactive Topics Blocking.
-COMPONENT_EXPORT(PRIVACY_SANDBOX_FEATURES)
-BASE_DECLARE_FEATURE(kPrivacySandboxProactiveTopicsBlocking);
-
 // Enables attribution reporting transitional debug reporting for the cookie
 // deprecation experiment.
 COMPONENT_EXPORT(PRIVACY_SANDBOX_FEATURES)
@@ -269,6 +265,11 @@ BASE_DECLARE_FEATURE(kPrivacySandboxMigratePrefsToNoticeConsentDataModel);
 COMPONENT_EXPORT(PRIVACY_SANDBOX_FEATURES)
 BASE_DECLARE_FEATURE(kPrivacySandboxPrivacyPolicy);
 
+// If true, adds the privacy sandbox notice to product messaging controller
+// queue.
+COMPONENT_EXPORT(PRIVACY_SANDBOX_FEATURES)
+BASE_DECLARE_FEATURE(kPrivacySandboxNoticeQueue);
+
 // Enables the `Always on` sentiment survey
 COMPONENT_EXPORT(PRIVACY_SANDBOX_FEATURES)
 BASE_DECLARE_FEATURE(kPrivacySandboxSentimentSurvey);
@@ -276,6 +277,10 @@ BASE_DECLARE_FEATURE(kPrivacySandboxSentimentSurvey);
 COMPONENT_EXPORT(PRIVACY_SANDBOX_FEATURES)
 extern const base::FeatureParam<std::string>
     kPrivacySandboxSentimentSurveyTriggerId;
+
+// If true, displays the Ads APIs UX Enancements.
+COMPONENT_EXPORT(PRIVACY_SANDBOX_FEATURES)
+BASE_DECLARE_FEATURE(kPrivacySandboxAdsApiUxEnhancements);
 
 }  // namespace privacy_sandbox
 

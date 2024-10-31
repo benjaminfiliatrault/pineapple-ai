@@ -179,8 +179,8 @@ void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
     base::Value::Dict unused_global_network_config;
     if (!chromeos::onc::ParseAndValidateOncForImport(
             onc_blob, onc::ONCSource::ONC_SOURCE_USER_POLICY,
-            "" /* no passphrase */, &unused_network_configs,
-            &unused_global_network_config, &certificates)) {
+            &unused_network_configs, &unused_global_network_config,
+            &certificates)) {
       LOG(ERROR) << "Value of onc policy has invalid format =" << onc_blob;
     }
   }
@@ -780,6 +780,7 @@ void ArcPolicyBridge::OnReportComplianceParse(
 // static
 void ArcPolicyBridge::ActivateArcIfRequiredByPolicy(
     const policy::PolicyMap& policy_map) {
+  VLOG(1) << "ArcPolicyBridge::ActivateArcIfRequiredByPolicy";
   base::Value::Dict filtered_policies = ParseArcPoliciesToDict(policy_map);
   base::Value::List* apps =
       filtered_policies.FindList(policy_util::kArcPolicyKeyApplications);
@@ -792,6 +793,7 @@ void ArcPolicyBridge::ActivateArcIfRequiredByPolicy(
                kPolicyAppInstallTypeForceInstalled;
       });
   if (hasForceInstallApps) {
+    VLOG(1) << "Force install apps found, allowing ARC activation.";
     arc::ArcSessionManager::Get()->AllowActivation(
         arc::ArcSessionManager::AllowActivationReason::kForcedByPolicy);
   }

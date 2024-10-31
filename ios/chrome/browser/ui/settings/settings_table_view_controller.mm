@@ -25,6 +25,7 @@
 #import "components/password_manager/core/browser/ui/password_check_referrer.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/plus_addresses/features.h"
+#import "components/plus_addresses/grit/plus_addresses_strings.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_member.h"
 #import "components/prefs/pref_service.h"
@@ -41,6 +42,7 @@
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
+#import "ios/chrome/app/profile/profile_state.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_constants.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_view_controller_presenter.h"
 #import "ios/chrome/browser/commerce/model/push_notification/push_notification_feature.h"
@@ -124,7 +126,7 @@
 #import "ios/chrome/browser/ui/settings/downloads/downloads_settings_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/settings/elements/enterprise_info_popover_view_controller.h"
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_coordinator.h"
-#import "ios/chrome/browser/ui/settings/google_services/manage_accounts/accounts_coordinator.h"
+#import "ios/chrome/browser/ui/settings/google_services/manage_accounts/manage_accounts_coordinator.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_coordinator.h"
 #import "ios/chrome/browser/ui/settings/language/language_settings_mediator.h"
@@ -211,8 +213,8 @@ struct EnhancedSafeBrowsingActivePromoData
     SyncObserverModelBridge> {
   // The browser where the settings are being displayed.
   raw_ptr<Browser> _browser;
-  // The browser state for `_browser`. Never off the record.
-  raw_ptr<ChromeBrowserState> _browserState;  // weak
+  // The profile for `_browser`. Never off the record.
+  raw_ptr<ProfileIOS> _profile;  // weak
   // Bridge for TemplateURLServiceObserver.
   std::unique_ptr<SearchEngineObserverBridge> _searchEngineObserverBridge;
   std::unique_ptr<signin::IdentityManagerObserverBridge>
@@ -259,7 +261,7 @@ struct EnhancedSafeBrowsingActivePromoData
   PasswordsCoordinator* _passwordsCoordinator;
 
   // Accounts coordinator.
-  AccountsCoordinator* _accountsCoordinator;
+  ManageAccountsCoordinator* _manageAccountsCoordinator;
 
   // Feature engagement tracker for the signin IPH.
   raw_ptr<feature_engagement::Tracker> _featureEngagementTracker;
@@ -341,28 +343,27 @@ struct EnhancedSafeBrowsingActivePromoData
 - (instancetype)initWithBrowser:(Browser*)browser
        hasDefaultBrowserBlueDot:(BOOL)hasDefaultBrowserBlueDot {
   DCHECK(browser);
-  DCHECK(!browser->GetBrowserState()->IsOffTheRecord());
+  DCHECK(!browser->GetProfile()->IsOffTheRecord());
 
   self = [super initWithStyle:ChromeTableViewStyle()];
   if (self) {
     _browser = browser;
-    _browserState = _browser->GetBrowserState();
+    _profile = _browser->GetProfile();
     self.showingDefaultBrowserNotificationDot = hasDefaultBrowserBlueDot;
     self.title = l10n_util::GetNSStringWithFixup(IDS_IOS_SETTINGS_TITLE);
     _searchEngineObserverBridge.reset(new SearchEngineObserverBridge(
-        self,
-        ios::TemplateURLServiceFactory::GetForBrowserState(_browserState)));
+        self, ios::TemplateURLServiceFactory::GetForProfile(_profile)));
     signin::IdentityManager* identityManager =
-        IdentityManagerFactory::GetForProfile(_browserState);
+        IdentityManagerFactory::GetForProfile(_profile);
     _accountManagerService =
-        ChromeAccountManagerServiceFactory::GetForBrowserState(_browserState);
+        ChromeAccountManagerServiceFactory::GetForProfile(_profile);
     // It is expected that `identityManager` should never be nil except in
     // tests. In that case, the tests should be fixed.
     DCHECK(identityManager);
     _identityObserverBridge.reset(
         new signin::IdentityManagerObserverBridge(identityManager, self));
     syncer::SyncService* syncService =
-        SyncServiceFactory::GetForBrowserState(_browserState);
+        SyncServiceFactory::GetForProfile(_profile);
     _syncObserverBridge.reset(new SyncObserverBridge(self, syncService));
 
     PrefService* localState = GetApplicationContext()->GetLocalState();
@@ -372,18 +373,18 @@ struct EnhancedSafeBrowsingActivePromoData
     [_showMemoryDebugToolsEnabled setObserver:self];
 
     AuthenticationService* authService =
-        AuthenticationServiceFactory::GetForBrowserState(_browserState);
+        AuthenticationServiceFactory::GetForProfile(_profile);
     _identity = authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
     _accountManagerServiceObserver.reset(
         new ChromeAccountManagerServiceObserverBridge(self,
                                                       _accountManagerService));
     _featureEngagementTracker =
-        feature_engagement::TrackerFactory::GetForBrowserState(_browserState);
+        feature_engagement::TrackerFactory::GetForProfile(_profile);
 
-    PrefService* prefService = _browserState->GetPrefs();
+    PrefService* prefService = _profile->GetPrefs();
 
     _passwordCheckManager =
-        IOSChromePasswordCheckManagerFactory::GetForBrowserState(_browserState);
+        IOSChromePasswordCheckManagerFactory::GetForProfile(_profile);
     _passwordCheckObserver = std::make_unique<PasswordCheckObserverBridge>(
         self, _passwordCheckManager.get());
 
@@ -519,7 +520,10 @@ struct EnhancedSafeBrowsingActivePromoData
   [model addItem:[self autoFillProfileDetailItem]
       toSectionWithIdentifier:SettingsSectionIdentifierBasics];
   if (base::FeatureList::IsEnabled(
-          plus_addresses::features::kPlusAddressesEnabled)) {
+          plus_addresses::features::kPlusAddressesEnabled) &&
+      !base::FeatureList::IsEnabled(
+          plus_addresses::features::
+              kPlusAddressIOSErrorAndLoadingStatesEnabled)) {
     _plusAddressesItem = [self plusAddressesItem];
     [model addItem:_plusAddressesItem
         toSectionWithIdentifier:SettingsSectionIdentifierBasics];
@@ -542,12 +546,12 @@ struct EnhancedSafeBrowsingActivePromoData
 
   // Feed is disabled in safe mode.
   SceneState* sceneState = _browser->GetSceneState();
-  BOOL isSafeMode = [sceneState.appState resumingFromSafeMode];
+  BOOL isSafeMode = [sceneState.profileState.appState resumingFromSafeMode];
   TemplateURLService* templateURLService =
-      ios::TemplateURLServiceFactory::GetForBrowserState(_browserState);
+      ios::TemplateURLServiceFactory::GetForProfile(_profile);
 
   if (!IsFeedAblationEnabled() && !isSafeMode &&
-      IsContentSuggestionsForSupervisedUserEnabled(_browserState->GetPrefs()) &&
+      IsContentSuggestionsForSupervisedUserEnabled(_profile->GetPrefs()) &&
       !ShouldHideFeedWithSearchChoice(templateURLService)) {
     if ([_contentSuggestionPolicyEnabled value]) {
       [model addItem:self.feedSettingsItem
@@ -559,8 +563,7 @@ struct EnhancedSafeBrowsingActivePromoData
     }
   }
 
-  PhotosService* photosService =
-      PhotosServiceFactory::GetForProfile(_browserState);
+  PhotosService* photosService = PhotosServiceFactory::GetForProfile(_profile);
   bool shouldShowDownloadsSettings =
       photosService && photosService->IsSupported();
   if (IsInactiveTabsAvailable()) {
@@ -606,11 +609,11 @@ struct EnhancedSafeBrowsingActivePromoData
     _showMemoryDebugToolsItem = [self showMemoryDebugSwitchItem];
     [model addItem:_showMemoryDebugToolsItem
         toSectionWithIdentifier:SettingsSectionIdentifierDebug];
+  }
 
-    if (experimental_flags::DisplaySwitchProfile().has_value()) {
-      [model addItem:[self switchProfileItem]
-          toSectionWithIdentifier:SettingsSectionIdentifierDebug];
-    }
+  if (experimental_flags::DisplaySwitchProfile()) {
+    [model addItem:[self switchProfileItem]
+        toSectionWithIdentifier:SettingsSectionIdentifierDebug];
   }
 
 #if BUILDFLAG(CHROMIUM_BRANDING) && !defined(NDEBUG)
@@ -647,7 +650,7 @@ struct EnhancedSafeBrowsingActivePromoData
   TableViewItem* item = nil;
 
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForBrowserState(_browserState);
+      AuthenticationServiceFactory::GetForProfile(_profile);
   const AuthenticationService::ServiceStatus authServiceStatus =
       authService->GetServiceStatus();
   // If sign-in is disabled by policy there should not be a sign-in promo.
@@ -685,7 +688,7 @@ struct EnhancedSafeBrowsingActivePromoData
 - (void)addAccountToSigninSection {
   TableViewModel<TableViewItem*>* model = self.tableViewModel;
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForBrowserState(_browserState);
+      AuthenticationServiceFactory::GetForProfile(_profile);
   if (authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
     // Account profile item.
     [model addItem:[self accountCellItem]
@@ -837,7 +840,7 @@ struct EnhancedSafeBrowsingActivePromoData
 - (TableViewItem*)searchEngineDetailItem {
   NSString* defaultSearchEngineName =
       base::SysUTF16ToNSString(GetDefaultSearchEngineName(
-          ios::TemplateURLServiceFactory::GetForBrowserState(_browserState)));
+          ios::TemplateURLServiceFactory::GetForProfile(_profile)));
 
   _defaultSearchEngineItem =
       [self detailItemWithType:SettingsItemTypeSearchEngine
@@ -884,7 +887,7 @@ struct EnhancedSafeBrowsingActivePromoData
 }
 
 - (TableViewItem*)passwordsDetailItem {
-  BOOL passwordsEnabled = _browserState->GetPrefs()->GetBoolean(
+  BOOL passwordsEnabled = _profile->GetPrefs()->GetBoolean(
       password_manager::prefs::kCredentialsEnableService);
 
   NSString* passwordsDetail = passwordsEnabled
@@ -907,8 +910,7 @@ struct EnhancedSafeBrowsingActivePromoData
 
 - (TableViewItem*)autoFillCreditCardDetailItem {
   BOOL autofillCreditCardEnabled =
-      autofill::prefs::IsAutofillPaymentMethodsEnabled(
-          _browserState->GetPrefs());
+      autofill::prefs::IsAutofillPaymentMethodsEnabled(_profile->GetPrefs());
   NSString* detailText = autofillCreditCardEnabled
                              ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                              : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
@@ -927,7 +929,7 @@ struct EnhancedSafeBrowsingActivePromoData
 
 - (TableViewItem*)autoFillProfileDetailItem {
   BOOL autofillProfileEnabled =
-      autofill::prefs::IsAutofillProfileEnabled(_browserState->GetPrefs());
+      autofill::prefs::IsAutofillProfileEnabled(_profile->GetPrefs());
   NSString* detailText = autofillProfileEnabled
                              ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                              : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
@@ -1134,10 +1136,10 @@ struct EnhancedSafeBrowsingActivePromoData
 
 - (TableViewItem*)switchProfileItem {
   NSString* detailText = nil;
-  std::string profileName = _browserState->GetProfileName();
+  std::string profileName = _profile->GetProfileName();
   // TODO(crbug.com/331783685): Remove assumption that "Default" is the
   // personal profile.
-  if (profileName == kIOSChromeInitialBrowserState) {
+  if (profileName == kIOSChromeInitialProfile) {
     detailText = @"Personal";
   } else {
     detailText = base::SysUTF8ToNSString(profileName);
@@ -1181,7 +1183,7 @@ struct EnhancedSafeBrowsingActivePromoData
   return [self detailItemWithType:SettingsItemTypeTableCellCatalog
                              text:@"TableView Cell Catalog"
                        detailText:nil
-                           symbol:DefaultSettingsRootSymbol(@"cart")
+                           symbol:DefaultSettingsRootSymbol(kCartSymbol)
             symbolBackgroundColor:[UIColor colorNamed:kGrey400Color]
           accessibilityIdentifier:nil];
 }
@@ -1287,10 +1289,10 @@ struct EnhancedSafeBrowsingActivePromoData
       [switchCell.switchView addTarget:self
                                 action:@selector(viewSourceSwitchToggled:)
                       forControlEvents:UIControlEventValueChanged];
-#else
-      NOTREACHED_IN_MIGRATION();
-#endif  // BUILDFLAG(CHROMIUM_BRANDING) && !defined(NDEBUG)
       break;
+#else
+      NOTREACHED();
+#endif  // BUILDFLAG(CHROMIUM_BRANDING) && !defined(NDEBUG)
     }
     case SettingsItemTypeManagedDefaultSearchEngine: {
       TableViewInfoButtonCell* managedCell =
@@ -1373,12 +1375,11 @@ struct EnhancedSafeBrowsingActivePromoData
       }
       base::RecordAction(base::UserMetricsAction("Settings.MyAccount"));
 
-      AccountsCoordinator* accountsCoordinator = [[AccountsCoordinator alloc]
+      _manageAccountsCoordinator = [[ManageAccountsCoordinator alloc]
           initWithBaseNavigationController:self.navigationController
                                    browser:_browser
                  closeSettingsOnAddAccount:NO];
-      _accountsCoordinator = accountsCoordinator;
-      [accountsCoordinator start];
+      [_manageAccountsCoordinator start];
       break;
     }
     case SettingsItemTypeGoogleServices:
@@ -1387,8 +1388,8 @@ struct EnhancedSafeBrowsingActivePromoData
       break;
     case SettingsItemTypeGoogleSync: {
       base::RecordAction(base::UserMetricsAction("Settings.Sync"));
-      switch (GetSyncFeatureState(
-          SyncServiceFactory::GetForBrowserState(_browserState))) {
+      switch (
+          GetSyncFeatureState(SyncServiceFactory::GetForProfile(_profile))) {
         case SyncState::kSyncConsentOff: {
           [self showSignIn];
           break;
@@ -1414,8 +1415,7 @@ struct EnhancedSafeBrowsingActivePromoData
 
       if (self.showingDefaultBrowserNotificationDot) {
         feature_engagement::Tracker* tracker =
-            feature_engagement::TrackerFactory::GetForBrowserState(
-                _browserState);
+            feature_engagement::TrackerFactory::GetForProfile(_profile);
         if (tracker) {
           tracker->NotifyEvent(
               feature_engagement::events::kBlueDotPromoSettingsDismissed);
@@ -1434,8 +1434,8 @@ struct EnhancedSafeBrowsingActivePromoData
     }
     case SettingsItemTypeSearchEngine:
       base::RecordAction(base::UserMetricsAction("EditSearchEngines"));
-      controller = [[SearchEngineTableViewController alloc]
-          initWithBrowserState:_browserState];
+      controller =
+          [[SearchEngineTableViewController alloc] initWithProfile:_profile];
       break;
     case SettingsItemTypeAddressBar:
       base::RecordAction(base::UserMetricsAction("Settings.AddressBar.Opened"));
@@ -1470,7 +1470,7 @@ struct EnhancedSafeBrowsingActivePromoData
     case SettingsItemTypeVoiceSearch:
       base::RecordAction(base::UserMetricsAction("Settings.VoiceSearch"));
       controller = [[VoiceSearchTableViewController alloc]
-          initWithPrefs:_browserState->GetPrefs()];
+          initWithPrefs:_profile->GetPrefs()];
       break;
     case SettingsItemTypeSafetyCheck:
       base::RecordAction(base::UserMetricsAction("Settings.SafetyCheck"));
@@ -1483,10 +1483,10 @@ struct EnhancedSafeBrowsingActivePromoData
     case SettingsItemTypeLanguageSettings: {
       base::RecordAction(base::UserMetricsAction("Settings.Language"));
       language::LanguageModelManager* languageModelManager =
-          LanguageModelManagerFactory::GetForBrowserState(_browserState);
+          LanguageModelManagerFactory::GetForProfile(_profile);
       LanguageSettingsMediator* mediator = [[LanguageSettingsMediator alloc]
           initWithLanguageModelManager:languageModelManager
-                           prefService:_browserState->GetPrefs()];
+                           prefService:_profile->GetPrefs()];
       LanguageSettingsTableViewController* languageSettingsTableViewController =
           [[LanguageSettingsTableViewController alloc]
               initWithDataSource:mediator
@@ -1511,7 +1511,7 @@ struct EnhancedSafeBrowsingActivePromoData
     case SettingsItemTypeBandwidth:
       base::RecordAction(base::UserMetricsAction("Settings.Bandwidth"));
       controller = [[BandwidthManagementTableViewController alloc]
-          initWithBrowserState:_browserState];
+          initWithProfile:_profile];
       break;
     case SettingsItemTypeAboutChrome: {
       base::RecordAction(base::UserMetricsAction("AboutChrome"));
@@ -1537,7 +1537,7 @@ struct EnhancedSafeBrowsingActivePromoData
               GURL(plus_addresses::features::kPlusAddressManagementUrl.Get())];
       id<ApplicationCommands> handler = HandlerForProtocol(
           _browser->GetCommandDispatcher(), ApplicationCommands);
-      [handler closeSettingsUIAndOpenURL:command];
+      [handler closePresentedViewsAndOpenURL:command];
       break;
     }
     case SettingsItemTypeSwitchProfile:
@@ -1663,8 +1663,8 @@ struct EnhancedSafeBrowsingActivePromoData
 
 // Returns true if sync is disabled by policy.
 - (bool)isSyncDisabledByPolicy {
-  return SyncServiceFactory::GetForBrowserState(_browserState)
-      ->HasDisableReason(syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
+  return SyncServiceFactory::GetForProfile(_profile)->HasDisableReason(
+      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
 }
 
 - (void)showGoogleServices {
@@ -1720,8 +1720,7 @@ struct EnhancedSafeBrowsingActivePromoData
   // TODO(crbug.com/40066949): Remove usage of HasSyncConsent() after kSync
   // users migrated to kSignin in phase 3. See ConsentLevel::kSync
   // documentation for details.
-  return !SyncServiceFactory::GetForBrowserState(_browserState)
-              ->HasSyncConsent();
+  return !SyncServiceFactory::GetForProfile(_profile)->HasSyncConsent();
 }
 
 - (void)showGoogleSync {
@@ -1864,7 +1863,7 @@ struct EnhancedSafeBrowsingActivePromoData
 // Updates the identity cell.
 - (void)updateIdentityAccountItem:(TableViewAccountItem*)identityAccountItem {
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForBrowserState(_browserState);
+      AuthenticationServiceFactory::GetForProfile(_profile);
   _identity = authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
   if (!_identity) {
     // This could occur during the sign out process. Just ignore as the account
@@ -1878,7 +1877,7 @@ struct EnhancedSafeBrowsingActivePromoData
   identityAccountItem.detailText = _identity.userEmail;
 
   syncer::SyncService* syncService =
-      SyncServiceFactory::GetForBrowserState(_browserState);
+      SyncServiceFactory::GetForProfile(_profile);
   DCHECK(syncService);
   identityAccountItem.shouldDisplayError =
       GetAccountErrorUIInfo(syncService) != nil;
@@ -1907,8 +1906,7 @@ struct EnhancedSafeBrowsingActivePromoData
     return;
   }
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForBrowserState(
-          _browser->GetBrowserState());
+      AuthenticationServiceFactory::GetForProfile(_browser->GetProfile());
   BOOL shouldShowSigninIPH =
       authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin) &&
       [self shouldReplaceSyncSettingsWithAccountSettings];
@@ -1970,8 +1968,7 @@ struct EnhancedSafeBrowsingActivePromoData
 // Updates the Sync item to display the right icon and status message in the
 // cell.
 - (void)updateSyncItem:(TableViewDetailIconItem*)googleSyncItem {
-  switch (GetSyncFeatureState(
-      SyncServiceFactory::GetForBrowserState(_browserState))) {
+  switch (GetSyncFeatureState(SyncServiceFactory::GetForProfile(_profile))) {
     case SyncState::kSyncConsentOff: {
       googleSyncItem.detailText = l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
       googleSyncItem.iconImage = CustomSettingsRootSymbol(kSyncDisabledSymbol);
@@ -1991,7 +1988,7 @@ struct EnhancedSafeBrowsingActivePromoData
     }
     case SyncState::kSyncEnabledWithError: {
       syncer::SyncService* syncService =
-          SyncServiceFactory::GetForBrowserState(_browserState);
+          SyncServiceFactory::GetForProfile(_profile);
       googleSyncItem.detailText =
           GetSyncErrorDescriptionForSyncService(syncService);
       googleSyncItem.iconImage = DefaultSettingsRootSymbol(kSyncErrorSymbol);
@@ -2023,7 +2020,7 @@ struct EnhancedSafeBrowsingActivePromoData
 
 // Check if the default search engine is managed by policy.
 - (BOOL)isDefaultSearchEngineManagedByPolicy {
-  const base::Value::Dict& dict = _browserState->GetPrefs()->GetDict(
+  const base::Value::Dict& dict = _profile->GetPrefs()->GetDict(
       DefaultSearchManager::kDefaultSearchProviderDataPrefName);
 
   if (dict.FindBoolByDottedPath(DefaultSearchManager::kDisabledByPolicy) ||
@@ -2034,7 +2031,7 @@ struct EnhancedSafeBrowsingActivePromoData
 
 // Returns the text to be displayed by the managed Search Engine item.
 - (NSString*)managedSearchEngineDetailText {
-  const base::Value::Dict& dict = _browserState->GetPrefs()->GetDict(
+  const base::Value::Dict& dict = _profile->GetPrefs()->GetDict(
       DefaultSearchManager::kDefaultSearchProviderDataPrefName);
   if (dict.FindBoolByDottedPath(DefaultSearchManager::kDisabledByPolicy)) {
     // Default search engine is disabled by policy.
@@ -2050,8 +2047,7 @@ struct EnhancedSafeBrowsingActivePromoData
 // Returns the appropriate text to update the title for the feed item.
 - (NSString*)feedItemTitle {
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForBrowserState(
-          _browser->GetBrowserState());
+      AuthenticationServiceFactory::GetForProfile(_browser->GetProfile());
   BOOL isSignedIn =
       authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin);
   return (isSignedIn && IsWebChannelsEnabled())
@@ -2118,10 +2114,10 @@ struct EnhancedSafeBrowsingActivePromoData
 
   NSString* detailText = nil;
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForBrowserState(_browserState);
+      AuthenticationServiceFactory::GetForProfile(_profile);
   id<SystemIdentity> identity =
       authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
-  PrefService* prefService = _browserState->GetPrefs();
+  PrefService* prefService = _profile->GetPrefs();
   const std::string& gaiaID = base::SysNSStringToUTF8(identity.gaiaID);
   push_notification_settings::ClientPermissionState permission_state =
       push_notification_settings::GetNotificationPermissionState(gaiaID,
@@ -2155,7 +2151,7 @@ struct EnhancedSafeBrowsingActivePromoData
 - (BOOL)shouldShowNotificationsSettings {
   return base::FeatureList::IsEnabled(kNotificationSettingsMenuItem) &&
          (IsPriceNotificationsEnabled() ||
-          IsContentNotificationEnabled(_browserState) ||
+          IsContentNotificationEnabled(_profile) ||
           IsIOSTipsNotificationsEnabled() ||
           base::FeatureList::IsEnabled(
               send_tab_to_self::kSendTabToSelfIOSPushNotifications));
@@ -2165,7 +2161,7 @@ struct EnhancedSafeBrowsingActivePromoData
 // browsing inline promo.
 - (void)maybeRecordEnhancedSafeBrowsingImpressionLimitReached {
   feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(_browserState);
+      feature_engagement::TrackerFactory::GetForProfile(_profile);
   std::vector<std::pair<feature_engagement::EventConfig, int>> events =
       tracker->ListEvents(
           feature_engagement::kIPHiOSInlineEnhancedSafeBrowsingPromoFeature);
@@ -2189,7 +2185,7 @@ struct EnhancedSafeBrowsingActivePromoData
   // shown here without querying the FET. Only query the FET if there is no
   // currently active promo.
   feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(_browserState);
+      feature_engagement::TrackerFactory::GetForProfile(_profile);
   EnhancedSafeBrowsingActivePromoData* data =
       static_cast<EnhancedSafeBrowsingActivePromoData*>(
           tracker->GetUserData(EnhancedSafeBrowsingActivePromoData::key));
@@ -2205,17 +2201,17 @@ struct EnhancedSafeBrowsingActivePromoData
   //   4.) One of the trigerring criteria has been met.
   //   5.) Not have their Safe Browsing preferences enterprise-managed.
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForBrowserState(_browserState);
+      AuthenticationServiceFactory::GetForProfile(_profile);
   bool isSignedInAndSynced =
       authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin);
   bool isDefaultBrowser = IsChromeLikelyDefaultBrowser();
   bool isStandardProtectionEnabled =
-      safe_browsing::GetSafeBrowsingState(*_browserState->GetPrefs()) ==
+      safe_browsing::GetSafeBrowsingState(*_profile->GetPrefs()) ==
       safe_browsing::SafeBrowsingState::STANDARD_PROTECTION;
   bool triggerCriteriaMet = tracker->WouldTriggerHelpUI(
       feature_engagement::kIPHiOSInlineEnhancedSafeBrowsingPromoFeature);
   bool isEnterpriseManaged =
-      safe_browsing::IsSafeBrowsingPolicyManaged(*_browserState->GetPrefs());
+      safe_browsing::IsSafeBrowsingPolicyManaged(*_profile->GetPrefs());
 
   if (!isSignedInAndSynced || !isDefaultBrowser ||
       !isStandardProtectionEnabled || !triggerCriteriaMet ||
@@ -2239,9 +2235,9 @@ struct EnhancedSafeBrowsingActivePromoData
 // Check if this is the last active Enhanced Safe Browsing promo shown and
 // dismisses the FET if so.
 - (void)removeEnhancedSafeBrowsingPromoFETDataIfNeeded {
-  CHECK(_browserState, base::NotFatalUntil::M131);
+  CHECK(_profile, base::NotFatalUntil::M131);
   feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(_browserState);
+      feature_engagement::TrackerFactory::GetForProfile(_profile);
   EnhancedSafeBrowsingActivePromoData* data =
       static_cast<EnhancedSafeBrowsingActivePromoData*>(
           tracker->GetUserData(EnhancedSafeBrowsingActivePromoData::key));
@@ -2274,15 +2270,14 @@ struct EnhancedSafeBrowsingActivePromoData
             accessPoint:signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS
             promoAction:signin_metrics::PromoAction::
                             PROMO_ACTION_NO_SIGNIN_PROMO
-               callback:^(SigninCoordinatorResult result,
+             completion:^(SigninCoordinatorResult result,
                           SigninCompletionInfo* completionInfo) {
-                 BOOL success = result == SigninCoordinatorResultSuccess;
-                 [weakSelf didFinishSignin:success];
-               }];
+               [weakSelf didFinishSignin];
+             }];
   [self.applicationHandler showSignin:command baseViewController:self];
 }
 
-- (void)didFinishSignin:(BOOL)signedIn {
+- (void)didFinishSignin {
   if (_settingsAreDismissed) {
     return;
   }
@@ -2310,7 +2305,7 @@ struct EnhancedSafeBrowsingActivePromoData
 
 - (void)reportBackUserAction {
   // Not called for root settings controller.
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 - (void)settingsWillBeDismissed {
@@ -2331,8 +2326,8 @@ struct EnhancedSafeBrowsingActivePromoData
   _passwordsCoordinator.delegate = nil;
   _passwordsCoordinator = nil;
 
-  [_accountsCoordinator stop];
-  _accountsCoordinator = nil;
+  [_manageAccountsCoordinator stop];
+  _manageAccountsCoordinator = nil;
 
   [_notificationsCoordinator stop];
   _notificationsCoordinator = nil;
@@ -2400,7 +2395,7 @@ struct EnhancedSafeBrowsingActivePromoData
   _voiceLocaleCode.Destroy();
   _passwordCheckManager.reset();
   _browser = nullptr;
-  _browserState = nullptr;
+  _profile = nullptr;
 
   _settingsAreDismissed = YES;
 }
@@ -2428,7 +2423,7 @@ struct EnhancedSafeBrowsingActivePromoData
     // The two items are mutually exclusive.
     _defaultSearchEngineItem.detailText =
         base::SysUTF16ToNSString(GetDefaultSearchEngineName(
-            ios::TemplateURLServiceFactory::GetForBrowserState(_browserState)));
+            ios::TemplateURLServiceFactory::GetForProfile(_profile)));
     [self reconfigureCellsForItems:@[ _defaultSearchEngineItem ]];
   }
 }
@@ -2520,7 +2515,7 @@ struct EnhancedSafeBrowsingActivePromoData
             : l10n_util::GetNSString(IDS_IOS_TOP_ADDRESS_BAR_OPTION);
     [self reconfigureCellsForItems:@[ _addressBarPreferenceItem ]];
   } else {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 }
 
@@ -2554,8 +2549,7 @@ struct EnhancedSafeBrowsingActivePromoData
   }
 
   if (preferenceName == password_manager::prefs::kCredentialsEnableService) {
-    BOOL passwordsEnabled =
-        _browserState->GetPrefs()->GetBoolean(preferenceName);
+    BOOL passwordsEnabled = _profile->GetPrefs()->GetBoolean(preferenceName);
     NSString* passwordsDetail =
         passwordsEnabled ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                          : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
@@ -2565,7 +2559,7 @@ struct EnhancedSafeBrowsingActivePromoData
 
   if (preferenceName == autofill::prefs::kAutofillProfileEnabled) {
     BOOL autofillProfileEnabled =
-        autofill::prefs::IsAutofillProfileEnabled(_browserState->GetPrefs());
+        autofill::prefs::IsAutofillProfileEnabled(_profile->GetPrefs());
     NSString* detailText = autofillProfileEnabled
                                ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                                : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
@@ -2575,8 +2569,7 @@ struct EnhancedSafeBrowsingActivePromoData
 
   if (preferenceName == autofill::prefs::kAutofillCreditCardEnabled) {
     BOOL autofillCreditCardEnabled =
-        autofill::prefs::IsAutofillPaymentMethodsEnabled(
-            _browserState->GetPrefs());
+        autofill::prefs::IsAutofillPaymentMethodsEnabled(_profile->GetPrefs());
     NSString* detailText = autofillCreditCardEnabled
                                ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                                : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
@@ -2667,7 +2660,7 @@ struct EnhancedSafeBrowsingActivePromoData
   // updated. Otherwise, it would lead to an UI glitch either while the sign
   // in UI is appearing or disappearing. The TableView will be reloaded once
   // the animation is finished.
-  // See: -[SettingsTableViewController didFinishSignin:].
+  // See: -[SettingsTableViewController didFinishSignin].
   if (self.isSigninInProgress)
     return;
   // Sign in state changes are rare. Just reload the entire table when
@@ -2743,7 +2736,7 @@ struct EnhancedSafeBrowsingActivePromoData
                 withRowAnimation:UITableViewRowAnimationFade];
 
   feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(_browserState);
+      feature_engagement::TrackerFactory::GetForProfile(_profile);
   tracker->NotifyEvent(
       feature_engagement::events::kInlineEnhancedSafeBrowsingPromoClosed);
   base::RecordAction(base::UserMetricsAction(

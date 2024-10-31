@@ -75,8 +75,12 @@ void FillRegionOutsideVisibleRect(uint8_t* data,
 VideoPixelFormat ReadbackFormat(const VideoFrame& frame) {
   // The |frame|.BitDepth() restriction is to avoid treating a P010LE frame as a
   // low-bit depth frame.
-  if (frame.RequiresExternalSampler() && frame.BitDepth() == 8u)
+  bool si_prefers_external_sampler =
+      frame.HasSharedImage() &&
+      frame.shared_image()->format().PrefersExternalSampler();
+  if (si_prefers_external_sampler && frame.BitDepth() == 8u) {
     return PIXEL_FORMAT_XRGB;
+  }
 
   switch (frame.format()) {
     case PIXEL_FORMAT_I420:
@@ -119,13 +123,12 @@ bool ReadbackTexturePlaneToMemorySyncOOP(const VideoFrame& src_frame,
   auto info = SkImageInfo::Make(src_rect.width(), src_rect.height(),
                                 sk_color_type, sk_alpha_type);
 
-  // With multiplanar shared images, there's one shared image mailbox so perform
-  // readback passing the appropriate `src_plane` for the single mailbox.
-  const gpu::MailboxHolder& holder = src_frame.mailbox_holder(0);
-  DCHECK(!holder.mailbox.IsZero());
-  ri->WaitSyncTokenCHROMIUM(holder.sync_token.GetConstData());
+  // Perform readback passing the appropriate `src_plane` for the mailbox.
+  auto mailbox = src_frame.shared_image()->mailbox();
+  auto sync_token = src_frame.acquire_sync_token();
+  ri->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
   bool result =
-      ri->ReadbackImagePixels(holder.mailbox, info, dest_stride, src_rect.x(),
+      ri->ReadbackImagePixels(mailbox, info, dest_stride, src_rect.x(),
                               src_rect.y(), src_plane, dest_pixels);
 
   return result && ri->GetGraphicsResetStatusKHR() == GL_NO_ERROR &&
@@ -211,6 +214,49 @@ void LetterboxPlane(VideoFrame* frame,
   CHECK(ptr);
 
   LetterboxPlane(frame, plane, ptr, view_area_in_pixels, fill_byte);
+}
+
+void ProcessAsyncMappingResult(
+    scoped_refptr<VideoFrame> video_frame,
+    base::OnceCallback<void(scoped_refptr<VideoFrame>)> result_cb,
+    std::unique_ptr<VideoFrame::ScopedMapping> scoped_mapping) {
+  CHECK(video_frame);
+  if (!scoped_mapping) {
+    std::move(result_cb).Run(nullptr);
+    return;
+  }
+
+  const size_t num_planes = VideoFrame::NumPlanes(video_frame->format());
+  uint8_t* plane_addrs[VideoFrame::kMaxPlanes] = {};
+  for (size_t i = 0; i < num_planes; i++) {
+    plane_addrs[i] = scoped_mapping->Memory(i);
+  }
+
+  auto mapped_frame = VideoFrame::WrapExternalYuvDataWithLayout(
+      video_frame->layout(), video_frame->visible_rect(),
+      video_frame->natural_size(), plane_addrs[0], plane_addrs[1],
+      plane_addrs[2], video_frame->timestamp());
+
+  if (!mapped_frame) {
+    std::move(result_cb).Run(nullptr);
+    return;
+  }
+
+  mapped_frame->set_color_space(video_frame->ColorSpace());
+  mapped_frame->metadata().MergeMetadataFrom(video_frame->metadata());
+
+  // Pass |video_frame| so that it outlives |mapped_frame| and the mapped buffer
+  // is unmapped on destruction.
+  mapped_frame->AddDestructionObserver(base::BindOnce(
+      [](scoped_refptr<VideoFrame> frame,
+         std::unique_ptr<VideoFrame::ScopedMapping> scoped_mapping) {
+        CHECK(scoped_mapping);
+        // The VideoFrame::ScopedMapping must be destroyed before the
+        // FrameResource that produced it in order to avoid dangling pointers.
+        scoped_mapping.reset();
+      },
+      std::move(video_frame), std::move(scoped_mapping)));
+  std::move(result_cb).Run(std::move(mapped_frame));
 }
 
 }  // namespace
@@ -299,7 +345,7 @@ void LetterboxVideoFrame(VideoFrame* frame, const gfx::Rect& view_area) {
       break;
     }
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 
@@ -387,7 +433,7 @@ void RotatePlaneByPixels(const uint8_t* src,
       }
     }
   } else {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
   // Copy pixels.
@@ -583,6 +629,16 @@ scoped_refptr<VideoFrame> ConvertToMemoryMappedFrame(
       },
       std::move(video_frame), std::move(scoped_mapping)));
   return mapped_frame;
+}
+
+void ConvertToMemoryMappedFrameAsync(
+    scoped_refptr<VideoFrame> video_frame,
+    base::OnceCallback<void(scoped_refptr<VideoFrame>)> result_cb) {
+  CHECK(video_frame);
+  CHECK(video_frame->HasMappableGpuBuffer());
+
+  video_frame->MapGMBOrSharedImageAsync(base::BindOnce(
+      &ProcessAsyncMappingResult, video_frame, std::move(result_cb)));
 }
 
 scoped_refptr<VideoFrame> WrapAsI420VideoFrame(

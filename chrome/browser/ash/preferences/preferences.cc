@@ -41,7 +41,7 @@
 #include "chrome/browser/ash/input_method/input_method_syncer.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
-#include "chrome/browser/ash/policy/skyvault/local_files_migration_manager.h"
+#include "chrome/browser/ash/policy/skyvault/policy_utils.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/system/input_device_settings.h"
 #include "chrome/browser/ash/system/timezone_resolver_manager.h"
@@ -163,7 +163,6 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
       ::prefs::kLacrosSelection,
       static_cast<int>(
           ash::standalone_browser::LacrosSelectionPolicy::kUserChoice));
-  registry->RegisterStringPref(::prefs::kLacrosDataBackwardMigrationMode, "");
   registry->RegisterBooleanPref(prefs::kDeviceSystemWideTracingEnabled, true);
   registry->RegisterBooleanPref(
       prefs::kLocalStateDevicePeripheralDataAccessEnabled, false);
@@ -215,6 +214,9 @@ void Preferences::RegisterProfilePrefs(
   // and it should not carry over to sessions were neither of these is set.
   registry->RegisterBooleanPref(::prefs::kUnifiedDesktopEnabledByDefault, false,
                                 PrefRegistry::NO_REGISTRATION_FLAGS);
+  registry->RegisterBooleanPref(::prefs::kAllowExcludeDisplayInMirrorMode,
+                                false, PrefRegistry::NO_REGISTRATION_FLAGS);
+
   // TODO(anasalazar): Finish moving this to ash.
   registry->RegisterBooleanPref(
       prefs::kNaturalScroll,
@@ -292,6 +294,7 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kOrcaEnabled, true);
   registry->RegisterBooleanPref(prefs::kOrcaFeedbackEnabled, true);
   registry->RegisterBooleanPref(prefs::kManagedOrcaEnabled, true);
+  registry->RegisterBooleanPref(prefs::kLobsterEnabled, true);
   registry->RegisterBooleanPref(
       prefs::kManagedPhysicalKeyboardAutocorrectAllowed, true);
   registry->RegisterBooleanPref(
@@ -678,8 +681,7 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterIntegerPref(
       ::prefs::kSkyVaultMigrationState,
-      static_cast<int>(policy::local_user_files::LocalFilesMigrationManager::
-                           State::kUninitialized));
+      static_cast<int>(policy::local_user_files::State::kUninitialized));
 }
 
 void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {

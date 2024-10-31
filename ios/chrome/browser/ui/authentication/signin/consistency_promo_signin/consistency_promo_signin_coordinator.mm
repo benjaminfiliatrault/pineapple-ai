@@ -283,8 +283,8 @@
   self.accountChooserCoordinator = nil;
   [self.consistencyPromoSigninMediator disconnectWithResult:signinResult];
   self.consistencyPromoSigninMediator = nil;
-  [self runCompletionCallbackWithSigninResult:signinResult
-                               completionInfo:completionInfo];
+  [self runCompletionWithSigninResult:signinResult
+                       completionInfo:completionInfo];
 }
 
 // Starts the sign-in flow.
@@ -395,8 +395,7 @@
              initWithAnimation:ConsistencySheetSlideAnimationPopping
           navigationController:self.navigationController];
   }
-  NOTREACHED_IN_MIGRATION();
-  return nil;
+  NOTREACHED();
 }
 
 - (id<UIViewControllerInteractiveTransitioning>)

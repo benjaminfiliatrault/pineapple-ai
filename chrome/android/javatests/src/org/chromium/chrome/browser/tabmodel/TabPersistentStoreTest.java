@@ -44,7 +44,6 @@ import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
 import org.chromium.chrome.browser.app.tabmodel.AsyncTabParamsManagerSingleton;
-import org.chromium.chrome.browser.app.tabmodel.ChromeTabModelFilterFactory;
 import org.chromium.chrome.browser.app.tabmodel.TabModelOrchestrator;
 import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelper;
@@ -83,6 +82,7 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabCreator;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabCreatorManager;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.io.File;
 import java.nio.ByteBuffer;
@@ -154,7 +154,7 @@ public class TabPersistentStoreTest {
         private final TabContentManager mMockTabContentManager;
 
         public TestTabModelSelector(Context context) throws Exception {
-            super(new MockTabCreatorManager(), new ChromeTabModelFilterFactory(context), false);
+            super(new MockTabCreatorManager(), false);
             ((MockTabCreatorManager) getTabCreatorManager()).initialize(this);
             mTabPersistentStoreObserver = new MockTabPersistentStoreObserver();
             // Use of a mockito object here is ok as this object is not important to the test. A
@@ -188,6 +188,12 @@ public class TabPersistentStoreTest {
                     new Callable<TabModelImpl>() {
                         @Override
                         public TabModelImpl call() {
+                            TabRemover tabRemover =
+                                    new PassthroughTabRemover(
+                                            () ->
+                                                    getTabGroupModelFilterProvider()
+                                                            .getTabGroupModelFilter(
+                                                                    /* isIncognito= */ false));
                             return new TabModelImpl(
                                     ProfileManager.getLastUsedRegularProfile(),
                                     NO_RESTORE_TYPE,
@@ -198,12 +204,18 @@ public class TabPersistentStoreTest {
                                     nextTabPolicySupplier,
                                     AsyncTabParamsManagerSingleton.getInstance(),
                                     TestTabModelSelector.this,
+                                    tabRemover,
                                     /* supportUndo= */ true,
                                     /* trackInNativeModelList= */ true);
                         }
                     };
             TabModelImpl regularTabModel = ThreadUtils.runOnUiThreadBlocking(callable);
-            IncognitoTabModel incognitoTabModel =
+            TabRemover incognitoTabRemover =
+                    new PassthroughTabRemover(
+                            () ->
+                                    getTabGroupModelFilterProvider()
+                                            .getTabGroupModelFilter(/* isIncognito= */ true));
+            IncognitoTabModelImpl incognitoTabModel =
                     new IncognitoTabModelImpl(
                             new IncognitoTabModelImplCreator(
                                     null,
@@ -214,8 +226,12 @@ public class TabPersistentStoreTest {
                                     nextTabPolicySupplier,
                                     AsyncTabParamsManagerSingleton.getInstance(),
                                     NO_RESTORE_TYPE,
-                                    this));
-            initialize(regularTabModel, incognitoTabModel);
+                                    this,
+                                    incognitoTabRemover));
+            TabUngrouperFactory factory =
+                    (isIncognitoBranded, tabGroupModelFilterSupplier) ->
+                            new PassthroughTabUngrouper(tabGroupModelFilterSupplier);
+            initialize(regularTabModel, incognitoTabModel, factory);
         }
 
         @Override
@@ -284,6 +300,7 @@ public class TabPersistentStoreTest {
                 @Override
                 public TabModelSelector buildSelector(
                         Context context,
+                        ModalDialogManager modalDialogManager,
                         OneshotSupplier<ProfileProvider> profileProviderSupplier,
                         TabCreatorManager tabCreatorManager,
                         NextTabPolicySupplier nextTabPolicySupplier) {
@@ -342,11 +359,6 @@ public class TabPersistentStoreTest {
                     mChromeActivity =
                             new ChromeActivity() {
                                 @Override
-                                protected boolean handleBackPressed() {
-                                    return false;
-                                }
-
-                                @Override
                                 protected Pair<? extends TabCreator, ? extends TabCreator>
                                         createTabCreators() {
                                     return null;
@@ -376,6 +388,7 @@ public class TabPersistentStoreTest {
                                 // This is intended to pretend we've started the activity, so we can
                                 // attach a base context to the activity.
                                 @Override
+                                @SuppressWarnings("MissingSuperCall")
                                 public void onStart() {
                                     if (getBaseContext() == null) {
                                         attachBaseContext(mAppContext);
@@ -469,7 +482,7 @@ public class TabPersistentStoreTest {
                         () -> {
                             Profile profile = ProfileManager.getLastUsedRegularProfile();
                             return new MockTabModelSelector(
-                                    profile, profile.getPrimaryOTRProfile(true), 0, 0, null);
+                                    profile, profile.getPrimaryOtrProfile(true), 0, 0, null);
                         });
 
         MockTabCreatorManager mockManager = new MockTabCreatorManager(mockSelector);
@@ -599,7 +612,7 @@ public class TabPersistentStoreTest {
                         () -> {
                             Profile profile = ProfileManager.getLastUsedRegularProfile();
                             return new MockTabModelSelector(
-                                    profile, profile.getPrimaryOTRProfile(true), 0, 0, null);
+                                    profile, profile.getPrimaryOtrProfile(true), 0, 0, null);
                         });
         MockTabCreatorManager mockManager = new MockTabCreatorManager(mockSelector);
         MockTabCreator regularCreator = mockManager.getTabCreator(false);
@@ -907,7 +920,7 @@ public class TabPersistentStoreTest {
                         () -> {
                             Profile profile = ProfileManager.getLastUsedRegularProfile();
                             return new MockTabModelSelector(
-                                    profile, profile.getPrimaryOTRProfile(true), 0, 0, null);
+                                    profile, profile.getPrimaryOtrProfile(true), 0, 0, null);
                         });
 
         MockTabCreatorManager mockManager = new MockTabCreatorManager(mockSelector);
@@ -1000,7 +1013,7 @@ public class TabPersistentStoreTest {
                         () -> {
                             Profile profile = ProfileManager.getLastUsedRegularProfile();
                             return new MockTabModelSelector(
-                                    profile, profile.getPrimaryOTRProfile(true), 0, 0, null);
+                                    profile, profile.getPrimaryOtrProfile(true), 0, 0, null);
                         });
 
         MockTabCreatorManager firstManager = new MockTabCreatorManager(firstSelector);
@@ -1028,7 +1041,7 @@ public class TabPersistentStoreTest {
                         () -> {
                             Profile profile = ProfileManager.getLastUsedRegularProfile();
                             return new MockTabModelSelector(
-                                    profile, profile.getPrimaryOTRProfile(true), 0, 0, null);
+                                    profile, profile.getPrimaryOtrProfile(true), 0, 0, null);
                         });
 
         MockTabCreatorManager secondManager = new MockTabCreatorManager(secondSelector);
@@ -1107,7 +1120,7 @@ public class TabPersistentStoreTest {
                         () -> {
                             Profile profile = ProfileManager.getLastUsedRegularProfile();
                             return new MockTabModelSelector(
-                                    profile, profile.getPrimaryOTRProfile(true), 0, 0, null);
+                                    profile, profile.getPrimaryOtrProfile(true), 0, 0, null);
                         });
 
         MockTabCreatorManager mockManager = new MockTabCreatorManager(mockSelector);
@@ -1166,7 +1179,7 @@ public class TabPersistentStoreTest {
                         () -> {
                             Profile profile = ProfileManager.getLastUsedRegularProfile();
                             return new MockTabModelSelector(
-                                    profile, profile.getPrimaryOTRProfile(true), 0, 0, null);
+                                    profile, profile.getPrimaryOtrProfile(true), 0, 0, null);
                         });
         MockTabCreatorManager mockManager = new MockTabCreatorManager(mockSelector);
         MockTabPersistentStoreObserver mockObserver = new MockTabPersistentStoreObserver();
@@ -1213,7 +1226,7 @@ public class TabPersistentStoreTest {
                         () -> {
                             Profile profile = ProfileManager.getLastUsedRegularProfile();
                             return new MockTabModelSelector(
-                                    profile, profile.getPrimaryOTRProfile(true), 0, 0, null);
+                                    profile, profile.getPrimaryOtrProfile(true), 0, 0, null);
                         });
         MockTabCreatorManager mockManager = new MockTabCreatorManager(mockSelector);
         final MockTabPersistentStoreObserver mockObserver = new MockTabPersistentStoreObserver();
@@ -1293,7 +1306,7 @@ public class TabPersistentStoreTest {
                         () -> {
                             Profile profile = ProfileManager.getLastUsedRegularProfile();
                             return new MockTabModelSelector(
-                                    profile, profile.getPrimaryOTRProfile(true), 0, 0, null);
+                                    profile, profile.getPrimaryOtrProfile(true), 0, 0, null);
                         });
         MockTabCreatorManager mockManager = new MockTabCreatorManager(mockSelector);
         MockTabPersistentStoreObserver mockObserver = new MockTabPersistentStoreObserver();
@@ -1479,6 +1492,7 @@ public class TabPersistentStoreTest {
                             return (TestTabModelSelector)
                                     sTabWindowManager.requestSelector(
                                                     mChromeActivity,
+                                                    mChromeActivity.getModalDialogManager(),
                                                     profileProvider,
                                                     mChromeActivity,
                                                     null,

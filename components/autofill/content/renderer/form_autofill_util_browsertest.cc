@@ -178,6 +178,17 @@ const char* kPoorMansPlaceholderNoHorizontalContainment = R"(
   <span class=overlapping_position_and_size>not a label</span>
 )";
 
+const char* kSelectWithDefaultOption = R"(
+  <select id=target>
+    <option>Select country</option>
+    <hr>
+    <optgroup label=Countries>
+      <option value=AT>Austria</option>
+      <option value=DE>Germany</option>
+    </optgroup>
+  </select>
+)";
+
 void VerifyButtonTitleCache(const WebFormElement& form_target,
                             const ButtonTitleList& expected_button_titles,
                             const ButtonTitlesCache& actual_cache) {
@@ -201,7 +212,8 @@ class FormAutofillUtilsTest : public content::RenderViewTest {
   FormAutofillUtilsTest() {
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/
-        {features::kAutofillReplaceCachedWebElementsByRendererIds},
+        {features::kAutofillReplaceCachedWebElementsByRendererIds,
+         features::kAutofillInferLabelFromDefaultSelectText},
         /*disabled_features=*/{});
   }
   ~FormAutofillUtilsTest() override = default;
@@ -473,7 +485,8 @@ TEST_F(FormAutofillUtilsTest, InferLabelForElementTest) {
        kPoorMansPlaceholderPossiblyErrorMessage, u""},
       {"Poor man's placeholder: no horizontal containment",
        kPoorMansPlaceholderNoHorizontalContainment, u""},
-  };
+      {"Select with default option", kSelectWithDefaultOption,
+       u"Select country"}};
   for (auto test_case : test_cases) {
     SCOPED_TRACE(test_case.description);
     LoadHTML(test_case.html);
@@ -517,7 +530,9 @@ TEST_F(FormAutofillUtilsTest, InferLabelSourceTest) {
       {"<dl><dt>label</dt><dd><input id='target'></dd></dl>",
        FormFieldData::LabelSource::kDdTag},
       {kPoorMansPlaceholderFullOverlap,
-       FormFieldData::LabelSource::kOverlayingLabel}};
+       FormFieldData::LabelSource::kOverlayingLabel},
+      {kSelectWithDefaultOption,
+       FormFieldData::LabelSource::kDefaultSelectText}};
 
   for (auto test_case : test_cases) {
     SCOPED_TRACE(testing::Message() << test_case.label_source);
@@ -1386,10 +1401,6 @@ TEST_F(FormAutofillUtilsTest, GetFormFieldElements_Unowned) {
       <option value='first'>first</option>
       <option value='second' selected>second</option>
     </select>
-    <select id='unowned_selectlist'>
-      <option value='first'>first</option>
-      <option value='second' selected>second</option>
-    </select>
     <object id='unowned_object'></object>
 
     <form id='form'>
@@ -1404,10 +1415,6 @@ TEST_F(FormAutofillUtilsTest, GetFormFieldElements_Unowned) {
         <option value='june'>june</option>
         <option value='july' selected>july</option>
       </select>
-      <selectlist name='form_selectlist' id='form_selectlist'>
-        <option value='june'>june</option>
-        <option value='july' selected>july</option>
-      </selectlist>
       <object id='form_object'></object>
     </form>
   )");
@@ -1416,15 +1423,13 @@ TEST_F(FormAutofillUtilsTest, GetFormFieldElements_Unowned) {
   std::vector<WebFormControlElement> unowned_form_fields =
       form_util::GetOwnedFormControlsForTesting(doc, WebFormElement());
 
-  EXPECT_THAT(
-      unowned_form_fields,
-      ElementsAre(GetFormControlElementById(doc, "unowned_button"),
-                  GetFormControlElementById(doc, "unowned_fieldset"),
-                  GetFormControlElementById(doc, "unowned_input"),
-                  GetFormControlElementById(doc, "unowned_textarea"),
-                  GetFormControlElementById(doc, "unowned_output"),
-                  GetFormControlElementById(doc, "unowned_select"),
-                  GetFormControlElementById(doc, "unowned_selectlist")));
+  EXPECT_THAT(unowned_form_fields,
+              ElementsAre(GetFormControlElementById(doc, "unowned_button"),
+                          GetFormControlElementById(doc, "unowned_fieldset"),
+                          GetFormControlElementById(doc, "unowned_input"),
+                          GetFormControlElementById(doc, "unowned_textarea"),
+                          GetFormControlElementById(doc, "unowned_output"),
+                          GetFormControlElementById(doc, "unowned_select")));
 }
 
 // Tests that FormData::fields and FormData::child_frames are extracted fully
@@ -1578,10 +1583,10 @@ TEST_F(FormAutofillUtilsTest, ExtractFormData_WebFormElementToFormData) {
   LoadHTML(R"(
     <form id='form'>
       <input id='input'>
-      <selectlist name='form_selectlist' id='selectlist'>
+      <select name='form_select' id='select'>
         <option value='june'>june</option>
         <option value='july' selected>july</option>
-      </selectlist>
+      </select>
     </form>
   )");
 
@@ -1599,7 +1604,7 @@ TEST_F(FormAutofillUtilsTest, ExtractFormData_WebFormElementToFormData) {
                                       form_data.fields()[0]));
   }
 
-  WebElement element = GetElementById(doc, "selectlist");
+  WebElement element = GetElementById(doc, "select");
   ASSERT_TRUE(element);
   ASSERT_TRUE(element.IsFormControlElement());
   EXPECT_TRUE(HaveSameFormControlId(element.To<WebFormControlElement>(),

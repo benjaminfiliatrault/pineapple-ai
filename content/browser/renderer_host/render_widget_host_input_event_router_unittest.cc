@@ -34,6 +34,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
 #include "third_party/blink/public/mojom/input/touch_event.mojom.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/test/aura_test_helper.h"
@@ -742,7 +743,7 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
 
   // Start a scroll that gets bubbled up from the child view.
   {
-    ASSERT_FALSE(child.view.get()->is_scroll_sequence_bubbling_);
+    ASSERT_FALSE(child.view.get()->input_helper_->IsScrollSequenceBubbling());
 
     child.view->GestureEventAck(
         scroll_begin, blink::mojom::InputEventResultSource::kCompositorThread,
@@ -750,7 +751,7 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
 
     EXPECT_EQ(child.view.get(), bubbling_gesture_scroll_origin());
     EXPECT_EQ(view_root_.get(), bubbling_gesture_scroll_target());
-    ASSERT_TRUE(child.view->is_scroll_sequence_bubbling_);
+    ASSERT_TRUE(child.view.get()->input_helper_->IsScrollSequenceBubbling());
   }
 
   // Simulate a debounce filtered GSE/GSB pair which looks like an ACK consumed
@@ -765,7 +766,7 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
 
     EXPECT_EQ(child.view.get(), bubbling_gesture_scroll_origin());
     EXPECT_EQ(view_root_.get(), bubbling_gesture_scroll_target());
-    EXPECT_TRUE(child.view->is_scroll_sequence_bubbling_);
+    EXPECT_TRUE(child.view.get()->input_helper_->IsScrollSequenceBubbling());
   }
 
   // An unfiltered GSE should now clear state.
@@ -775,14 +776,14 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
     child.view->GestureEventAck(scroll_end,
                                 blink::mojom::InputEventResultSource::kBrowser,
                                 blink::mojom::InputEventResultState::kIgnored);
-    EXPECT_FALSE(child.view->is_scroll_sequence_bubbling_);
+    EXPECT_FALSE(child.view.get()->input_helper_->IsScrollSequenceBubbling());
     EXPECT_EQ(bubbling_gesture_scroll_origin(), nullptr);
     EXPECT_EQ(bubbling_gesture_scroll_target(), nullptr);
   }
 
   // A new scroll should once again establish bubbling.
   {
-    ASSERT_FALSE(child.view.get()->is_scroll_sequence_bubbling_);
+    ASSERT_FALSE(child.view.get()->input_helper_->IsScrollSequenceBubbling());
 
     child.view->GestureEventAck(
         scroll_begin, blink::mojom::InputEventResultSource::kCompositorThread,
@@ -790,7 +791,7 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
 
     EXPECT_EQ(child.view.get(), bubbling_gesture_scroll_origin());
     EXPECT_EQ(view_root_.get(), bubbling_gesture_scroll_target());
-    ASSERT_TRUE(child.view->is_scroll_sequence_bubbling_);
+    ASSERT_TRUE(child.view.get()->input_helper_->IsScrollSequenceBubbling());
   }
 }
 
@@ -1094,8 +1095,8 @@ TEST_F(RenderWidgetHostInputEventRouterTest,
 // devtools connect to a browser instance running on a mobile.  It should not
 // crash.
 TEST_F(RenderWidgetHostInputEventRouterTest, CanCallShowContextMenuAtPoint) {
-  rwhier()->ShowContextMenuAtPoint(gfx::Point(0, 0), ui::MENU_SOURCE_MOUSE,
-                                   view_root_.get());
+  rwhier()->ShowContextMenuAtPoint(
+      gfx::Point(0, 0), ui::mojom::MenuSourceType::kMouse, view_root_.get());
 }
 
 // Input events get latched to a target when middle click autoscroll is in

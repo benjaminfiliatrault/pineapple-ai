@@ -10,6 +10,7 @@
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "components/autofill/core/common/unique_ids.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace autofill {
@@ -20,25 +21,23 @@ class MockAutofillPredictionImprovementsDelegate
   MockAutofillPredictionImprovementsDelegate();
   ~MockAutofillPredictionImprovementsDelegate() override;
 
-  MOCK_METHOD(bool,
-              MaybeUpdateSuggestions,
-              (std::vector<Suggestion> & address_suggestions,
-               const FormFieldData& field,
-               bool should_add_trigger_suggestion),
+  MOCK_METHOD(std::vector<Suggestion>,
+              GetSuggestions,
+              (const std::vector<Suggestion>& address_suggestions,
+               const FormData& form,
+               const FormFieldData& field),
               (override));
   MOCK_METHOD(bool,
               ShouldProvidePredictionImprovements,
               (const GURL& url),
-              (override));
-  MOCK_METHOD(void,
-              UserFeedbackReceived,
-              (AutofillPredictionImprovementsDelegate::UserFeedback feedback),
-              (override));
+              (const override));
+  MOCK_METHOD(void, UserFeedbackReceived, (UserFeedback feedback), (override));
   MOCK_METHOD(bool,
-              IsFormEligible,
-              (const autofill::FormStructure& form),
-              (override));
-  MOCK_METHOD(bool, IsUserEligible, (), (override));
+              IsPredictionImprovementsEligible,
+              (const autofill::FormStructure& form,
+               const autofill::AutofillField& field),
+              (const override));
+  MOCK_METHOD(bool, IsUserEligible, (), (const override));
   MOCK_METHOD(void, UserClickedLearnMore, (), (override));
   MOCK_METHOD(void,
               OnClickedTriggerSuggestion,
@@ -46,13 +45,32 @@ class MockAutofillPredictionImprovementsDelegate
                const autofill::FormFieldData& trigger_field,
                UpdateSuggestionsCallback update_suggestions_callback),
               (override));
-  MOCK_METHOD(void,
-              MaybeImportForm,
-              (std::unique_ptr<autofill::FormStructure> form,
-               ImportFormCallback callback),
-              (override));
+  MOCK_METHOD(
+      void,
+      MaybeImportForm,
+      (std::unique_ptr<autofill::FormStructure> form,
+       base::OnceCallback<void(std::unique_ptr<autofill::FormStructure> form,
+                               bool autofill_ai_shows_bubble)> callback),
+      (override));
   MOCK_METHOD(void, HasDataStored, (HasDataCallback callback), (override));
-  MOCK_METHOD(void, GoToSettings, (), (override));
+  MOCK_METHOD(bool,
+              ShouldDisplayIph,
+              (const autofill::FormStructure& form, const AutofillField& field),
+              (const override));
+  MOCK_METHOD(void, GoToSettings, (), (const override));
+  MOCK_METHOD(void,
+              OnSuggestionsShown,
+              (const DenseSet<SuggestionType>& shown_suggestion_types,
+               const FormData& form,
+               const FormFieldData& trigger_field,
+               UpdateSuggestionsCallback update_suggestions_callback),
+              (override));
+  MOCK_METHOD(void, OnFormSeen, (const FormStructure& form), (override));
+  MOCK_METHOD(void, OnDidFillSuggestion, (FormGlobalId form_id), (override));
+  MOCK_METHOD(void,
+              OnEditedAutofilledField,
+              (FormGlobalId form_id),
+              (override));
 };
 
 }  // namespace autofill

@@ -23,7 +23,6 @@
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/components/arc/session/arc_client_adapter.h"
-#include "ash/components/arc/session/arc_dlc_installer.h"
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/session/arc_session.h"
 #include "ash/components/arc/session/connection_holder.h"
@@ -200,8 +199,6 @@ std::vector<std::string> GenerateUpgradeProps(
 void AppendParamsFromStartParams(
     vm_tools::concierge::StartArcVmRequest& request,
     const StartParams& start_params) {
-  request.set_enable_keyboard_shortcut_helper_integration(
-      start_params.enable_keyboard_shortcut_helper_integration);
 
   switch (IdentifyBinaryTranslationType(start_params)) {
     case ArcBinaryTranslationType::NONE:
@@ -423,8 +420,6 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
       const int ram_percentage = kVmMemorySizePercentage.Get();
       int vm_ram_mib =
           std::min(max_mib, ram_percentage * ram_mib / 100 + shift_mib);
-      constexpr int kVmRamMinMib = 2048;
-
       if (delegate->IsCrosvm32bit()) {
         // This is a workaround for ARM Chromebooks where userland including
         // crosvm is compiled in 32 bit.
@@ -436,15 +431,8 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
         }
       }
 
-      if (vm_ram_mib > kVmRamMinMib) {
-        request.set_memory_mib(vm_ram_mib);
-        VLOG(2) << "VmMemorySize is enabled. memory_mib=" << vm_ram_mib;
-      } else {
-        VLOG(2) << "VmMemorySize is enabled, but computed size is "
-                << "min(" << ram_mib << " + " << shift_mib << "," << max_mib
-                << ") == " << vm_ram_mib << "MiB, less than " << kVmRamMinMib
-                << " MiB safe minium.";
-      }
+      request.set_memory_mib(vm_ram_mib);
+      VLOG(2) << "VmMemorySize is enabled. memory_mib=" << vm_ram_mib;
     } else {
       VLOG(2) << "VmMemorySize is enabled, but GetSystemMemoryInfo failed.";
     }
@@ -569,6 +557,11 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
       break;
     default:
       NOTREACHED();
+  }
+
+  if (request.memory_mib() < kMinVmMemorySizeMiB) {
+    request.set_memory_mib(kMinVmMemorySizeMiB);
+    VLOG(2) << "Overriding VM memory size to 3243 MiB for app compatibility";
   }
 
   request.set_use_gki(base::FeatureList::IsEnabled(kArcVmGki));
@@ -955,18 +948,6 @@ class ArcVmClientAdapter : public ArcClientAdapter,
     if (file_system_status_rewriter_for_testing_)
       file_system_status_rewriter_for_testing_.Run(&file_system_status);
 
-    VLOG(2) << "Wait for DLC installation if necessary";
-    // Waits for a stable state (kInstalled/kUninstalled) and proceeds
-    // regardless of installation result because even if the installation
-    // has failed, it will only affect limited functionality (e.g. without
-    // Houdini library for ARM apps). ARCVM should still continue to start.
-    ArcDlcInstaller::Get()->WaitForStableState(base::BindOnce(
-        &ArcVmClientAdapter::LoadDemoResources, weak_factory_.GetWeakPtr(),
-        std::move(callback), std::move(file_system_status)));
-  }
-
-  void LoadDemoResources(chromeos::VoidDBusMethodCallback callback,
-                         FileSystemStatus file_system_status) {
     VLOG(2) << "Retrieving demo session apps path";
     DCHECK(demo_mode_delegate_);
     demo_mode_delegate_->EnsureResourcesLoaded(base::BindOnce(

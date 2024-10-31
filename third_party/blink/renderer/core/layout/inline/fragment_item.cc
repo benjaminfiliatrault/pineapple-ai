@@ -137,7 +137,6 @@ FragmentItem::FragmentItem(const PhysicalSize& size,
       is_dirty_(false),
       is_last_for_node_(true) {
   DCHECK(!IsFormattingContextRoot());
-  DCHECK(RuntimeEnabledFeatures::RubyLineBreakableEnabled());
 }
 
 FragmentItem::FragmentItem(const PhysicalBoxFragment& box,
@@ -398,10 +397,23 @@ gfx::RectF FragmentItem::ObjectBoundingBox(const FragmentItems& items) const {
     ink_bounds.Offset(0.0f, font_data->GetFontMetrics().FloatAscent());
   ink_bounds.Scale(GetSvgFragmentData()->length_adjust_scale, 1.0f);
   const gfx::RectF& scaled_rect = GetSvgFragmentData()->rect;
-  if (!IsHorizontal()) {
-    ink_bounds =
-        gfx::RectF(scaled_rect.width() - ink_bounds.bottom(), ink_bounds.x(),
-                   ink_bounds.height(), ink_bounds.width());
+  // Convert a logical ink_bounds to physical. We don't use WiringModeConverter,
+  // which has no ToPhysical() for gfx::RectF.
+  switch (GetWritingMode()) {
+    case WritingMode::kHorizontalTb:
+      break;
+    case WritingMode::kVerticalLr:
+    case WritingMode::kVerticalRl:
+    case WritingMode::kSidewaysRl:
+      ink_bounds =
+          gfx::RectF(scaled_rect.width() - ink_bounds.bottom(), ink_bounds.x(),
+                     ink_bounds.height(), ink_bounds.width());
+      break;
+    case WritingMode::kSidewaysLr:
+      ink_bounds =
+          gfx::RectF(ink_bounds.y(), scaled_rect.height() - ink_bounds.right(),
+                     ink_bounds.height(), ink_bounds.width());
+      break;
   }
   ink_bounds.Offset(scaled_rect.OffsetFromOrigin());
   ink_bounds.Union(scaled_rect);
@@ -578,7 +590,8 @@ unsigned FragmentItem::StartOffsetInContainer(
     if (current->Type() == kBox && !current->IsInlineBox())
       break;
   }
-  NOTREACHED_IN_MIGRATION();
+  // No such text fragment.  We don't know how to reproduce this.
+  // See crbug.com/372586875.
   return 0;
 }
 
@@ -670,6 +683,9 @@ AffineTransform FragmentItem::BuildSvgTransformForLengthAdjust() const {
       scale_transform.SetMatrix(
           scale, 0, 0, 1, with_text_path_transform ? 0 : x - scale * x, 0);
     } else {
+      // svg_data.rect is a physical bounding rectangle including lengthAdjust
+      // scaling.  So all vertical writing modes including sideways-lr need the
+      // same transform.
       float y = svg_data.rect.y();
       scale_transform.SetMatrix(1, 0, 0, scale, 0,
                                 with_text_path_transform ? 0 : y - scale * y);
@@ -1260,8 +1276,11 @@ std::ostream& operator<<(std::ostream& ostream, const FragmentItem& item) {
     case StyleVariant::kFirstLine:
       ostream << "FirstLine";
       break;
-    case StyleVariant::kEllipsis:
-      ostream << "Ellipsis";
+    case StyleVariant::kStandardEllipsis:
+      ostream << "StandardEllipsis";
+      break;
+    case StyleVariant::kFirstLineEllipsis:
+      ostream << "FirstLineEllipsis";
       break;
   }
   return ostream << "}";

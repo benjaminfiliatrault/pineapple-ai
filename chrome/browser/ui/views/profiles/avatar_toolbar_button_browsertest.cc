@@ -70,7 +70,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_unittest_util.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/constants/ash_switches.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/testing_profile.h"
@@ -134,9 +134,6 @@ class AvatarToolbarButtonBrowserTest : public InProcessBrowserTest {
     // properly test the behavior pre/post delay without being time dependent.
     SetInfiniteAvatarDelay(AvatarDelayType::kNameGreeting);
     SetInfiniteAvatarDelay(AvatarDelayType::kSigninPendingText);
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-    SetInfiniteAvatarDelay(AvatarDelayType::kManagementLabelTransientMode);
-#endif
   }
 
   AvatarToolbarButtonBrowserTest(const AvatarToolbarButtonBrowserTest&) =
@@ -453,7 +450,7 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest, IncognitoWindowCount) {
   EXPECT_FALSE(GetWindowCountInAvatarButtonText(avatar_button1).has_value());
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest, GuestWindowCount) {
   Browser* browser1 = CreateGuestBrowser();
   AvatarToolbarButton* avatar_button1 = GetAvatarToolbarButton(browser1);
@@ -471,7 +468,7 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest, GuestWindowCount) {
 }
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 class AvatarToolbarButtonAshBrowserTest
     : public AvatarToolbarButtonBrowserTest {
  protected:
@@ -515,7 +512,7 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonAshBrowserTest, GuestSession) {
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest, DefaultBrowser) {
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
   ASSERT_TRUE(avatar);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // No avatar button is shown in normal Ash windows.
   EXPECT_FALSE(avatar->GetVisible());
 #else
@@ -547,7 +544,7 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest, SigninBrowser) {
   AddBlankTabAndShow(browser1);
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser1);
   ASSERT_TRUE(avatar);
-  // On ChromeOS (Ash and Lacros), captive portal signin windows show a
+  // On ChromeOS, captive portal signin windows show a
   // disabled avatar button to indicate that the window is incognito.
   EXPECT_TRUE(avatar->GetVisible());
   EXPECT_FALSE(avatar->GetEnabled());
@@ -695,7 +692,7 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest,
   // During test setup, number of profiles may differ per platform.
   size_t number_of_profiles =
       g_browser_process->profile_manager()->GetNumberOfProfiles();
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // In Ash tests setup creates more than 1 profile. When there is more than 1
   // profile (not Ash specific logic), the name is always shown on browser that
   // are signed in to show the greenting by default.
@@ -853,17 +850,15 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest,
 
 // Avatar button is not shown on Ash. No need to perform those tests as the info
 // checked might not be adapted.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest, SignInOutIconEffect) {
   ASSERT_FALSE(IsSignedInImageUsed());
 
   SigninWithImage(u"test@gmail.com");
   EXPECT_TRUE(IsSignedInImageUsed());
 
-#if !BUILDFLAG(IS_CHROMEOS)
   Signout();
   EXPECT_FALSE(IsSignedInImageUsed());
-#endif
 }
 
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest, SignedInChangeIcon) {
@@ -1104,23 +1099,6 @@ INSTANTIATE_TEST_SUITE_P(,
 class AvatarToolbarButtonEnterpriseBadgingBrowserTest
     : public AvatarToolbarButtonBrowserTest {
  public:
-  void EnableToolbarAvatarLabelByPolicy(bool transient) {
-    policy::PolicyMap policies;
-    policies.Set(policy::key::kToolbarAvatarLabelSettings,
-                 policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_MACHINE,
-                 policy::POLICY_SOURCE_CLOUD, base::Value(transient ? 1 : 0),
-                 nullptr);
-    provider_.UpdateChromePolicy(policies);
-  }
-
-  void SetPolicyLabelType(AvatarToolbarButton::ProfileLabelType label_type) {
-    policy::PolicyMap policies;
-    policies.Set(policy::key::kProfileLabel, policy::POLICY_LEVEL_MANDATORY,
-                 policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                 base::Value(label_type), nullptr);
-    provider_.UpdateChromePolicy(policies);
-  }
-
   void SetUpInProcessBrowserTestFixture() override {
     provider_.SetDefaultReturns(
         true /* is_initialization_complete_return */,
@@ -1135,7 +1113,7 @@ class AvatarToolbarButtonEnterpriseBadgingBrowserTest
  protected:
   testing::NiceMock<policy::MockConfigurationPolicyProvider> provider_;
   base::test::ScopedFeatureList scoped_feature_list_{
-      features::kEnterpriseProfileBadging};
+      features::kEnterpriseProfileBadgingForAvatar};
 };
 
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
@@ -1168,83 +1146,45 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
-                       WorkBadgeOnTransientModeTimesOut) {
+                       DefaultBadgeDisabledbyPolicy) {
   std::u16string work_label = u"Work";
   AvatarToolbarButton* avatar_button = GetAvatarToolbarButton(browser());
+  browser()->profile()->GetPrefs()->SetInteger(
+      prefs::kEnterpriseProfileBadgeToolbarSettings, 1);
 
-  EnableToolbarAvatarLabelByPolicy(/*transient=*/true);
   enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
-  EXPECT_EQ(avatar_button->GetText(), work_label);
 
-  avatar_button->TriggerTimeoutForTesting(
-      AvatarDelayType::kManagementLabelTransientMode);
-  // After timeout the normal state is expect - no text.
+  // There should be no text because the policy fully disables badging.
   EXPECT_EQ(avatar_button->GetText(), std::u16string());
 }
 
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
-                       WorkBadgeOnTransientModeTimesOutToNonTransient) {
-  std::u16string work_label = u"Work";
+                       CustomBadgeDisabledbyPolicy) {
+  browser()->profile()->GetPrefs()->SetString(
+      prefs::kEnterpriseCustomLabelForProfile, "Custom Label");
+  browser()->profile()->GetPrefs()->SetInteger(
+      prefs::kEnterpriseProfileBadgeToolbarSettings, 1);
+
   AvatarToolbarButton* avatar_button = GetAvatarToolbarButton(browser());
 
-  EnableToolbarAvatarLabelByPolicy(/*transient=*/true);
   enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
-  EXPECT_EQ(avatar_button->GetText(), work_label);
 
-  avatar_button->TriggerTimeoutForTesting(
-      AvatarDelayType::kManagementLabelTransientMode);
-
-  // After timeout the normal state is expect - no text.
-  EXPECT_EQ(avatar_button->GetText(), std::u16string());
-
-  // Reset the policy to not be transient.
-  EnableToolbarAvatarLabelByPolicy(/*transient=*/false);
-  EXPECT_EQ(avatar_button->GetText(), work_label);
-
-  // Reset the policy to be transient again.
-  EnableToolbarAvatarLabelByPolicy(/*transient=*/true);
+  // There should be no text because the policy fully disables badging.
   EXPECT_EQ(avatar_button->GetText(), std::u16string());
 }
 
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
-                       WorkBadgeOnNonTransientModeDoesNotTimesOut) {
-  AvatarToolbarButton* avatar_button = GetAvatarToolbarButton(browser());
-  ASSERT_TRUE(avatar_button->GetText().empty());
+                       CustomBadgeLengthLimited) {
+  browser()->profile()->GetPrefs()->SetString(
+      prefs::kEnterpriseCustomLabelForProfile,
+      "Custom Label Can Be Max 16 Characters");
 
-  EnableToolbarAvatarLabelByPolicy(/*transient=*/false);
-
-  std::u16string work_label = u"Work";
-  enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
-  EXPECT_EQ(avatar_button->GetText(), work_label);
-
-  // Enforcing the delay stop for the transient mode.
-  avatar_button->TriggerTimeoutForTesting(
-      AvatarDelayType::kManagementLabelTransientMode);
-
-  // Work label is still expected as it should be permanent.
-  EXPECT_EQ(avatar_button->GetText(), work_label);
-}
-
-IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
-                       WorkBrowserShowsBadgeWithLabelPresets) {
-  auto* prefs = browser()->profile()->GetPrefs();
-  enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
   AvatarToolbarButton* avatar_button = GetAvatarToolbarButton(browser());
 
-  // Work label
-  SetPolicyLabelType(AvatarToolbarButton::ProfileLabelType::kWork);
-  EXPECT_EQ(avatar_button->GetText(),
-            l10n_util::GetStringUTF16(IDS_AVATAR_BUTTON_WORK));
-  prefs->SetString(prefs::kEnterpriseCustomLabelForProfile, "Custom Label");
-  EXPECT_EQ(avatar_button->GetText(), u"Custom Label");
+  enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
 
-  // School label
-  prefs->ClearPref(prefs::kEnterpriseCustomLabelForProfile);
-  SetPolicyLabelType(AvatarToolbarButton::ProfileLabelType::kSchool);
-  EXPECT_EQ(avatar_button->GetText(),
-            l10n_util::GetStringUTF16(IDS_AVATAR_BUTTON_SCHOOL));
-  prefs->SetString(prefs::kEnterpriseCustomLabelForProfile, "Custom Label");
-  EXPECT_EQ(avatar_button->GetText(), u"Custom Label");
+  // The text should be tuncated to 16 characters followed by "...".
+  EXPECT_EQ(avatar_button->GetText(), u"Custom Label Can…");
 }
 
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
@@ -1276,11 +1216,10 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
 
 // Sync Pause/Error has priority over WorkBadge.
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
-                       WorkBadgeNonTransientModeAndSyncPause) {
+                       WorkBadgeAndSyncPaused) {
   AvatarToolbarButton* avatar_button = GetAvatarToolbarButton(browser());
   ASSERT_TRUE(avatar_button->GetText().empty());
 
-  EnableToolbarAvatarLabelByPolicy(/*transient=*/false);
   std::u16string work_label = u"Work";
   enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
   EXPECT_EQ(avatar_button->GetText(), work_label);
@@ -1297,39 +1236,11 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
   EXPECT_EQ(avatar_button->GetText(), work_label);
 }
 
-// Sync Pause/Error has priority over WorkBadge.
-IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
-                       WorkBadgeTransientModeAndSyncPause) {
-  AvatarToolbarButton* avatar_button = GetAvatarToolbarButton(browser());
-  ASSERT_TRUE(avatar_button->GetText().empty());
-
-  EnableSyncWithImageAndClearGreeting(avatar_button, u"work@managed.com");
-
-  EnableToolbarAvatarLabelByPolicy(/*transient=*/true);
-  std::u16string work_label = u"Work";
-  enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
-  EXPECT_EQ(avatar_button->GetText(), work_label);
-
-  SimulateSyncPaused();
-  // Sync Paused has priority over the Work badge.
-  ExpectSyncPaused(avatar_button);
-
-  ClearSyncPaused();
-
-  EXPECT_EQ(avatar_button->GetText(), work_label);
-
-  avatar_button->TriggerTimeoutForTesting(
-      AvatarDelayType::kManagementLabelTransientMode);
-
-  EXPECT_EQ(avatar_button->GetText(), std::u16string());
-}
-
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
                        DecliningManagementShouldRemoveWorkBadge) {
   AvatarToolbarButton* avatar_button = GetAvatarToolbarButton(browser());
   ASSERT_TRUE(avatar_button->GetText().empty());
 
-  EnableToolbarAvatarLabelByPolicy(/*transient=*/false);
   std::u16string work_label = u"Work";
   enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
   EXPECT_EQ(avatar_button->GetText(), work_label);

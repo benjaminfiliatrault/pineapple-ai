@@ -7,8 +7,11 @@
 
 #include <memory>
 
+#include "base/containers/span.h"
+#include "base/functional/callback_forward.h"
 #include "chrome/browser/facilitated_payments/ui/android/facilitated_payments_bottom_sheet_bridge.h"
 #include "components/autofill/core/browser/data_model/bank_account.h"
+#include "components/autofill/core/browser/data_model/ewallet.h"
 
 namespace content {
 class WebContents;
@@ -30,10 +33,14 @@ class FacilitatedPaymentsController {
   // Returns true if the device is being used in the landscape mode.
   virtual bool IsInLandscapeMode();
 
-  // Asks the `view_` to show the FOP selector. Returns whether the surface was
-  // successfully shown.
-  virtual bool Show(
+  // Shows the PIX FOP selector.
+  virtual void Show(
       base::span<const autofill::BankAccount> bank_account_suggestions,
+      base::OnceCallback<void(bool, int64_t)> on_user_decision_callback);
+
+  // Shows the eWallet FOP selector.
+  virtual void ShowForEwallet(
+      base::span<const autofill::Ewallet> ewallet_suggestions,
       base::OnceCallback<void(bool, int64_t)> on_user_decision_callback);
 
   // Asks the `view_` to show the progress screen. Virtual for overriding in
@@ -52,6 +59,8 @@ class FacilitatedPaymentsController {
 
   void OnBankAccountSelected(JNIEnv* env, jlong instrument_id);
 
+  void OnEwalletSelected(JNIEnv* env, jlong instrument_id);
+
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
 
   void SetViewForTesting(
@@ -60,6 +69,10 @@ class FacilitatedPaymentsController {
 
  private:
   FRIEND_TEST_ALL_PREFIXES(FacilitatedPaymentsControllerTest, OnDismissed);
+
+  // Clears any native references from the Java view components, and then clears
+  // the pointers to the Java objects.
+  void ClearJavaViewComponents();
 
   // View that displays the surface.
   std::unique_ptr<payments::facilitated::FacilitatedPaymentsBottomSheetBridge>

@@ -10,9 +10,10 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/uuid.h"
 #include "components/data_sharing/public/android/conversion_utils.h"
-#include "components/saved_tab_groups/android/tab_group_sync_conversions_bridge.h"
-#include "components/saved_tab_groups/android/tab_group_sync_conversions_utils.h"
+#include "components/saved_tab_groups/messaging/activity_log.h"
 #include "components/saved_tab_groups/messaging/message.h"
+#include "components/saved_tab_groups/public/android/tab_group_sync_conversions_bridge.h"
+#include "components/saved_tab_groups/public/android/tab_group_sync_conversions_utils.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
 #include "components/saved_tab_groups/messaging/android/jni_headers/ConversionUtils_jni.h"
@@ -22,6 +23,14 @@ using base::android::ScopedJavaLocalRef;
 
 namespace tab_groups::messaging::android {
 namespace {
+ScopedJavaLocalRef<jstring> JavaStringOrNullFromOptionalString(
+    JNIEnv* env,
+    std::optional<std::string> str) {
+  if (!str.has_value()) {
+    return ScopedJavaLocalRef<jstring>();
+  }
+  return ConvertUTF8ToJavaString(env, (*str));
+}
 
 ScopedJavaLocalRef<jstring> OptionalUuidToLowercaseJavaString(
     JNIEnv* env,
@@ -32,53 +41,89 @@ ScopedJavaLocalRef<jstring> OptionalUuidToLowercaseJavaString(
   return ConvertUTF8ToJavaString(env, (*uuid).AsLowercaseString());
 }
 
+// Helper method to provide a consistent way to create a MessageAttribution
+// across multiple entry points.
+ScopedJavaLocalRef<jobject> MessageAttributionToJava(
+    JNIEnv* env,
+    const MessageAttribution& attribution) {
+  ScopedJavaLocalRef<jstring> j_collaboration_id =
+      ConvertUTF8ToJavaString(env, attribution.collaboration_id.value());
+  ScopedJavaLocalRef<jobject> j_local_tab_group_id = nullptr;
+  ScopedJavaLocalRef<jstring> j_sync_tab_group_id = nullptr;
+  ScopedJavaLocalRef<jstring> j_last_known_tab_group_title = nullptr;
+  jint j_last_known_tab_group_color = -1;
+  if (attribution.tab_group_metadata.has_value()) {
+    j_local_tab_group_id = TabGroupSyncConversionsBridge::ToJavaTabGroupId(
+        env, attribution.tab_group_metadata->local_tab_group_id);
+    j_sync_tab_group_id = OptionalUuidToLowercaseJavaString(
+        env, attribution.tab_group_metadata->sync_tab_group_id);
+    j_last_known_tab_group_title = JavaStringOrNullFromOptionalString(
+        env, attribution.tab_group_metadata->last_known_title);
+    if (attribution.tab_group_metadata->last_known_color.has_value()) {
+      j_last_known_tab_group_color =
+          static_cast<jint>(*attribution.tab_group_metadata->last_known_color);
+    }
+  }
+
+  jint j_local_tab_id = -1;
+  ScopedJavaLocalRef<jstring> j_sync_tab_id = nullptr;
+  ScopedJavaLocalRef<jstring> j_last_known_tab_url = nullptr;
+  ScopedJavaLocalRef<jstring> j_last_known_tab_title = nullptr;
+  if (attribution.tab_metadata.has_value()) {
+    j_local_tab_id = ToJavaTabId((*attribution.tab_metadata).local_tab_id);
+    j_sync_tab_id = OptionalUuidToLowercaseJavaString(
+        env, attribution.tab_metadata->sync_tab_id);
+
+    j_last_known_tab_url = JavaStringOrNullFromOptionalString(
+        env, attribution.tab_metadata->last_known_url);
+    j_last_known_tab_title = JavaStringOrNullFromOptionalString(
+        env, attribution.tab_metadata->last_known_title);
+  }
+
+  ScopedJavaLocalRef<jobject> j_affected_user = nullptr;
+  if (attribution.affected_user.has_value()) {
+    j_affected_user = data_sharing::conversion::CreateJavaGroupMember(
+        env, attribution.affected_user.value());
+  }
+
+  ScopedJavaLocalRef<jobject> j_triggering_user = nullptr;
+  if (attribution.triggering_user.has_value()) {
+    j_triggering_user = data_sharing::conversion::CreateJavaGroupMember(
+        env, attribution.triggering_user.value());
+  }
+
+  return Java_ConversionUtils_createAttributionFrom(
+      env, j_collaboration_id, j_local_tab_group_id, j_sync_tab_group_id,
+      j_last_known_tab_group_title, j_last_known_tab_group_color,
+      j_local_tab_id, j_sync_tab_id, j_last_known_tab_title,
+      j_last_known_tab_url, j_affected_user, j_triggering_user);
+}
+
 // Helper method to provide a consistent way to create a PersistentMessage
 // across multiple entry points.
-// TODO(dtrainor): Probably worth constructing a MessageAttribution separately
-// and isolating that (common) code.
 ScopedJavaLocalRef<jobject> CreatePersistentMessageAndMaybeAddToListHelper(
     JNIEnv* env,
     ScopedJavaLocalRef<jobject> jlist,
-    PersistentMessage message) {
-  ScopedJavaLocalRef<jobject> jaffected_user = nullptr;
-  if (message.attribution.affected_user.has_value()) {
-    jaffected_user = data_sharing::conversion::CreateJavaGroupMember(
-        env, message.attribution.affected_user.value());
-  }
-
-  ScopedJavaLocalRef<jobject> jtriggering_user = nullptr;
-  if (message.attribution.triggering_user.has_value()) {
-    jtriggering_user = data_sharing::conversion::CreateJavaGroupMember(
-        env, message.attribution.triggering_user.value());
-  }
-
+    const PersistentMessage& message) {
   ScopedJavaLocalRef<jobject> jmessage =
       Java_ConversionUtils_createPersistentMessageAndMaybeAddToList(
-          env, jlist,
-          ConvertUTF8ToJavaString(env,
-                                  message.attribution.collaboration_id.value()),
-          TabGroupSyncConversionsBridge::ToJavaTabGroupId(
-              env, message.attribution.local_tab_group_id),
-          OptionalUuidToLowercaseJavaString(
-              env, message.attribution.sync_tab_group_id),
-          ToJavaTabId(message.attribution.local_tab_id),
-          OptionalUuidToLowercaseJavaString(env,
-                                            message.attribution.sync_tab_id),
-          jaffected_user, jtriggering_user, static_cast<int>(message.action),
+          env, jlist, MessageAttributionToJava(env, message.attribution),
+          static_cast<int>(message.collaboration_event),
           static_cast<int>(message.type));
 
   return jmessage;
 }
 }  // namespace
 
-ScopedJavaLocalRef<jobject> PersistentMessageToJava(JNIEnv* env,
-                                                    PersistentMessage message) {
+ScopedJavaLocalRef<jobject> PersistentMessageToJava(
+    JNIEnv* env,
+    const PersistentMessage& message) {
   return CreatePersistentMessageAndMaybeAddToListHelper(env, nullptr, message);
 }
 
 ScopedJavaLocalRef<jobject> PersistentMessagesToJava(
     JNIEnv* env,
-    std::vector<PersistentMessage> messages) {
+    const std::vector<PersistentMessage>& messages) {
   ScopedJavaLocalRef<jobject> jlist =
       Java_ConversionUtils_createPersistentMessageList(env);
 
@@ -89,32 +134,31 @@ ScopedJavaLocalRef<jobject> PersistentMessagesToJava(
   return jlist;
 }
 
-ScopedJavaLocalRef<jobject> InstantMessageToJava(JNIEnv* env,
-                                                 InstantMessage message) {
-  ScopedJavaLocalRef<jobject> jaffected_user = nullptr;
-  if (message.attribution.affected_user.has_value()) {
-    jaffected_user = data_sharing::conversion::CreateJavaGroupMember(
-        env, message.attribution.affected_user.value());
-  }
-
-  ScopedJavaLocalRef<jobject> jtriggering_user = nullptr;
-  if (message.attribution.triggering_user.has_value()) {
-    jtriggering_user = data_sharing::conversion::CreateJavaGroupMember(
-        env, message.attribution.triggering_user.value());
-  }
-
+ScopedJavaLocalRef<jobject> InstantMessageToJava(
+    JNIEnv* env,
+    const InstantMessage& message) {
   return Java_ConversionUtils_createInstantMessage(
-      env,
-      ConvertUTF8ToJavaString(env,
-                              message.attribution.collaboration_id.value()),
-      TabGroupSyncConversionsBridge::ToJavaTabGroupId(
-          env, message.attribution.local_tab_group_id),
-      OptionalUuidToLowercaseJavaString(env,
-                                        message.attribution.sync_tab_group_id),
-      ToJavaTabId(message.attribution.local_tab_id),
-      OptionalUuidToLowercaseJavaString(env, message.attribution.sync_tab_id),
-      jaffected_user, jtriggering_user, static_cast<int>(message.action),
-      static_cast<int>(message.type));
+      env, MessageAttributionToJava(env, message.attribution),
+      static_cast<int>(message.collaboration_event),
+      static_cast<int>(message.level), static_cast<int>(message.type));
+}
+
+ScopedJavaLocalRef<jobject> ActivityLogItemsToJava(
+    JNIEnv* env,
+    const std::vector<ActivityLogItem>& activity_log_items) {
+  ScopedJavaLocalRef<jobject> jlist =
+      Java_ConversionUtils_createActivityLogItemList(env);
+
+  for (const auto& activity_log_item : activity_log_items) {
+    Java_ConversionUtils_createActivityLogItemAndMaybeAddToList(
+        env, jlist, static_cast<int>(activity_log_item.collaboration_event),
+        ConvertUTF8ToJavaString(env, activity_log_item.title_text),
+        ConvertUTF8ToJavaString(env, activity_log_item.description_text),
+        ConvertUTF8ToJavaString(env, activity_log_item.timestamp_text),
+        MessageAttributionToJava(env, activity_log_item.activity_metadata));
+  }
+
+  return jlist;
 }
 
 }  // namespace tab_groups::messaging::android

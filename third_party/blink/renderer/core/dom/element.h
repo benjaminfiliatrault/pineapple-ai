@@ -54,6 +54,7 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/transform_view.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_linked_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/region_capture_crop_id.h"
 #include "third_party/blink/renderer/platform/restriction_target_id.h"
@@ -70,7 +71,6 @@ class Vector2dF;
 
 namespace blink {
 
-class AccessibleNode;
 class AnchorElementObserver;
 class AnchorPositionScrollData;
 class AriaNotificationOptions;
@@ -116,6 +116,7 @@ class ResizeObserverSize;
 class ScrollIntoViewOptions;
 class CheckVisibilityOptions;
 class ScrollToOptions;
+class SetHTMLOptions;
 class ShadowRoot;
 class ShadowRootInit;
 class SpaceSplitString;
@@ -225,7 +226,7 @@ enum class CommandEventType {
   kRequestFullscreen,
   kExitFullscreen,
   // Audio/Video
-  kPlaypause,
+  kPlayPause,
   kPause,
   kPlay,
   kToggleMuted,
@@ -255,6 +256,13 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     kDontForce = 0,
     kForce = 1,
   };
+  // SanitizeHTML specifies whether the HTML parser should call into the HTML
+  // sanitizer API, and if so whether in safe or unsafe mode.
+  enum class SanitizeHtml {
+    kDont,
+    kSanitizeSafe,
+    kSanitizeUnsafe,
+  };
 
   // Animatable implementation.
   Element* GetAnimationTarget() override;
@@ -267,12 +275,29 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool hasAttribute(const QualifiedName&) const;
   const AtomicString& getAttribute(const QualifiedName&) const;
 
-  // Passing g_null_atom as the second parameter removes the attribute when
-  // calling either of these set methods.
-  void setAttribute(const QualifiedName&, const AtomicString& value);
-  void setAttribute(const QualifiedName&,
-                    const AtomicString& value,
-                    ExceptionState&);
+  // Set an attribute without Trusted Type validation. Passing g_null_atom
+  // is the same as removing the attribute. This should only be used directly
+  // if we know the `QualifiedName` is not a special attribute.
+  // TODO(crbug.com/374263390): Rename this method and audit callers.
+  void setAttribute(const QualifiedName& name, const AtomicString& value) {
+    SetAttributeWithoutValidation(name, value);
+  }
+
+  // Set an attribute without Trusted Type validation. Passing g_null_atom
+  // is the same as removing the attribute. This should only be used directly
+  // if we know the `QualifiedName` is not a special attribute or the value
+  // has already been validated.
+  void SetAttributeWithoutValidation(const QualifiedName&,
+                                     const AtomicString& value);
+
+  // Set an attribute with Trusted Type validation. Passing g_null_atom
+  // is the same as removing the attribute.
+  void SetAttributeWithValidation(const QualifiedName&,
+                                  const AtomicString& value,
+                                  ExceptionState&);
+
+  // TODO(crbug.com/374263390): This method should likely CHECK if
+  // QualifiedName is a trusted type.
   void SetSynchronizedLazyAttribute(const QualifiedName&,
                                     const AtomicString& value);
 
@@ -313,13 +338,15 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // This is only exposed as an implementation detail to AXRelationCache, which
   // computes aria-owns differently for element reflection.
   bool HasExplicitlySetAttrAssociatedElements(const QualifiedName& name);
+  HeapLinkedHashSet<WeakMember<Element>>* GetExplicitlySetElementsForAttr(
+      const QualifiedName& name) const;
   Element* GetElementAttribute(const QualifiedName& name) const;
   Element* GetElementAttributeResolvingReferenceTarget(
       const QualifiedName& name) const;
   void SetElementAttribute(const QualifiedName&, Element*);
   HeapVector<Member<Element>>* GetAttrAssociatedElements(
       const QualifiedName& name,
-      bool resolve_reference_target);
+      bool resolve_reference_target) const;
 
   // If treescope_element is connected, then we will search treescope_element's
   // TreeScope for an element with the id. If treescope_element is disconnected,
@@ -391,8 +418,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   // Returns attributes that should be checked against Trusted Types
   virtual const AttrNameToTrustedType& GetCheckedAttributeTypes() const;
-
-  void setAttribute(const QualifiedName&, const String&, ExceptionState&);
 
   static std::optional<QualifiedName> ParseAttributeName(
       const AtomicString& namespace_uri,
@@ -514,9 +539,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   const AtomicString& ComputedRoleNoLifecycleUpdate();
   String computedName();
   String ComputedNameNoLifecycleUpdate();
-
-  AccessibleNode* ExistingAccessibleNode() const;
-  AccessibleNode* accessibleNode();
 
   void ariaNotify(const String& announcement,
                   const AriaNotificationOptions* options);
@@ -754,7 +776,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void RebuildLayoutTreeForTraversalRootAncestor() {
     RebuildFirstLetterLayoutTree();
     WhitespaceAttacher whitespace_attacher;
-    RebuildMarkerLayoutTree(whitespace_attacher);
+    RebuildPseudoElementLayoutTree(kPseudoIdMarker, whitespace_attacher);
     HandleSubtreeModifications();
   }
   void RebuildLayoutTreeForSizeContainerAncestor() {
@@ -1033,7 +1055,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   // This allows customization of how Invoker Commands are handled, per element.
   // See: crbug.com/1490919, https://open-ui.org/components/invokers.explainer/
-  virtual bool IsValidCommand(HTMLElement& invoker, CommandEventType command) {
+  virtual bool IsValidBuiltinCommand(HTMLElement& invoker,
+                                     CommandEventType command) {
     return false;
   }
   virtual bool HandleCommandInternal(HTMLElement& invoker,
@@ -1078,6 +1101,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // argument to set Sanitizer parameters.
   // See https://github.com/whatwg/html/pull/9538.
   void setHTMLUnsafe(const String& html, ExceptionState& = ASSERT_NO_EXCEPTION);
+  void setHTMLUnsafe(const String& html, SetHTMLOptions*, ExceptionState&);
+  void setHTML(const String& html, SetHTMLOptions*, ExceptionState&);
 
   void setPointerCapture(PointerId poinetr_id, ExceptionState&);
   void releasePointerCapture(PointerId pointer_id, ExceptionState&);
@@ -1382,7 +1407,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // ::scroll-marker per ::column pseudo element. ClearColumnPseudoElements()
   // needs to be called before each layout pass that generate these pseudo
   // elements.
-  ColumnPseudoElement* CreateColumnPseudoElement(
+  ColumnPseudoElement* CreateColumnPseudoElementIfNeeded(
       const PhysicalRect& column_rect);
   const ColumnPseudoElementsVector* GetColumnPseudoElements() const;
   void ClearColumnPseudoElements();
@@ -1428,7 +1453,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   // Returns the element that represents the given |pseudo_id| and
   // |view_transition_name| originating from this DOM element.  The
-  // returned element may be a PseudoElement, or (for part-like
+  // returned element may be a PseudoElement, or (for element-backed
   // pseudo-elements) an Element.
   //
   // The returned pseudo element may be directly associated with this
@@ -1547,6 +1572,10 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   InsertionNotificationRequest InsertedInto(ContainerNode&) override;
   void RemovedFrom(ContainerNode&) override;
   void ChildrenChanged(const ChildrenChange&) override;
+
+  // This is an implementation of
+  // https://whatpr.org/html/10657/infrastructure.html#html-element-moving-steps
+  void MovedFrom(ContainerNode& old_parent) override;
 
   virtual void WillRecalcStyle(const StyleRecalcChange);
   virtual void DidRecalcStyle(const StyleRecalcChange);
@@ -1710,11 +1739,12 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   void RebuildPseudoElementLayoutTree(PseudoId, WhitespaceAttacher&);
   void RebuildFirstLetterLayoutTree();
-  void RebuildMarkerLayoutTree(WhitespaceAttacher&);
   void RebuildShadowRootLayoutTree(WhitespaceAttacher&);
   inline void CheckForEmptyStyleChange(const Node* node_before_change,
                                        const Node* node_after_change);
 
+  void UpdateColumnPseudoElements(const StyleRecalcChange,
+                                  const StyleRecalcContext&);
   PseudoElement* UpdatePseudoElement(
       PseudoId,
       const StyleRecalcChange,
@@ -1748,6 +1778,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void AttachPrecedingPseudoElements(AttachContext& context) {
     AttachPseudoElement(kPseudoIdScrollPrevButton, context);
     AttachPseudoElement(kPseudoIdMarker, context);
+    AttachPseudoElement(kPseudoIdCheck, context);
     AttachPseudoElement(kPseudoIdBefore, context);
   }
 
@@ -1763,6 +1794,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     DetachPseudoElement(kPseudoIdScrollPrevButton, performing_reattach);
     DetachPseudoElement(kPseudoIdScrollMarkerGroupBefore, performing_reattach);
     DetachPseudoElement(kPseudoIdMarker, performing_reattach);
+    DetachPseudoElement(kPseudoIdCheck, performing_reattach);
     DetachPseudoElement(kPseudoIdBefore, performing_reattach);
   }
 
@@ -1898,6 +1930,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
       const String&,
       ParseDeclarativeShadowRoots parse_declarative_shadows,
       ForceHtml force_html_over_xml,
+      SanitizeHtml sanitize_html,
+      SetHTMLOptions* set_html_options,
       ExceptionState&);
 
   ElementRareDataVector* GetElementRareData() const;
@@ -1958,21 +1992,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   subtle::UncompressedMember<const ComputedStyle> computed_style_;
   Member<ElementData> element_data_;
 };
-
-template <typename T>
-bool IsElementOfType(const Node&);
-template <>
-inline bool IsElementOfType<const Element>(const Node& node) {
-  return node.IsElementNode();
-}
-template <typename T>
-inline bool IsElementOfType(const Element& element) {
-  return IsElementOfType<T>(static_cast<const Node&>(element));
-}
-template <>
-inline bool IsElementOfType<const Element>(const Element&) {
-  return true;
-}
 
 template <>
 struct DowncastTraits<Element> {

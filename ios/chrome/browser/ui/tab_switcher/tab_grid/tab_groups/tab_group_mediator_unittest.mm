@@ -43,7 +43,7 @@ class TabGroupMediatorTest : public GridMediatorTestClass {
     builder_ =
         std::make_unique<WebStateListBuilderFromDescription>(web_state_list);
     ASSERT_TRUE(builder_->BuildWebStateListFromDescription(
-        "| f [ 1 a* b c ] d e ", browser_->GetBrowserState()));
+        "| f [ 1 a* b c ] d e ", browser_->GetProfile()));
 
     mode_holder_ = [[TabGridModeHolder alloc] init];
 
@@ -93,7 +93,7 @@ TEST_F(TabGroupMediatorTest, DropLocalTab) {
       web_state_list->GetWebStateAt(4)->GetUniqueIdentifier();
 
   id local_object = [[TabInfo alloc] initWithTabID:web_state_id
-                                      browserState:browser_->GetBrowserState()];
+                                           profile:browser_->GetProfile()];
   NSItemProvider* item_provider = [[NSItemProvider alloc] init];
   UIDragItem* drag_item =
       [[UIDragItem alloc] initWithItemProvider:item_provider];
@@ -114,7 +114,7 @@ TEST_F(TabGroupMediatorTest, DropFromTabGrid) {
   web::WebStateID web_state_id =
       web_state_list->GetWebStateAt(0)->GetUniqueIdentifier();
   id local_object = [[TabInfo alloc] initWithTabID:web_state_id
-                                      browserState:browser_->GetBrowserState()];
+                                           profile:browser_->GetProfile()];
   NSItemProvider* item_provider = [[NSItemProvider alloc] init];
   UIDragItem* drag_item =
       [[UIDragItem alloc] initWithItemProvider:item_provider];
@@ -126,7 +126,7 @@ TEST_F(TabGroupMediatorTest, DropFromTabGrid) {
   // Drop "D" before "B".
   web_state_id = web_state_list->GetWebStateAt(4)->GetUniqueIdentifier();
   local_object = [[TabInfo alloc] initWithTabID:web_state_id
-                                   browserState:browser_->GetBrowserState()];
+                                        profile:browser_->GetProfile()];
   item_provider = [[NSItemProvider alloc] init];
   drag_item = [[UIDragItem alloc] initWithItemProvider:item_provider];
   drag_item.localObject = local_object;
@@ -139,7 +139,7 @@ TEST_F(TabGroupMediatorTest, DropFromTabGrid) {
 // the grid.
 TEST_F(TabGroupMediatorTest, DropCrossWindowTab) {
   auto other_browser = std::make_unique<TestBrowser>(
-      browser_state_.get(), scene_state_,
+      profile_.get(), scene_state_,
       std::make_unique<BrowserWebStateListDelegate>());
   SnapshotBrowserAgent::CreateForBrowser(other_browser.get());
 
@@ -155,7 +155,7 @@ TEST_F(TabGroupMediatorTest, DropCrossWindowTab) {
   ASSERT_EQ(6, web_state_list->count());
 
   id local_object = [[TabInfo alloc] initWithTabID:other_id
-                                      browserState:browser_->GetBrowserState()];
+                                           profile:browser_->GetProfile()];
   NSItemProvider* item_provider = [[NSItemProvider alloc] init];
   UIDragItem* drag_item =
       [[UIDragItem alloc] initWithItemProvider:item_provider];

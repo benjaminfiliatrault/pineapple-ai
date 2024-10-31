@@ -415,7 +415,10 @@ VideoCaptureImpl::CreateVideoFrameInitData(
       // On Windows it might happen that the Renderer process loses GPU
       // connection, while the capturer process will continue to produce
       // GPU backed frames.
-      if (!gpu_factories_ || !media_task_runner_ || gmb_not_supported_) {
+      if (!gpu_factories_ || !media_task_runner_ ||
+          (gpu_factories_->GpuMemoryBufferManager() &&
+           !gpu_factories_->GpuMemoryBufferManager()->IsConnected()) ||
+          gmb_not_supported_) {
         RequirePremappedFrames();
         if (!video_frame_init_data.ready_buffer->info->is_premapped ||
             !buffer_context->data()) {
@@ -490,6 +493,10 @@ VideoCaptureImpl::CreateVideoFrameInitData(
           video_frame_init_data.ready_buffer->info->is_premapped
               ? const_cast<uint8_t*>(buffer_context->data())
               : nullptr;
+      size_t premapped_data_size =
+          video_frame_init_data.ready_buffer->info->is_premapped
+              ? buffer_context->data_size()
+              : 0;
 
       // Clone the GpuMemoryBuffer and wrap it in a VideoFrame.
       std::unique_ptr<gfx::GpuMemoryBuffer> buffer =
@@ -499,13 +506,18 @@ VideoCaptureImpl::CreateVideoFrameInitData(
               buffer_context->GetGpuMemoryBuffer()->GetFormat(),
               gfx::BufferUsage::SCANOUT_VEA_CPU_READ, base::DoNothing(),
               gpu_factories_->GpuMemoryBufferManager(), pool_,
-              base::span<uint8_t>(premapped_data, buffer_context->data_size()));
+              base::span<uint8_t>(premapped_data, premapped_data_size));
       if (!buffer) {
         LOG(ERROR) << "Failed to open GpuMemoryBuffer handle";
         return std::nullopt;
       }
       video_frame_init_data.frame_or_buffer = std::move(buffer);
     }
+  }
+  if (auto* video_frame = absl::get_if<scoped_refptr<media::VideoFrame>>(
+          &video_frame_init_data.frame_or_buffer)) {
+    (*video_frame)
+        ->set_metadata(video_frame_init_data.ready_buffer->info->metadata);
   }
   CHECK(absl::holds_alternative<scoped_refptr<media::VideoFrame>>(
             video_frame_init_data.frame_or_buffer) ||
@@ -536,7 +548,6 @@ bool VideoCaptureImpl::BindVideoFrameOnMediaTaskRunner(
 
   bool should_recreate_shared_image = false;
   if (gpu_factories != video_frame_init_data.buffer_context->gpu_factories()) {
-    DVLOG(1) << "GPU context changed; re-creating SharedImage objects";
     video_frame_init_data.buffer_context->SetGpuFactories(gpu_factories);
     should_recreate_shared_image = true;
   }
@@ -579,7 +590,7 @@ bool VideoCaptureImpl::BindVideoFrameOnMediaTaskRunner(
 #if BUILDFLAG(IS_APPLE)
   usage |= gpu::SHARED_IMAGE_USAGE_MACOS_VIDEO_TOOLBOX;
 #endif
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
   // These SharedImages may be used for zero-copy of VideoFrames into WebGPU.
   usage |= gpu::SHARED_IMAGE_USAGE_WEBGPU_READ;
 #endif
@@ -627,14 +638,7 @@ bool VideoCaptureImpl::BindVideoFrameOnMediaTaskRunner(
     LOG(ERROR) << "Can't wrap GpuMemoryBuffer as VideoFrame";
     return false;
   }
-
-  // For a single multiplanar image, inform the VideoFrame that it
-  // should go down the normal SharedImageFormat codepath or the one with
-  // ExternalSampler.
-  frame->set_shared_image_format_type(
-      shared_image->format().PrefersExternalSampler()
-          ? media::SharedImageFormatType::kSharedImageFormatExternalSampler
-          : media::SharedImageFormatType::kSharedImageFormat);
+  frame->set_metadata(video_frame_init_data.ready_buffer->info->metadata);
 
   frame->metadata().allow_overlay = true;
   frame->metadata().read_lock_fences_enabled = true;
@@ -776,6 +780,10 @@ void VideoCaptureImpl::StartCapture(
       OnLog("VideoCaptureImpl is in camera busy error state.");
       state_update_cb.Run(blink::VIDEO_CAPTURE_STATE_ERROR_CAMERA_BUSY);
       return;
+    case VIDEO_CAPTURE_STATE_ERROR_START_TIMEOUT:
+      OnLog("VideoCaptureImpl is in timeout error state.");
+      state_update_cb.Run(blink::VIDEO_CAPTURE_STATE_ERROR_START_TIMEOUT);
+      return;
     case VIDEO_CAPTURE_STATE_PAUSED:
     case VIDEO_CAPTURE_STATE_RESUMED:
       // The internal |state_| is never set to PAUSED/RESUMED since
@@ -856,6 +864,12 @@ void VideoCaptureImpl::OnStateChanged(
       OnLog(
           "VideoCaptureImpl changing state to "
           "VIDEO_CAPTURE_STATE_ERROR_CAMERA_BUSY");
+    } else if (result->get_error_code() ==
+               media::VideoCaptureError::kVideoCaptureImplTimedOutOnStart) {
+      state_ = VIDEO_CAPTURE_STATE_ERROR_START_TIMEOUT;
+      OnLog(
+          "VideoCaptureImpl changing state to "
+          "VIDEO_CAPTURE_STATE_ERROR_START_TIMEOUT");
     } else {
       state_ = VIDEO_CAPTURE_STATE_ERROR;
       OnLog("VideoCaptureImpl changing state to VIDEO_CAPTURE_STATE_ERROR");

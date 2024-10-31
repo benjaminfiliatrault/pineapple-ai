@@ -22,6 +22,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.PatternMatcher;
 import android.os.SystemClock;
 import android.text.TextUtils;
@@ -62,6 +63,7 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.DisableFeatures;
@@ -821,6 +823,7 @@ public class UrlOverridingTest {
 
     @Test
     @SmallTest
+    @DisableIf.Build(sdk_equals = Build.VERSION_CODES.S, message = "crbug.com/373333486")
     public void testNavigationFromXHRCallbackAndShortTimeout() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
@@ -1067,7 +1070,7 @@ public class UrlOverridingTest {
 
     @Test
     @LargeTest
-    public void testCCTRedirectFromIntentUriStaysInChrome_InIncognito() throws Exception {
+    public void testCctRedirectFromIntentUriStaysInChrome_InIncognito() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
         // This will cause getActivityTab() in loadUrlAndWaitForIntentUrl to return an incognito tab
         // instead.
@@ -1703,7 +1706,7 @@ public class UrlOverridingTest {
     @Test
     @LargeTest
     @Restriction(Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    public void testRedirectFromCCTSpeculation() throws Exception {
+    public void testRedirectFromCctSpeculation() throws Exception {
         final String url = mTestServer.getURL(NAVIGATION_FROM_PAGE_SHOW);
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
         Context context = ContextUtils.getApplicationContext();

@@ -112,6 +112,8 @@
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/devices/input_device_event_observer.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
+#include "ui/gfx/animation/animation.h"
+#include "ui/native_theme/native_theme_features.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
@@ -157,6 +159,18 @@ const char kTtsStandardFileName[] = "voice-standard.zvoice";
 // FaceGaze actions. This value needs to be in sync with the MOUSE_CLICK_LEFT
 // action in the above file.
 constexpr int kFaceGazeLeftClickValue = 35;
+
+// The value representing the FaceGaze scroll action. See
+// ash/webui/common/resources/accessibility/macro_names.ts for the full list of
+// FaceGaze actions. This value needs to be in sync with the TOGGLE_SCROLL_MODE
+// action in the above file.
+constexpr int kFaceGazeScrollValue = 50;
+
+// The string representing the FaceGaze jaw open gesture. See
+// ash/webui/common/resources/accessibility/facial_gestures.ts for the full list
+// of FaceGaze gestures. This value needs to be in sync with the JAW_OPEN
+// gesture in the above file.
+constexpr char kFaceGazeJawOpenGesture[] = "jawOpen";
 
 // The string representing the FaceGaze mouth smile gesture. See
 // ash/webui/common/resources/accessibility/facial_gestures.ts for the full list
@@ -256,7 +270,7 @@ std::optional<bool> GetDictationOfflineNudgePrefForLocale(
 struct ReadDlcFileResponse {
   ReadDlcFileResponse(std::vector<uint8_t> contents,
                       std::optional<std::string> error)
-      : contents(contents), error(error) {}
+      : contents(std::move(contents)), error(std::move(error)) {}
   ~ReadDlcFileResponse() = default;
   ReadDlcFileResponse(const ReadDlcFileResponse&) = default;
   ReadDlcFileResponse& operator=(const ReadDlcFileResponse&) = default;
@@ -280,22 +294,20 @@ ReadDlcFileResponse ReadDlcFile(base::FilePath path) {
     return ReadDlcFileResponse(std::vector<uint8_t>(), error);
   }
 
-  int64_t file_size = 0;
-  if (!base::GetFileSize(path, &file_size) || (file_size <= 0)) {
+  std::optional<uint64_t> file_size = base::GetFileSize(path);
+  if (!file_size.has_value() || file_size.value() == 0) {
     error = "Error: failed to read size of file: " + path.AsUTF8Unsafe();
     return ReadDlcFileResponse(std::vector<uint8_t>(), error);
   }
 
-  std::vector<uint8_t> contents(file_size);
-  int bytes_read =
-      base::ReadFile(path, reinterpret_cast<char*>(contents.data()),
-                     base::checked_cast<int>(file_size));
-  if (bytes_read != file_size) {
+  std::vector<uint8_t> contents(file_size.value());
+  std::optional<uint64_t> bytes_read = base::ReadFile(path, contents);
+  if (bytes_read != file_size.value()) {
     error = "Error: could not read file: " + path.AsUTF8Unsafe();
     return ReadDlcFileResponse(std::vector<uint8_t>(), error);
   }
 
-  return ReadDlcFileResponse(contents, std::nullopt);
+  return ReadDlcFileResponse(std::move(contents), std::nullopt);
 }
 
 // Runs when `ReadDlcFile` returns the contents of a file.
@@ -315,14 +327,13 @@ std::optional<FaceGazeAssets> CreateFaceGazeAssets(base::FilePath base_path) {
   });
 
   for (const auto& iter : files_to_data) {
-    std::string file_name = iter.first;
+    const std::string& file_name = iter.first;
     std::vector<uint8_t>* file_data = iter.second;
     ReadDlcFileResponse response = ReadDlcFile(base_path.Append(file_name));
     if (response.error.has_value()) {
       return std::nullopt;
     }
-
-    *file_data = response.contents;
+    *file_data = std::move(response.contents);
   }
 
   return assets;
@@ -352,14 +363,14 @@ std::optional<PumpkinData> CreatePumpkinData(base::FilePath base_pumpkin_path) {
   });
 
   for (const auto& iter : files_to_data) {
-    std::string file_name = iter.first;
+    const std::string& file_name = iter.first;
     std::vector<uint8_t>* file_data = iter.second;
     ReadDlcFileResponse response =
         ReadDlcFile(base_pumpkin_path.Append(file_name));
-    if (response.error.has_value())
+    if (response.error.has_value()) {
       return std::nullopt;
-
-    *file_data = response.contents;
+    }
+    *file_data = std::move(response.contents);
   }
 
   return data;
@@ -684,12 +695,15 @@ void AccessibilityManager::OnFaceGazeChanged() {
     // If FaceGaze is enabled but there isn't a gesture to action mapping, then
     // we should install a minimal mapping to provide a working default
     // experience.
-    pref_service->SetDict(prefs::kAccessibilityFaceGazeGesturesToMacros,
-                          base::Value::Dict().Set(kFaceGazeMouthSmileGesture,
-                                                  kFaceGazeLeftClickValue));
     pref_service->SetDict(
-        prefs::kAccessibilityFaceGazeGesturesToConfidence,
-        base::Value::Dict().Set(kFaceGazeMouthSmileGesture, 60));
+        prefs::kAccessibilityFaceGazeGesturesToMacros,
+        base::Value::Dict()
+            .Set(kFaceGazeMouthSmileGesture, kFaceGazeLeftClickValue)
+            .Set(kFaceGazeJawOpenGesture, kFaceGazeScrollValue));
+    pref_service->SetDict(prefs::kAccessibilityFaceGazeGesturesToConfidence,
+                          base::Value::Dict()
+                              .Set(kFaceGazeMouthSmileGesture, 60)
+                              .Set(kFaceGazeJawOpenGesture, 60));
     pref_service->CommitPendingWrite();
   }
 }
@@ -935,6 +949,29 @@ bool AccessibilityManager::IsReducedAnimationsEnabled() const {
   return ::features::IsAccessibilityReducedAnimationsEnabled() && profile_ &&
          profile_->GetPrefs()->GetBoolean(
              prefs::kAccessibilityReducedAnimationsEnabled);
+}
+
+void AccessibilityManager::EnableOverlayScrollbar(bool enabled) {
+  if (!::features::IsOverlayScrollbarOSSettingEnabled() || !profile_) {
+    return;
+  }
+
+  PrefService* pref_service = profile_->GetPrefs();
+  pref_service->SetBoolean(prefs::kAccessibilityOverlayScrollbarEnabled,
+                           enabled);
+  pref_service->CommitPendingWrite();
+}
+
+bool AccessibilityManager::IsOverlayScrollbarEnabled() const {
+  return ::features::IsOverlayScrollbarOSSettingEnabled() && profile_ &&
+         profile_->GetPrefs()->GetBoolean(
+             prefs::kAccessibilityOverlayScrollbarEnabled);
+}
+
+void AccessibilityManager::OnReducedAnimationsChanged() const {
+  gfx::Animation::SetPrefersReducedMotionForA11y(IsReducedAnimationsEnabled());
+  content::BrowserAccessibilityState::GetInstance()
+      ->NotifyWebContentsPreferencesChanged();
 }
 
 void AccessibilityManager::EnableFaceGaze(bool enabled) {
@@ -1716,6 +1753,10 @@ void AccessibilityManager::SetProfile(Profile* profile) {
         base::BindRepeating(&AccessibilityManager::OnSwitchAccessChanged,
                             base::Unretained(this)));
     pref_change_registrar_->Add(
+        prefs::kAccessibilityReducedAnimationsEnabled,
+        base::BindRepeating(&AccessibilityManager::OnReducedAnimationsChanged,
+                            base::Unretained(this)));
+    pref_change_registrar_->Add(
         prefs::kAccessibilityDictationEnabled,
         base::BindRepeating(&AccessibilityManager::OnDictationChanged,
                             base::Unretained(this),
@@ -1780,6 +1821,7 @@ void AccessibilityManager::SetProfile(Profile* profile) {
   OnSpokenFeedbackChanged();
   OnSwitchAccessChanged();
   OnSelectToSpeakChanged();
+  OnReducedAnimationsChanged();
 
   for (const std::string& feature : kAccessibilityCommonFeatures)
     OnAccessibilityCommonChanged(feature);
@@ -1946,6 +1988,10 @@ void AccessibilityManager::UpdateChromeOSAccessibilityHistograms() {
   if (::features::IsAccessibilityFaceGazeEnabled()) {
     base::UmaHistogramBoolean("Accessibility.CrosFaceGaze",
                               IsFaceGazeEnabled());
+  }
+  if (::features::IsOverlayScrollbarOSSettingEnabled()) {
+    base::UmaHistogramBoolean("Accessibility.CrosAlwaysShowScrollbar",
+                              IsOverlayScrollbarEnabled());
   }
 }
 
@@ -3098,7 +3144,8 @@ void AccessibilityManager::SendSyntheticMouseEvent(
     ui::EventType type,
     int flags,
     int changed_button_flags,
-    gfx::Point location_in_screen) {
+    gfx::Point location_in_screen,
+    bool use_rewriters) {
   const display::Display& display =
       display::Screen::GetScreen()->GetDisplayNearestPoint(location_in_screen);
   auto* host = ash::GetWindowTreeHostForDisplay(display.id());
@@ -3130,8 +3177,12 @@ void AccessibilityManager::SendSyntheticMouseEvent(
   synthetic_mouse_event.UpdateForRootTransform(
       host->GetRootTransform(),
       host->GetRootTransformForLocalEventCoordinates());
-  // This skips rewriters.
-  host->DeliverEventToSink(&synthetic_mouse_event);
+
+  if (use_rewriters) {
+    host->SendEventToSink(&synthetic_mouse_event);
+  } else {
+    host->DeliverEventToSink(&synthetic_mouse_event);
+  }
 
   if (!is_mouse_events_enabled) {
     cursor_client->DisableMouseEvents();

@@ -108,11 +108,6 @@ const re2::RE2& GetCouponPartnerMerchantPattern() {
 
 }  // namespace
 
-namespace switches {
-// Specifies whether ChromeCart is enabled.
-const char kEnableChromeCart[] = "enable-chrome-cart";
-}  // namespace switches
-
 BASE_FEATURE(kCommerceAllowChipExpansion,
              "CommerceAllowChipExpansion",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -232,6 +227,10 @@ BASE_FEATURE(kCompareConfirmationToast,
              "CompareConfirmationToast",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kProductSpecificationsCache,
+             "ProductSpecificationsCache",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 BASE_FEATURE(kShoppingIconColorVariant,
              "ShoppingIconColorVariant",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -272,6 +271,10 @@ const base::FeatureParam<int> kNonMerchantWideBehavior{
     &commerce::kDiscountDialogAutoPopupBehaviorSetting,
     kNonMerchantWideBehaviorParam, 2};
 
+BASE_FEATURE(kDiscountDialogAutoPopupCounterfactual,
+             "DiscountDialogAutoPopupCounterfactual",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kDiscountsUiRefactor,
              "DiscountsUiRefactor",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -293,6 +296,10 @@ BASE_FEATURE(kShoppingListRegionLaunched,
 
 BASE_FEATURE(kPriceTrackingSubscriptionServiceLocaleKey,
              "PriceTrackingSubscriptionServiceLocaleKey",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPriceTrackingSubscriptionServiceProductVersion,
+             "PriceTrackingSubscriptionServiceProductVersion",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kShoppingPDPMetrics,
@@ -354,14 +361,6 @@ BASE_FEATURE(kParcelTracking,
 BASE_FEATURE(kParcelTrackingRegionLaunched,
              "ParcelTrackingRegionLaunched",
              base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kParcelTrackingTestData,
-             "ParcelTrackingTestData",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-const char kParcelTrackingTestDataParam[] = "ParcelTrackingTestData";
-const char kParcelTrackingTestDataParamDelivered[] = "Delivered";
-const char kParcelTrackingTestDataParamInProgress[] = "InProgress";
-const char kParcelTrackingTestDataParamOutForDelivery[] = "OutForDelivery";
 
 // Params for Discount Consent V2 in the NTP Cart module.
 const char kNtpChromeCartModuleDiscountConsentNtpVariationParam[] =

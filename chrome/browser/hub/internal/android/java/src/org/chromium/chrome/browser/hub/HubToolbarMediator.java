@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.hub;
 
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.ACTION_BUTTON_DATA;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.COLOR_SCHEME;
+import static org.chromium.chrome.browser.hub.HubToolbarProperties.IS_INCOGNITO;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.MENU_BUTTON_VISIBLE;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.PANE_BUTTON_LOOKUP_CALLBACK;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.PANE_SWITCHER_BUTTON_DATA;
@@ -14,7 +15,6 @@ import static org.chromium.chrome.browser.hub.HubToolbarProperties.SEARCH_BOX_LI
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.SEARCH_BOX_VISIBLE;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.SHOW_ACTION_BUTTON_TEXT;
 
-import android.app.Activity;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -28,7 +28,7 @@ import org.chromium.base.supplier.TransitiveObservableSupplier;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.HubToolbarProperties.PaneButtonLookup;
 import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityClient;
-import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityExtras.IntentOrigin;
+import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityExtras.ResolutionType;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -42,7 +42,6 @@ import java.util.Objects;
 public class HubToolbarMediator {
     private static final int INVALID_PANE_SWITCHER_INDEX = -1;
 
-    private final @NonNull Activity mActivity;
     private final @NonNull PropertyModel mPropertyModel;
 
     private final @NonNull Callback<FullButtonData> mOnActionButtonChangeCallback =
@@ -66,12 +65,10 @@ public class HubToolbarMediator {
 
     /** Creates the mediator. */
     public HubToolbarMediator(
-            @NonNull Activity activity,
             @NonNull PropertyModel propertyModel,
             @NonNull PaneManager paneManager,
             @NonNull Tracker tracker,
             @NonNull SearchActivityClient searchActivityClient) {
-        mActivity = activity;
         mPropertyModel = propertyModel;
         mPaneManager = paneManager;
         mTracker = tracker;
@@ -195,9 +192,13 @@ public class HubToolbarMediator {
         if (focusedPaneId == null) {
             mPropertyModel.set(PANE_SWITCHER_INDEX, INVALID_PANE_SWITCHER_INDEX);
             mPropertyModel.set(MENU_BUTTON_VISIBLE, false);
+            mPropertyModel.set(IS_INCOGNITO, false);
             return;
         } else {
             mPropertyModel.set(MENU_BUTTON_VISIBLE, focusedPane.getMenuButtonVisible());
+
+            boolean isIncognito = focusedPaneId == PaneId.INCOGNITO_TAB_SWITCHER;
+            mPropertyModel.set(IS_INCOGNITO, isIncognito);
         }
 
         int index = 0;
@@ -233,6 +234,11 @@ public class HubToolbarMediator {
 
     private void onSearchClicked() {
         mSearchActivityClient.requestOmniboxForResult(
-                mActivity, new GURL(UrlConstants.NTP_NON_NATIVE_URL), IntentOrigin.HUB, null);
+                mSearchActivityClient
+                        .newIntentBuilder()
+                        .setPageUrl(new GURL(UrlConstants.NTP_NON_NATIVE_URL))
+                        .setIncognito(mPropertyModel.get(IS_INCOGNITO))
+                        .setResolutionType(ResolutionType.SEND_TO_CALLER)
+                        .build());
     }
 }

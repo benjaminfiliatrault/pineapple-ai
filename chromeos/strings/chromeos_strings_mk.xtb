@@ -20,6 +20,7 @@
 <translation id="1070066693520972135">WEP</translation>
 <translation id="1071587090247825784">Откриен е заштитен ѕид</translation>
 <translation id="1075811647922107217">Големина на страницата</translation>
+<translation id="108084407137234521">Не може да се резимира транскрипција што содржи помалку од <ph name="MIN_WORD_LENGTH" /> збора</translation>
 <translation id="1082009148392559545">Се презема штедачот на екран</translation>
 <translation id="1094693127011229778">IP-адресата не е достапна</translation>
 <translation id="1100902271996134409">Се создаваат слики…</translation>
@@ -43,6 +44,7 @@
 <translation id="11743817593307477">Користете ги копчињата со стрелки за да ја преместите контролава на посакуваното дејство за игра. Користете го копчето Enter за да ја поставите контролата. Користете го копчето Escape за да откажете.</translation>
 <translation id="1175697296044146566"><ph name="MANAGER" /> управува со овој <ph name="DEVICE_TYPE" />.</translation>
 <translation id="1175951029573070619">Просечен (<ph name="SIGNAL_STRENGTH" />)</translation>
+<translation id="1178581264944972037">Пауза</translation>
 <translation id="1180621378971766337">удобно</translation>
 <translation id="1181037720776840403">Отстрани</translation>
 <translation id="1191518099344003522">APN е овозможено.</translation>
@@ -248,7 +250,6 @@
 <translation id="2085089206770112532">Осветленоста на екранот се намали</translation>
 <translation id="2086091080968010660">Промените според време можеби не се прецизни. Вклучете пристап до локацијата за оперативниот систем во поставките.</translation>
 <translation id="2102231663024125441">Изменување текст</translation>
-<translation id="2102648867808308635">Помош при читање на страницава</translation>
 <translation id="2105810540595158374">Уредот е контролер на игра.</translation>
 <translation id="2119172414412204879"><ph name="BOARD_NAME" />, верзија <ph name="MILESTONE_VERSION" /></translation>
 <translation id="2124643134650336457">Во моментов, достапно е само на англиски (САД)</translation>
@@ -414,6 +415,7 @@
 <translation id="3031560714565892478">Уредот е видеокамера.</translation>
 <translation id="3042927241478734594">Да се излезе од снимањето?</translation>
 <translation id="3054177598518735801"><ph name="CURRENT_VALUE" /> mA</translation>
+<translation id="3055176406666937744">Не може да се резимира транскрипција што содржи повеќе од <ph name="MAX_WORD_LENGTH" /> збора</translation>
 <translation id="3056720590588772262">Крајна точка</translation>
 <translation id="3060579846059757016">Кратки прегледи</translation>
 <translation id="3061850252076394168">овозможете „Изберете за говор“</translation>
@@ -450,6 +452,7 @@
 <translation id="3226657629376379887">Мени на дејства за распоред</translation>
 <translation id="3227186760713762082">Поделете ја вредноста на <ph name="CATEGORY_TEXT" /> со <ph name="CONVERSION_RATE" /></translation>
 <translation id="3237710083340813756">Препишување</translation>
+<translation id="3245518008592055173">Не може да се создадат имиња за транскрипција што содржи помалку од <ph name="MIN_WORD_LENGTH" /> збора</translation>
 <translation id="3246869037381808805">Задачите за печатење постари од 1 ден ќе се отстранат</translation>
 <translation id="324961752321393509">Администраторот не го дозволува затворање на апликацијава</translation>
 <translation id="3263941347294171263">Исклучете, па вклучете го повторно уредот <ph name="DEVICE_NAME" /> за да продолжите со процесот на ажурирање</translation>
@@ -499,7 +502,6 @@
 <translation id="3502426834823382181">прикажи ги сите апликации</translation>
 <translation id="3510890413042482857">Испрати <ph name="BEGIN_LINK1" />податоци во траги за учинок<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Ажурирање на Chrome OS</translation>
-<translation id="3522508178835057262">Засега, не е поддржана транскрипција со повеќе од <ph name="MAX_WORD_LENGTH" /> збора</translation>
 <translation id="3527036260304016759">Неуспешно - непозната грешка</translation>
 <translation id="353214771040290298">Изменувањето е готово</translation>
 <translation id="3532980081107202182">Преостануваат околу <ph name="MIN_REMAINING" /> мин.</translation>
@@ -611,6 +613,7 @@
 <translation id="409427325554347132">Зачувај детали од тестот</translation>
 <translation id="409469431304488632">Експеримент</translation>
 <translation id="4095829376260267438">WPA2WPA3</translation>
+<translation id="4105182082354119881">Не може да се создадат имиња за транскрипција што содржи повеќе од <ph name="MAX_WORD_LENGTH" /> збора</translation>
 <translation id="4110686435123617899">Изберете го албумот <ph name="TITLE" /> <ph name="DESC" /></translation>
 <translation id="4111761024568264522">Подлога за допир со USB</translation>
 <translation id="4113067922640381334">Сега имате пристап до нови <ph name="BEGIN_LINK_WALLPAPER_SUBPAGE" />тапети<ph name="END_LINK_WALLPAPER_SUBPAGE" /></translation>
@@ -660,6 +663,7 @@
 <translation id="4333390807948134856">Копчето <ph name="KEY_NAME" /> е притиснато</translation>
 <translation id="4334293042716981313">Може и <ph name="BEGIN_LINK_FREEFORM_SUBPAGE" />да напишете сопствено барање<ph name="END_LINK_FREEFORM_SUBPAGE" /></translation>
 <translation id="4354430579665871434">копче</translation>
+<translation id="4356100841225547054">Исклучи го звукот</translation>
 <translation id="4361257691546579041">APN е од стандарден тип.</translation>
 <translation id="437294888293595148">Ресетирај ги сите кратенки</translation>
 <translation id="437477383107495720">зајачиња</translation>
@@ -715,7 +719,6 @@
 <translation id="458794348635939462">Неуспешно отворање на сите хостови</translation>
 <translation id="4593212453765072419">Потребна е проверка на прокси</translation>
 <translation id="4594021849294327751">Создавај транскрипција</translation>
-<translation id="4602266091140407479">Микрофон</translation>
 <translation id="4607282946861182308">Не може да се создадат слики од ова. Обидете се со друго барање.</translation>
 <translation id="4609350030397390689">Осветленоста на тастатурата се намали</translation>
 <translation id="4623061655523261501">Имињата на снимката се генерирани успешно</translation>
@@ -754,7 +757,6 @@
 <translation id="4809927044794281115">Светла тема</translation>
 <translation id="4813136279048157860">Мои слики</translation>
 <translation id="4813345808229079766">Врска</translation>
-<translation id="4824527342590024245">Засега, не е поддржана транскрипција со помалку од <ph name="MIN_WORD_LENGTH" /> збора</translation>
 <translation id="4830894019733815633">кањон</translation>
 <translation id="4832079907277790330">Изберете папка во апликацијата „Датотеки“…</translation>
 <translation id="4835901797422965222">Нема активни мрежи</translation>
@@ -815,12 +817,12 @@
 <translation id="5089810972385038852">Држава</translation>
 <translation id="5090362543162270857">IPsec (IKEv2)</translation>
 <translation id="5095761549884461003">Исклучете го USB-кабелот на <ph name="DEVICE_NAME" />, па вклучете го повторно за да продолжите со процесот на ажурирање</translation>
-<translation id="5095864667399748231">Вклучувај/исклучувај звук</translation>
 <translation id="5099354524039520280">нагоре</translation>
 <translation id="5107243100836678918">Можно е да дојде до поклопување меѓу кратенка без копче за <ph name="META_KEY" /> и кратенката на некоја апликација. Притиснете ја кратенкава повторно за да продолжите да ја користите или притиснете нова кратенка со копчето за <ph name="KEY" />. <ph name="LINK_BEGIN" />Дознајте повеќе<ph name="LINK_END" /></translation>
 <translation id="5108781503443873320">Слични:</translation>
 <translation id="5130848777448318809">понија</translation>
 <translation id="5137451382116112100">Цел екран</translation>
+<translation id="5140788690559353412">Кога ќе го изгубите пристапот до вашата училишна сметка, веќе нема да имате пристап до поврзаната е-пошта и датотеките во Google Drive, како Gmail, „Документи“, „Слајдови“ и друго.</translation>
 <translation id="5142961317498132443">Проверка</translation>
 <translation id="5144311987923128508">Копчето „Потврди“ сега е оневозможено</translation>
 <translation id="5144887194300568405">Копирај го преводот</translation>
@@ -914,6 +916,7 @@
 <translation id="5595623927872580850">сива</translation>
 <translation id="5596627076506792578">Повеќе опции</translation>
 <translation id="5600027863942488546">Копчето <ph name="KEY_NAME" /> е тестирано</translation>
+<translation id="5606865426897221650">Картичка</translation>
 <translation id="5613201299517339763">Одјавени сте</translation>
 <translation id="5620281292257375798">Само интерно</translation>
 <translation id="5630438231335788050">баухаус</translation>
@@ -1008,6 +1011,7 @@
 <translation id="6075872808778243331">(Android) Латенција на HTTP</translation>
 <translation id="6078323886959318429">Додајте кратенка</translation>
 <translation id="6091080061796993741">жолта</translation>
+<translation id="6093853427925392522">Погрижете се да ја користите апликацијата Content Transfer од Google за да ги префрлите податоците во училишната сметка во вашата лична сметка пред да го изгубите пристапот.</translation>
 <translation id="6104112872696127344">Скенирањето е откажано</translation>
 <translation id="6106186594183574873">За да завршите, внесете ја старата лозинка</translation>
 <translation id="6108689792487843350">Порталот е недостапен</translation>
@@ -1020,6 +1024,7 @@
 <translation id="6122191549521593678">Онлајн</translation>
 <translation id="6122277663991249694">Услуга за методи за внесување во Chrome OS</translation>
 <translation id="6127426868813166163">бела</translation>
+<translation id="613049107179582049">Кога е вклучено аудиото на Chromebook, „Диктафон“ го снима секое аудио што се пушта на уредов</translation>
 <translation id="6136285399872347291">бриши</translation>
 <translation id="6137614725462089991">сајберпанк</translation>
 <translation id="6137767437444130246">Сертификат на корисник</translation>
@@ -1139,7 +1144,6 @@
 <translation id="6650062777702288430">Прекинувач за кана/алфанумеричко внесување</translation>
 <translation id="6657240842932274095">Да се дозволи системските услуги да ја користат вашата локација?</translation>
 <translation id="6657585470893396449">Лозинка</translation>
-<translation id="6659594942844771486">Картичка</translation>
 <translation id="66621959568103627">коралнорозова</translation>
 <translation id="6667885109186363316"><ph name="SEA_PEN_INTRO_FIRST_PARAGRAPH" />
           <ph name="LINE_BREAK" />
@@ -1244,6 +1248,7 @@
 <translation id="7130438335435247835">Име на пристапна точка (APN)</translation>
 <translation id="7134436342991564651">{0,plural, =1{Именски сервер}one{Именски сервер}other{Именски сервери}}</translation>
 <translation id="7135814714616751706">Пребарувајте кратенки</translation>
+<translation id="7141470099673912333">Content Transfer</translation>
 <translation id="7143207342074048698">Се поврзува</translation>
 <translation id="7144878232160441200">Обиди се повторно</translation>
 <translation id="7144954474087165241">пагода</translation>
@@ -1334,6 +1339,7 @@
 <translation id="7551123448725492271">Уредот е аудиоуред.</translation>
 <translation id="7559239713112547082">Прегледајте ја сликата од екранот</translation>
 <translation id="7561454561030345039">Администраторот управува со дејствово</translation>
+<translation id="7561759921596375678">Вклучи звук</translation>
 <translation id="7569444139234840525"><ph name="QUERY_TEXT" /> · /<ph name="PHONETICS" />/</translation>
 <translation id="7570674786725311828">Допирен екран со USB</translation>
 <translation id="757747079855995705">камен</translation>
@@ -1393,6 +1399,7 @@
 <translation id="7856267634822906833">Допирен екран со Bluetooth</translation>
 <translation id="7859006200041800233">цвет од кактус</translation>
 <translation id="7869143217755017858">Оневозможи темен режим</translation>
+<translation id="7878972877380405573">Резимирајте со „Помош при читање“</translation>
 <translation id="7881066108824108340">DNS</translation>
 <translation id="7882358943899516840">Тип оператор</translation>
 <translation id="7882501334836096755">Јавен клуч</translation>
@@ -1456,12 +1463,12 @@
 <translation id="8179976553408161302">Enter</translation>
 <translation id="8183975772394450380">плажа</translation>
 <translation id="819278132617411009">Користете ја Google AI за да бидете попродуктивни</translation>
+<translation id="8200772114523450471">Продолжи</translation>
 <translation id="8206859287963243715">Мобилен</translation>
 <translation id="8208861521865154048">Поволности</translation>
 <translation id="8226628635270268143">Изберете ги омилените фотографии и албуми</translation>
 <translation id="8227119283605456246">Прикачи датотека</translation>
 <translation id="8230672074305416752">Не успеа да се пингува стандардниот мрежен портал</translation>
-<translation id="8236972776513018241">Транскрипција</translation>
 <translation id="8238771987802558562">Изберете APN</translation>
 <translation id="8246209727385807362">Непознат оператор</translation>
 <translation id="8250926778281121244">’рѓа</translation>
@@ -1536,6 +1543,7 @@
 <translation id="8626489604350149811">Повеќе дејства за <ph name="APN_NAME" /></translation>
 <translation id="86356131183441916">Светловиолетов</translation>
 <translation id="8647595191512746911">Аудиотранскрипција</translation>
+<translation id="8650852232143958317">Понесете ги датотеките во Gmail и Google Drive со себе</translation>
 <translation id="8651481478098336970">исклучи звук</translation>
 <translation id="8655295600908251630">Канал</translation>
 <translation id="8655828773034788261">Сподели URL:</translation>
@@ -1587,7 +1595,6 @@
 <translation id="8864415976656252616">Нема предложени содржини. Прегледајте ги најпопуларните содржини за помош.</translation>
 <translation id="8868741746785112895">GUID</translation>
 <translation id="8876270629542503161">Уредот е таблет.</translation>
-<translation id="8878117140814294155">Вклучувај/исклучувај звук на микрофонот</translation>
 <translation id="8881098542468797602">Тестот успеа</translation>
 <translation id="8882789155418924367">бувови</translation>
 <translation id="8892443466059986410">Откажи го изменувањето кратенка</translation>

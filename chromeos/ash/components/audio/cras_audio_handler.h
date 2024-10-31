@@ -64,6 +64,10 @@ using OnStyleTransferSupportedCallback = base::OnceCallback<void()>;
 // supported by the board.
 using OnHfpMicSrSupportedCallback = base::OnceCallback<void()>;
 
+// Callback to handle the dbus message for whether spatial_audio is
+// supported by the board.
+using OnSpatialAudioSupportedCallback = base::OnceCallback<void()>;
+
 // This class is not thread safe. The public functions should be called on
 // browser main thread.
 class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
@@ -167,6 +171,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
       "Cras.OutputVolumeMutedSource";
   static constexpr char kNoiseCancellationEnabledSourceHistogramName[] =
       "Cras.NoiseCancellationEnabledSource";
+  static constexpr char kSpatialAudioHistogramName[] = "Cras.SpatialAudio";
 
   class AudioObserver {
    public:
@@ -217,6 +222,9 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
 
     // Called when hotword is detected.
     virtual void OnHotwordTriggered(uint64_t tv_sec, uint64_t tv_nsec);
+
+    // Called when spatial audio state changed.
+    virtual void OnSpatialAudioStateChanged();
 
     // Called when the battery level change is reported over the Hands-Free
     // Profile for a Bluetooth headset.
@@ -419,6 +427,15 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   // Gets the default output buffer size in frames.
   void GetDefaultOutputBufferSize(int32_t* buffer_size) const;
 
+  // Requests to get the audio effect dlcs.
+  void RequestGetAudioEffectDlcs();
+
+  // Handles dbus callback for GetAudioEffectDlcs.
+  void HandleGetAudioEffectDlcs(std::optional<std::string> audio_effect_dlcs);
+
+  // Returns the required DLCs of the supported audio effects.
+  std::optional<std::vector<std::string>> GetAudioEffectDlcs() const;
+
   // Returns noise cancellation supported if:
   // - Overall board/device supports noise cancellation
   // - Audio device has bit for Noise Cancellation set in `audio_effect`.
@@ -492,6 +509,24 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   // `AudioDevicesPrefHandler` to the provided value. `source` records to
   // metrics who changed the hfp_mic_sr state.
   void SetHfpMicSrState(bool hfp_mic_sr_on, AudioSettingsChangeSource source);
+
+  // Returns spatial audio supported.
+  bool IsSpatialAudioSupportedForDevice(uint64_t device_id);
+
+  // Gets if spatial audio is supported by the board.
+  void RequestSpatialAudioSupported(OnSpatialAudioSupportedCallback callback);
+
+  // Gets the state of spatial audio state.
+  bool GetSpatialAudioState() const;
+
+  // Refreshes the spatial audio state.
+  void RefreshSpatialAudioState();
+
+  // Makes a DBus call to set the state of spatial audio.
+  void SetSpatialAudioState(bool state);
+
+  // Simulate spatial audio support in a test.
+  void SetSpatialAudioSupportedForTesting(bool supported);
 
   // Whether there is alternative input/output audio device.
   bool has_alternative_input() const;
@@ -696,6 +731,9 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
 
   // Returns number of streams ignoring UI gains.
   int32_t num_stream_ignore_ui_gains() const;
+
+  // Returns if spatial audio is supported in CRAS or not.
+  bool spatial_audio_supported() const;
 
   // Asks  CRAS to resend BluetoothBatteryChanged signal, used in cases when
   // Chrome cleans up the stored battery information but still has the device
@@ -1011,6 +1049,11 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   // Handle dbus callback for GetSystemAgcSupported.
   void HandleGetSystemAgcSupported(std::optional<bool> system_agc_supported);
 
+  // Handle dbus callback for IsSpatialAudioSupported.
+  void HandleGetSpatialAudioSupported(
+      OnSpatialAudioSupportedCallback callback,
+      std::optional<bool> spatial_audio_supported);
+
   void OnVideoCaptureStartedOnMainThread(media::VideoFacingMode facing);
   void OnVideoCaptureStoppedOnMainThread(media::VideoFacingMode facing);
 
@@ -1135,12 +1178,14 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   base::flat_map<ClientType, uint32_t> number_of_input_streams_with_permission_;
 
   bool system_aec_supported_ = false;
+  std::optional<std::vector<std::string>> audio_effect_dlcs_;
   bool noise_cancellation_supported_ = false;
   bool style_transfer_supported_ = false;
   int32_t system_aec_group_id_ = kSystemAecGroupIdNotAvailable;
   bool system_ns_supported_ = false;
   bool system_agc_supported_ = false;
   bool hfp_mic_sr_supported_ = false;
+  bool spatial_audio_supported_ = false;
 
   int num_active_output_streams_ = 0;
   int32_t num_active_nonchrome_output_streams_ = 0;

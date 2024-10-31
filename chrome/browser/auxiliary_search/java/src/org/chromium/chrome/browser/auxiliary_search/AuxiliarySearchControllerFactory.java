@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.auxiliary_search;
 
+import android.content.Context;
+
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.ServiceLoaderUtil;
@@ -13,12 +16,14 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 /** This is the Factory for the auxiliary search. */
 public class AuxiliarySearchControllerFactory {
     public static @Nullable AuxiliarySearchController createAuxiliarySearchController(
-            Profile profile, TabModelSelector tabModelSelector) {
+            @NonNull Context context,
+            @NonNull Profile profile,
+            @Nullable TabModelSelector tabModelSelector) {
         AuxiliarySearchHooks hooks = ServiceLoaderUtil.maybeCreate(AuxiliarySearchHooks.class);
         if (hooks == null || !hooks.isEnabled()) {
             return null;
         }
 
-        return hooks.createAuxiliarySearchController(profile, tabModelSelector);
+        return hooks.createAuxiliarySearchController(context, profile, tabModelSelector);
     }
 }

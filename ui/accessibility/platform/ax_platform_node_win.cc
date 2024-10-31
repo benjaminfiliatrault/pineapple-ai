@@ -917,9 +917,13 @@ AXPlatformNodeWin::UIARoleProperties AXPlatformNodeWin::GetUIARoleProperties() {
 
     case ax::mojom::Role::kDisclosureTriangle:
     case ax::mojom::Role::kDisclosureTriangleGrouped:
-      return {UIALocalizationStrategy::kSupply, UIA_ButtonControlTypeId,
-              L"button"};
-
+      if (::features::IsAccessibilityExposeSummaryAsHeadingEnabled()) {
+        return {UIALocalizationStrategy::kSupply, UIA_ButtonControlTypeId,
+                L"heading"};
+      } else {
+        return {UIALocalizationStrategy::kSupply, UIA_ButtonControlTypeId,
+                L"button"};
+      }
     case ax::mojom::Role::kDocCover:
       return {UIALocalizationStrategy::kSupply, UIA_ImageControlTypeId, L"img"};
 
@@ -4941,9 +4945,10 @@ IFACEMETHODIMP AXPlatformNodeWin::Navigate(
     NavigateDirection direction,
     IRawElementProviderFragment** element_provider) {
   WIN_ACCESSIBILITY_API_TRACE_EVENT("Navigate");
+  UIA_VALIDATE_CALL_1_ARG(element_provider);
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_NAVIGATE);
   WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_NAVIGATE);
-  UIA_VALIDATE_CALL_1_ARG(element_provider);
+  WIN_ACCESSIBILITY_SOURCE_API_PERF_HISTOGRAM(UMA_API_NAVIGATE);
 
   *element_provider = nullptr;
 
@@ -5039,8 +5044,7 @@ IFACEMETHODIMP AXPlatformNodeWin::Navigate(
       break;
 
     default:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 
   if (neighbor) {
@@ -5108,10 +5112,10 @@ IFACEMETHODIMP AXPlatformNodeWin::GetRuntimeId(SAFEARRAY** runtime_id) {
 IFACEMETHODIMP AXPlatformNodeWin::get_BoundingRectangle(
     UiaRect* screen_physical_pixel_bounds) {
   WIN_ACCESSIBILITY_API_TRACE_EVENT("get_BoundingRectangle");
+  UIA_VALIDATE_CALL_1_ARG(screen_physical_pixel_bounds);
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_BOUNDINGRECTANGLE);
   WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_GET_BOUNDINGRECTANGLE);
-
-  UIA_VALIDATE_CALL_1_ARG(screen_physical_pixel_bounds);
+  WIN_ACCESSIBILITY_SOURCE_API_PERF_HISTOGRAM(UMA_API_GET_BOUNDINGRECTANGLE);
 
   gfx::Rect bounds =
       delegate_->GetBoundsRect(AXCoordinateSystem::kScreenPhysicalPixels,
@@ -5174,8 +5178,10 @@ IFACEMETHODIMP AXPlatformNodeWin::get_FragmentRoot(
 IFACEMETHODIMP AXPlatformNodeWin::GetPatternProvider(PATTERNID pattern_id,
                                                      IUnknown** result) {
   WIN_ACCESSIBILITY_API_TRACE_EVENT("GetPatternProvider");
+  UIA_VALIDATE_CALL_1_ARG(result);
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_PATTERN_PROVIDER);
   WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_GET_PATTERN_PROVIDER);
+  WIN_ACCESSIBILITY_SOURCE_API_PERF_HISTOGRAM(UMA_API_GET_PATTERN_PROVIDER);
   NotifyAPIObserverForPatternRequest(pattern_id);
   return GetPatternProviderImpl(pattern_id, result);
 }
@@ -5197,8 +5203,10 @@ HRESULT AXPlatformNodeWin::GetPatternProviderImpl(PATTERNID pattern_id,
 IFACEMETHODIMP AXPlatformNodeWin::GetPropertyValue(PROPERTYID property_id,
                                                    VARIANT* result) {
   WIN_ACCESSIBILITY_API_TRACE_EVENT("GetPropertyValue");
+  UIA_VALIDATE_CALL_1_ARG(result);
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_PROPERTY_VALUE);
   WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_GET_PROPERTY_VALUE);
+  WIN_ACCESSIBILITY_SOURCE_API_PERF_HISTOGRAM(UMA_API_GET_PROPERTY_VALUE);
 
   constexpr LONG kFirstKnownUiaPropertyId = UIA_RuntimeIdPropertyId;
   constexpr LONG kLastKnownUiaPropertyId = UIA_IsDialogPropertyId;
@@ -5472,9 +5480,8 @@ HRESULT AXPlatformNodeWin::GetPropertyValueImpl(PROPERTYID property_id,
       if (SupportsOrientation(GetRole())) {
         if (HasState(ax::mojom::State::kHorizontal) &&
             HasState(ax::mojom::State::kVertical)) {
-          NOTREACHED_IN_MIGRATION()
-              << "An accessibility object cannot have a horizontal "
-                 "and a vertical orientation at the same time.";
+          NOTREACHED() << "An accessibility object cannot have a horizontal "
+                          "and a vertical orientation at the same time.";
         }
         if (HasState(ax::mojom::State::kHorizontal)) {
           result->vt = VT_I4;
@@ -6127,6 +6134,12 @@ LONG AXPlatformNodeWin::ComputeUIAStyleId() const {
   const AXPlatformNodeBase* current_node = this;
   do {
     switch (current_node->GetRole()) {
+      case ax::mojom::Role::kDisclosureTriangle:
+      case ax::mojom::Role::kDisclosureTriangleGrouped:
+        if (!::features::IsAccessibilityExposeSummaryAsHeadingEnabled()) {
+          break;
+        }
+        [[fallthrough]];  // Expose heading level.
       case ax::mojom::Role::kHeading:
         return AXHierarchicalLevelToUIAStyleId(current_node->GetIntAttribute(
             ax::mojom::IntAttribute::kHierarchicalLevel));
@@ -7001,6 +7014,14 @@ int32_t AXPlatformNodeWin::ComputeIA2Role() {
     case ax::mojom::Role::kDateTime:
       ia2_role = IA2_ROLE_DATE_EDITOR;
       break;
+    case ax::mojom::Role::kDisclosureTriangle:
+    case ax::mojom::Role::kDisclosureTriangleGrouped:
+      if (::features::IsAccessibilityExposeSummaryAsHeadingEnabled()) {
+        // TODO(accessibility): Consider keeping as button if inside list item
+        // or table cell.
+        ia2_role = IA2_ROLE_HEADING;
+      }
+      break;
     case ax::mojom::Role::kDocPageFooter:
       ia2_role = IA2_ROLE_FOOTER;
       break;
@@ -7217,7 +7238,7 @@ std::wstring AXPlatformNodeWin::ComputeUIAProperties() {
         properties.emplace_back(L"pressed=mixed");
       } else if (GetRole() == ax::mojom::Role::kSwitch) {
         // This is disallowed both by the ARIA standard and by Blink.
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
       } else {
         properties.emplace_back(L"checked=mixed");
       }
@@ -7239,7 +7260,7 @@ std::wstring AXPlatformNodeWin::ComputeUIAProperties() {
 
   // aria-dropeffect is deprecated in WAI-ARIA 1.1.
   if (HasIntAttribute(ax::mojom::IntAttribute::kDropeffectDeprecated)) {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
   StateToUIAAriaProperty(properties, ax::mojom::State::kExpanded, "expanded");
 
@@ -8384,8 +8405,7 @@ AXPlatformNodeWin* AXPlatformNodeWin::GetLowestAccessibleElementForUIA() {
     node = node->GetParentPlatformNodeWin();
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 AXPlatformNodeWin* AXPlatformNodeWin::GetFirstTextOnlyDescendant() {
@@ -8463,7 +8483,6 @@ void AXPlatformNodeWin::NotifyAPIObserverForPropertyRequest(
 
   bool probable_advanced_client_detected = false;
   bool probable_screen_reader_detected = false;
-  bool uiautomation_id_requested = false;
   switch (property_id) {
     // These properties are used by non-screenreader UIA clients. They should
     // not cause additional enablement.
@@ -8535,7 +8554,6 @@ void AXPlatformNodeWin::NotifyAPIObserverForPropertyRequest(
     case UIA_LocalizedLandmarkTypePropertyId:
     case UIA_FullDescriptionPropertyId:
     case UIA_IsDialogPropertyId:
-      uiautomation_id_requested = true;
       probable_screen_reader_detected = true;
       probable_advanced_client_detected = true;
       break;
@@ -8547,8 +8565,6 @@ void AXPlatformNodeWin::NotifyAPIObserverForPropertyRequest(
       observer.OnAdvancedUIAutomationUsed();
     if (probable_screen_reader_detected)
       observer.OnProbableUIAutomationScreenReaderDetected();
-    if (uiautomation_id_requested)
-      observer.OnUIAutomationIdRequested();
   }
 }
 

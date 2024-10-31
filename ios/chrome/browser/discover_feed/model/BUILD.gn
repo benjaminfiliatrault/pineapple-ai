@@ -54,6 +54,7 @@ source_set("discover_feed_factory") {
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/profile",
     "//ios/chrome/browser/signin/model",
+    "//ios/chrome/browser/signin/model:authentication_service_factory",
     "//ios/chrome/browser/sync/model",
     "//ios/public/provider/chrome/browser/discover_feed:discover_feed_api",
   ]
@@ -81,12 +82,15 @@ source_set("discover_feed_app_agent") {
     "//ios/chrome/browser/ntp/shared/metrics",
     "//ios/chrome/browser/push_notification/model:push_notification_client_id",
     "//ios/chrome/browser/push_notification/model:push_notification_service",
+    "//ios/chrome/browser/push_notification/model:push_notification_util",
     "//ios/chrome/browser/search_engines/model:template_url_service_factory",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/profile",
     "//ios/chrome/browser/shared/model/utils",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/signin/model",
+    "//ios/chrome/browser/signin/model:authentication_service",
+    "//ios/chrome/browser/signin/model:authentication_service_factory",
   ]
   frameworks = [
     "BackgroundTasks.framework",
@@ -114,7 +118,8 @@ source_set("discover_feed_profile_agent") {
     "//ios/chrome/browser/search_engines/model:template_url_service_factory",
     "//ios/chrome/browser/shared/model/profile",
     "//ios/chrome/browser/shared/public/features",
-    "//ios/chrome/browser/signin/model",
+    "//ios/chrome/browser/signin/model:authentication_service",
+    "//ios/chrome/browser/signin/model:authentication_service_factory",
   ]
 }
 

@@ -13,6 +13,10 @@
 
 class PrefService;
 
+namespace policy {
+class CloudPolicyManager;
+}  // namespace policy
+
 namespace enterprise_connectors {
 
 // Abstract class to access Connector policy values and related information.
@@ -30,13 +34,16 @@ class ConnectorsServiceBase {
 
   // Returns whether the Connectors are enabled.
   virtual bool IsConnectorEnabled(AnalysisConnector connector) const = 0;
-  bool IsConnectorEnabled(ReportingConnector connector) const;
 
   std::vector<std::string> GetReportingServiceProviderNames(
       ReportingConnector connector);
 
   virtual std::optional<ReportingSettings> GetReportingSettings(
       ReportingConnector connector);
+
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+  std::optional<std::string> GetProfileDmToken() const;
+#endif
 
  protected:
   struct DmToken {
@@ -72,6 +79,11 @@ class ConnectorsServiceBase {
   // return reporting connector related settings. Should never return nullptr.
   virtual ConnectorsManagerBase* GetConnectorsManagerBase() = 0;
   virtual const ConnectorsManagerBase* GetConnectorsManagerBase() const = 0;
+
+  // Returns a `policy::CloudPolicyManager` corresponding to a managed user, if
+  // one exists.
+  virtual policy::CloudPolicyManager* GetManagedUserCloudPolicyManager()
+      const = 0;
 };
 
 }  // namespace enterprise_connectors

@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/functional/callback_forward.h"
@@ -35,6 +36,7 @@ namespace views {
 class AtomicViewAXTreeManager;
 class View;
 class Widget;
+class ScopedAccessibilityEventBlocker;
 
 // An object that manages the accessibility interface for a View.
 //
@@ -152,6 +154,10 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
 
   void ClearTextOffsets();
 
+  void SetClipsChildren(bool clips_children);
+
+  void SetClassName(const std::string& class_name);
+
   void SetHasPopup(const ax::mojom::HasPopup has_popup);
 
   void SetRole(const ax::mojom::Role role);
@@ -175,6 +181,9 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
 
   void SetRoleDescription(const std::u16string& role_description);
   void SetRoleDescription(const std::string& role_description);
+
+  std::u16string GetRoleDescription() const;
+
   void RemoveRoleDescription();
 
   // For the same reasons as GetCachedRole, this function cannot
@@ -234,6 +243,10 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
 
   void SetIsMultiselectable(bool multiselectable);
 
+  void SetIsModal(bool modal);
+
+  void AddHTMLAttributes(std::pair<std::string, std::string> attribute);
+
   void SetIsHovered(bool is_hovered);
   bool GetIsHovered() const;
 
@@ -245,6 +258,16 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
 
   void SetTextSelStart(int32_t text_sel_start);
   void SetTextSelEnd(int32_t text_sel_end);
+
+  void SetLiveAtomic(bool live_atomic);
+
+  void SetLiveStatus(const std::string& status);
+
+  void SetLiveRelevant(const std::string& live_relevant);
+  void RemoveLiveRelevant();
+
+  void SetContainerLiveRelevant(const std::string& live_relevant);
+  void RemoveContainerLiveRelevant();
 
   // Hides this view from the accessibility APIs. Keep in mind that this is not
   // the sole determinant of whether the ignored state is set. See
@@ -371,7 +394,7 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
       const ax::mojom::DefaultActionVerb default_action_verb);
   void RemoveDefaultActionVerb();
 
-  void SetAutoComplete(const std::string autocomplete);
+  void SetAutoComplete(const std::string& autocomplete);
 
   void SetHierarchicalLevel(int hierarchical_level);
 
@@ -399,6 +422,7 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   // Override the child tree id.
   void SetChildTreeID(ui::AXTreeID tree_id);
   ui::AXTreeID GetChildTreeID() const;
+  void RemoveChildTreeID();
 
   void SetChildTreeScaleFactor(float scale_factor);
 
@@ -489,6 +513,8 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
 
   void CompleteCacheInitialization();
 
+  bool IsAccessibilityEnabled() const;
+
   bool is_initialized() const {
     return initialization_state_ == State::kInitialized;
   }
@@ -507,6 +533,7 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   FRIEND_TEST_ALL_PREFIXES(ViewTest, ViewAccessibilityReadyToNotifyEvents);
   FRIEND_TEST_ALL_PREFIXES(ViewTest,
                            WidgetObserverViewWidgetClosedViewReparented);
+  friend class ScopedAccessibilityEventBlocker;
 
   // Fully initialize the cache.
   void CompleteCacheInitializationRecursive();
@@ -548,6 +575,8 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   void SetDataForClosedWidget(ui::AXNodeData* data) const;
 
   void SetState(ax::mojom::State state, bool is_enabled);
+
+  void SetBlockNotifyEvents(bool block);
 
   // Weak. Owns this.
   const raw_ptr<View> view_;
@@ -619,6 +648,22 @@ class IgnoreMissingWidgetForTestingScopedSetter {
   }
   ~IgnoreMissingWidgetForTestingScopedSetter() {
     view_accessibility_->SetIgnoreMissingWidgetForTesting(false);
+  }
+
+ private:
+  raw_ptr<ViewAccessibility> view_accessibility_;
+};
+class ScopedAccessibilityEventBlocker {
+ public:
+  explicit ScopedAccessibilityEventBlocker(
+      ViewAccessibility& view_accessibility)
+      : view_accessibility_(&view_accessibility) {
+    CHECK(view_accessibility_);
+    view_accessibility_->SetBlockNotifyEvents(true);
+  }
+  ~ScopedAccessibilityEventBlocker() {
+    CHECK(view_accessibility_);
+    view_accessibility_->SetBlockNotifyEvents(false);
   }
 
  private:

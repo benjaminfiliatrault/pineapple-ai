@@ -8,7 +8,6 @@ import android.content.ComponentName;
 
 import org.chromium.base.Log;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityClient;
-import org.chromium.chrome.browser.browserservices.metrics.TrustedWebActivityUmaRecorder;
 import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.embedder_support.util.Origin;
@@ -30,22 +29,19 @@ public class LocationPermissionUpdater {
 
     private final InstalledWebappPermissionManager mPermissionManager;
     private final TrustedWebActivityClient mTrustedWebActivityClient;
-    private final TrustedWebActivityUmaRecorder mUmaRecorder;
 
     @Inject
     public LocationPermissionUpdater(
             InstalledWebappPermissionManager permissionManager,
-            TrustedWebActivityClient trustedWebActivityClient,
-            TrustedWebActivityUmaRecorder umaRecorder) {
+            TrustedWebActivityClient trustedWebActivityClient) {
         mPermissionManager = permissionManager;
         mTrustedWebActivityClient = trustedWebActivityClient;
-        mUmaRecorder = umaRecorder;
     }
 
     /**
-     * If the uninstalled client app results in there being no more TrustedWebActivityService
-     * for the origin, or the client app does not support location delegation, return the
-     * origin's location permission to what it was before any client app was installed.
+     * If the uninstalled client app results in there being no more TrustedWebActivityService for
+     * the origin, or the client app does not support location delegation, return the origin's
+     * location permission to what it was before any client app was installed.
      */
     void onClientAppUninstalled(Origin origin) {
         mPermissionManager.resetStoredPermission(origin, TYPE);

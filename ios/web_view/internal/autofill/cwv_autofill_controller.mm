@@ -479,9 +479,19 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
   // Not supported.
 }
 
-- (void)scanFormsInWebState:(web::WebState*)webState
-                    inFrame:(web::WebFrame*)webFrame {
-  [_autofillAgent scanFormsInWebState:webState inFrame:webFrame];
+- (void)notifyFormsSeen:(const std::vector<autofill::FormData>&)updatedForms
+                inFrame:(web::WebFrame*)frame {
+  [_autofillAgent notifyFormsSeen:updatedForms inFrame:frame];
+}
+
+- (void)fetchFormsFiltered:(BOOL)filtered
+                  withName:(const std::u16string&)formName
+                   inFrame:(web::WebFrame*)frame
+         completionHandler:(FormFetchCompletion)completionHandler {
+  [_autofillAgent fetchFormsFiltered:filtered
+                            withName:formName
+                             inFrame:frame
+                   completionHandler:std::move(completionHandler)];
 }
 
 #pragma mark - CRWWebStateObserver
@@ -552,15 +562,14 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
 }
 
 - (void)webState:(web::WebState*)webState
-    didSubmitDocumentWithFormNamed:(const std::string&)formName
-                          withData:(const std::string&)formData
-                    hasUserGesture:(BOOL)userInitiated
-                           inFrame:(web::WebFrame*)frame {
+    didSubmitDocumentWithFormData:(const autofill::FormData&)formData
+                   hasUserGesture:(BOOL)userInitiated
+                          inFrame:(web::WebFrame*)frame {
   if ([_delegate respondsToSelector:@selector
                  (autofillController:
                      didSubmitFormWithName:frameID:userInitiated:)]) {
     [_delegate autofillController:self
-            didSubmitFormWithName:base::SysUTF8ToNSString(formName)
+            didSubmitFormWithName:base::SysUTF16ToNSString(formData.name())
                           frameID:base::SysUTF8ToNSString(frame->GetFrameId())
                     userInitiated:userInitiated];
   }

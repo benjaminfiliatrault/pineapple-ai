@@ -20,6 +20,7 @@
 <translation id="1070066693520972135">WEP</translation>
 <translation id="1071587090247825784">Откривен је заштитни зид</translation>
 <translation id="1075811647922107217">Величина странице</translation>
+<translation id="108084407137234521">Не можемо да резимирамо транскрипт који има мање од <ph name="MIN_WORD_LENGTH" /> речи</translation>
 <translation id="1082009148392559545">Чувар екрана се преузима</translation>
 <translation id="1094693127011229778">IP адреса није доступна</translation>
 <translation id="1100902271996134409">Праве се слике...</translation>
@@ -43,6 +44,7 @@
 <translation id="11743817593307477">Користите тастере са стрелицама да бисте преместили ову контролу на радњу у игри коју желите. Користите тастер Enter да бисте поставили контролу. Користите тастер Escape да бисте отказали.</translation>
 <translation id="1175697296044146566"><ph name="MANAGER" /> управља овим <ph name="DEVICE_TYPE" /> уређајем.</translation>
 <translation id="1175951029573070619">Просечан (<ph name="SIGNAL_STRENGTH" />)</translation>
+<translation id="1178581264944972037">Паузирај</translation>
 <translation id="1180621378971766337">удобни</translation>
 <translation id="1181037720776840403">Уклони</translation>
 <translation id="1191518099344003522">Назив приступне тачке је омогућен.</translation>
@@ -218,6 +220,7 @@
 <translation id="1905710495812624430">Премашен је максимални број покушаја.</translation>
 <translation id="1908234395526491708">Неуспели UDP захтеви</translation>
 <translation id="1908394185991500139">стрелица улево</translation>
+<translation id="1914144885717544695">у петак</translation>
 <translation id="1923388006036088459">Боје за наглашавање</translation>
 <translation id="1945403655450283000">Снимач звука</translation>
 <translation id="1947737735496445907">Одштампано</translation>
@@ -248,7 +251,6 @@
 <translation id="2085089206770112532">Смањите осветљеност екрана</translation>
 <translation id="2086091080968010660">Промене засноване на времену можда нису прецизне. Укључите приступ локацији система у подешавањима.</translation>
 <translation id="2102231663024125441">Уређивање текста</translation>
-<translation id="2102648867808308635">Помоћ при читању за ову страницу</translation>
 <translation id="2105810540595158374">Уређај је контролер за игре.</translation>
 <translation id="2119172414412204879"><ph name="BOARD_NAME" />, верзија <ph name="MILESTONE_VERSION" /></translation>
 <translation id="2124643134650336457">Тренутно је доступно само на енглеском (САД)</translation>
@@ -257,6 +259,7 @@
 <translation id="2138109643290557664">Наставите да плутате</translation>
 <translation id="2141644705054017895"><ph name="PERCENTAGE_VALUE" />%</translation>
 <translation id="2148716181193084225">Данас</translation>
+<translation id="215206000155329774"><ph name="INTENT" />; <ph name="QUERY_TEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="2152882202543497059">Слика: <ph name="NUMBER" /></translation>
 <translation id="2154460308960858308">Обришите претрагу</translation>
 <translation id="2157660087437850958">бирач емоџија</translation>
@@ -375,6 +378,7 @@
 <translation id="2713444072780614174">Бела</translation>
 <translation id="2715723665057727940">река</translation>
 <translation id="2717139507051041123">Омогућите режим тамне боје</translation>
+<translation id="2726755229438917165">у понедељак</translation>
 <translation id="2728460467788544679">Обриши сву историју штампања</translation>
 <translation id="2731700343119398978">Сачекајте…</translation>
 <translation id="2740531572673183784">Потврди</translation>
@@ -414,9 +418,11 @@
 <translation id="3031560714565892478">Уређај је видео камера.</translation>
 <translation id="3042927241478734594">Желите да затворите снимање?</translation>
 <translation id="3054177598518735801"><ph name="CURRENT_VALUE" /> mA</translation>
+<translation id="3055176406666937744">Не можемо да резимирамо транскрипт који има више од <ph name="MAX_WORD_LENGTH" /> речи</translation>
 <translation id="3056720590588772262">Крајња тачка</translation>
 <translation id="3060579846059757016">Оквири</translation>
 <translation id="3061850252076394168">омогућите услугу Изаберите за говор</translation>
+<translation id="3066772729299747758">у уторак</translation>
 <translation id="3069085583900247081">Тест није успео</translation>
 <translation id="3078740164268491126">табела</translation>
 <translation id="3081652522083185657">светло</translation>
@@ -450,6 +456,7 @@
 <translation id="3226657629376379887">Мени са радњама за распоред</translation>
 <translation id="3227186760713762082">Вредност (<ph name="CATEGORY_TEXT" />) дели се бројем <ph name="CONVERSION_RATE" /></translation>
 <translation id="3237710083340813756">Преради</translation>
+<translation id="3245518008592055173">Не можемо да именујемо транскрипт који има мање од <ph name="MIN_WORD_LENGTH" /> речи</translation>
 <translation id="3246869037381808805">Задаци штампања старији од 1 дана се уклањају</translation>
 <translation id="324961752321393509">Администратор не дозвољава затварање ове апликације</translation>
 <translation id="3263941347294171263">Искључите и поново прикључите уређај <ph name="DEVICE_NAME" /> да бисте наставили процес ажурирања</translation>
@@ -463,6 +470,7 @@
 <translation id="3305294846493618482">још</translation>
 <translation id="3310640316857623290">Кашњење DNS-а знатно премашује дозвољену граничну вредност</translation>
 <translation id="3321030238473337787">Брзина репродукције</translation>
+<translation id="3327613592010997943">Моћи ћете поново да користите овај уређај <ph name="DAY" />у <ph name="TIME" />.</translation>
 <translation id="3328783797891415197">Тест је у току</translation>
 <translation id="3340011300870565703">Уређај има <ph name="BATTERY_PERCENTAGE" />% батерије десне слушалице.</translation>
 <translation id="3340978935015468852">подешавања</translation>
@@ -472,6 +480,7 @@
 <translation id="3361618936611118375">суши</translation>
 <translation id="3368922792935385530">Повезан</translation>
 <translation id="3369013195428705271">Желите ли стварно да обришете сву историју штампања? Задаци штампања који су у току се не бришу.</translation>
+<translation id="3369632935976756339"><ph name="INTENT" />; <ph name="QUERY_TEXT" />; <ph name="SUBTEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="3373141842870501561">Позадина са Земљом</translation>
 <translation id="33736539805963175"><ph name="LETTERS_COLOR" /> позадина са словом <ph name="LETTERS_LETTER" /></translation>
 <translation id="3383623117265110236">Ексклузивно</translation>
@@ -499,7 +508,6 @@
 <translation id="3502426834823382181">прикажи све апликације</translation>
 <translation id="3510890413042482857">Шаљи <ph name="BEGIN_LINK1" />податке о праћењу учинка<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Ажурирање Chrome ОС-а</translation>
-<translation id="3522508178835057262">За сада није подржан транкрипт са мање од <ph name="MAX_WORD_LENGTH" /> речи</translation>
 <translation id="3527036260304016759">Није успело – непозната грешка</translation>
 <translation id="353214771040290298">Измене су готове</translation>
 <translation id="3532980081107202182">Преостало је још око <ph name="MIN_REMAINING" /> минута</translation>
@@ -611,6 +619,7 @@
 <translation id="409427325554347132">Сачувај детаље теста</translation>
 <translation id="409469431304488632">Експеримент</translation>
 <translation id="4095829376260267438">WPA2WPA3</translation>
+<translation id="4105182082354119881">Не можемо да именујемо транскрипт који има више од <ph name="MAX_WORD_LENGTH" /> речи</translation>
 <translation id="4110686435123617899">Изаберите албум <ph name="TITLE" /> <ph name="DESC" /></translation>
 <translation id="4111761024568264522">USB тачпед</translation>
 <translation id="4113067922640381334">Сада имате приступ новим <ph name="BEGIN_LINK_WALLPAPER_SUBPAGE" />позадинама<ph name="END_LINK_WALLPAPER_SUBPAGE" /></translation>
@@ -619,6 +628,7 @@
 <translation id="4130035430755296270">Наставите да прелазите курсором за још опција изгледа</translation>
 <translation id="4130750466177569591">Прихватам</translation>
 <translation id="4131410914670010031">Црно-бело</translation>
+<translation id="4137700675046373159">у суботу</translation>
 <translation id="4143226836069425823">Додирните други тастер на тастатури да бисте заменили</translation>
 <translation id="4145784616224233563">HTTP заштитни зид</translation>
 <translation id="4147897805161313378">Google слике</translation>
@@ -641,6 +651,7 @@
 <translation id="4227825898293920515">Лозинка истиче за <ph name="TIME" /></translation>
 <translation id="4238516577297848345">Ниједан задатак штампања није у току</translation>
 <translation id="4239069858505860023">GPRS</translation>
+<translation id="4249717042534905822">у недељу</translation>
 <translation id="4250229828105606438">Снимак екрана</translation>
 <translation id="4251839292699800785">Модерна канцеларија</translation>
 <translation id="4258281355379922695">HTTP кашњење</translation>
@@ -660,6 +671,7 @@
 <translation id="4333390807948134856">Тастер <ph name="KEY_NAME" /> је притиснут</translation>
 <translation id="4334293042716981313">Можете и да <ph name="BEGIN_LINK_FREEFORM_SUBPAGE" />напишете свој упит<ph name="END_LINK_FREEFORM_SUBPAGE" /></translation>
 <translation id="4354430579665871434">тастер</translation>
+<translation id="4356100841225547054">Искључите звук</translation>
 <translation id="4361257691546579041">Назив приступне тачке је подразумеваног типа.</translation>
 <translation id="437294888293595148">Ресетуј све пречице</translation>
 <translation id="437477383107495720">зеке</translation>
@@ -715,7 +727,6 @@
 <translation id="458794348635939462">Разрешење свих хостова није успело</translation>
 <translation id="4593212453765072419">Потребна је потврда аутентичности проксија</translation>
 <translation id="4594021849294327751">Направи транскрипт</translation>
-<translation id="4602266091140407479">Микрофон</translation>
 <translation id="4607282946861182308">Не можемо да направимо слике на којима је ово. Пробајте са другим упитом.</translation>
 <translation id="4609350030397390689">Смањите осветљеност тастатуре</translation>
 <translation id="4623061655523261501">Имена за снимак су генерисана</translation>
@@ -754,7 +765,6 @@
 <translation id="4809927044794281115">Светла тема</translation>
 <translation id="4813136279048157860">Моје слике</translation>
 <translation id="4813345808229079766">Веза</translation>
-<translation id="4824527342590024245">За сада није подржан транкрипт са мање од <ph name="MIN_WORD_LENGTH" /> речи</translation>
 <translation id="4830894019733815633">кањон</translation>
 <translation id="4832079907277790330">Изаберите фолдер у апликацији Фајлови...</translation>
 <translation id="4835901797422965222">Нема активних мрежа</translation>
@@ -815,12 +825,12 @@
 <translation id="5089810972385038852">Држава</translation>
 <translation id="5090362543162270857">IPsec (IKEv2)</translation>
 <translation id="5095761549884461003">Искључите USB кабл <ph name="DEVICE_NAME" />, па га поново прикључите да бисте наставили процес ажурирања</translation>
-<translation id="5095864667399748231">Укључите/искључите звук</translation>
 <translation id="5099354524039520280">нагоре</translation>
 <translation id="5107243100836678918">Пречица без тастера <ph name="META_KEY" /> може да буде у супротности са пречицом неке апликације. Поново притисните ову пречицу да бисте наставили да је користите или притисните нову пречицу помоћу тастера <ph name="KEY" />. <ph name="LINK_BEGIN" />Сазнајте више<ph name="LINK_END" /></translation>
 <translation id="5108781503443873320">Слично:</translation>
 <translation id="5130848777448318809">понији</translation>
 <translation id="5137451382116112100">Цео екран</translation>
+<translation id="5140788690559353412">Када изгубите приступ школском налогу, више нећете имати приступ повезаном имејлу и фајловима на Google диску, као што су Gmail, Документи, Презентације и друго.</translation>
 <translation id="5142961317498132443">Потврда идентитета</translation>
 <translation id="5144311987923128508">Дугме за потврду је сада онемогућено</translation>
 <translation id="5144887194300568405">Копирајте превод</translation>
@@ -898,6 +908,7 @@
 <translation id="550600468576850160">ливада</translation>
 <translation id="551689408806449779">Прекинута је веза са уређајем. Пробајте поново да се повежете ради тестирања</translation>
 <translation id="5519195206574732858">LTE</translation>
+<translation id="5527146180235316490">Опције микрофона</translation>
 <translation id="5534900277405737921">Терен</translation>
 <translation id="554067135846762198">коралне и боје коже</translation>
 <translation id="5543701552415191873">закључано</translation>
@@ -914,6 +925,7 @@
 <translation id="5595623927872580850">сиве</translation>
 <translation id="5596627076506792578">Још опција</translation>
 <translation id="5600027863942488546">Тастер <ph name="KEY_NAME" /> је тестиран</translation>
+<translation id="5606865426897221650">Картица</translation>
 <translation id="5613201299517339763">Одјављени сте</translation>
 <translation id="5620281292257375798">Само интерно</translation>
 <translation id="5630438231335788050">баухаус</translation>
@@ -943,6 +955,7 @@
 <translation id="5760715441271661976">Статус портала</translation>
 <translation id="5763838252932650682"><ph name="APP_NAME" /> се рестартује и ажурира</translation>
 <translation id="576835345334454681">Повећајте осветљеност екрана</translation>
+<translation id="5775340474232476653">Наставник је завршио час</translation>
 <translation id="5779818640587041940">Не искључуј екран током снимања</translation>
 <translation id="57838592816432529">Искључи звук</translation>
 <translation id="5784136236926853061">Велико HTTP кашњење</translation>
@@ -1008,6 +1021,7 @@
 <translation id="6075872808778243331">(Android) HTTP кашњење</translation>
 <translation id="6078323886959318429">Додај пречицу</translation>
 <translation id="6091080061796993741">жуте</translation>
+<translation id="6093853427925392522">Обавезно користите Google апликацију Пренос садржаја да бисте преместили податке са школског налога на лични налог пре него што изгубите приступ.</translation>
 <translation id="6104112872696127344">Скенирање је отказано</translation>
 <translation id="6106186594183574873">Да бисте завршили, унесите стару лозинку</translation>
 <translation id="6108689792487843350">Мрежни пролаз је недоступан</translation>
@@ -1115,6 +1129,7 @@
 <translation id="6527081081771465939">Непознат безбедносни протокол за WiFi</translation>
 <translation id="6535178685492749208">Офлајн сте. Повратне информације ће бити послате касније.</translation>
 <translation id="6543412779435705598">такоси</translation>
+<translation id="6550369542114086980">у четвртак</translation>
 <translation id="6551839203326557324">јабуке</translation>
 <translation id="65526652485742171">Дугме за потврду је сада омогућено</translation>
 <translation id="6557784757915238407">Тип назива приступне тачке је <ph name="ATTACH" />.</translation>
@@ -1140,7 +1155,6 @@
 <translation id="6650062777702288430">Прекидач за кана/алфанумеричке знакове</translation>
 <translation id="6657240842932274095">Желите да дозволите системским услугама да користе локацију?</translation>
 <translation id="6657585470893396449">Лозинка</translation>
-<translation id="6659594942844771486">Картица</translation>
 <translation id="66621959568103627">коралнорозе</translation>
 <translation id="6667885109186363316"><ph name="SEA_PEN_INTRO_FIRST_PARAGRAPH" />
           <ph name="LINE_BREAK" />
@@ -1245,6 +1259,7 @@
 <translation id="7130438335435247835">Назив приступне тачке (APN)</translation>
 <translation id="7134436342991564651">{0,plural, =1{Сервер имена}one{Сервери имена}few{Сервери имена}other{Сервери имена}}</translation>
 <translation id="7135814714616751706">Претражите пречице</translation>
+<translation id="7141470099673912333">Пренос садржаја</translation>
 <translation id="7143207342074048698">Повезивање</translation>
 <translation id="7144878232160441200">Пробај поново</translation>
 <translation id="7144954474087165241">Пагода</translation>
@@ -1261,6 +1276,7 @@
 <translation id="7180865173735832675">Прилагоди</translation>
 <translation id="7182063559013288142">Инстант хотспот</translation>
 <translation id="7184043045742675738">Кликните на било који тастер да бисте прилагодили дугме. Промените положај тастера помоћу тастера миша или тастера са стрелицама.</translation>
+<translation id="7187669805838282391">у среду</translation>
 <translation id="7206979415662233817">Услови коришћења услуге</translation>
 <translation id="7210635925306941239">цијан</translation>
 <translation id="7212547870105584639">Управљајте подешавањима назива приступне тачке мреже. Називи приступних тачака успостављају везу између мобилне мреже и интернета. <ph name="BEGIN_LINK_LEARN_MORE" />Сазнајте више<ph name="END_LINK_LEARN_MORE" /></translation>
@@ -1307,6 +1323,7 @@
 <translation id="7388959671917308825">Уграђени тачпед</translation>
 <translation id="7397270852490618635">Искључите светлу тему</translation>
 <translation id="7401543881546089382">Избришите пречицу</translation>
+<translation id="7405493795721832710"><ph name="DEVICE_NAME" /> је спреман за ажурирање</translation>
 <translation id="741244894080940828">конверзију</translation>
 <translation id="7415801143053185905">Веома велико HTTP кашњење</translation>
 <translation id="7425037327577270384">Помоћ при писању</translation>
@@ -1321,6 +1338,7 @@
 <translation id="7500205272584643581">Желите да дозволите Снимачу звука да открива и означава говорнике?</translation>
 <translation id="7501957181231305652">или</translation>
 <translation id="7502658306369382406">IPv6 адреса</translation>
+<translation id="7503342217608032738">Уређај не може да се користи</translation>
 <translation id="7507061649493508884"><ph name="FLOWER_TYPE" /> са светлом нијансом боје <ph name="FLOWER_COLOR" /></translation>
 <translation id="7513770521371759388">дно</translation>
 <translation id="7514365320538308">Преузми</translation>
@@ -1335,11 +1353,13 @@
 <translation id="7551123448725492271">Уређај је аудио уређај.</translation>
 <translation id="7559239713112547082">Преглед снимка екрана</translation>
 <translation id="7561454561030345039">Овим подешавањем управља администратор</translation>
+<translation id="7561759921596375678">Укључите звук</translation>
 <translation id="7569444139234840525"><ph name="QUERY_TEXT" /> · /<ph name="PHONETICS" />/</translation>
 <translation id="7570674786725311828">USB додирни екран</translation>
 <translation id="757747079855995705">камена</translation>
 <translation id="7590883480672980941">Подешавања уноса</translation>
 <translation id="7595982850646262331">Још <ph name="TIME_VALUE" /></translation>
+<translation id="7600430297804876776">Администратор за <ph name="MANAGER" /> је подесио када овај <ph name="DEVICE_TYPE" /> може да се користи</translation>
 <translation id="7613724632293948900">Промените положај помоћу тастера миша или тастера са стрелицама.</translation>
 <translation id="7618774594543487847">Неутрално</translation>
 <translation id="7620771111601174153">Сазнајте више у Центру за помоћ</translation>
@@ -1393,7 +1413,9 @@
 <translation id="785170686607360576">лала</translation>
 <translation id="7856267634822906833">Bluetooth додирни екран</translation>
 <translation id="7859006200041800233">цвет кактуса</translation>
+<translation id="7865217133132122390">Укључи микрофон</translation>
 <translation id="7869143217755017858">Онемогућите тамни режим</translation>
+<translation id="7878972877380405573">Направи резиме уз Помоћ при читању</translation>
 <translation id="7881066108824108340">DNS</translation>
 <translation id="7882358943899516840">Тип добављача</translation>
 <translation id="7882501334836096755">Јавни кључ</translation>
@@ -1420,6 +1442,7 @@
 <translation id="7983597390787556680">{NUM_ROOL_APPS,plural, =1{Апликација <ph name="APP_NAME_1" /> је аутоматски покренута}one{# апликација је аутоматски покренута}few{# апликације су аутоматски покренуте}other{# апликација је аутоматски покренуто}}</translation>
 <translation id="7994702968232966508">EAP метод</translation>
 <translation id="8004582292198964060">Прегледач</translation>
+<translation id="8010765388850538088">Сазнајте више о генеративној вештачкој интелигенцији</translation>
 <translation id="8017679124341497925">Пречица је измењена</translation>
 <translation id="802154636333426148">Преузимање није успело</translation>
 <translation id="8028993641010258682">Величина</translation>
@@ -1429,6 +1452,7 @@
 <translation id="8045012663542226664">Искључивање звука микрофона</translation>
 <translation id="8054112564438735763">беж</translation>
 <translation id="8062968459344882447"><ph name="CHARACTERS_SUBJECTS" /> <ph name="CHARACTERS_COLOR" /> боје на позадини <ph name="CHARACTERS_BACKGROUND" /> боје</translation>
+<translation id="8064337065720789104"><ph name="QUERY_TEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="8067126283828232460">Назив приступне тачке је повезан.</translation>
 <translation id="8067208048261192356">браон</translation>
 <translation id="8067224607978179455">Избришите <ph name="ACTION_NAME" /></translation>
@@ -1441,6 +1465,7 @@
 <translation id="8088963492174775412">Притисните да бисте снимили</translation>
 <translation id="8094062939584182041">Дозволите Google-у да вам пошаље имејл о овом проблему</translation>
 <translation id="8104083085214006426">Користите отворену и необезбеђену мрежу</translation>
+<translation id="8110942816572072814">Наставник је закључао екран</translation>
 <translation id="811820734797650957">(Android) Мрежни пролаз може да се пингује</translation>
 <translation id="8129620843620772246"><ph name="TEMPERATURE_C" /> °C</translation>
 <translation id="8131740175452115882">Потврди</translation>
@@ -1457,12 +1482,12 @@
 <translation id="8179976553408161302">Enter</translation>
 <translation id="8183975772394450380">плажа</translation>
 <translation id="819278132617411009">Користите Google вештачку интелигенцију да бисте били продуктивнији</translation>
+<translation id="8200772114523450471">Настави</translation>
 <translation id="8206859287963243715">Мобилни уређај</translation>
 <translation id="8208861521865154048">Погодности</translation>
 <translation id="8226628635270268143">Одаберите омиљене слике и албуме</translation>
 <translation id="8227119283605456246">Приложи датотеку</translation>
 <translation id="8230672074305416752">Пинговање подразумеваног мрежног пролаза није успело</translation>
-<translation id="8236972776513018241">Транскрипт</translation>
 <translation id="8238771987802558562">Одаберите назив приступне тачке</translation>
 <translation id="8246209727385807362">Непознат мобилни оператер</translation>
 <translation id="8250926778281121244">рђа</translation>
@@ -1532,11 +1557,13 @@
 <translation id="8557447961879934694">WPA2</translation>
 <translation id="8575298406870537639">Мобилни оператер може да затражи ову опцију ради повезивања на мрежу. Обратите се мобилном оператеру за детаље.</translation>
 <translation id="8576249514688522074">Није покренуто</translation>
+<translation id="8584654835905316966">Рестартовање је обавезно да би се довршилa инсталација фирмвера за <ph name="DEVICE_NAME" /> за верзију <ph name="VERSION" />. Може да изгледа као да се рачунар рестартује неколико пута. Ово је очекивано понашање.</translation>
 <translation id="8593058461203131755">паузирајте медије</translation>
 <translation id="8620617069779373398">Статус роминга</translation>
 <translation id="8626489604350149811">Још радњи за <ph name="APN_NAME" /></translation>
 <translation id="86356131183441916">Светлољубичасто</translation>
 <translation id="8647595191512746911">Транскрипција звука</translation>
+<translation id="8650852232143958317">Узмите фајлове из Gmail-а и са Google диска са собом</translation>
 <translation id="8651481478098336970">искључи звук</translation>
 <translation id="8655295600908251630">Канал</translation>
 <translation id="8655828773034788261">Дели URL:</translation>
@@ -1588,7 +1615,6 @@
 <translation id="8864415976656252616">Нема предложеног садржаја. Погледајте најпопуларнији садржај помоћи.</translation>
 <translation id="8868741746785112895">GUID</translation>
 <translation id="8876270629542503161">Уређај је таблет.</translation>
-<translation id="8878117140814294155">Укључите/искључите звук микрофона</translation>
 <translation id="8881098542468797602">Тест је успео</translation>
 <translation id="8882789155418924367">сове</translation>
 <translation id="8892443466059986410">Откажите измену пречица</translation>
@@ -1665,6 +1691,7 @@
 <translation id="917720651393141712">Тестирај</translation>
 <translation id="9188992814426075118">Тастатура може аутоматски да се подудара са позадином</translation>
 <translation id="9189000703457422362">Повезивање са овом мрежом није успело помоћу аутоматски откривених назива приступне тачке. Затражите више информација од мобилног оператера.</translation>
+<translation id="9190726385682694354"><ph name="QUERY_TEXT" />; <ph name="SUBTEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="9193744392140377127">Назив приступне тачке*</translation>
 <translation id="9195918315673527512">Изабрани тастери на џојстику су <ph name="KEYS" />. Додирните дугме да бисте изменили контролу</translation>
 <translation id="9204237731135241582">Контакт са мрежним пролазом не успева из Android апликација</translation>
@@ -1685,5 +1712,6 @@
 <translation id="982713511914535780">Покрени тест пражњења</translation>
 <translation id="98515147261107953">Пејзаж</translation>
 <translation id="987264212798334818">Опште</translation>
+<translation id="994473081369871639">Искључи микрофон</translation>
 <translation id="995062385528875723">Не можете да користите акцентована слова, слова која нису латинична или симболе</translation>
 </translationbundle>

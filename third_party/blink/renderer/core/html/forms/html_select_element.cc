@@ -33,6 +33,7 @@
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mutation_observer_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmlelement_long.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmloptgroupelement_htmloptionelement.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
@@ -45,6 +46,8 @@
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
+#include "third_party/blink/renderer/core/dom/mutation_observer.h"
+#include "third_party/blink/renderer/core/dom/mutation_record.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/node_lists_node_data.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
@@ -60,8 +63,13 @@
 #include "third_party/blink/renderer/core/html/forms/html_options_collection.h"
 #include "third_party/blink/renderer/core/html/forms/html_selected_option_element.h"
 #include "third_party/blink/renderer/core/html/forms/select_type.h"
+#include "third_party/blink/renderer/core/html/html_div_element.h"
 #include "third_party/blink/renderer/core/html/html_hr_element.h"
+#include "third_party/blink/renderer/core/html/html_no_script_element.h"
+#include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
+#include "third_party/blink/renderer/core/html/html_span_element.h"
+#include "third_party/blink/renderer/core/html/html_template_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -90,6 +98,72 @@ static const unsigned kMaxListItems = 100000;
 // absent.
 const int kDefaultListBoxSize = 4;
 
+class SelectDescendantsObserver : public MutationObserver::Delegate {
+ public:
+  explicit SelectDescendantsObserver(HTMLSelectElement& select)
+      : select_(select), observer_(MutationObserver::Create(this)) {
+    // TODO(crbug.com/370735374) The addition of this mutation observer causes
+    // significant perf regressions for adding and removing options to a
+    // select. It's important to fix those regressions before shipping this
+    // feature.
+    CHECK(RuntimeEnabledFeatures::CustomizableSelectEnabled());
+
+    MutationObserverInit* init = MutationObserverInit::Create();
+    init->setChildList(true);
+    init->setSubtree(true);
+    observer_->observe(select_, init, ASSERT_NO_EXCEPTION);
+  }
+
+  ExecutionContext* GetExecutionContext() const override {
+    return select_->GetExecutionContext();
+  }
+
+  void Deliver(const MutationRecordVector& records,
+               MutationObserver&) override {
+    for (const auto& record : records) {
+      if (record->type() == "childList") {
+        for (unsigned i = 0; i < record->addedNodes()->length(); ++i) {
+          if (auto* html_element =
+                  DynamicTo<HTMLElement>(record->addedNodes()->item(i))) {
+            if (!IsDescendantAllowed(html_element)) {
+              // TODO(ansollan): Report an Issue to the DevTools' Issue Panel as
+              // well.
+              html_element->AddConsoleMessage(
+                  mojom::blink::ConsoleMessageSource::kRecommendation,
+                  mojom::blink::ConsoleMessageLevel::kWarning,
+                  "A descendant of a <select> does not follow the content "
+                  "model.");
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(select_);
+    visitor->Trace(observer_);
+    MutationObserver::Delegate::Trace(visitor);
+  }
+
+ private:
+  bool IsDescendantAllowed(HTMLElement* element) {
+    // TODO(ansollan): This should be looking at the tree structure to decide if
+    // this is a valid descendant.
+    return IsA<HTMLOptionElement>(element) ||
+           IsA<HTMLOptGroupElement>(element) || IsA<HTMLHRElement>(element) ||
+           IsA<HTMLScriptElement>(element) ||
+           IsA<HTMLTemplateElement>(element) ||
+           IsA<HTMLNoScriptElement>(element) ||
+           IsA<HTMLButtonElement>(element) || IsA<HTMLDivElement>(element) ||
+           IsA<HTMLSpanElement>(element) ||
+           IsA<HTMLSelectedOptionElement>(element);
+  }
+  Member<HTMLSelectElement> select_;
+  Member<MutationObserver> observer_;
+};
+
 HTMLSelectElement::HTMLSelectElement(Document& document)
     : HTMLFormControlElementWithState(html_names::kSelectTag, document),
       type_ahead_(this),
@@ -102,6 +176,10 @@ HTMLSelectElement::HTMLSelectElement(Document& document)
   select_type_ = SelectType::Create(*this);
   SetHasCustomStyleCallbacks();
   EnsureUserAgentShadowRoot(SlotAssignmentMode::kManual);
+  if (RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
+    descendants_observer_ =
+        MakeGarbageCollected<SelectDescendantsObserver>(*this);
+  }
 }
 
 HTMLSelectElement::~HTMLSelectElement() = default;
@@ -913,7 +991,7 @@ void HTMLSelectElement::OptionInserted(HTMLOptionElement& option,
       .GetFrame()
       ->GetPage()
       ->GetChromeClient()
-      .SelectOrSelectListFieldOptionsChanged(*this);
+      .SelectFieldOptionsChanged(*this);
 }
 
 void HTMLSelectElement::OptionRemoved(HTMLOptionElement& option) {
@@ -940,7 +1018,7 @@ void HTMLSelectElement::OptionRemoved(HTMLOptionElement& option) {
       .GetFrame()
       ->GetPage()
       ->GetChromeClient()
-      .SelectOrSelectListFieldOptionsChanged(*this);
+      .SelectFieldOptionsChanged(*this);
 }
 
 void HTMLSelectElement::OptGroupInsertedOrRemoved(
@@ -1284,11 +1362,23 @@ void HTMLSelectElement::TypeAheadFind(const KeyboardEvent& event) {
   int index = type_ahead_.HandleEvent(
       event, event.charCode(),
       TypeAhead::kMatchPrefix | TypeAhead::kCycleFirstChar);
-  if (index < 0)
+  if (index < 0) {
     return;
-  SelectOption(OptionAtListIndex(index), kDeselectOtherOptionsFlag |
-                                             kMakeOptionDirtyFlag |
-                                             kDispatchInputAndChangeEventFlag);
+  }
+
+  HTMLOptionElement* option_at_index = OptionAtListIndex(index);
+
+  if (RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
+      select_type_->IsAppearanceBasePicker() &&
+      select_type_->PopupIsVisible()) {
+    option_at_index->Focus(FocusParams(FocusTrigger::kScript));
+    return;
+  }
+
+  SelectOption(option_at_index, kDeselectOtherOptionsFlag |
+                                    kMakeOptionDirtyFlag |
+                                    kDispatchInputAndChangeEventFlag);
+
   select_type_->ListBoxOnChange();
 }
 
@@ -1357,6 +1447,7 @@ void HTMLSelectElement::Trace(Visitor* visitor) const {
   visitor->Trace(suggested_option_);
   visitor->Trace(descendant_selectedoptions_);
   visitor->Trace(select_type_);
+  visitor->Trace(descendants_observer_);
   HTMLFormControlElementWithState::Trace(visitor);
 }
 
@@ -1464,6 +1555,10 @@ HTMLOptionElement* HTMLSelectElement::OptionToBeShown() const {
 }
 
 void HTMLSelectElement::SelectOptionByPopup(int list_index) {
+  SelectOptionByPopup(OptionAtListIndex(list_index));
+}
+
+void HTMLSelectElement::SelectOptionByPopup(HTMLOptionElement* option) {
   DCHECK(UsesMenuList());
   // Check to ensure a page navigation has not occurred while the popup was
   // up.
@@ -1473,7 +1568,6 @@ void HTMLSelectElement::SelectOptionByPopup(int list_index) {
 
   SetIndexToSelectOnCancel(-1);
 
-  HTMLOptionElement* option = OptionAtListIndex(list_index);
   // Bail out if this index is already the selected one, to avoid running
   // unnecessary JavaScript that can mess up autofill when there is no actual
   // change (see https://bugs.webkit.org/show_bug.cgi?id=35256 and
@@ -1619,9 +1713,9 @@ void HTMLSelectElement::showPicker(ExceptionState& exception_state) {
   select_type_->ShowPicker();
 }
 
-bool HTMLSelectElement::IsValidCommand(HTMLElement& invoker,
-                                       CommandEventType command) {
-  bool parent_is_valid = HTMLElement::IsValidCommand(invoker, command);
+bool HTMLSelectElement::IsValidBuiltinCommand(HTMLElement& invoker,
+                                              CommandEventType command) {
+  bool parent_is_valid = HTMLElement::IsValidBuiltinCommand(invoker, command);
   if (!RuntimeEnabledFeatures::HTMLInvokeActionsV2Enabled()) {
     return parent_is_valid;
   }
@@ -1630,7 +1724,7 @@ bool HTMLSelectElement::IsValidCommand(HTMLElement& invoker,
 
 bool HTMLSelectElement::HandleCommandInternal(HTMLElement& invoker,
                                               CommandEventType command) {
-  CHECK(IsValidCommand(invoker, command));
+  CHECK(IsValidBuiltinCommand(invoker, command));
 
   if (HTMLElement::HandleCommandInternal(invoker, command)) {
     return true;

@@ -19,6 +19,7 @@
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "ui/accessibility/ax_mode_observer.h"
 #include "ui/base/class_property.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -57,6 +58,7 @@ class InputMethod;
 class Layer;
 class OSExchangeData;
 class ThemeProvider;
+class AXPlatform;
 }  // namespace ui
 
 namespace ui_devtools {
@@ -113,6 +115,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
                             public ui::NativeThemeObserver,
                             public ui::ColorProviderSource,
                             public ui::PropertyHandler,
+                            public ui::AXModeObserver,
                             public ui::metadata::MetaDataProvider {
   // Do not remove this macro!
   // The macro is maintained by the memory safety team.
@@ -320,8 +323,6 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
     // See Widget class comment above.
     Ownership ownership;
-
-    bool mirror_origin_in_rtl = false;
 
     ShadowType shadow_type = ShadowType::kDefault;
 
@@ -1205,6 +1206,13 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // Overridden from ui::NativeThemeObserver:
   void OnNativeThemeUpdated(ui::NativeTheme* observed_theme) override;
 
+  // Overridden from ui::AXModeObsever
+  // TODO(crbug.com/325137417): We might need to add an override for when the
+  // mode is removed, but currently we don't have the support for this in
+  // ViewAccessibility. Add the override once logic to remove a mode is added to
+  // ViewAccessibility.
+  void OnAXModeAdded(ui::AXMode mode) override;
+
   // Sets an override for `color_mode` when `GetColorProvider()` is requested.
   // e.g. if set to kDark, colors will always be for the dark theme.
   void SetColorModeOverride(
@@ -1236,6 +1244,10 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // Called to enable or disable screenshots of this widget.
   void SetAllowScreenshots(bool allow);
   bool AreScreenshotsAllowed();
+
+  // Called when we become / stop being `child_widget`'s parent.
+  void OnChildAdded(Widget* child_widget);
+  void OnChildRemoved(Widget* child_widget);
 
  protected:
   // Creates the RootView to be used within this Widget. Subclasses may override
@@ -1514,6 +1526,9 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
       native_theme_observation_{this};
+
+  base::ScopedObservation<ui::AXPlatform, ui::AXModeObserver>
+      ax_mode_observation_{this};
 
   base::WeakPtrFactory<Widget> weak_ptr_factory_{this};
 };

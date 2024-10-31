@@ -55,8 +55,7 @@ extern GURL AppendOrReplaceQueryParametersForLensRequest(
 extern std::string GetQueryParametersForLensRequest(
     lens::EntryPoint ep,
     bool is_lens_side_panel_request,
-    bool is_full_screen_request,
-    bool is_companion_request = false);
+    bool is_full_screen_request);
 
 // Check if the lens URL is a valid results page. This is done by checking if
 // the URL has a payload parameter.
@@ -66,6 +65,10 @@ bool IsValidLensResultUrl(const GURL& url);
 // by checking if the given URL and lens::features::kHomepageURLForLens have
 // matching domains
 bool IsLensUrl(const GURL& url);
+
+// Returns true if the given URL corresponds to a Lens mWeb result page. This is
+// done by checking the URL and its parameters.
+bool IsLensMWebResult(const GURL& url);
 
 }  // namespace lens
 

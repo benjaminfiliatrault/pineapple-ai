@@ -36,6 +36,8 @@ class FacilitatedPaymentsDriver;
 // A cross-platform interface that manages the flow of payments for non-form
 // based form-of-payments between the browser and the Payments platform. It is
 // owned by `FacilitatedPaymentsDriver`.
+// TODO(crbug.com/369898977): Rename `FacilitatedPaymentsManager` to be PIX
+// specific and update the class level comment.
 class FacilitatedPaymentsManager {
  public:
   FacilitatedPaymentsManager(
@@ -223,8 +225,8 @@ class FacilitatedPaymentsManager {
   // 1. In the allowlist
   // 2. Not in the allowlist
   // 3. Infra for querying is not ready
-  optimization_guide::OptimizationGuideDecision GetAllowlistCheckResult(
-      const GURL& url) const;
+  // Returns true if the result is [1].
+  bool IsMerchantAllowlisted(const GURL& url) const;
 
   // Called by the utility process after validation of the `pix_code`. If the
   // utility processes has disconnected (e.g., due to a crash in the validation

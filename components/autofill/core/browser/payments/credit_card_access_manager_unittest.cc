@@ -218,100 +218,6 @@ TEST_F(CreditCardAccessManagerTest, FetchServerCardCVCTryAgainFailure) {
 }
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_ANDROID)
-// Params of the CreditCardAccessManagerBetterAuthLogTest:
-// -- bool has_server_card;
-// -- bool is_user_opted_in;
-class CreditCardAccessManagerBetterAuthLogTest
-    : public CreditCardAccessManagerTestBase,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
- public:
-  CreditCardAccessManagerBetterAuthLogTest() = default;
-  ~CreditCardAccessManagerBetterAuthLogTest() override = default;
-
-  bool HasServerCard() { return std::get<0>(GetParam()); }
-  bool IsUserOptedIn() { return std::get<1>(GetParam()); }
-
-  void SetUp() override {
-    ClearCards();
-    if (HasServerCard()) {
-      CreateServerCard(kTestGUID, kTestNumber);
-    } else {
-      CreateLocalCard(kTestGUID, kTestNumber);
-    }
-    CreditCardAccessManagerTest::SetUp();
-  }
-
-  const std::string kVerifiabilityCheckDurationMetrics =
-      "Autofill.BetterAuth.UserVerifiabilityCheckDuration";
-  const std::string kPreflightCallMetrics =
-      "Autofill.BetterAuth.CardUnmaskPreflightCalledWithFidoOptInStatus";
-  const std::string kPreflightLatencyMetrics =
-      "Autofill.BetterAuth.CardUnmaskPreflightDuration";
-  const std::string kPreflightFlowInitiatedMetrics =
-      "Autofill.BetterAuth.CardUnmaskPreflightInitiated";
-};
-
-TEST_P(CreditCardAccessManagerBetterAuthLogTest,
-       CardUnmaskPreflightCalledMetric_FidoEligible) {
-  base::HistogramTester histogram_tester;
-  auto* fido_authenticator = GetFIDOAuthenticator();
-  fido_authenticator->SetUserVerifiable(/*is_user_verifiable=*/true);
-  fido_authenticator->set_is_user_opted_in(IsUserOptedIn());
-  ResetFetchCreditCard();
-  credit_card_access_manager().PrepareToFetchCreditCard();
-  InvokeUnmaskDetailsTimeout();
-  WaitForCallbacks();
-  histogram_tester.ExpectTotalCount(/*name=*/kVerifiabilityCheckDurationMetrics,
-                                    /*expected_count=*/HasServerCard() ? 1 : 0);
-  if (HasServerCard()) {
-    histogram_tester.ExpectUniqueSample(kPreflightCallMetrics,
-                                        /*sample=*/IsUserOptedIn(),
-                                        /*expected_bucket_count=*/1);
-  } else {
-    histogram_tester.ExpectTotalCount(/*name=*/kPreflightCallMetrics,
-                                      /*expected_count=*/0);
-  }
-  histogram_tester.ExpectTotalCount(/*name=*/kPreflightCallMetrics,
-                                    /*expected_count=*/HasServerCard() ? 1 : 0);
-  histogram_tester.ExpectTotalCount(/*name=*/kPreflightLatencyMetrics,
-                                    /*expected_count=*/HasServerCard() ? 1 : 0);
-  histogram_tester.ExpectTotalCount(/*name=*/kPreflightFlowInitiatedMetrics,
-                                    /*expected_count=*/HasServerCard() ? 1 : 0);
-}
-
-TEST_P(CreditCardAccessManagerBetterAuthLogTest,
-       CardUnmaskPreflightCalledMetric_NotFidoEligible) {
-  base::HistogramTester histogram_tester;
-  GetFIDOAuthenticator()->SetUserVerifiable(/*is_user_verifiable=*/false);
-  ResetFetchCreditCard();
-  credit_card_access_manager().PrepareToFetchCreditCard();
-  InvokeUnmaskDetailsTimeout();
-  WaitForCallbacks();
-  if (HasServerCard()) {
-    histogram_tester.ExpectUniqueSample(
-        /*name=*/kPreflightFlowInitiatedMetrics, /*sample=*/true,
-        /*expected_bucket_count=*/1);
-    histogram_tester.ExpectTotalCount(
-        /*name=*/kVerifiabilityCheckDurationMetrics,
-        /*expected_count=*/1);
-  } else {
-    histogram_tester.ExpectTotalCount(/*name=*/kPreflightFlowInitiatedMetrics,
-                                      /*expected_count=*/0);
-    histogram_tester.ExpectTotalCount(
-        /*name=*/kVerifiabilityCheckDurationMetrics,
-        /*expected_count=*/0);
-  }
-  histogram_tester.ExpectTotalCount(
-      /*name=*/kPreflightCallMetrics,
-      /*expected_count=*/0);
-  histogram_tester.ExpectTotalCount(/*name=*/kPreflightLatencyMetrics,
-                                    /*expected_count=*/0);
-}
-
-INSTANTIATE_TEST_SUITE_P(,
-                         CreditCardAccessManagerBetterAuthLogTest,
-                         testing::Combine(testing::Bool(), testing::Bool()));
-
 // Ensures that FetchCreditCard() returns the full PAN upon a successful
 // WebAuthn verification and response from payments.
 TEST_F(CreditCardAccessManagerTest, FetchServerCardFIDOSuccess) {
@@ -1530,198 +1436,6 @@ TEST_F(CreditCardAccessManagerTest, SettingsPage_OptOut) {
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-// Params of the CreditCardAccessManagerBetterAuthOptInLogTest:
-// -- bool is_virtual_card;
-// -- bool unmask_details_offer_fido_opt_in;
-// -- bool card_authorization_token_present;
-// -- bool max_strikes_limit_reached;
-// -- bool has_opted_in_from_android_settings;
-// -- bool is_opted_in_for_fido;
-class CreditCardAccessManagerBetterAuthOptInLogTest
-    : public CreditCardAccessManagerTestBase,
-      public testing::WithParamInterface<
-          std::tuple<bool, bool, bool, bool, bool, bool>> {
- public:
-  CreditCardAccessManagerBetterAuthOptInLogTest() = default;
-  ~CreditCardAccessManagerBetterAuthOptInLogTest() override = default;
-
-  void SetUp() override {
-    CreditCardAccessManagerTest::SetUp();
-
-    if (MaxStrikesLimitReached()) {
-      AddMaxStrikes();
-    } else {
-      ClearStrikes();
-    }
-
-    CreateServerCard(kTestGUID, kTestNumber);
-    GetFIDOAuthenticator()->SetUserVerifiable(true);
-#if BUILDFLAG(IS_ANDROID)
-    SetCreditCardFIDOAuthEnabled(HasOptedInFromAndroidSettings());
-#else
-    SetCreditCardFIDOAuthEnabled(false);
-#endif  // BUILDFLAG(OS_ANDROID)
-    payments_network_interface().AllowFidoRegistration(
-        /*offer_fido_opt_in=*/UnmaskDetailsOfferFidoOptIn());
-    if (IsVirtualCard()) {
-      GetCreditCard()->set_record_type(CreditCard::RecordType::kVirtualCard);
-    }
-    if (IsOptedIntoFido()) {
-      // If user and device are already opted into FIDO, then add an eligible
-      // card to ensure that the `unmask_details_` contains fido request
-      // options.
-      payments_network_interface().AddFidoEligibleCard(
-          "random_id", kCredentialId, kGooglePaymentsRpid);
-    }
-
-    credit_card_access_manager().PrepareToFetchCreditCard();
-    credit_card_access_manager().FetchCreditCard(
-        GetCreditCard(), base::BindOnce(&TestAccessor::OnCreditCardFetched,
-                                        accessor_->GetWeakPtr()));
-  }
-
-  bool IsVirtualCard() { return std::get<0>(GetParam()); }
-  bool UnmaskDetailsOfferFidoOptIn() { return std::get<1>(GetParam()); }
-  bool CardAuthorizationTokenPresent() { return std::get<2>(GetParam()); }
-  bool MaxStrikesLimitReached() { return std::get<3>(GetParam()); }
-  bool HasOptedInFromAndroidSettings() { return std::get<4>(GetParam()); }
-  bool IsOptedIntoFido() { return std::get<5>(GetParam()); }
-
-  bool ShouldOfferFidoOptIn() {
-    return !IsOptedIntoFido() && !IsVirtualCard() &&
-           UnmaskDetailsOfferFidoOptIn() && CardAuthorizationTokenPresent() &&
-           !MaxStrikesLimitReached();
-  }
-
-  bool ShouldOfferFidoOptInAndroid() {
-    return !IsOptedIntoFido() && !IsVirtualCard() &&
-           UnmaskDetailsOfferFidoOptIn() && !HasOptedInFromAndroidSettings();
-  }
-
-  const std::string GetFidoOptInNotOfferedHistogram() {
-    return fido_opt_in_not_offered_histogram;
-  }
-
-  CreditCard* GetCreditCard() {
-    return personal_data().payments_data_manager().GetCreditCardByGUID(
-        kTestGUID);
-  }
-
- private:
-  const std::string fido_opt_in_not_offered_histogram =
-      "Autofill.BetterAuth.OptInPromoNotOfferedReason";
-};
-
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-// Ensures that the correct metrics are logged when the FIDO opt-in dialog is
-// not shown on Desktop.
-TEST_P(CreditCardAccessManagerBetterAuthOptInLogTest,
-       FidoOptInNotShown_Desktop) {
-  base::HistogramTester histogram_tester;
-
-  EXPECT_EQ(test_api(credit_card_access_manager())
-                .ShouldOfferFidoOptInDialog(
-                    CreditCardCvcAuthenticator::CvcAuthenticationResponse()
-                        .with_did_succeed(true)
-                        .with_card(GetCreditCard())
-                        .with_card_authorization_token(
-                            CardAuthorizationTokenPresent()
-                                ? "card_authorization_token"
-                                : "")
-                        .with_cvc(u"123")),
-            ShouldOfferFidoOptIn());
-
-  if (IsOptedIntoFido()) {
-    histogram_tester.ExpectUniqueSample(
-        GetFidoOptInNotOfferedHistogram(),
-        /*sample=*/
-        autofill_metrics::WebauthnOptInPromoNotOfferedReason::kAlreadyOptedIn,
-        /*expected_bucket_count=*/1);
-  } else if (!UnmaskDetailsOfferFidoOptIn()) {
-    histogram_tester.ExpectUniqueSample(
-        GetFidoOptInNotOfferedHistogram(),
-        /*sample=*/
-        autofill_metrics::WebauthnOptInPromoNotOfferedReason::
-            kUnmaskDetailsOfferFidoOptInFalse,
-        /*expected_bucket_count=*/1);
-  } else if (!CardAuthorizationTokenPresent()) {
-    histogram_tester.ExpectUniqueSample(
-        GetFidoOptInNotOfferedHistogram(),
-        /*sample=*/
-        autofill_metrics::WebauthnOptInPromoNotOfferedReason::
-            kCardAuthorizationTokenEmpty,
-        /*expected_bucket_count=*/1);
-  } else if (MaxStrikesLimitReached()) {
-    histogram_tester.ExpectUniqueSample(
-        GetFidoOptInNotOfferedHistogram(),
-        /*sample=*/
-        autofill_metrics::WebauthnOptInPromoNotOfferedReason::
-            kBlockedByStrikeDatabase,
-        /*expected_bucket_count=*/1);
-  } else if (IsVirtualCard()) {
-    histogram_tester.ExpectUniqueSample(
-        GetFidoOptInNotOfferedHistogram(),
-        /*sample=*/
-        autofill_metrics::WebauthnOptInPromoNotOfferedReason::kVirtualCard,
-        /*expected_bucket_count=*/1);
-  } else {
-    histogram_tester.ExpectTotalCount(GetFidoOptInNotOfferedHistogram(),
-                                      /*expected_count=*/0);
-  }
-}
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-
-#if BUILDFLAG(IS_ANDROID)
-// Ensures that the correct metrics are logged when the FIDO opt-in checkbox is
-// not shown on Android.
-TEST_P(CreditCardAccessManagerBetterAuthOptInLogTest,
-       FidoOptInNotShown_Android) {
-  base::HistogramTester histogram_tester;
-
-  EXPECT_EQ(test_api(credit_card_access_manager()).ShouldOfferFidoAuth(),
-            ShouldOfferFidoOptInAndroid());
-
-  if (IsOptedIntoFido()) {
-    histogram_tester.ExpectUniqueSample(
-        GetFidoOptInNotOfferedHistogram(),
-        /*sample=*/
-        autofill_metrics::WebauthnOptInPromoNotOfferedReason::kAlreadyOptedIn,
-        /*expected_bucket_count=*/1);
-  } else if (!UnmaskDetailsOfferFidoOptIn()) {
-    histogram_tester.ExpectUniqueSample(
-        GetFidoOptInNotOfferedHistogram(),
-        /*sample=*/
-        autofill_metrics::WebauthnOptInPromoNotOfferedReason::
-            kUnmaskDetailsOfferFidoOptInFalse,
-        /*expected_bucket_count=*/1);
-  } else if (HasOptedInFromAndroidSettings()) {
-    histogram_tester.ExpectUniqueSample(
-        GetFidoOptInNotOfferedHistogram(),
-        /*sample=*/
-        autofill_metrics::WebauthnOptInPromoNotOfferedReason::
-            kOptedInFromSettings,
-        /*expected_bucket_count=*/1);
-  } else if (IsVirtualCard()) {
-    histogram_tester.ExpectUniqueSample(
-        GetFidoOptInNotOfferedHistogram(),
-        /*sample=*/
-        autofill_metrics::WebauthnOptInPromoNotOfferedReason::kVirtualCard,
-        /*expected_bucket_count=*/1);
-  } else {
-    histogram_tester.ExpectTotalCount(GetFidoOptInNotOfferedHistogram(),
-                                      /*expected_count=*/0);
-  }
-}
-#endif  // BUILDFLAG(IS_ANDROID)
-INSTANTIATE_TEST_SUITE_P(,
-                         CreditCardAccessManagerBetterAuthOptInLogTest,
-                         testing::Combine(testing::Bool(),
-                                          testing::Bool(),
-                                          testing::Bool(),
-                                          testing::Bool(),
-                                          testing::Bool(),
-                                          testing::Bool()));
-
 // Ensure that when unmask detail response is delayed, we will automatically
 // fall back to CVC even if local pref and Payments mismatch.
 TEST_F(CreditCardAccessManagerTest,
@@ -2070,13 +1784,8 @@ TEST_F(CreditCardAccessManagerTest, IsVirtualCardPresentInUnmaskedCache) {
 }
 
 TEST_F(CreditCardAccessManagerTest,
-       RiskBasedVirtualCardUnmasking_Success_VirtualCardsEnabled) {
+       RiskBasedVirtualCardUnmasking_Success_VirtualCards) {
   base::HistogramTester histogram_tester;
-
-#if BUILDFLAG(IS_IOS)
-  base::test::ScopedFeatureList scoped_feature_list{
-      features::kAutofillEnableVirtualCards};
-#endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_ANDROID)
   if (base::android::BuildInfo::GetInstance()->is_automotive()) {
@@ -2099,71 +1808,7 @@ TEST_F(CreditCardAccessManagerTest,
   EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
                   ->risk_based_authentication_invoked());
   // Mock server response with valid card information.
-  payments::PaymentsNetworkInterface::UnmaskResponseDetails response;
-  response.real_pan = "4111111111111111";
-  response.dcvv = "321";
-  response.expiration_month = test::NextMonth();
-  response.expiration_year = test::NextYear();
-  response.card_type = PaymentsRpcCardType::kVirtualCard;
-  credit_card_access_manager()
-      .OnVirtualCardRiskBasedAuthenticationResponseReceived(
-          PaymentsRpcResult::kSuccess, response);
-
-  // Ensure the accessor received the correct response.
-  EXPECT_EQ(accessor_->result(), CreditCardFetchResult::kSuccess);
-  EXPECT_EQ(accessor_->number(), u"4111111111111111");
-  EXPECT_EQ(accessor_->cvc(), u"321");
-  EXPECT_EQ(accessor_->expiry_month(), base::UTF8ToUTF16(test::NextMonth()));
-  EXPECT_EQ(accessor_->expiry_year(), base::UTF8ToUTF16(test::NextYear()));
-
-  // There was no interactive authentication in this flow, so check that this
-  // is signaled correctly.
-  std::optional<NonInteractivePaymentMethodType> type =
-      test_api(*autofill_client_.GetFormDataImporter())
-          .payment_method_type_if_non_interactive_authentication_flow_completed();
-  EXPECT_THAT(type,
-              testing::Optional(NonInteractivePaymentMethodType::kVirtualCard));
-
-  // Expect the metrics are logged correctly.
-  histogram_tester.ExpectUniqueSample(
-      "Autofill.ServerCardUnmask.VirtualCard.Attempt", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "Autofill.ServerCardUnmask.VirtualCard.Result.RiskBased",
-      autofill_metrics::ServerCardUnmaskResult::kRiskBasedUnmasked, 1);
-}
-
-TEST_F(CreditCardAccessManagerTest,
-       RiskBasedVirtualCardUnmasking_Success_VirtualCardsDisabled) {
-  base::HistogramTester histogram_tester;
-
-#if BUILDFLAG(IS_IOS)
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      features::kAutofillEnableVirtualCards);
-#endif  // BUILDFLAG(IS_IOS)
-
-#if BUILDFLAG(IS_ANDROID)
-  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
-    GTEST_SKIP() << "This test should not run on automotive.";
-  }
-#endif  // BUILDFLAG(IS_ANDROID)
-
-  const CreditCard* masked_server_card =
-      CreateServerCard(kTestGUID, kTestNumber, kTestServerId);
-  CreditCard virtual_card = *masked_server_card;
-  virtual_card.set_record_type(CreditCard::RecordType::kVirtualCard);
-
-  credit_card_access_manager().FetchCreditCard(
-      &virtual_card, base::BindOnce(&TestAccessor::OnCreditCardFetched,
-                                    accessor_->GetWeakPtr()));
-
-  // This checks risk-based authentication flow is successfully invoked,
-  // because it is always the very first authentication flow in a VCN
-  // unmasking flow.
-  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
-                  ->risk_based_authentication_invoked());
-  // Mock server response with valid card information.
-  payments::PaymentsNetworkInterface::UnmaskResponseDetails response;
+  payments::UnmaskResponseDetails response;
   response.real_pan = "4111111111111111";
   response.dcvv = "321";
   response.expiration_month = test::NextMonth();
@@ -2202,11 +1847,6 @@ TEST_F(CreditCardAccessManagerTest,
 TEST_F(CreditCardAccessManagerTest,
        RiskBasedVirtualCardUnmasking_AuthenticationRequired_OtpOnly) {
   base::HistogramTester histogram_tester;
-
-#if BUILDFLAG(IS_IOS)
-  base::test::ScopedFeatureList scoped_feature_list{
-      features::kAutofillEnableVirtualCards};
-#endif  // BUILDFLAG(IS_IOS)
 
   std::vector<CardUnmaskChallengeOption> challenge_options =
       test::GetCardUnmaskChallengeOptions(
@@ -2248,11 +1888,6 @@ TEST_F(CreditCardAccessManagerTest,
        RiskBasedVirtualCardUnmasking_AuthenticationRequired_CvcOnly) {
   base::HistogramTester histogram_tester;
 
-#if BUILDFLAG(IS_IOS)
-  base::test::ScopedFeatureList scoped_feature_list{
-      features::kAutofillEnableVirtualCards};
-#endif  // BUILDFLAG(IS_IOS)
-
   std::vector<CardUnmaskChallengeOption> challenge_options =
       test::GetCardUnmaskChallengeOptions(
           {CardUnmaskChallengeOptionType::kCvc});
@@ -2284,11 +1919,6 @@ TEST_F(CreditCardAccessManagerTest,
 // kThreeDomainSecure when only the 3DS challenge option is returned.
 TEST_F(CreditCardAccessManagerTest,
        RiskBasedVirtualCardUnmasking_Only3dsChallengeReturned) {
-#if BUILDFLAG(IS_IOS)
-  base::test::ScopedFeatureList scoped_feature_list{
-      features::kAutofillEnableVirtualCards};
-#endif  // BUILDFLAG(IS_IOS)
-
   base::HistogramTester histogram_tester;
   const CreditCard* masked_server_card =
       CreateServerCard(kTestGUID, kTestNumber, kTestServerId);
@@ -2299,7 +1929,7 @@ TEST_F(CreditCardAccessManagerTest,
                                     accessor_->GetWeakPtr()));
 
   // Mock server response with information regarding VCN auth.
-  payments::PaymentsNetworkInterface::UnmaskResponseDetails response;
+  payments::UnmaskResponseDetails response;
   response.context_token = "fake_context_token";
   response.card_unmask_challenge_options = test::GetCardUnmaskChallengeOptions(
       {CardUnmaskChallengeOptionType::kThreeDomainSecure});
@@ -2334,11 +1964,6 @@ TEST_F(CreditCardAccessManagerTest,
 TEST_F(CreditCardAccessManagerTest,
        RiskBasedVirtualCardUnmasking_AuthenticationRequired_OtpAndCvcAnd3ds) {
   base::HistogramTester histogram_tester;
-
-#if BUILDFLAG(IS_IOS)
-  base::test::ScopedFeatureList scoped_feature_list{
-      features::kAutofillEnableVirtualCards};
-#endif  // BUILDFLAG(IS_IOS)
 
   std::vector<CardUnmaskChallengeOption> challenge_options =
       test::GetCardUnmaskChallengeOptions(
@@ -2381,8 +2006,7 @@ TEST_F(CreditCardAccessManagerTest,
         break;
       case CardUnmaskChallengeOptionType::kEmailOtp:
       case CardUnmaskChallengeOptionType::kUnknownType:
-        NOTREACHED_IN_MIGRATION();
-        break;
+        NOTREACHED();
     }
   }
 
@@ -2552,7 +2176,7 @@ TEST_F(CreditCardAccessManagerTest,
   EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
                   ->risk_based_authentication_invoked());
   // Mock server response with information regarding FIDO auth.
-  payments::PaymentsNetworkInterface::UnmaskResponseDetails response;
+  payments::UnmaskResponseDetails response;
   response.context_token = "fake_context_token";
   response.fido_request_options = GetTestRequestOptions();
   credit_card_access_manager()
@@ -2614,7 +2238,7 @@ TEST_F(
   EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
                   ->risk_based_authentication_invoked());
   // Mock server response with information regarding both FIDO and OTP auth.
-  payments::PaymentsNetworkInterface::UnmaskResponseDetails response;
+  payments::UnmaskResponseDetails response;
   response.context_token = "fake_context_token";
   CardUnmaskChallengeOption challenge_option =
       test::GetCardUnmaskChallengeOptions(
@@ -2740,7 +2364,7 @@ TEST_F(
   EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
                   ->risk_based_authentication_invoked());
   // Mock server response with information regarding FIDO auth.
-  payments::PaymentsNetworkInterface::UnmaskResponseDetails response;
+  payments::UnmaskResponseDetails response;
   response.context_token = "fake_context_token";
   response.fido_request_options = GetTestRequestOptions();
   credit_card_access_manager()
@@ -2791,7 +2415,7 @@ TEST_F(CreditCardAccessManagerTest,
   EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
                   ->risk_based_authentication_invoked());
   // Mock server response with no challenge options.
-  payments::PaymentsNetworkInterface::UnmaskResponseDetails response;
+  payments::UnmaskResponseDetails response;
   response.context_token = "fake_context_token";
   credit_card_access_manager()
       .OnVirtualCardRiskBasedAuthenticationResponseReceived(
@@ -2839,7 +2463,7 @@ TEST_F(CreditCardAccessManagerTest,
   EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
                   ->risk_based_authentication_invoked());
   // Mock server response with no challenge options.
-  payments::PaymentsNetworkInterface::UnmaskResponseDetails response;
+  payments::UnmaskResponseDetails response;
   credit_card_access_manager()
       .OnVirtualCardRiskBasedAuthenticationResponseReceived(
           PaymentsRpcResult::kVcnRetrievalPermanentFailure, response);
@@ -2878,7 +2502,7 @@ TEST_F(CreditCardAccessManagerTest,
   autofill_error_dialog_context.server_returned_description =
       "test_server_returned_description";
 
-  payments::PaymentsNetworkInterface::UnmaskResponseDetails response;
+  payments::UnmaskResponseDetails response;
   response.autofill_error_dialog_context = autofill_error_dialog_context;
   credit_card_access_manager()
       .OnVirtualCardRiskBasedAuthenticationResponseReceived(

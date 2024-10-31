@@ -407,6 +407,9 @@ UseCounterMetricsRecorder::GetAllowedUkmFeatures() {
           WebFeature::kPartitionedPopin_Opened,
           WebFeature::kV8Window_PopinContextTypesSupported_Method,
           WebFeature::kV8Window_PopinContextType_Method,
+          WebFeature::kSpeculationRulesHeader,
+          WebFeature::kGeolocationGetCurrentPosition,
+          WebFeature::kGeolocationWatchPosition,
       }));
   return *opt_in_features;
 }

@@ -11,7 +11,7 @@
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/ui/chromeos/read_write_cards/read_write_card_controller.h"
+#include "chrome/browser/ui/ash/read_write_cards/read_write_card_controller.h"
 #include "chrome/browser/ui/views/editor_menu/editor_manager.h"
 #include "chrome/browser/ui/views/editor_menu/editor_menu_view_delegate.h"
 #include "chrome/browser/ui/views/editor_menu/utils/editor_types.h"
@@ -51,7 +51,7 @@ class EditorMenuControllerImpl : public chromeos::ReadWriteCardController,
       views::Widget::ClosedReason closed_reason) override;
   void OnEditorMenuVisibilityChanged(bool visible) override;
 
-  void SetBrowserContext(content::BrowserContext* context);
+  bool SetBrowserContext(content::BrowserContext* context);
   void LogEditorMode(const EditorMode& editor_mode);
   void GetEditorContext(
       base::OnceCallback<void(const EditorContext&)> callback);

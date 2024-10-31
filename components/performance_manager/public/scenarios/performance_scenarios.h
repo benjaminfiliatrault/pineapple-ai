@@ -16,13 +16,15 @@ class RenderProcessHost;
 
 namespace performance_manager {
 
+class ProcessNode;
+
 // Convenience aliases.
 using LoadingScenario = blink::performance_scenarios::LoadingScenario;
 using InputScenario = blink::performance_scenarios::InputScenario;
 
-// Functions to manage the browser side of SharedScenarioState memory regions
-// that communicate state to child processes. The state can be read from any
-// process using functions in
+// Functions to manage the browser side of ScenarioState memory regions that
+// communicate state to child processes. The state can be read from any process
+// using functions in
 // //third_party/blink/public/common/performance/performance_scenarios.h.
 
 // A scoped object that maps in writable shared memory for the global scenario
@@ -44,11 +46,14 @@ class ScopedGlobalScenarioMemory {
       read_only_mapping_;
 };
 
-// Returns a copy of the shared memory handle for the scenario state of a
-// renderer process, or an invalid handle if there is none. The handle can be
-// passed to child processes to map in the scenario state.
-base::ReadOnlySharedMemoryRegion GetSharedScenarioRegionForProcess(
-    content::RenderProcessHost& host);
+// Returns a copy of the shared memory handle for the scenario state of
+// `process_node`, or an invalid handle if there is none. The handle can be
+// passed to the child process to map in the scenario state. If
+// `process_track_id` is non-zero, it will be associated with the scenario state
+// to log trace events. Must be called from the PM sequence.
+base::ReadOnlySharedMemoryRegion GetSharedScenarioRegionForProcessNode(
+    const ProcessNode* process_node,
+    uint64_t process_track_id = 0u);
 
 // Returns a copy of the shared memory handle for the global scenario state, or
 // an invalid handle if there is none. The handle can be passed to child
@@ -56,18 +61,25 @@ base::ReadOnlySharedMemoryRegion GetSharedScenarioRegionForProcess(
 base::ReadOnlySharedMemoryRegion GetGlobalSharedScenarioRegion();
 
 // Functions to set the current performance scenarios. This can only be done
-// from the browser process.
+// from the browser process. Functions that take a RenderProcessHost must be
+// called from the UI thread; functions that take a ProcessNode must be called
+// from the PerformanceManager sequence. These do nothing if the process
+// argument is null. Functions that update global scenarios are thread-safe.
 
 // Atomically updates the loading scenario for a renderer process.
-void SetLoadingScenarioForProcess(content::RenderProcessHost& host,
-                                  LoadingScenario scenario);
+void SetLoadingScenarioForProcess(LoadingScenario scenario,
+                                  content::RenderProcessHost* host);
+void SetLoadingScenarioForProcessNode(LoadingScenario scenario,
+                                      const ProcessNode* process_node);
 
 // Atomically updates the global loading scenario.
 void SetGlobalLoadingScenario(LoadingScenario scenario);
 
 // Atomically updates the input scenario for a renderer process.
-void SetInputScenarioForProcess(content::RenderProcessHost& host,
-                                InputScenario scenario);
+void SetInputScenarioForProcess(InputScenario scenario,
+                                content::RenderProcessHost* host);
+void SetInputScenarioForProcessNode(InputScenario scenario,
+                                    const ProcessNode* process_node);
 
 // Atomically updates the global input scenario.
 void SetGlobalInputScenario(InputScenario scenario);

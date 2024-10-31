@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <optional>
+
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/scoped_feature_list.h"
@@ -32,9 +34,8 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/power_bookmarks/core/power_bookmark_features.h"
 #include "components/prefs/pref_service.h"
-#include "components/saved_tab_groups/features.h"
-#include "components/saved_tab_groups/saved_tab_group_model.h"
-#include "components/saved_tab_groups/tab_group_sync_service.h"
+#include "components/saved_tab_groups/public/features.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "content/public/test/browser_test.h"
@@ -60,29 +61,10 @@
 
 namespace tab_groups {
 
-class SavedTabGroupInteractiveTest
-    : public InteractiveBrowserTest,
-      public ::testing::WithParamInterface<bool> {
+class SavedTabGroupInteractiveTestBase : public InteractiveBrowserTest {
  public:
-  SavedTabGroupInteractiveTest() = default;
-  ~SavedTabGroupInteractiveTest() override = default;
-
-  void SetUp() override {
-    if (IsV2UIEnabled()) {
-      scoped_feature_list_.InitWithFeatures(
-          {tab_groups::kTabGroupsSaveUIUpdate, tab_groups::kTabGroupsSaveV2,
-           tab_groups::kTabGroupSyncServiceDesktopMigration},
-          {});
-    } else {
-      scoped_feature_list_.InitWithFeatures(
-          {tab_groups::kTabGroupsSaveV2},
-          {tab_groups::kTabGroupsSaveUIUpdate,
-           tab_groups::kTabGroupSyncServiceDesktopMigration});
-    }
-    InteractiveBrowserTest::SetUp();
-  }
-
-  bool IsV2UIEnabled() const { return GetParam(); }
+  SavedTabGroupInteractiveTestBase() = default;
+  ~SavedTabGroupInteractiveTestBase() override = default;
 
   MultiStep ShowBookmarksBar() {
     return Steps(PressButton(kToolbarAppMenuButtonElementId),
@@ -97,13 +79,6 @@ class SavedTabGroupInteractiveTest
         std::move(WithView(kTabStripElementId, [](TabStrip* tab_strip) {
                     tab_strip->StopAnimating(true);
                   }).SetDescription("FinishTabstripAnimation")));
-  }
-
-  MultiStep HoverTabAt(int index) {
-    const char kTabToHover[] = "Tab to hover";
-    return Steps(NameDescendantViewByType<Tab>(kBrowserViewElementId,
-                                               kTabToHover, index),
-                 MoveMouseTo(kTabToHover));
   }
 
   MultiStep HoverTabGroupHeader(tab_groups::TabGroupId group_id) {
@@ -123,6 +98,39 @@ class SavedTabGroupInteractiveTest
                 },
                 group_id)),
         MoveMouseTo(kTabGroupHeaderToHover));
+  }
+};
+
+class SavedTabGroupInteractiveTest
+    : public SavedTabGroupInteractiveTestBase,
+      public ::testing::WithParamInterface<bool> {
+ public:
+  SavedTabGroupInteractiveTest() = default;
+  ~SavedTabGroupInteractiveTest() override = default;
+
+  void SetUp() override {
+    if (IsV2UIEnabled()) {
+      scoped_feature_list_.InitWithFeatures(
+          {tab_groups::kTabGroupsSaveUIUpdate, tab_groups::kTabGroupsSaveV2,
+           tab_groups::kTabGroupSyncServiceDesktopMigration},
+          {});
+    } else {
+      scoped_feature_list_.InitWithFeatures(
+          {tab_groups::kTabGroupsSaveV2},
+          {tab_groups::kTabGroupsSaveUIUpdate,
+           tab_groups::kTabGroupSyncServiceDesktopMigration});
+    }
+
+    SavedTabGroupInteractiveTestBase::SetUp();
+  }
+
+  bool IsV2UIEnabled() const { return GetParam(); }
+
+  MultiStep HoverTabAt(int index) {
+    const char kTabToHover[] = "Tab to hover";
+    return Steps(NameDescendantViewByType<Tab>(kBrowserViewElementId,
+                                               kTabToHover, index),
+                 MoveMouseTo(kTabToHover));
   }
 
   MultiStep OpenTabGroupEditorMenu(tab_groups::TabGroupId group_id) {
@@ -166,6 +174,23 @@ class SavedTabGroupInteractiveTest
     });
   }
 
+  StepBuilder CreateEmptySavedGroup() {
+    return Do([=, this]() {
+      TabGroupSyncService* service =
+          SavedTabGroupUtils::GetServiceForProfile(browser()->profile());
+      service->AddGroup({u"Test Test",
+                         tab_groups::TabGroupColorId::kBlue,
+                         {},
+                         /*position=*/std::nullopt,
+                         base::Uuid::GenerateRandomV4(),
+                         /*local_group_id=*/std::nullopt,
+                         /*creator_cache_guid=*/std::nullopt,
+                         /*last_updater_cache_guid=*/std::nullopt,
+                         /*created_before_syncing_tab_groups=*/false,
+                         /*creation_time_windows_epoch_micros=*/std::nullopt});
+    });
+  }
+
   StepBuilder UnsaveGroupViaModel(const tab_groups::TabGroupId local_group) {
     return Do([=, this]() {
       service()->RemoveGroup(local_group);
@@ -191,6 +216,58 @@ class SavedTabGroupInteractiveTest
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+// Used to test SavedTabGroups V2 specific features such as the save toggle.
+class SavedTabGroupInteractiveTestV1
+    : public SavedTabGroupInteractiveTestBase,
+      public ::testing::WithParamInterface<bool> {
+ public:
+  SavedTabGroupInteractiveTestV1() = default;
+  ~SavedTabGroupInteractiveTestV1() override = default;
+
+  void SetUp() override {
+    if (IsV2UIEnabled()) {
+      scoped_feature_list_.InitWithFeatures(
+          {tab_groups::kTabGroupSyncServiceDesktopMigration},
+          {tab_groups::kTabGroupsSaveV2});
+    } else {
+      scoped_feature_list_.InitWithFeatures(
+          {}, {tab_groups::kTabGroupSyncServiceDesktopMigration,
+               tab_groups::kTabGroupsSaveV2});
+    }
+
+    SavedTabGroupInteractiveTestBase::SetUp();
+  }
+
+  bool IsV2UIEnabled() const { return GetParam(); }
+
+  MultiStep SaveGroupLeaveEditorBubbleOpen(tab_groups::TabGroupId group_id) {
+    return Steps(EnsureNotPresent(kTabGroupEditorBubbleId),
+                 // Right click on the header to open the editor bubble.
+                 HoverTabGroupHeader(group_id), ClickMouse(ui_controls::RIGHT),
+                 // Wait for the tab group editor bubble to appear.
+                 WaitForShow(kTabGroupEditorBubbleId),
+                 // Click the save toggle and make sure the saved tab group
+                 // appears in the bookmarks bar.
+                 PressButton(kTabGroupEditorBubbleSaveToggleId));
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_P(SavedTabGroupInteractiveTestV1,
+                       ToggleSavedStateOfGroup) {
+  const tab_groups::TabGroupId& group_id =
+      browser()->tab_strip_model()->AddToNewGroup({0});
+  RunTestSequence(FinishTabstripAnimations(), ShowBookmarksBar(),
+                  // Verify pressing the toggle saves the group.
+                  SaveGroupLeaveEditorBubbleOpen(group_id),
+                  EnsurePresent(kSavedTabGroupButtonElementId),
+                  // Verify pressing the toggle again unsaves the group.
+                  PressButton(kTabGroupEditorBubbleSaveToggleId),
+                  EnsureNotPresent(kSavedTabGroupButtonElementId));
+}
 
 IN_PROC_BROWSER_TEST_P(SavedTabGroupInteractiveTest, CreateGroupAndSave) {
   browser()->tab_strip_model()->AddToNewGroup({0});
@@ -1085,8 +1162,48 @@ IN_PROC_BROWSER_TEST_P(SavedTabGroupInteractiveTest,
       EnsureNotPresent(kSavedTabGroupOverflowMenuId));
 }
 
+IN_PROC_BROWSER_TEST_P(SavedTabGroupInteractiveTest,
+                       EverythingMenuDoesntDisplayEmptyGroups) {
+  // The everything menu is only enabled in V2.
+  if (!IsV2UIEnabled()) {
+    GTEST_SKIP() << "N/A for V1";
+  }
+
+  RunTestSequence(
+      // Create an empty group
+      FinishTabstripAnimations(), ShowBookmarksBar(), CreateEmptySavedGroup(),
+      // Open the everything menu and expect the group to not show up.
+      CheckEverythingButtonVisibility(IsV2UIEnabled()),
+      PressButton(kSavedTabGroupOverflowButtonElementId),
+      WaitForShow(STGEverythingMenu::kCreateNewTabGroup),
+      EnsureNotPresent(STGEverythingMenu::kTabGroup));
+}
+
+IN_PROC_BROWSER_TEST_P(SavedTabGroupInteractiveTest,
+                       AppMenuDoesntDisplayEmptyGroups) {
+  // The everything menu is only enabled in V2.
+  if (!IsV2UIEnabled()) {
+    GTEST_SKIP() << "N/A for V1";
+  }
+
+  RunTestSequence(
+      // Create an empty group
+      FinishTabstripAnimations(), ShowBookmarksBar(), CreateEmptySavedGroup(),
+      // Open the app menu tab group menu.
+      PressButton(kToolbarAppMenuButtonElementId),
+
+      WaitForShow(AppMenuModel::kTabGroupsMenuItem),
+      SelectMenuItem(AppMenuModel::kTabGroupsMenuItem),
+      WaitForShow(STGEverythingMenu::kCreateNewTabGroup),
+      // Expect the group to not be displayed.
+      EnsureNotPresent(STGEverythingMenu::kTabGroup));
+}
+
 INSTANTIATE_TEST_SUITE_P(SavedTabGroupBar,
                          SavedTabGroupInteractiveTest,
                          testing::Bool());
 
+INSTANTIATE_TEST_SUITE_P(SavedTabGroupBar,
+                         SavedTabGroupInteractiveTestV1,
+                         testing::Bool());
 }  // namespace tab_groups

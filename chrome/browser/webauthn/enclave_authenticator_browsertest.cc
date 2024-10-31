@@ -22,6 +22,7 @@
 #include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
 #include "base/process/process.h"
 #include "base/rand_util.h"
@@ -35,7 +36,9 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_logging_settings.h"
 #include "base/test/simple_test_clock.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "base/test/test_future.h"
+#include "base/test/test_mock_time_task_runner.h"
 #include "base/thread_annotations.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -80,6 +83,7 @@
 #include "components/trusted_vault/test/mock_trusted_vault_connection.h"
 #include "components/trusted_vault/trusted_vault_connection.h"
 #include "components/webauthn/core/browser/passkey_model.h"
+#include "components/webauthn/core/browser/passkey_model_change.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
@@ -392,6 +396,17 @@ static constexpr char kGetAssertionUvDiscouraged[] = R"((() => {
            e => window.domAutomationController.send('error ' + e));
 })())";
 
+static constexpr char kGetAssertionUvDiscouragedWithGoogleRp[] = R"((() => {
+  return navigator.credentials.get({ publicKey: {
+    rpId: "google.com",
+    challenge: new Uint8Array([0]),
+    timeout: 10000,
+    userVerification: 'discouraged',
+    allowCredentials: [],
+  }}).then(c => window.domAutomationController.send('webauthn: OK'),
+           e => window.domAutomationController.send('error ' + e));
+})())";
+
 static constexpr char kAbortableGetAssertion[] = R"((() => {
   window.enclaveAbortSignal = new AbortController();
   navigator.credentials.get({ publicKey: {
@@ -511,6 +526,7 @@ class EnclaveAuthenticatorBrowserTest : public SyncTest {
     explicit DelegateObserver(EnclaveAuthenticatorBrowserTest* test_instance)
         : test_instance_(test_instance) {
       run_loop_ = std::make_unique<base::RunLoop>();
+      tai_run_loop_ = std::make_unique<base::RunLoop>();
       destruction_run_loop_ = std::make_unique<base::RunLoop>();
     }
     virtual ~DelegateObserver() = default;
@@ -518,6 +534,11 @@ class EnclaveAuthenticatorBrowserTest : public SyncTest {
     void WaitForUI() {
       run_loop_->Run();
       run_loop_ = std::make_unique<base::RunLoop>();
+    }
+
+    void WaitForTransportAvailabilityEnumerated() {
+      tai_run_loop_->Run();
+      tai_run_loop_ = std::make_unique<base::RunLoop>();
     }
 
     void WaitForDelegateDestruction() {
@@ -545,7 +566,9 @@ class EnclaveAuthenticatorBrowserTest : public SyncTest {
         delegate->SetTrustedVaultConnectionForTesting(
             std::move(pending_connection_));
       }
-      delegate->SetClockForTesting(&test_instance_->clock_);
+      delegate->SetMockTimeForTesting(
+          test_instance_->timer_task_runner_->GetMockTickClock(),
+          test_instance_->timer_task_runner_);
     }
 
     void OnDestroy(ChromeAuthenticatorRequestDelegate* delegate) override {
@@ -571,6 +594,7 @@ class EnclaveAuthenticatorBrowserTest : public SyncTest {
       if (additional_transport_.has_value()) {
         tai->available_transports.insert(*additional_transport_);
       }
+      tai_run_loop_->QuitWhenIdle();
     }
 
     void UIShown(ChromeAuthenticatorRequestDelegate* delegate) override {
@@ -590,6 +614,7 @@ class EnclaveAuthenticatorBrowserTest : public SyncTest {
     std::unique_ptr<trusted_vault::TrustedVaultConnection> pending_connection_;
     bool use_synced_device_cable_pairing_ = false;
     std::unique_ptr<base::RunLoop> run_loop_;
+    std::unique_ptr<base::RunLoop> tai_run_loop_;
     std::unique_ptr<base::RunLoop> destruction_run_loop_;
   };
 
@@ -605,13 +630,6 @@ class EnclaveAuthenticatorBrowserTest : public SyncTest {
         model_->observers.RemoveObserver(this);
         model_ = nullptr;
       }
-    }
-
-    void WaitForLoadingEnclaveTimeout() {
-      run_loop_ = std::make_unique<base::RunLoop>();
-      waiting_for_loading_enclave_timeout_ = true;
-      run_loop_->Run();
-      Reset();
     }
 
     // Call this before the state transition you are looking to observe.
@@ -655,9 +673,7 @@ class EnclaveAuthenticatorBrowserTest : public SyncTest {
     }
 
     void OnLoadingEnclaveTimeout() override {
-      if (run_loop_ && waiting_for_loading_enclave_timeout_) {
-        run_loop_->QuitWhenIdle();
-      }
+      loading_enclave_timed_out_ = true;
     }
 
     void OnModelDestroyed(AuthenticatorRequestDialogModel* model) override {
@@ -674,12 +690,14 @@ class EnclaveAuthenticatorBrowserTest : public SyncTest {
       return all_steps_;
     }
 
+    bool loading_enclave_timed_out() { return loading_enclave_timed_out_; }
+
    private:
     raw_ptr<AuthenticatorRequestDialogModel> model_;
     AuthenticatorRequestDialogModel::Step step_ =
         AuthenticatorRequestDialogModel::Step::kNotStarted;
     std::vector<AuthenticatorRequestDialogModel::Step> all_steps_;
-    bool waiting_for_loading_enclave_timeout_ = false;
+    bool loading_enclave_timed_out_ = false;
     bool observe_next_step_ = false;
     std::unique_ptr<base::RunLoop> run_loop_;
   };
@@ -714,7 +732,6 @@ class EnclaveAuthenticatorBrowserTest : public SyncTest {
     }
     scoped_icloud_drive_override_ = OverrideICloudDriveEnabled(false);
 #endif
-    clock_.SetNow(base::Time::FromTimeT(1000));
     OSCryptMocker::SetUp();
     // Log call `FIDO_LOG` messages.
     scoped_vmodule_.InitWithSwitches("device_event_log_impl=2");
@@ -972,7 +989,8 @@ class EnclaveAuthenticatorBrowserTest : public SyncTest {
   }
 
  protected:
-  base::SimpleTestClock clock_;
+  scoped_refptr<base::TestMockTimeTaskRunner> timer_task_runner_ =
+      base::MakeRefCounted<base::TestMockTimeTaskRunner>();
   net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
   const TempDir temp_dir_;
   base::CallbackListSubscription subscription_;
@@ -1671,6 +1689,26 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorWithPinBrowserTest,
   security_domain_service_->pretend_there_are_members();
   AddTestPasskeyToModel();
 
+  class PasskeyModelObserver : public webauthn::PasskeyModel::Observer {
+   public:
+    void OnPasskeysChanged(
+        const std::vector<webauthn::PasskeyModelChange>& changes) override {
+      for (const auto& change : changes) {
+        if (change.type() == webauthn::PasskeyModelChange::ChangeType::UPDATE) {
+          CHECK(!did_update);
+          did_update = true;
+        }
+      }
+    }
+
+    void OnPasskeyModelShuttingDown() override {}
+    void OnPasskeyModelIsReady(bool is_ready) override {}
+
+    bool did_update = false;
+  };
+  PasskeyModelObserver passkey_model_observer;
+  passkey_model()->AddObserver(&passkey_model_observer);
+
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   content::DOMMessageQueue message_queue(web_contents);
@@ -1697,11 +1735,22 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorWithPinBrowserTest,
                   kSecretVersion);
   model_observer()->WaitForStep();
 
+  EXPECT_FALSE(passkey_model_observer.did_update);
   dialog_model()->OnGPMPinEntered(u"123456");
 
   std::string script_result;
   ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
   EXPECT_EQ(script_result, "\"webauthn: OK\"");
+  passkey_model()->RemoveObserver(&passkey_model_observer);
+  EXPECT_TRUE(passkey_model_observer.did_update);
+  auto passkeys = passkey_model()->GetAllPasskeys();
+  ASSERT_EQ(passkeys.size(), 1u);
+  // The update time should be in the last 10 minutes.
+  EXPECT_LT((base::Time::Now() -
+             base::Time::FromDeltaSinceWindowsEpoch(base::Microseconds(
+                 passkeys[0].last_used_time_windows_epoch_micros())))
+                .InMinutes(),
+            10);
 }
 
 IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorWithPinBrowserTest,
@@ -1981,7 +2030,7 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorWithPinBrowserTest,
 
   // The modal UI should not be shown yet.
   EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kConditionalMediation);
+            AuthenticatorRequestDialogModel::Step::kNotStarted);
 
   // Resolve the connection and wait for the next step.
   model_observer()->SetStepToObserve(
@@ -1993,6 +2042,56 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorWithPinBrowserTest,
   registration_state_result.key_version = kSecretVersion;
   std::move(connection_cb).Run(std::move(registration_state_result));
   model_observer()->WaitForStep();
+}
+
+IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorWithPinBrowserTest,
+                       ConditionalAssertionWhileFullySetUp) {
+  // This test reproduces crbug.com/374366241. It performs a conditional request
+  // to generate an assertion and then triggers another conditional UI request.
+  // At one point this crashed.
+  trusted_vault::DownloadAuthenticationFactorsRegistrationStateResult
+      registration_state_result;
+  registration_state_result.state = trusted_vault::
+      DownloadAuthenticationFactorsRegistrationStateResult::State::kRecoverable;
+  registration_state_result.key_version = kSecretVersion;
+  SetMockVaultConnectionOnRequestDelegate(std::move(registration_state_result));
+  security_domain_service_->pretend_there_are_members();
+  AddTestPasskeyToModel();
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  content::DOMMessageQueue message_queue(web_contents);
+  content::ExecuteScriptAsync(web_contents, kGetAssertionConditionalUI);
+  delegate_observer()->WaitForUI();
+  EXPECT_EQ(dialog_model()->step(),
+            AuthenticatorRequestDialogModel::Step::kConditionalMediation);
+
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kRecoverSecurityDomain);
+  dialog_model()->OnAccountPreselectedIndex(0);
+  model_observer()->WaitForStep();
+
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePin);
+  EnclaveManagerFactory::GetAsEnclaveManagerForProfile(browser()->profile())
+      ->StoreKeys(kGaiaId,
+                  {std::vector<uint8_t>(std::begin(kSecurityDomainSecret),
+                                        std::end(kSecurityDomainSecret))},
+                  kSecretVersion);
+  model_observer()->WaitForStep();
+
+  dialog_model()->OnGPMPinEntered(u"123456");
+
+  std::string script_result;
+  ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
+  EXPECT_EQ(script_result, "\"webauthn: OK\"");
+
+  content::ExecuteScriptAsync(web_contents, kGetAssertionConditionalUI);
+  delegate_observer()->WaitForUI();
+  EXPECT_EQ(dialog_model()->step(),
+            AuthenticatorRequestDialogModel::Step::kConditionalMediation);
+  // Not crashing here is success.
+  dialog_model()->OnAccountPreselectedIndex(0);
 }
 
 // Tests tapping a passkey from autofill after the trusted vault service times
@@ -2011,9 +2110,10 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorWithPinBrowserTest,
   EXPECT_EQ(dialog_model()->step(),
             AuthenticatorRequestDialogModel::Step::kConditionalMediation);
 
-  // Wait for the request to time out.
-  clock_.Advance(GPMEnclaveController::kDownloadAccountStateTimeout);
-  model_observer()->WaitForLoadingEnclaveTimeout();
+  // Have the request time out.
+  timer_task_runner_->FastForwardBy(
+      GPMEnclaveController::kDownloadAccountStateTimeout);
+  ASSERT_TRUE(model_observer()->loading_enclave_timed_out());
 
   // Tap the passkey and expect an error.
   model_observer()->SetStepToObserve(
@@ -2038,16 +2138,17 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorWithPinBrowserTest,
   EXPECT_EQ(dialog_model()->step(),
             AuthenticatorRequestDialogModel::Step::kConditionalMediation);
 
-  // Tap the passkey. The step should still be conditional mediation while
-  // autofill shows a loading indicator.
+  // Tap the passkey. The step should be kNotStarted while autofill shows a
+  // loading indicator.
   dialog_model()->OnAccountPreselectedIndex(0);
   EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kConditionalMediation);
+            AuthenticatorRequestDialogModel::Step::kNotStarted);
 
   // Wait for the request to time out.
   model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kGPMError);
-  clock_.Advance(GPMEnclaveController::kDownloadAccountStateTimeout);
+  timer_task_runner_->FastForwardBy(
+      GPMEnclaveController::kDownloadAccountStateTimeout);
   model_observer()->WaitForStep();
 }
 
@@ -2100,6 +2201,40 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorWithPinBrowserTest,
   EXPECT_TRUE(script_result.starts_with("\"error NotAllowedError"))
       << script_result;
   EXPECT_EQ(browser()->tab_strip_model()->GetTabCount(), 2);
+}
+
+IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorWithPinBrowserTest,
+                       GpmEnclaveNeedsReauthOnGoogleCom) {
+  // Set the account state to a recoverable signin error.
+  auto* const identity_manager =
+      IdentityManagerFactory::GetForProfile(browser()->profile());
+  CoreAccountId account =
+      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kSignin);
+  signin::UpdatePersistentErrorOfRefreshTokenForAccount(
+      identity_manager, account,
+      GoogleServiceAuthError(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS));
+
+  // Add a passkey to make sure it's not shown.
+  AddTestPasskeyToModel();
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("accounts.google.com", "/title1.html")));
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  content::DOMMessageQueue message_queue(web_contents);
+  content::ExecuteScriptAsync(web_contents,
+                              kGetAssertionUvDiscouragedWithGoogleRp);
+  delegate_observer()->WaitForUI();
+
+  ASSERT_EQ(browser()->tab_strip_model()->GetTabCount(), 1);
+  // The sign in button is not visible.
+  const auto sign_in_again_mech =
+      base::ranges::find_if(dialog_model()->mechanisms, [](const auto& m) {
+        return absl::holds_alternative<
+            AuthenticatorRequestDialogModel::Mechanism::SignInAgain>(m.type);
+      });
+  ASSERT_EQ(sign_in_again_mech, dialog_model()->mechanisms.end());
 }
 
 IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorWithPinBrowserTest,
@@ -2188,10 +2323,18 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorWithPinBrowserTest,
 
   // Now set the security domain check to timeout. Chrome should operate
   // normally.
-
   SetVaultConnectionToTimeout();
 
+  // Wait for the transport availability to be enumerated. The UI won't be shown
+  // yet because the enclave is not ready.
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMConnecting);
+  delegate_observer()->WaitForTransportAvailabilityEnumerated();
+
+  // Make the enclave ready by having the account state download time out.
+  timer_task_runner_->FastForwardBy(
+      GPMEnclaveController::kDownloadAccountStateTimeout);
   delegate_observer()->WaitForUI();
 
   EXPECT_EQ(dialog_model()->step(),
@@ -2989,8 +3132,6 @@ IN_PROC_BROWSER_TEST_F(EnclaveICloudRecoveryKeyTest, DISABLED_Recovery) {
       ->ClearRegistrationForTesting();
   EnclaveManagerFactory::GetAsEnclaveManagerForProfile(browser()->profile())
       ->ResetForTesting();
-  // Expire any cache.
-  clock_.Advance(base::Hours(10));
 
   // Do a make credential request and recover with the iCloud key.
   {
@@ -3080,76 +3221,6 @@ IN_PROC_BROWSER_TEST_F(EnclaveICloudRecoveryKeyTest, DISABLED_Recovery) {
 }
 
 #endif  // BUILDFLAG(IS_MAC)
-
-class EnclaveAuthenticatorCachingTest
-    : public EnclaveAuthenticatorWithoutPinBrowserTest {
-  base::test::ScopedFeatureList scoped_feature_list{
-      device::kWebAuthnCacheSecurityDomain};
-};
-
-IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorCachingTest, Caching) {
-  EnableUVKeySupport();
-  trusted_vault::DownloadAuthenticationFactorsRegistrationStateResult
-      registration_state_result;
-
-  registration_state_result.state = trusted_vault::
-      DownloadAuthenticationFactorsRegistrationStateResult::State::kEmpty;
-  SetMockVaultConnectionOnRequestDelegate(std::move(registration_state_result));
-
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  content::DOMMessageQueue message_queue(web_contents);
-  content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
-  delegate_observer()->WaitForUI();
-
-  // The enclave is not active because the account is empty.
-  EXPECT_TRUE(
-      base::ranges::none_of(dialog_model()->mechanisms, [](const auto& m) {
-        return absl::holds_alternative<
-            AuthenticatorRequestDialogModel::Mechanism::Enclave>(m.type);
-      }));
-
-  dialog_model()->CancelAuthenticatorRequest();
-  std::string script_result;
-  ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
-  delegate_observer()->WaitForDelegateDestruction();
-
-  // The enclave will _still_ not be active for a second request because the
-  // previous result is cached, thus no call to
-  // `SetMockVaultconnectionOnRequestDelegate` is needed.
-  content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
-  delegate_observer()->WaitForUI();
-
-  EXPECT_TRUE(
-      base::ranges::none_of(dialog_model()->mechanisms, [](const auto& m) {
-        return absl::holds_alternative<
-            AuthenticatorRequestDialogModel::Mechanism::Enclave>(m.type);
-      }));
-
-  dialog_model()->CancelAuthenticatorRequest();
-  ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
-  delegate_observer()->WaitForDelegateDestruction();
-
-  clock_.Advance(base::Hours(10));
-  request_delegate_ = nullptr;
-  registration_state_result.state = trusted_vault::
-      DownloadAuthenticationFactorsRegistrationStateResult::State::kRecoverable;
-  SetMockVaultConnectionOnRequestDelegate(std::move(registration_state_result));
-  content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
-  delegate_observer()->WaitForUI();
-
-  // Now that the clock has advanced, the cache is stale and the updated account
-  // state will be noticed.
-  EXPECT_FALSE(
-      base::ranges::none_of(dialog_model()->mechanisms, [](const auto& m) {
-        return absl::holds_alternative<
-            AuthenticatorRequestDialogModel::Mechanism::Enclave>(m.type);
-      }));
-
-  dialog_model()->CancelAuthenticatorRequest();
-  ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
-  delegate_observer()->WaitForDelegateDestruction();
-}
 
 #if BUILDFLAG(IS_MAC)
 #define MAYBE_MakeCredentialDeclineGPM DISABLED_MakeCredentialDeclineGPM

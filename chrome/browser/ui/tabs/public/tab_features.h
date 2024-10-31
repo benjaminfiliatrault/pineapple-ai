@@ -13,12 +13,12 @@
 #include "base/memory/weak_ptr.h"
 
 class ChromeAutofillPredictionImprovementsClient;
-class DipsNavigationFlowDetectorWrapper;
 class FedCmAccountSelectionViewController;
 class LensOverlayController;
 class Profile;
 class ReadAnythingSidePanelController;
 class SidePanelRegistry;
+class PinnedTranslateActionListener;
 
 namespace commerce {
 class CommerceUiTabHelper;
@@ -47,10 +47,6 @@ class PermissionIndicatorsTabData;
 namespace privacy_sandbox {
 class PrivacySandboxTabObserver;
 }  // namespace privacy_sandbox
-
-namespace user_annotations {
-class UserAnnotationsWebContentsObserver;
-}  // namespace user_annotations
 
 namespace tabs {
 
@@ -98,10 +94,6 @@ class TabFeatures {
   // window scoped SidePanelRegistry.
   SidePanelRegistry* side_panel_registry() {
     return side_panel_registry_.get();
-  }
-
-  DipsNavigationFlowDetectorWrapper* dips_navigation_flow_detector_wrapper() {
-    return dips_navigation_flow_detector_wrapper_.get();
   }
 
   ChromeAutofillPredictionImprovementsClient*
@@ -155,7 +147,6 @@ class TabFeatures {
   std::unique_ptr<
       enterprise_data_protection::DataProtectionNavigationController>
       data_protection_controller_;
-  std::unique_ptr<LensOverlayController> lens_overlay_controller_;
   std::unique_ptr<FedCmAccountSelectionViewController>
       fedcm_account_selection_view_controller_;
 
@@ -163,16 +154,11 @@ class TabFeatures {
       permission_indicators_tab_data_;
 
   std::unique_ptr<SidePanelRegistry> side_panel_registry_;
+  std::unique_ptr<LensOverlayController> lens_overlay_controller_;
 
   // Responsible for the customize chrome tab-scoped side panel.
   std::unique_ptr<customize_chrome::SidePanelController>
       customize_chrome_side_panel_controller_;
-
-  std::unique_ptr<DipsNavigationFlowDetectorWrapper>
-      dips_navigation_flow_detector_wrapper_;
-
-  std::unique_ptr<user_annotations::UserAnnotationsWebContentsObserver>
-      user_annotations_web_contents_observer_;
 
   std::unique_ptr<ChromeAutofillPredictionImprovementsClient>
       chrome_autofill_prediction_improvements_client_;
@@ -182,6 +168,10 @@ class TabFeatures {
 
   // Responsible for commerce related features.
   std::unique_ptr<commerce::CommerceUiTabHelper> commerce_ui_tab_helper_;
+
+  // Responsible for updating status indicator of the pinned translate button.
+  std::unique_ptr<PinnedTranslateActionListener>
+      pinned_translate_action_listener_;
 
   std::unique_ptr<privacy_sandbox::PrivacySandboxTabObserver>
       privacy_sandbox_tab_observer_;

@@ -117,7 +117,7 @@ void VideoFrameCompositor::OnRendererStateUpdate(bool new_state) {
   if (!auto_open_close_) {
     auto_open_close_ = std::make_unique<
         base::trace_event::AutoOpenCloseEvent<kTracingCategory>>(
-        base::trace_event::AutoOpenCloseEvent<kTracingCategory>::Type::ASYNC,
+        base::trace_event::AutoOpenCloseEvent<kTracingCategory>::Type::kAsync,
         "VideoPlayback");
   }
 
@@ -488,7 +488,7 @@ void VideoFrameCompositor::OnContextLost() {
   // is not valid any more. current_frame_ should be reset. Now the compositor
   // has no concept of resetting current_frame_, so a black frame is set.
   base::AutoLock lock(current_frame_lock_);
-  if (!current_frame_ || (!current_frame_->HasTextures() &&
+  if (!current_frame_ || (!current_frame_->HasSharedImage() &&
                           !current_frame_->HasMappableGpuBuffer())) {
     return;
   }

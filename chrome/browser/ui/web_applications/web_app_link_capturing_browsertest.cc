@@ -14,7 +14,6 @@
 #include "base/test/test_future.h"
 #include "base/types/expected.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_registry_cache_waiter.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -34,6 +33,7 @@
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/chrome_features.h"
@@ -46,6 +46,7 @@
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
 
 using content::RenderFrameHost;
@@ -665,7 +666,6 @@ INSTANTIATE_TEST_SUITE_P(,
                                              : "CapturingDefaultOff";
                          });
 
-// TODO: Run these tests on Chrome OS with both Ash and Lacros processes active.
 class WebAppTabStripLinkCapturingBrowserTest
     : public WebAppLinkCapturingBrowserTest {
  public:
@@ -695,6 +695,10 @@ class WebAppTabStripLinkCapturingBrowserTest
 // the app window.
 IN_PROC_BROWSER_TEST_P(WebAppTabStripLinkCapturingBrowserTest,
                        InScopeNavigationsCaptured) {
+  if (!WebAppRegistrar::IsSupportedDisplayModeForNavigationCapture(
+          blink::mojom::DisplayMode::kTabbed)) {
+    GTEST_SKIP() << "kTabbed mode not yet supported for navigation capturing.";
+  }
   const auto [app_id, in_scope_1, in_scope_2, scope] = InstallTestTabbedApp();
   ASSERT_EQ(apps::test::EnableLinkCapturingByUser(profile(), app_id),
             base::ok());

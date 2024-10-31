@@ -148,6 +148,7 @@ found in the LICENSE file.
 
     <!-- Incognito NTP -->
     <dimen name="incognito_ntp_total_space_between_views">14sp</dimen>
+    <dimen name="incognito_ntp_fading_shadow_size">16dp</dimen>
 
     <!-- Recent tabs page -->
     <dimen name="recent_tabs_visible_separator_padding">8dp</dimen>
@@ -177,7 +178,6 @@ found in the LICENSE file.
     <dimen name="improved_bookmark_row_horizontal_padding">6dp</dimen>
     <dimen name="improved_bookmark_row_horizontal_negative_margin">-10dp</dimen>
     <dimen name="improved_bookmark_row_vertical_margin">1dp</dimen>
-    <dimen name="bookmark_promo_top_margin_with_search_box">4dp</dimen>
     <dimen name="shopping_chip_padding">8dp</dimen>
 
     <!-- Improved bookmark save flow properties-->
@@ -374,4 +374,7 @@ found in the LICENSE file.
 
     <!-- tab strip context menu-->
     <dimen name="tab_strip_group_context_menu_max_width">392dp</dimen>
+
+    <!-- Auxiliary search dimensions. -->
+    <dimen name="auxiliary_search_favicon_size">36dp</dimen>
 </resources>

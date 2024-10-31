@@ -12,7 +12,9 @@
 #include "components/autofill/core/browser/autofill_form_test_utils.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill_prediction_improvements/core/browser/autofill_prediction_improvements_test_utils.h"
 #include "components/optimization_guide/core/mock_optimization_guide_model_executor.h"
+#include "components/optimization_guide/core/optimization_guide_proto_util.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 #include "components/optimization_guide/proto/features/forms_predictions.pb.h"
 #include "components/user_annotations/test_user_annotations_service.h"
@@ -32,15 +34,28 @@ using ::testing::ElementsAre;
 using ::testing::Field;
 using ::testing::Pair;
 
-MATCHER_P(HasPrediction, expected_prediction, "") {
-  EXPECT_THAT(arg, AllOf(Field("Prediction::value", &Prediction::value,
-                               expected_prediction.value),
-                         Field("Prediction::label", &Prediction::label,
-                               expected_prediction.label),
-                         Field("Prediction::select_option_text",
-                               &Prediction::select_option_text,
-                               expected_prediction.select_option_text)));
-  return true;
+void AddFieldToResponse(
+    optimization_guide::proto::FormsPredictionsResponse& response,
+    const std::string& label,
+    const std::string& normalized_label,
+    const std::string& value,
+    int request_field_index = 0) {
+  optimization_guide::proto::FilledFormFieldData* filled_field =
+      response.mutable_form_data()->add_filled_form_field_data();
+  filled_field->mutable_field_data()->set_field_label(label);
+  filled_field->set_normalized_label(normalized_label);
+  optimization_guide::proto::PredictedValue* predicted_value =
+      filled_field->add_predicted_values();
+  predicted_value->set_value(value);
+  filled_field->set_request_field_index(request_field_index);
+}
+
+auto HasPrediction(Prediction expected_prediction) {
+  return AllOf(
+      Field("Prediction::value", &Prediction::value, expected_prediction.value),
+      Field("Prediction::label", &Prediction::label, expected_prediction.label),
+      Field("Prediction::select_option_text", &Prediction::select_option_text,
+            expected_prediction.select_option_text));
 }
 
 class AutofillPredictionImprovementsFillingEngineImplTest
@@ -84,62 +99,37 @@ TEST_F(AutofillPredictionImprovementsFillingEngineImplTest, EndToEnd) {
 
   // Set up mock.
   optimization_guide::proto::FormsPredictionsResponse response;
-  optimization_guide::proto::FormFieldData* filled_field =
-      response.mutable_form_data()
-          ->add_filled_form_field_data()
-          ->mutable_field_data();
-  filled_field->set_field_label("label");
-  filled_field->set_field_value("value");
-  optimization_guide::proto::FormFieldData* empty_field =
-      response.mutable_form_data()
-          ->add_filled_form_field_data()
-          ->mutable_field_data();
-  empty_field->set_field_label("empty");
-  empty_field->set_field_value("");
-  optimization_guide::proto::FormFieldData* not_in_original_form_field =
-      response.mutable_form_data()
-          ->add_filled_form_field_data()
-          ->mutable_field_data();
-  not_in_original_form_field->set_field_label("notinform");
-  not_in_original_form_field->set_field_value("doesntmatter");
-  optimization_guide::proto::FormFieldData* filled_select_field =
-      response.mutable_form_data()
-          ->add_filled_form_field_data()
-          ->mutable_field_data();
-  filled_select_field->set_field_label("State");
-  filled_select_field->set_field_value("33");
-  optimization_guide::proto::FormFieldData* bad_response_select_field =
-      response.mutable_form_data()
-          ->add_filled_form_field_data()
-          ->mutable_field_data();
-  bad_response_select_field->set_field_label(
-      "Country Code - response not in select options, not filled");
-  bad_response_select_field->set_field_value("-2");
-  optimization_guide::proto::FormFieldData*
-      response_equals_selected_value_select_field =
-          response.mutable_form_data()
-              ->add_filled_form_field_data()
-              ->mutable_field_data();
-  response_equals_selected_value_select_field->set_field_label(
-      "Country - response equals selected value, not filled");
-  response_equals_selected_value_select_field->set_field_value("2");
-  optimization_guide::proto::Any any;
-  any.set_type_url(response.GetTypeName());
-  response.SerializeToString(any.mutable_value());
+  AddFieldToResponse(response, "label", "normalized label", "value", 0);
+  AddFieldToResponse(response, "empty", "", "", 2);
+  AddFieldToResponse(response, "notinform", "", "doesntmatter");
+  AddFieldToResponse(response, "State", "", "North Carolina", 3);
+  AddFieldToResponse(
+      response, "Country Code - response not in select options, not filled", "",
+      "-2", 4);
+  AddFieldToResponse(response,
+                     "Country - response equals selected value, not filled", "",
+                     "Spain", 5);
+  AddFieldToResponse(response, "Field has value, not filled", "", "value", 6);
   EXPECT_CALL(
       *model_executor(),
       ExecuteModel(
-          optimization_guide::ModelBasedCapabilityKey::kFormsPredictions, _,
+          optimization_guide::ModelBasedCapabilityKey::kFormsPredictions, _, _,
           An<optimization_guide::
                  OptimizationGuideModelExecutionResultCallback>()))
-      .WillOnce(base::test::RunOnceCallback<2>(any, /*log_entry=*/nullptr));
+      .WillOnce(base::test::RunOnceCallback<3>(
+          optimization_guide::OptimizationGuideModelExecutionResult(
+
+              optimization_guide::AnyWrapProto(response),
+              /*model_execution_info=*/nullptr),
+          /*log_entry=*/nullptr));
 
   autofill::test::FormDescription form_description = {
       .fields = {
           {.label = u"label"},
           {.label = u"not in response, not filled"},
           {.label = u"empty, not filled"},
-          {.label = u"State",
+          {.is_focusable = false,
+           .label = u"State",
            .value = u"-1",
            .form_control_type = autofill::FormControlType::kSelectOne,
            .select_options = {{.value = u"-1", .text = u"Select state"},
@@ -154,13 +144,14 @@ TEST_F(AutofillPredictionImprovementsFillingEngineImplTest, EndToEnd) {
            .value = u"2",
            .form_control_type = autofill::FormControlType::kSelectOne,
            .select_options = {{.value = u"1", .text = u"France"},
-                              {.value = u"2", .text = u"Spain"}}}}};
+                              {.value = u"2", .text = u"Spain"}}},
+          {.label = u"Field has value, not filled", .value = u"value"}}};
   autofill::FormData form = autofill::test::GetFormData(form_description);
 
   optimization_guide::proto::AXTreeUpdate ax_tree;
   base::test::TestFuture<PredictionsOrError, std::optional<std::string>>
       test_future;
-  engine()->GetPredictions(form, ax_tree, test_future.GetCallback());
+  engine()->GetPredictions(form, {}, {}, ax_tree, test_future.GetCallback());
 
   const PredictionsOrError predictions_or_error =
       std::get<0>(test_future.Take());
@@ -169,9 +160,15 @@ TEST_F(AutofillPredictionImprovementsFillingEngineImplTest, EndToEnd) {
       predictions_or_error.value(),
       ElementsAre(
           Pair(form.fields()[0].global_id(),
-               HasPrediction(Prediction(u"value", u"label"))),
+               // Also tests that Prediction::label is set to the normalized
+               // label if set and non-empty.
+               HasPrediction(Prediction(u"value", u"normalized label",
+                                        /*is_focusable=*/true))),
           Pair(form.fields()[3].global_id(),
-               HasPrediction(Prediction(u"33", u"State", u"North Carolina")))));
+               // Also tests that Prediction::label falls back to the field
+               // label if the normalized label is not set or empty.
+               HasPrediction(Prediction(u"33", u"State", /*is_focusable=*/false,
+                                        u"North Carolina")))));
 }
 
 TEST_F(AutofillPredictionImprovementsFillingEngineImplTest,
@@ -180,7 +177,7 @@ TEST_F(AutofillPredictionImprovementsFillingEngineImplTest,
   user_annotations_service()->ReplaceAllEntries({});
 
   // Make sure model executor not called.
-  EXPECT_CALL(*model_executor(), ExecuteModel(_, _, _)).Times(0);
+  EXPECT_CALL(*model_executor(), ExecuteModel).Times(0);
 
   autofill::FormFieldData form_field_data;
   form_field_data.set_label(u"label");
@@ -189,7 +186,8 @@ TEST_F(AutofillPredictionImprovementsFillingEngineImplTest,
   optimization_guide::proto::AXTreeUpdate ax_tree;
   base::test::TestFuture<PredictionsOrError, std::optional<std::string>>
       test_future;
-  engine()->GetPredictions(form_data, ax_tree, test_future.GetCallback());
+  engine()->GetPredictions(form_data, {}, {}, ax_tree,
+                           test_future.GetCallback());
 
   const PredictionsOrError predictions_or_error =
       std::get<0>(test_future.Take());
@@ -208,15 +206,18 @@ TEST_F(AutofillPredictionImprovementsFillingEngineImplTest,
   EXPECT_CALL(
       *model_executor(),
       ExecuteModel(
-          optimization_guide::ModelBasedCapabilityKey::kFormsPredictions, _,
+          optimization_guide::ModelBasedCapabilityKey::kFormsPredictions, _, _,
           An<optimization_guide::
                  OptimizationGuideModelExecutionResultCallback>()))
-      .WillOnce(base::test::RunOnceCallback<2>(
-          base::unexpected(
-              optimization_guide::OptimizationGuideModelExecutionError::
-                  FromModelExecutionError(
-                      optimization_guide::OptimizationGuideModelExecutionError::
-                          ModelExecutionError::kGenericFailure)),
+      .WillOnce(base::test::RunOnceCallback<3>(
+          optimization_guide::OptimizationGuideModelExecutionResult(
+              base::unexpected(
+                  optimization_guide::OptimizationGuideModelExecutionError::
+                      FromModelExecutionError(
+                          optimization_guide::
+                              OptimizationGuideModelExecutionError::
+                                  ModelExecutionError::kGenericFailure)),
+              /*model_execution_info=*/nullptr),
           /*log_entry=*/nullptr));
 
   autofill::FormFieldData form_field_data;
@@ -226,7 +227,8 @@ TEST_F(AutofillPredictionImprovementsFillingEngineImplTest,
   optimization_guide::proto::AXTreeUpdate ax_tree;
   base::test::TestFuture<PredictionsOrError, std::optional<std::string>>
       test_future;
-  engine()->GetPredictions(form_data, ax_tree, test_future.GetCallback());
+  engine()->GetPredictions(form_data, {}, {}, ax_tree,
+                           test_future.GetCallback());
 
   const PredictionsOrError predictions_or_error =
       std::get<0>(test_future.Take());
@@ -246,10 +248,13 @@ TEST_F(AutofillPredictionImprovementsFillingEngineImplTest,
   EXPECT_CALL(
       *model_executor(),
       ExecuteModel(
-          optimization_guide::ModelBasedCapabilityKey::kFormsPredictions, _,
+          optimization_guide::ModelBasedCapabilityKey::kFormsPredictions, _, _,
           An<optimization_guide::
                  OptimizationGuideModelExecutionResultCallback>()))
-      .WillOnce(base::test::RunOnceCallback<2>(any, /*log_entry=*/nullptr));
+      .WillOnce(base::test::RunOnceCallback<3>(
+          optimization_guide::OptimizationGuideModelExecutionResult(
+              any, /*model_execution_info=*/nullptr),
+          /*log_entry=*/nullptr));
 
   autofill::FormFieldData form_field_data;
   form_field_data.set_label(u"label");
@@ -258,7 +263,8 @@ TEST_F(AutofillPredictionImprovementsFillingEngineImplTest,
   optimization_guide::proto::AXTreeUpdate ax_tree;
   base::test::TestFuture<PredictionsOrError, std::optional<std::string>>
       test_future;
-  engine()->GetPredictions(form_data, ax_tree, test_future.GetCallback());
+  engine()->GetPredictions(form_data, {}, {}, ax_tree,
+                           test_future.GetCallback());
 
   const PredictionsOrError predictions_or_error =
       std::get<0>(test_future.Take());

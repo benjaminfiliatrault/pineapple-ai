@@ -7,7 +7,7 @@ import 'chrome://resources/cr_elements/cr_auto_img/cr_auto_img.js';
 import 'chrome://resources/cr_elements/cr_grid/cr_grid.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import './check_mark_wrapper.js';
-import './strings.m.js';
+import '/strings.m.js';
 import './wallpaper_search/wallpaper_search_tile.js';
 
 import type {SpHeadingElement} from 'chrome://customize-chrome-side-panel.top-chrome/shared/sp_heading.js';
@@ -23,7 +23,7 @@ import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
 import {getCss} from './categories.css.js';
 import {getHtml} from './categories.html.js';
-import {CustomizeChromeAction, recordCustomizeChromeAction} from './common.js';
+import {CustomizeChromeAction, NtpImageType, recordCustomizeChromeAction, recordCustomizeChromeImageError} from './common.js';
 import type {BackgroundCollection, CustomizeChromePageHandlerInterface, Theme} from './customize_chrome.mojom-webui.js';
 import {CustomizeChromeApiProxy} from './customize_chrome_api_proxy.js';
 import {WindowProxy} from './window_proxy.js';
@@ -193,6 +193,7 @@ export class CategoriesElement extends CategoriesElementBase {
     if (!this.imageErrorDetectionEnabled_) {
       return;
     }
+    recordCustomizeChromeImageError(NtpImageType.COLLECTIONS);
     const index = Number((e.currentTarget as HTMLElement).dataset['index']);
     assert(this.collections_[index]);
     this.pageHandler_

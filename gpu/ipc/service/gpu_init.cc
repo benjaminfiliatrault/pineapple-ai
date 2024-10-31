@@ -82,7 +82,6 @@
 #endif
 
 #if BUILDFLAG(USE_DAWN) || BUILDFLAG(SKIA_USE_DAWN)
-#include "gpu/command_buffer/service/dawn_instance.h"
 #include "third_party/dawn/include/dawn/dawn_proc.h"          // nogncheck
 #include "third_party/dawn/include/dawn/native/DawnNative.h"  // nogncheck
 #endif
@@ -467,8 +466,6 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     return false;
   }
 #if BUILDFLAG(IS_WIN)
-  UMA_HISTOGRAM_BOOLEAN("GPU.AppHelpIsLoaded",
-                        static_cast<bool>(::GetModuleHandle(L"apphelp.dll")));
   if (gpu_preferences_.gr_context_type == GrContextType::kGraphiteDawn &&
       features::kSkiaGraphiteDawnBackendValidation.Get()) {
     // Enable ANGLE debug layer if we need backend validation for Graphite since
@@ -758,6 +755,11 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
       ui::OzonePlatform::GetInstance()
           ->GetSurfaceFactoryOzone()
           ->GetSupportedFormatsForTexturing();
+  std::vector<gfx::BufferFormat>
+      supported_buffer_formats_for_gl_native_pixmap_import =
+          ui::OzonePlatform::GetInstance()
+              ->GetSurfaceFactoryOzone()
+              ->GetSupportedFormatsForGLNativePixmapImport();
 #endif  // BUILDFLAG(IS_OZONE)
 
   InitializePlatformOverlaySettings(&gpu_info_, gpu_feature_info_);
@@ -800,8 +802,8 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     gpu_preferences_.disable_accelerated_video_encode = true;
   }
 
-  UMA_HISTOGRAM_MEDIUM_TIMES("GPU.InitializeOneOffMediumTime",
-                             elapsed_timer.Elapsed());
+  DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES("GPU.InitializeOneOffMediumTime",
+                                        elapsed_timer.Elapsed());
 
   bool recreate_watchdog = false;
   if (!gl_use_swiftshader_ && command_line->HasSwitch(switches::kUseGL)) {
@@ -851,20 +853,6 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     watchdog_init.SetGpuWatchdogPtr(watchdog_thread_.get());
   }
 
-  InitializeDawnProcs();
-
-#if BUILDFLAG(IS_WIN)
-  // We need to create a D3D12Device to enable the access to D3D12 shader cache
-  // files on many GPU drivers before the launch of the GPU sandbox (otherwise
-  // such access will always be blocked by the GPU sandbox). To achieve this
-  // goal we create a Dawn instance and attempt to request an adapter for D3D12
-  // backend so that a D3D12Device will be saved in the Dawn instance.
-  // TODO(chromium:40700602): Fix WebGPU shader cache partitioning.
-  dawn_instance_for_d3d12_shader_cache_ =
-      gpu::DawnContextProvider::CreateDawnInstanceForD3D12ShaderCache(
-          gpu_preferences_);
-#endif
-
   UMA_HISTOGRAM_ENUMERATION("GPU.GLImplementation", gl::GetGLImplementation());
 
   if (!gpu_info_.sandboxed && !attempted_startsandbox) {
@@ -872,6 +860,8 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
         watchdog_thread_.get(), &gpu_info_, gpu_preferences_);
   }
   UMA_HISTOGRAM_BOOLEAN("GPU.Sandboxed", gpu_info_.sandboxed);
+
+  InitializeDawnProcs();
 
   if (gpu_preferences_.gr_context_type == GrContextType::kGraphiteDawn) {
     if (!InitializeDawn()) {
@@ -889,6 +879,8 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   ui::OzonePlatform::GetInstance()->AfterSandboxEntry();
   gpu_feature_info_.supported_buffer_formats_for_allocation_and_texturing =
       std::move(supported_buffer_formats_for_texturing);
+  gpu_feature_info_.supported_buffer_formats_for_gl_native_pixmap_import =
+      std::move(supported_buffer_formats_for_gl_native_pixmap_import);
   [[maybe_unused]] auto* factory =
       ui::OzonePlatform::GetInstance()->GetSurfaceFactoryOzone();
   bool filter_set = false;
@@ -1104,8 +1096,15 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
       ui::OzonePlatform::GetInstance()
           ->GetSurfaceFactoryOzone()
           ->GetSupportedFormatsForTexturing();
+  const std::vector<gfx::BufferFormat>
+      supported_buffer_formats_for_gl_native_pixmap_import =
+          ui::OzonePlatform::GetInstance()
+              ->GetSurfaceFactoryOzone()
+              ->GetSupportedFormatsForGLNativePixmapImport();
   gpu_feature_info_.supported_buffer_formats_for_allocation_and_texturing =
       std::move(supported_buffer_formats_for_texturing);
+  gpu_feature_info_.supported_buffer_formats_for_gl_native_pixmap_import =
+      std::move(supported_buffer_formats_for_gl_native_pixmap_import);
 #endif
 
   DisableInProcessGpuVulkan(&gpu_feature_info_, &gpu_preferences_);

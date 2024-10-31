@@ -4,6 +4,7 @@
 
 import {FacialGesture} from 'chrome://resources/ash/common/accessibility/facial_gestures.js';
 import {MacroName} from 'chrome://resources/ash/common/accessibility/macro_names.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 
 export const FACE_GAZE_GESTURE_TO_MACROS_PREF =
     'prefs.settings.a11y.face_gaze.gestures_to_macros.value';
@@ -23,12 +24,13 @@ export const FACE_GAZE_GESTURE_TO_KEY_COMBO_PREF =
 // Currently supported macros in FaceGaze.
 export const FaceGazeActions: MacroName[] = [
   MacroName.TOGGLE_FACEGAZE,
+  MacroName.RESET_CURSOR,
   MacroName.MOUSE_CLICK_LEFT,
   MacroName.MOUSE_CLICK_LEFT_DOUBLE,
   MacroName.MOUSE_CLICK_RIGHT,
   MacroName.MOUSE_LONG_CLICK_LEFT,
-  MacroName.RESET_CURSOR,
   MacroName.TOGGLE_DICTATION,
+  MacroName.KEY_PRESS_SCREENSHOT,
   MacroName.KEY_PRESS_TOGGLE_OVERVIEW,
   MacroName.KEY_PRESS_MEDIA_PLAY_PAUSE,
   MacroName.TOGGLE_SCROLL_MODE,
@@ -36,9 +38,58 @@ export const FaceGazeActions: MacroName[] = [
   MacroName.CUSTOM_KEY_COMBINATION,
 ];
 
+// Actions that involve mouse location and require an accurate mouse location to
+// execute as expected.
+export const FaceGazeLocationDependentActions: MacroName[] = [
+  MacroName.MOUSE_CLICK_LEFT,
+  MacroName.MOUSE_CLICK_LEFT_DOUBLE,
+  MacroName.MOUSE_CLICK_RIGHT,
+  MacroName.MOUSE_LONG_CLICK_LEFT,
+  MacroName.TOGGLE_SCROLL_MODE,
+];
+
+// A map of actions to their informational text ID, which further describes
+// their behavior to the user.
+export const ComplexActions: Partial<Record<MacroName, string>> = {
+  [MacroName.MOUSE_LONG_CLICK_LEFT]: 'faceGazeMacroSubLabelLongClickLeft',
+  [MacroName.TOGGLE_SCROLL_MODE]: 'faceGazeMacroSubLabelToggleScrollMode',
+};
+
 // All possible facial gestures.
 // Values are extracted here for ease of use.
 export const FaceGazeGestures = Object.values(FacialGesture);
+
+// Facial gestures that require looking away from the screen.
+export const FaceGazeLookGestures: FacialGesture[] = [
+  FacialGesture.EYES_LOOK_DOWN,
+  FacialGesture.EYES_LOOK_LEFT,
+  FacialGesture.EYES_LOOK_RIGHT,
+  FacialGesture.EYES_LOOK_UP,
+];
+
+export const ConflictingGestures: Partial<
+    Record<FacialGesture, FacialGesture[]>> = {
+  // Conflicts because some users may squint their eyes in order to lower their
+  // eyebrows.
+  [FacialGesture.BROWS_DOWN]:
+      [FacialGesture.EYE_SQUINT_LEFT, FacialGesture.EYE_SQUINT_RIGHT],
+  // Conflicts because the user's mouth needs to be open in order to perform
+  // the JAW_LEFT and JAW_RIGHT gestures.
+  [FacialGesture.JAW_LEFT]: [FacialGesture.JAW_OPEN],
+  [FacialGesture.JAW_RIGHT]: [FacialGesture.JAW_OPEN],
+  // Conflicts because MOUTH_FUNNEL is essentially a MOUTH_PUCKER with an open
+  // mouth.
+  [FacialGesture.MOUTH_FUNNEL]: [FacialGesture.MOUTH_PUCKER],
+  // Conflicts because lips may be pursed when performing MOUTH_LEFT and
+  // MOUTH_RIGHT.
+  [FacialGesture.MOUTH_LEFT]: [FacialGesture.MOUTH_PUCKER],
+  [FacialGesture.MOUTH_RIGHT]: [FacialGesture.MOUTH_PUCKER],
+  [FacialGesture.MOUTH_SMILE]: [
+    FacialGesture.MOUTH_UPPER_UP,
+    FacialGesture.EYE_SQUINT_LEFT,
+    FacialGesture.EYE_SQUINT_RIGHT,
+  ],
+};
 
 export interface KeyCombination {
   key: number;
@@ -229,6 +280,8 @@ export class FaceGazeUtils {
         return 'faceGazeMacroLabelResetCursor';
       case MacroName.TOGGLE_DICTATION:
         return 'faceGazeMacroLabelToggleDictation';
+      case MacroName.KEY_PRESS_SCREENSHOT:
+        return 'faceGazeMacroLabelScreenshot';
       case MacroName.KEY_PRESS_TOGGLE_OVERVIEW:
         return 'faceGazeMacroLabelToggleOverview';
       case MacroName.KEY_PRESS_MEDIA_PLAY_PAUSE:
@@ -255,9 +308,55 @@ export class FaceGazeUtils {
     switch (macro) {
       case MacroName.TOGGLE_SCROLL_MODE:
         return 'faceGazeMacroSubLabelToggleScrollMode';
+      case MacroName.MOUSE_LONG_CLICK_LEFT:
+        return 'faceGazeMacroSubLabelLongClickLeft';
       default:
         // Other macros do not have a sub-label, return null to indicate this.
         return null;
+    }
+  }
+
+  /**
+   * @param keyCombo The KeyCombination for which to return the display text.
+   * @return the string containing the user-friendly display text for the key
+   *     combination.
+   */
+  static getKeyComboDisplayText(keyCombo: KeyCombination): string {
+    const keys: string[] = [];
+
+    if (keyCombo.modifiers?.ctrl) {
+      keys.push(loadTimeData.getString('faceGazeKeyboardKeyCtrl'));
+    }
+    if (keyCombo.modifiers?.alt) {
+      keys.push(loadTimeData.getString('faceGazeKeyboardKeyAlt'));
+    }
+    if (keyCombo.modifiers?.shift) {
+      keys.push(loadTimeData.getString('faceGazeKeyboardKeyShift'));
+    }
+    if (keyCombo.modifiers?.search) {
+      keys.push(loadTimeData.getString('faceGazeKeyboardKeySearch'));
+    }
+
+    keys.push(keyCombo.keyDisplay);
+
+    switch (keys.length) {
+      case 2:
+        return loadTimeData.getStringF(
+            'faceGazeKeyboardLabelOneModifier', ...keys);
+      case 3:
+        return loadTimeData.getStringF(
+            'faceGazeKeyboardLabelTwoModifiers', ...keys);
+      case 4:
+        return loadTimeData.getStringF(
+            'faceGazeKeyboardLabelThreeModifiers', ...keys);
+      case 5:
+        return loadTimeData.getStringF(
+            'faceGazeKeyboardLabelFourModifiers', ...keys);
+      default:
+        // keyDisplay comes directly from the original KeyEvent and should be
+        // preserved as-is since keys may appear differently on keyboards
+        // depending on locale and layout.
+        return keyCombo.keyDisplay;
     }
   }
 }

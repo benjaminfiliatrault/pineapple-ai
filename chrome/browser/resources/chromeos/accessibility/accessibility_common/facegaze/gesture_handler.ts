@@ -4,7 +4,7 @@
 
 import {CustomCallbackMacro} from '/common/action_fulfillment/macros/custom_callback_macro.js';
 import {KeyCombination, KeyPressMacro} from '/common/action_fulfillment/macros/key_press_macro.js';
-import {Macro} from '/common/action_fulfillment/macros/macro.js';
+import {Macro, ToggleDirection} from '/common/action_fulfillment/macros/macro.js';
 import {MacroName} from '/common/action_fulfillment/macros/macro_names.js';
 import {MouseClickLeftDoubleMacro, MouseClickMacro} from '/common/action_fulfillment/macros/mouse_click_macro.js';
 import {ToggleDictationMacro} from '/common/action_fulfillment/macros/toggle_dictation_macro.js';
@@ -16,6 +16,7 @@ import type {FaceLandmarkerResult} from '/third_party/mediapipe/vision.js';
 import {BubbleController} from './bubble_controller.js';
 import {FacialGesture} from './facial_gestures.js';
 import {GestureDetector} from './gesture_detector.js';
+import {MouseLongClickMacro} from './macros/mouse_long_click_macro.js';
 import {MouseScrollMacro} from './macros/mouse_scroll_macro.js';
 import {ResetCursorMacro} from './macros/reset_cursor_macro.js';
 import {MouseController} from './mouse_controller.js';
@@ -46,9 +47,12 @@ export class GestureHandler {
   private previousGestures_: FacialGesture[] = [];
   private macrosToCompleteLater_: Map<FacialGesture, Macro> = new Map();
   private paused_ = false;
+  private isDictationActive_: () => boolean;
 
-  constructor(mouseController: MouseController) {
+  constructor(
+      mouseController: MouseController, isDictationActive: () => boolean) {
     this.mouseController_ = mouseController;
+    this.isDictationActive_ = isDictationActive;
     this.prefsListener_ = prefs => this.updateFromPrefs_(prefs);
     this.toggleInfoListener_ = enabled =>
         GestureDetector.toggleSendGestureDetectionInfo(enabled);
@@ -89,10 +93,22 @@ export class GestureHandler {
           if (pref.value) {
             // Update the whole map from this preference.
             this.gestureToMacroName_.clear();
+
+            let hasScrollModeAction = false;
+            let hasLongClickAction = false;
             for (const [gesture, assignedMacro] of Object.entries(pref.value)) {
               if (assignedMacro === MacroName.UNSPECIFIED) {
                 continue;
               }
+
+              if (assignedMacro === MacroName.TOGGLE_SCROLL_MODE) {
+                hasScrollModeAction = true;
+              }
+
+              if (assignedMacro === MacroName.MOUSE_LONG_CLICK_LEFT) {
+                hasLongClickAction = true;
+              }
+
               this.gestureToMacroName_.set(
                   gesture as FacialGesture, Number(assignedMacro));
               // Ensure the confidence for this gesture is set to the default,
@@ -103,6 +119,19 @@ export class GestureHandler {
                     gesture as FacialGesture,
                     GestureHandler.DEFAULT_CONFIDENCE_THRESHOLD);
               }
+            }
+
+            // If a "toggle" action is removed while the relevant action
+            // is active, then we should toggle out of the action. Otherwise,
+            // the user will be stuck in the action with no way to exit.
+            if (this.mouseController_.isScrollModeActive() &&
+                !hasScrollModeAction) {
+              this.mouseController_.toggleScrollMode();
+            }
+
+            if (this.mouseController_.isLongClickActive() &&
+                !hasLongClickAction) {
+              this.mouseController_.toggleLongClick();
             }
           }
           break;
@@ -178,25 +207,17 @@ export class GestureHandler {
     }
 
     // Construct display text.
-    const displayStrings = [];
+    const displayStrings: string[] = [];
     // Construct macros from all the macro names.
     const result: Macro[] = [];
     for (const [macroName, gesture] of macroNames) {
       const macro = this.macroFromName_(macroName, gesture);
       if (macro) {
-        if (macro instanceof MouseClickMacro) {
-          // Don't add mouse click macros if we are in the middle of long click.
-          if ([...this.macrosToCompleteLater_.values()].some(
-                  (savedMacro: Macro) => savedMacro.getName() ===
-                      MacroName.MOUSE_LONG_CLICK_LEFT)) {
-            continue;
-          }
-        }
         result.push(macro);
         displayStrings.push(BubbleController.getDisplayText(gesture, macro));
         if (macro.triggersAtActionStartAndEnd()) {
           // Cache this macro to be run a second time later,
-          // e.g. for the mouse or key release.
+          // e.g. for key release.
           this.macrosToCompleteLater_.set(gesture, macro);
         }
       }
@@ -208,9 +229,9 @@ export class GestureHandler {
 
   /**
    * Gets the cached macros that are run again when a gesture ends. For example,
-   * for a left click macro, the left click starts when the gesture is first
+   * for a key press macro, the key press starts when the gesture is first
    * detected and the macro is run a second time when the gesture is no longer
-   * detected, thus the click will be held as long as the gesture is still
+   * detected, thus the key press will be held as long as the gesture is still
    * detected.
    */
   private popMacrosOnGestureEnd(
@@ -224,9 +245,6 @@ export class GestureHandler {
         if (!macro) {
           return;
         }
-        if (macro instanceof MouseClickMacro) {
-          macro.updateLocation(this.mouseController_.mouseLocation());
-        }
         macrosForLater.push(macro);
         this.macrosToCompleteLater_.delete(previousGesture);
       }
@@ -236,22 +254,31 @@ export class GestureHandler {
 
   private macroFromName_(name: MacroName, gesture: FacialGesture): Macro
       |undefined {
-    if (this.paused_ && name !== MacroName.TOGGLE_FACEGAZE) {
+    if (!this.isMacroAllowed_(name)) {
+      return;
+    }
+
+    // If we are in the middle of long click, do not allow additional mouse
+    // clicks or scroll mode.
+    if (this.mouseController_.isLongClickActive() &&
+        (name === MacroName.MOUSE_CLICK_LEFT ||
+         name === MacroName.MOUSE_CLICK_RIGHT ||
+         name === MacroName.MOUSE_CLICK_LEFT_DOUBLE ||
+         name === MacroName.TOGGLE_SCROLL_MODE)) {
       return;
     }
 
     switch (name) {
       case MacroName.TOGGLE_DICTATION:
-        return new ToggleDictationMacro();
+        return new ToggleDictationMacro(
+            /*dictationActive=*/ this.isDictationActive_());
       case MacroName.MOUSE_CLICK_LEFT:
         return new MouseClickMacro(this.mouseController_.mouseLocation());
       case MacroName.MOUSE_CLICK_RIGHT:
         return new MouseClickMacro(
             this.mouseController_.mouseLocation(), /*leftClick=*/ false);
       case MacroName.MOUSE_LONG_CLICK_LEFT:
-        return new MouseClickMacro(
-            this.mouseController_.mouseLocation(), /*leftClick=*/ true,
-            /*clickImmediately=*/ false);
+        return new MouseLongClickMacro(this.mouseController_);
       case MacroName.MOUSE_CLICK_LEFT_DOUBLE:
         return new MouseClickLeftDoubleMacro(
             this.mouseController_.mouseLocation());
@@ -273,16 +300,22 @@ export class GestureHandler {
         return new KeyPressMacro(name, {key: KeyCode.MEDIA_LAUNCH_APP1});
       case MacroName.KEY_PRESS_MEDIA_PLAY_PAUSE:
         return new KeyPressMacro(name, {key: KeyCode.MEDIA_PLAY_PAUSE});
+      case MacroName.KEY_PRESS_SCREENSHOT:
+        return new KeyPressMacro(name, {key: KeyCode.SNAPSHOT});
       case MacroName.OPEN_FACEGAZE_SETTINGS:
         return new CustomCallbackMacro(MacroName.OPEN_FACEGAZE_SETTINGS, () => {
           chrome.accessibilityPrivate.openSettingsSubpage(
               GestureHandler.SETTINGS_PATH);
         });
       case MacroName.TOGGLE_FACEGAZE:
-        return new CustomCallbackMacro(MacroName.TOGGLE_FACEGAZE, () => {
-          this.mouseController_.togglePaused();
-          this.togglePaused(gesture);
-        });
+        return new CustomCallbackMacro(
+            MacroName.TOGGLE_FACEGAZE,
+            () => {
+              this.mouseController_.togglePaused();
+              this.togglePaused(gesture);
+            },
+            /*toggleDirection=*/ this.paused_ ? ToggleDirection.ON :
+                                                ToggleDirection.OFF);
       case MacroName.TOGGLE_SCROLL_MODE:
         return new MouseScrollMacro(this.mouseController_);
       case MacroName.TOGGLE_VIRTUAL_KEYBOARD:
@@ -317,6 +350,23 @@ export class GestureHandler {
         return;
     }
   }
+
+  private isMacroAllowed_(name: MacroName): boolean {
+    if (this.isDictationActive_() && name !== MacroName.TOGGLE_DICTATION) {
+      return false;
+    }
+
+    if (this.mouseController_.isScrollModeActive() &&
+        name !== MacroName.TOGGLE_SCROLL_MODE) {
+      return false;
+    }
+
+    if (this.paused_ && name !== MacroName.TOGGLE_FACEGAZE) {
+      return false;
+    }
+
+    return true;
+  }
 }
 
 export namespace GestureHandler {
@@ -324,8 +374,7 @@ export namespace GestureHandler {
   export const DEFAULT_CONFIDENCE_THRESHOLD = 0.5;
 
   /** Minimum repeat rate of a gesture. */
-  // TODO(b:322511275): Move to a pref in settings.
-  export const DEFAULT_REPEAT_DELAY_MS = 500;
+  export const DEFAULT_REPEAT_DELAY_MS = 1000;
 
   export const GESTURE_TO_KEY_COMBO_PREF =
       'settings.a11y.face_gaze.gestures_to_key_combos';

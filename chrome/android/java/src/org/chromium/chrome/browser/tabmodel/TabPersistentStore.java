@@ -550,7 +550,7 @@ public class TabPersistentStore {
     }
 
     @VisibleForTesting
-    void initializeRestoreVars(boolean ignoreIncognitoFiles) {
+    /* package */ void initializeRestoreVars(boolean ignoreIncognitoFiles) {
         mCancelNormalTabLoads = false;
         mCancelIncognitoTabLoads = ignoreIncognitoFiles;
         mNormalTabsRestored = new SparseIntArray();
@@ -989,7 +989,8 @@ public class TabPersistentStore {
         }
     }
 
-    public void addTabToSaveQueue(Tab tab) {
+    @VisibleForTesting
+    /* package */ void addTabToSaveQueue(Tab tab) {
         addTabToSaveQueueIfApplicable(tab);
         saveNextTab();
     }
@@ -998,7 +999,7 @@ public class TabPersistentStore {
      * @return Whether the specified tab is in any pending save operations.
      */
     @VisibleForTesting
-    boolean isTabPendingSave(Tab tab) {
+    /* package */ boolean isTabPendingSave(Tab tab) {
         return (mSaveTabTask != null && mSaveTabTask.mTab.equals(tab)) || mTabsToSave.contains(tab);
     }
 
@@ -1783,7 +1784,7 @@ public class TabPersistentStore {
         if (mTabRestoreStartTime == INVALID_TIME) return;
 
         long duration = SystemClock.elapsedRealtime() - mTabRestoreStartTime;
-        RecordHistogram.recordMediumTimesHistogram(
+        RecordHistogram.deprecatedRecordMediumTimesHistogram(
                 "Tabs.Startup.RestoreDuration." + mClientTag, duration);
         int tabCount = mTabModelSelector.getTotalTabCount();
         if (tabCount != 0) {

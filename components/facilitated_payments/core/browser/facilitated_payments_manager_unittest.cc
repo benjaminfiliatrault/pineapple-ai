@@ -21,13 +21,15 @@
 #include "components/autofill/core/browser/data_model/bank_account.h"
 #include "components/autofill/core/browser/test_payments_data_manager.h"
 #include "components/autofill/core/common/autofill_prefs.h"
-#include "components/facilitated_payments/core/browser/facilitated_payments_api_client.h"
+#include "components/facilitated_payments/core/browser/ewallet_manager.h"
 #include "components/facilitated_payments/core/browser/facilitated_payments_client.h"
 #include "components/facilitated_payments/core/browser/facilitated_payments_driver.h"
+#include "components/facilitated_payments/core/browser/mock_facilitated_payments_api_client.h"
+#include "components/facilitated_payments/core/browser/mock_facilitated_payments_client.h"
 #include "components/facilitated_payments/core/browser/network_api/facilitated_payments_network_interface.h"
 #include "components/facilitated_payments/core/features/features.h"
 #include "components/facilitated_payments/core/metrics/facilitated_payments_metrics.h"
-#include "components/optimization_guide/core/optimization_guide_decider.h"
+#include "components/optimization_guide/core/mock_optimization_guide_decider.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/sync/test/test_sync_service.h"
 #include "components/ukm/test_ukm_recorder.h"
@@ -62,8 +64,10 @@ CoreAccountInfo CreateLoggedInAccountInfo() {
 class MockFacilitatedPaymentsDriver : public FacilitatedPaymentsDriver {
  public:
   explicit MockFacilitatedPaymentsDriver(
-      std::unique_ptr<FacilitatedPaymentsManager> manager)
-      : FacilitatedPaymentsDriver(std::move(manager)) {}
+      std::unique_ptr<FacilitatedPaymentsManager> manager,
+      std::unique_ptr<EwalletManager> ewallet_manager)
+      : FacilitatedPaymentsDriver(std::move(manager),
+                                  std::move(ewallet_manager)) {}
   ~MockFacilitatedPaymentsDriver() override = default;
 
   MOCK_METHOD(void,
@@ -71,93 +75,6 @@ class MockFacilitatedPaymentsDriver : public FacilitatedPaymentsDriver {
               (base::OnceCallback<void(mojom::PixCodeDetectionResult,
                                        const std::string&)>),
               (override));
-};
-
-// A mock for the facilitated payment API client interface.
-class MockFacilitatedPaymentsApiClient : public FacilitatedPaymentsApiClient {
- public:
-  static std::unique_ptr<FacilitatedPaymentsApiClient> CreateApiClient() {
-    return std::make_unique<MockFacilitatedPaymentsApiClient>();
-  }
-
-  MockFacilitatedPaymentsApiClient() = default;
-  ~MockFacilitatedPaymentsApiClient() override = default;
-
-  MOCK_METHOD(void, IsAvailable, (base::OnceCallback<void(bool)>), (override));
-  MOCK_METHOD(void,
-              GetClientToken,
-              (base::OnceCallback<void(std::vector<uint8_t>)>),
-              (override));
-  MOCK_METHOD(void,
-              InvokePurchaseAction,
-              (CoreAccountInfo,
-               base::span<const uint8_t>,
-               base::OnceCallback<void(PurchaseActionResult)>),
-              (override));
-};
-
-class MockOptimizationGuideDecider
-    : public optimization_guide::OptimizationGuideDecider {
- public:
-  MOCK_METHOD(void,
-              RegisterOptimizationTypes,
-              (const std::vector<optimization_guide::proto::OptimizationType>&),
-              (override));
-  MOCK_METHOD(void,
-              CanApplyOptimization,
-              (const GURL&,
-               optimization_guide::proto::OptimizationType,
-               optimization_guide::OptimizationGuideDecisionCallback),
-              (override));
-  MOCK_METHOD(optimization_guide::OptimizationGuideDecision,
-              CanApplyOptimization,
-              (const GURL&,
-               optimization_guide::proto::OptimizationType,
-               optimization_guide::OptimizationMetadata*),
-              (override));
-  MOCK_METHOD(
-      void,
-      CanApplyOptimizationOnDemand,
-      (const std::vector<GURL>&,
-       const base::flat_set<optimization_guide::proto::OptimizationType>&,
-       optimization_guide::proto::RequestContext,
-       optimization_guide::OnDemandOptimizationGuideDecisionRepeatingCallback,
-       std::optional<optimization_guide::proto::RequestContextMetadata>
-           request_context_metadata),
-      (override));
-};
-
-// A mock for the facilitated payment "client" interface.
-class MockFacilitatedPaymentsClient : public FacilitatedPaymentsClient {
- public:
-  MockFacilitatedPaymentsClient() = default;
-  ~MockFacilitatedPaymentsClient() override = default;
-
-  MOCK_METHOD(void,
-              LoadRiskData,
-              (base::OnceCallback<void(const std::string&)>),
-              (override));
-  MOCK_METHOD(autofill::PaymentsDataManager*,
-              GetPaymentsDataManager,
-              (),
-              (override));
-  MOCK_METHOD(FacilitatedPaymentsNetworkInterface*,
-              GetFacilitatedPaymentsNetworkInterface,
-              (),
-              (override));
-  MOCK_METHOD(std::optional<CoreAccountInfo>,
-              GetCoreAccountInfo,
-              (),
-              (override));
-  MOCK_METHOD(bool, IsInLandscapeMode, (), (override));
-  MOCK_METHOD(bool,
-              ShowPixPaymentPrompt,
-              (base::span<const autofill::BankAccount> pix_account_suggestions,
-               base::OnceCallback<void(bool, int64_t)>),
-              (override));
-  MOCK_METHOD(void, ShowProgressScreen, (), (override));
-  MOCK_METHOD(void, ShowErrorScreen, (), (override));
-  MOCK_METHOD(void, DismissPrompt, (), (override));
 };
 
 class MockFacilitatedPaymentsNetworkInterface
@@ -185,8 +102,8 @@ class FacilitatedPaymentsManagerTest : public testing::Test {
 
   void SetUp() override {
     optimization_guide_decider_ =
-        std::make_unique<MockOptimizationGuideDecider>();
-    driver_ = std::make_unique<MockFacilitatedPaymentsDriver>(nullptr);
+        std::make_unique<optimization_guide::MockOptimizationGuideDecider>();
+    driver_ = std::make_unique<MockFacilitatedPaymentsDriver>(nullptr, nullptr);
     client_ = std::make_unique<MockFacilitatedPaymentsClient>();
 
     manager_ = std::make_unique<FacilitatedPaymentsManager>(
@@ -224,7 +141,8 @@ class FacilitatedPaymentsManagerTest : public testing::Test {
   }
 
  protected:
-  std::unique_ptr<MockOptimizationGuideDecider> optimization_guide_decider_;
+  std::unique_ptr<optimization_guide::MockOptimizationGuideDecider>
+      optimization_guide_decider_;
   std::unique_ptr<MockFacilitatedPaymentsDriver> driver_;
   std::unique_ptr<MockFacilitatedPaymentsClient> client_;
   std::unique_ptr<FacilitatedPaymentsManager> manager_;
@@ -242,7 +160,6 @@ class FacilitatedPaymentsManagerTest : public testing::Test {
 TEST_F(FacilitatedPaymentsManagerTest, RegisterPixAllowlist) {
   EXPECT_CALL(*optimization_guide_decider_,
               RegisterOptimizationTypes(testing::ElementsAre(
-                  optimization_guide::proto::PIX_PAYMENT_MERCHANT_ALLOWLIST,
                   optimization_guide::proto::PIX_MERCHANT_ORIGINS_ALLOWLIST)))
       .Times(1);
 
@@ -279,24 +196,6 @@ TEST_F(FacilitatedPaymentsManagerTest,
                                              testing::_));
 
   manager_->OnApiAvailabilityReceived(true);
-}
-
-// Test that a histogram is logged with the result of the ShowPixPaymentPrompt.
-TEST_F(FacilitatedPaymentsManagerTest, ShowsPixPaymentPrompt_HistogramLogged) {
-  base::HistogramTester histogram_tester;
-  autofill::BankAccount pix_account = CreatePixBankAccount(/*instrument_id=*/1);
-  payments_data_manager_->AddMaskedBankAccountForTest(pix_account);
-  EXPECT_CALL(*client_, ShowPixPaymentPrompt(
-                            testing::UnorderedElementsAreArray({pix_account}),
-                            testing::_))
-      .WillOnce(testing::Return(true));
-
-  manager_->OnApiAvailabilityReceived(true);
-
-  histogram_tester.ExpectUniqueSample(
-      "FacilitatedPayments.Pix.FopSelector.Shown",
-      /*sample=*/true,
-      /*expected_bucket_count=*/1);
 }
 
 // If the user does not select a payment account in the payment prompt, request
@@ -464,6 +363,33 @@ TEST_F(FacilitatedPaymentsManagerTest, ResettingPreventsPayment) {
 
   EXPECT_FALSE(
       manager_->initiate_payment_request_details_->IsReadyForPixPayment());
+}
+
+TEST_F(FacilitatedPaymentsManagerTest,
+       CopyTrigger_UrlInAllowlist_LogPixCodeCopied) {
+  base::HistogramTester histogram_tester;
+  payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
+  GURL url("https://example.com/");
+  // Mock allowlist check result.
+  EXPECT_CALL(
+      *optimization_guide_decider_,
+      CanApplyOptimization(
+          testing::Eq(url),
+          testing::Eq(
+              optimization_guide::proto::PIX_MERCHANT_ORIGINS_ALLOWLIST),
+          testing::Matcher<optimization_guide::OptimizationMetadata*>(
+              testing::Eq(nullptr))))
+      .Times(1)
+      .WillOnce(testing::Return(
+          optimization_guide::OptimizationGuideDecision::kTrue));
+
+  manager_->OnPixCodeCopiedToClipboard(
+      url, "00020126370014br.gov.bcb.pix2515www.example.com6304EA3F",
+      ukm::UkmRecorder::GetNewSourceID());
+
+  histogram_tester.ExpectUniqueSample("FacilitatedPayments.Pix.PixCodeCopied",
+                                      /*sample=*/true,
+                                      /*expected_bucket_count=*/1);
 }
 
 TEST_F(FacilitatedPaymentsManagerTest,
@@ -890,10 +816,6 @@ TEST_F(FacilitatedPaymentsManagerTest, TransactionSuccess_HistogramLogged) {
   base::HistogramTester histogram_tester;
   autofill::BankAccount pix_account = CreatePixBankAccount(/*instrument_id=*/1);
   payments_data_manager_->AddMaskedBankAccountForTest(pix_account);
-  EXPECT_CALL(*client_, ShowPixPaymentPrompt(
-                            testing::UnorderedElementsAreArray({pix_account}),
-                            testing::_))
-      .WillOnce(testing::Return(true));
   manager_->OnApiAvailabilityReceived(true);
 
   FastForwardBy(base::Seconds(2));
@@ -917,10 +839,6 @@ TEST_F(FacilitatedPaymentsManagerTest,
   base::HistogramTester histogram_tester;
   autofill::BankAccount pix_account = CreatePixBankAccount(/*instrument_id=*/1);
   payments_data_manager_->AddMaskedBankAccountForTest(pix_account);
-  EXPECT_CALL(*client_, ShowPixPaymentPrompt(
-                            testing::UnorderedElementsAreArray({pix_account}),
-                            testing::_))
-      .WillOnce(testing::Return(true));
   manager_->OnApiAvailabilityReceived(true);
 
   FastForwardBy(base::Seconds(2));
@@ -944,10 +862,6 @@ TEST_F(FacilitatedPaymentsManagerTest,
   base::HistogramTester histogram_tester;
   autofill::BankAccount pix_account = CreatePixBankAccount(/*instrument_id=*/1);
   payments_data_manager_->AddMaskedBankAccountForTest(pix_account);
-  EXPECT_CALL(*client_, ShowPixPaymentPrompt(
-                            testing::UnorderedElementsAreArray({pix_account}),
-                            testing::_))
-      .WillOnce(testing::Return(true));
   manager_->OnApiAvailabilityReceived(true);
 
   FastForwardBy(base::Seconds(2));
@@ -969,10 +883,6 @@ TEST_F(FacilitatedPaymentsManagerTest,
   base::HistogramTester histogram_tester;
   autofill::BankAccount pix_account = CreatePixBankAccount(/*instrument_id=*/1);
   payments_data_manager_->AddMaskedBankAccountForTest(pix_account);
-  EXPECT_CALL(*client_, ShowPixPaymentPrompt(
-                            testing::UnorderedElementsAreArray({pix_account}),
-                            testing::_))
-      .WillOnce(testing::Return(false));
   manager_->OnApiAvailabilityReceived(true);
 
   histogram_tester.ExpectUniqueSample(

@@ -91,6 +91,9 @@ BASE_DECLARE_FEATURE(kCheckingNoExtensionIdInExtensionIpcs);
 // embedding Chrome App to request access to Human Interface Devices.
 BASE_DECLARE_FEATURE(kEnableWebHidInWebView);
 
+// If enabled, disables unpacked extensions if developer mode is off.
+BASE_DECLARE_FEATURE(kExtensionDisableUnsupportedDeveloper);
+
 // Determine if dynamic extension URLs are handled and redirected.
 BASE_DECLARE_FEATURE(kExtensionDynamicURLRedirection);
 
@@ -158,13 +161,6 @@ BASE_DECLARE_FEATURE(kForceWebRequestProxyForTest);
 // cmd.exe process as a proxy.
 BASE_DECLARE_FEATURE(kLaunchWindowsNativeHostsDirectly);
 
-#if BUILDFLAG(IS_MAC)
-// Controls whether extension resource file paths ending with a separator are
-// rejected. See https://crbug.com/356878412.
-// TODO(crbug.com/357636604): Remove this feature flag in M132.
-BASE_DECLARE_FEATURE(kMacRejectFilePathsEndingWithSeparator);
-#endif
-
 // Controls whether extensions can use the new favicon fetching in Manifest V3.
 BASE_DECLARE_FEATURE(kNewExtensionFaviconHandling);
 
@@ -230,6 +226,8 @@ BASE_DECLARE_FEATURE(kUseNewServiceWorkerTaskQueue);
 // type for modifying headers.
 BASE_DECLARE_FEATURE(kDeclarativeNetRequestHeaderSubstitution);
 
+// Show no warning banner when an extension uses CDP's `chrome.debugger`.
+BASE_DECLARE_FEATURE(kSilentDebuggerExtensionAPI);
 }  // namespace extensions_features
 
 #endif  // EXTENSIONS_COMMON_EXTENSION_FEATURES_H_

@@ -21,6 +21,7 @@
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/wm/core/shadow_types.h"
 
@@ -31,15 +32,14 @@ namespace {
 // TODO(sophiewen): Remove hardcoded values when we get UX specs.
 inline constexpr int kPanelCornerRadius = 16;
 inline constexpr int kSearchResultsPanelWidth = 600;
-constexpr char kValidSearchUrl[] =
-    "https://www.google.com/search?q=cat&gsc=1&masfc=c";
 const std::u16string kSearchBoxPlaceholderText = u"Add to your search";
 inline constexpr gfx::Insets kPanelPadding = gfx::Insets::TLBR(12, 15, 15, 15);
 
 }  // namespace
 
 // `SunfishSearchBoxView` contains an image thumbnail and a textfield.
-class SunfishSearchBoxView : public views::View {
+class SunfishSearchBoxView : public views::View,
+                             public views::TextfieldController {
   METADATA_HEADER(SunfishSearchBoxView, views::View)
 
  public:
@@ -58,6 +58,7 @@ class SunfishSearchBoxView : public views::View {
                      .Build());
     AddChildView(views::Builder<views::Textfield>()
                      .CopyAddressTo(&textfield_)
+                     .SetController(this)
                      .SetTextInputType(ui::TEXT_INPUT_TYPE_TEXT)
                      .SetPlaceholderText(kSearchBoxPlaceholderText)
                      .SetProperty(views::kFlexBehaviorKey,
@@ -86,7 +87,27 @@ class SunfishSearchBoxView : public views::View {
     image_view_->SetImageSize(gfx::Size(target_width, target_height));
   }
 
+  // views::TextfieldController:
+  bool HandleKeyEvent(views::Textfield* sender,
+                      const ui::KeyEvent& event) override {
+    if (sender->GetText().empty()) {
+      return false;
+    }
+
+    if (event.type() == ui::EventType::kKeyPressed &&
+        event.key_code() == ui::VKEY_RETURN) {
+      const std::u16string& text = sender->GetText();
+      CaptureModeController::Get()->SendMultimodalSearch(
+          image_view_->GetImage(), base::UTF16ToUTF8(text));
+      return true;
+    }
+
+    return false;
+  }
+
  private:
+  friend class SearchResultsPanel;
+
   // Owned by the views hierarchy.
   raw_ptr<views::ImageView> image_view_;
   raw_ptr<views::Textfield> textfield_;
@@ -110,10 +131,6 @@ SearchResultsPanel::SearchResultsPanel() {
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
                                views::MaximumFlexSizeRule::kUnbounded));
-
-  // TODO(b/356878705): Replace this when the backend is hooked up. Currently
-  // used for UI debugging.
-  search_results_view_->Navigate(GURL(kValidSearchUrl));
 
   SetBackground(views::CreateThemedRoundedRectBackground(
       cros_tokens::kCrosSysSystemBaseElevated, kPanelCornerRadius));
@@ -148,8 +165,27 @@ std::unique_ptr<views::Widget> SearchResultsPanel::CreateWidget(
   return widget;
 }
 
+views::Textfield* SearchResultsPanel::GetSearchBoxTextfield() const {
+  return search_box_view_->textfield_;
+}
+
 void SearchResultsPanel::SetSearchBoxImage(const gfx::ImageSkia& image) {
   search_box_view_->SetImage(image);
+}
+
+bool SearchResultsPanel::HasFocus() const {
+  // Returns true if `this` or any of its child views has focus.
+  const views::FocusManager* focus_manager = GetFocusManager();
+  if (!focus_manager) {
+    return false;
+  }
+
+  const views::View* focused_view = focus_manager->GetFocusedView();
+  if (!focused_view) {
+    return false;
+  }
+
+  return Contains(focused_view);
 }
 
 BEGIN_METADATA(SearchResultsPanel)

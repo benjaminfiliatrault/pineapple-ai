@@ -158,6 +158,12 @@ void HeadlessContentBrowserClient::OverrideWebkitPrefs(
     content::WebContents* web_contents,
     blink::web_pref::WebPreferences* prefs) {
   prefs->lazy_load_enabled = browser_->options()->lazy_load_enabled;
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ::switches::kForceHighContrast)) {
+    prefs->in_forced_colors = true;
+    prefs->preferred_contrast = blink::mojom::PreferredContrast::kMore;
+  }
 }
 
 void HeadlessContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
@@ -328,6 +334,7 @@ bool HeadlessContentBrowserClient::
 }
 
 bool HeadlessContentBrowserClient::IsInterestGroupAPIAllowed(
+    content::BrowserContext* browser_context,
     content::RenderFrameHost* render_frame_host,
     content::InterestGroupApiOperation operation,
     const url::Origin& top_frame_origin,
@@ -359,6 +366,27 @@ bool HeadlessContentBrowserClient::IsSharedStorageSelectURLAllowed(
     const url::Origin& accessing_origin,
     std::string* out_debug_message,
     bool* out_block_is_site_setting_specific) {
+  return true;
+}
+
+bool HeadlessContentBrowserClient::
+    IsFencedFramesLocalUnpartitionedDataAccessAllowed(
+        content::BrowserContext* browser_context,
+        content::RenderFrameHost* rfh,
+        const url::Origin& top_frame_origin,
+        const url::Origin& accessing_origin) {
+  return true;
+}
+
+bool HeadlessContentBrowserClient::IsCookieDeprecationLabelAllowed(
+    content::BrowserContext* browser_context) {
+  return true;
+}
+
+bool HeadlessContentBrowserClient::IsCookieDeprecationLabelAllowedForContext(
+    content::BrowserContext* browser_context,
+    const url::Origin& top_frame_origin,
+    const url::Origin& context_origin) {
   return true;
 }
 

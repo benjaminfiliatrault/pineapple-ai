@@ -69,6 +69,17 @@ AX_BASE_EXPORT bool IsAutoDisableAccessibilityEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kEnableAccessibilityAriaVirtualContent);
 AX_BASE_EXPORT bool IsAccessibilityAriaVirtualContentEnabled();
 
+// Expose <summary>" as a heading instead of a button.
+// Two reasons to try this:
+// 1. Unlike for a button, JAWS will not enforce leafiness for a heading, so
+// that things like child links will still be presented to the user.
+// 2. The user can use heading navigation for summaries.
+// We may decide to scale this back for use cases such as a summary inside of
+// a table or a list.
+// Experiment until we validate the approach with ATs and ARIA WG.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityExposeSummaryAsHeading);
+AX_BASE_EXPORT bool IsAccessibilityExposeSummaryAsHeadingEnabled();
+
 // Use language detection to determine the language
 // of text content in page and exposed to the browser process AXTree.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kEnableAccessibilityLanguageDetection);
@@ -177,10 +188,6 @@ AX_BASE_EXPORT bool IsAccessibilityCaretBlinkIntervalSettingEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityOverscrollSettingFeature);
 AX_BASE_EXPORT bool IsAccessibilityOverscrollSettingFeatureEnabled();
 
-// Controls whether the Select to Speak keyboard shortcut is enabled.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilitySelectToSpeakShortcut);
-AX_BASE_EXPORT bool IsAccessibilitySelectToSpeakShortcutEnabled();
-
 // Controls whether the shake cursor to locate feature is available.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityShakeToLocate);
 AX_BASE_EXPORT bool IsAccessibilityShakeToLocateEnabled();
@@ -192,7 +199,7 @@ AX_BASE_EXPORT bool IsAccessibilityMagnifyAcceleratorDialogEnabled();
 
 // Controls whether the disable trackpad feature is enabled.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityDisableTrackpad);
-AX_BASE_EXPORT bool IsAccessibilityDisableTrackpadEnabled();
+AX_BASE_EXPORT bool IsAccessibilityDisableTouchpadEnabled();
 
 // Controls whether the flash screen for notifications feature is available.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityFlashScreenFeature);
@@ -240,12 +247,6 @@ AX_BASE_EXPORT bool IsDataCollectionModeForScreen2xEnabled();
 // provided.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kMainNodeAnnotations);
 AX_BASE_EXPORT bool IsMainNodeAnnotationsEnabled();
-
-// Use OCR to make inaccessible (i.e. untagged) PDFs
-// accessibility. (Note: Due to the size of the OCR component, this feature
-// targets only desktop versions of Chrome for now.)
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kPdfOcr);
-AX_BASE_EXPORT bool IsPdfOcrEnabled();
 
 // Show the Read Aloud feature in Read Anything.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnythingReadAloud);

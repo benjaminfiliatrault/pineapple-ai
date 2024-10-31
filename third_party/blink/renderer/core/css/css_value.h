@@ -43,6 +43,7 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   static CSSValue* Create(const Length& value, float zoom);
 
   WTF::String CssText() const;
+  unsigned Hash() const;
 
   bool IsNumericLiteralValue() const {
     return class_type_ == kNumericLiteralClass;
@@ -204,9 +205,6 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   bool IsLightDarkValuePair() const {
     return class_type_ == kLightDarkValuePairClass;
   }
-  bool IsAppearanceAutoBaseSelectValuePair() const {
-    return class_type_ == kAppearanceAutoBaseSelectValuePairClass;
-  }
 
   bool IsScrollValue() const { return class_type_ == kScrollClass; }
   bool IsViewValue() const { return class_type_ == kViewClass; }
@@ -217,6 +215,8 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   bool IsRelativeColorValue() const {
     return class_type_ == kRelativeColorClass;
   }
+
+  bool IsRepeatValue() const { return class_type_ == kRepeatClass; }
 
   bool HasFailedOrCanceledSubresources() const;
   bool MayContainUrl() const;
@@ -262,7 +262,6 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
     kURIClass,
     kValuePairClass,
     kLightDarkValuePairClass,
-    kAppearanceAutoBaseSelectValuePairClass,
     kScrollClass,
     kViewClass,
     kRatioClass,
@@ -343,6 +342,7 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
     kGridAutoRepeatClass,
     kGridIntegerRepeatClass,
     kAxisClass,
+    kRepeatClass,
     // Do not append non-list class types here.
   };
 

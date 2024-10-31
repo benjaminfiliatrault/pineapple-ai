@@ -30,7 +30,6 @@ class BrowserAccessibility;
 
 namespace content {
 
-
 // Base class for an accessibility browsertest that takes an HTML file as
 // input, loads it into a tab, dumps some accessibility data in text format,
 // then compares that text to an expectation file in the same directory.
@@ -230,6 +229,8 @@ class DumpAccessibilityTestBase
   }
 
  private:
+  std::string FormatWebContentsTree(const ui::AXTreeFormatter&) const;
+
   ui::BrowserAccessibility* FindNodeInSubtree(ui::BrowserAccessibility& node,
                                               const std::string& name) const;
 

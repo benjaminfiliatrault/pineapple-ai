@@ -347,85 +347,6 @@ void AddressDataManager::MigrateProfileToAccount(
   AddProfile(account_profile);
 }
 
-void AddressDataManager::TryMigrateProfilesToAccount() {
-  // Reset if the user is not signed in.
-  if (!identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSignin) ||
-      identity_manager_->HasAccountWithRefreshTokenInPersistentErrorState(
-          identity_manager_->GetPrimaryAccountId(
-              signin::ConsentLevel::kSignin))) {
-    ResetSyncServiceObserver();
-    return;
-  }
-
-  for (const std::string& guid : profile_guids_to_migrate_) {
-    const AutofillProfile* const profile_to_migrate = GetProfileByGUID(guid);
-
-    // Skip if the profile no longer exists.
-    if (!profile_to_migrate) {
-      continue;
-    }
-
-    // Only local profiles can be migrated.
-    if (profile_to_migrate->record_type() !=
-        AutofillProfile::RecordType::kLocalOrSyncable) {
-      continue;
-    }
-
-    std::vector<const AutofillProfile*> profiles = GetProfiles();
-
-    // If a duplicate profile is already in the account store, we should not
-    // migrate, but still remove the local profile so that only the one saved
-    // to the account remains.
-    auto duplicate_account_profile = base::ranges::find_if(
-        profiles, [&profile_to_migrate](const AutofillProfile* p) {
-          return p->record_type() !=
-                     AutofillProfile::RecordType::kLocalOrSyncable &&
-                 p->Compare(*profile_to_migrate) == 0;
-        });
-
-    if (duplicate_account_profile != profiles.end()) {
-      RemoveProfile(guid);
-      break;
-    }
-
-    // All checks passed, initiate migration.
-    MigrateProfileToAccount(*profile_to_migrate);
-  }
-
-  ResetSyncServiceObserver();
-}
-
-void AddressDataManager::ResetSyncServiceObserver() {
-  profile_guids_to_migrate_.clear();
-  sync_service_observer_.Reset();
-}
-
-void AddressDataManager::MigrateProfileToAccountWhenReady(
-    const AutofillProfile& profile) {
-  profile_guids_to_migrate_.insert(profile.guid());
-
-  // Migrate the profile directly if `CONTACT_INFO` is already available.
-  if (sync_service_->GetActiveDataTypes().Has(syncer::CONTACT_INFO)) {
-    TryMigrateProfilesToAccount();
-    return;
-  }
-
-  sync_service_observer_.Observe(sync_service_.get());
-}
-
-void AddressDataManager::OnStateChanged(syncer::SyncService* sync) {
-  // Return, but keep waiting if sync is not ready to process addresses yet.
-  if (!sync->GetActiveDataTypes().Has(syncer::CONTACT_INFO)) {
-    return;
-  }
-
-  TryMigrateProfilesToAccount();
-}
-
-void AddressDataManager::OnSyncShutdown(syncer::SyncService* sync) {
-  ResetSyncServiceObserver();
-}
-
 void AddressDataManager::OnAutofillProfilePrefChanged() {
   LoadProfiles();
   autofill_metrics::MaybeLogAutofillProfileDisabled(
@@ -896,30 +817,30 @@ void AddressDataManager::OnProfileChangeDone(const std::string& guid) {
 }
 
 void AddressDataManager::LogStoredDataMetrics() const {
-  const std::vector<const AutofillProfile*> profiles = GetProfiles();
-  autofill_metrics::LogStoredProfileMetrics(profiles);
-  autofill_metrics::LogStoredProfileTokenQualityMetrics(profiles);
+  const std::vector<const AutofillProfile*> profile_pointers = GetProfiles();
+  std::vector<AutofillProfile> profiles = base::ToVector(
+      profile_pointers, [](const AutofillProfile* p) { return *p; });
+
+  autofill_metrics::LogStoredProfileMetrics(profile_pointers);
+  autofill_metrics::LogStoredProfileTokenQualityMetrics(profile_pointers);
 
   if (base::FeatureList::IsEnabled(
           features::kAutofillLogDeduplicationMetrics)) {
     // Since the computation of deduplication metrics is expensive, the
-    // recording is delayed by 30 seconds (arbitrary number) to prevent startup
+    // recording is delayed by 15 seconds (arbitrary number) to prevent startup
     // time regressions.
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(
-            [](base::WeakPtr<const AddressDataManager> adm) {
-              if (!adm) {
-                return;
-              }
+            [](std::vector<AutofillProfile> profiles, std::string app_locale) {
               autofill_metrics::LogDeduplicationStartupMetrics(
-                  adm->GetProfiles(), adm->app_locale());
+                  std::move(profiles), std::move(app_locale));
             },
-            weak_factory_.GetWeakPtr()),
-        base::Seconds(30));
+            profiles, app_locale_),
+        base::Seconds(15));
   }
 
-  autofill_metrics::LogLocalProfileSupersetMetrics(std::move(profiles),
+  autofill_metrics::LogLocalProfileSupersetMetrics(std::move(profile_pointers),
                                                    app_locale_);
 }
 

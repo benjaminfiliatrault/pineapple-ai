@@ -107,7 +107,8 @@ struct Suggestion {
 
   struct PaymentsPayload final {
     PaymentsPayload();
-    explicit PaymentsPayload(bool should_display_terms_available);
+    PaymentsPayload(std::u16string main_text_content_description,
+                    bool should_display_terms_available);
     PaymentsPayload(const PaymentsPayload&);
     PaymentsPayload(PaymentsPayload&&);
     PaymentsPayload& operator=(const PaymentsPayload&);
@@ -117,17 +118,42 @@ struct Suggestion {
     friend bool operator==(const PaymentsPayload&,
                            const PaymentsPayload&) = default;
 
+    // Value to be announced for the suggestion's `main_text`.
+    std::u16string main_text_content_description;
+
     // If true, the user will be presented with a "Terms apply for card
     // benefits" message below the suggestions list on TTF for mobile.
     bool should_display_terms_available = false;
   };
 
-  using IsLoading = base::StrongAlias<class IsLoadingTag, bool>;
   using Guid = base::StrongAlias<class GuidTag, std::string>;
+
+  struct AutofillProfilePayload final {
+    AutofillProfilePayload();
+    explicit AutofillProfilePayload(Guid guid);
+    AutofillProfilePayload(Guid guid, std::u16string email_override);
+    AutofillProfilePayload(const AutofillProfilePayload&);
+    AutofillProfilePayload(AutofillProfilePayload&&);
+    AutofillProfilePayload& operator=(const AutofillProfilePayload&);
+    AutofillProfilePayload& operator=(AutofillProfilePayload&&);
+    ~AutofillProfilePayload();
+
+    friend bool operator==(const AutofillProfilePayload&,
+                           const AutofillProfilePayload&) = default;
+
+    // Address profile identifier.
+    Guid guid;
+    // If non-empty, the email override is applied on the AutofillProfile
+    // identified by `guid` every time it's loaded.
+    std::u16string email_override;
+  };
+
+  using IsLoading = base::StrongAlias<class IsLoadingTag, bool>;
   using InstrumentId = base::StrongAlias<class InstrumentIdTag, uint64_t>;
-  using BackendId = absl::variant<Guid, InstrumentId>;
   using ValueToFill = base::StrongAlias<struct ValueToFill, std::u16string>;
-  using Payload = absl::variant<BackendId,
+  using Payload = absl::variant<Guid,
+                                InstrumentId,
+                                AutofillProfilePayload,
                                 GURL,
                                 ValueToFill,
                                 PasswordSuggestionDetails,
@@ -250,6 +276,19 @@ struct Suggestion {
     kStatic,
   };
 
+  // Describes whether a suggestion can be accepted and how it should be styled
+  // when it cannot be.
+  enum class Acceptability {
+    // The suggestion can be accepted.
+    kAcceptable,
+    // The suggestion cannot be accepted (i.e. trying to accept it is ignored by
+    // the UI controller).
+    kUnacceptable,
+    // The suggestion cannot be accepted and is displayed in a
+    // disabled/grayed-out form.
+    kUnacceptableWithDeactivatedStyle,
+  };
+
   // TODO(crbug.com/335194240): Consolidate expected param types for these
   // constructors. Some expect UTF16 strings and others UTF8, while internally
   // we only use UTF16. The ones expecting UTF8 are only used by tests and could
@@ -287,12 +326,6 @@ struct Suggestion {
     return absl::holds_alternative<T>(payload) ? absl::get<T>(payload) : T{};
   }
 
-  template <typename T>
-  T GetBackendId() const {
-    CHECK(absl::holds_alternative<BackendId>(payload));
-    return absl::get<T>(absl::get<BackendId>(payload));
-  }
-
 #if DCHECK_IS_ON()
   bool Invariant() const {
     switch (type) {
@@ -301,11 +334,10 @@ struct Suggestion {
         return absl::holds_alternative<PlusAddressPayload>(payload);
       case SuggestionType::kPasswordEntry:
         // Manual fallback password suggestions store the password to preview or
-        // fill in the suggestion's payload. Regular per-domain contain empty
-        // `BackendId`.
-        // TODO(crbug.com/333992198): Use `PasswordSuggestionDetails` for all
-        // suggestions with `SuggestionType::kPasswordEntry`.
-        return absl::holds_alternative<BackendId>(payload) ||
+        // fill in the suggestion's payload.
+        // TODO(crbug.com/333992198): Use `PasswordSuggestionDetails` only for
+        // all suggestions with `SuggestionType::kPasswordEntry`.
+        return absl::holds_alternative<Guid>(payload) ||
                absl::holds_alternative<PasswordSuggestionDetails>(payload);
       case SuggestionType::kFillPassword:
       case SuggestionType::kViewPasswordDetails:
@@ -314,7 +346,8 @@ struct Suggestion {
         return absl::holds_alternative<GURL>(payload);
       case SuggestionType::kIbanEntry:
         return absl::holds_alternative<ValueToFill>(payload) ||
-               absl::holds_alternative<BackendId>(payload);
+               absl::holds_alternative<Guid>(payload) ||
+               absl::holds_alternative<InstrumentId>(payload);
       case SuggestionType::kFillPredictionImprovements:
         return absl::holds_alternative<ValueToFill>(payload) ||
                absl::holds_alternative<PredictionImprovementsPayload>(payload);
@@ -323,10 +356,12 @@ struct Suggestion {
         // TODO(crbug.com/367434234): Use `PaymentsPayload` for all credit card
         // suggestions. Only Touch-To-Fill credit card suggestions currently
         // use this.
-        return absl::holds_alternative<BackendId>(payload) ||
+        return absl::holds_alternative<Guid>(payload) ||
                absl::holds_alternative<PaymentsPayload>(payload);
+      case SuggestionType::kDevtoolsTestAddressEntry:
       default:
-        return absl::holds_alternative<BackendId>(payload);
+        return absl::holds_alternative<Guid>(payload) ||
+               absl::holds_alternative<AutofillProfilePayload>(payload);
     }
   }
 #endif
@@ -414,20 +449,14 @@ struct Suggestion {
   // `FieldType` used to build the suggestion's `main_text`.
   std::optional<FieldType> field_by_field_filling_type_used;
 
-  // Whether the user is able to preview the suggestion by hovering on it or
-  // accept it by clicking on it.
-  bool is_acceptable = true;
-
   // How the suggestion should be handled by the filtration logic, see the enum
   // values doc for details.
   // Now used for filtering manually triggered password suggestions only and
   // has no effect on other suggestions.
   FiltrationPolicy filtration_policy = FiltrationPolicy::kFilterable;
 
-  // If true, the user will see the suggestion in a "disabled and grayed-out"
-  // form. This field should be true only when `is_acceptable` is false  which
-  // will make the suggestion deactivated and unclickable.
-  bool apply_deactivated_style = false;
+  // The acceptability of the suggestion, see the enum values doc for details.
+  Acceptability acceptability = Acceptability::kAcceptable;
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // If true, selecting a suggestion or, when it exists, expanding its
@@ -435,9 +464,16 @@ struct Suggestion {
   // contained cells.
   bool highlight_on_select = true;
 #endif
+
+  // Returns whether the user is able to preview the suggestion by hovering on
+  // it or accept it by clicking on it.
+  bool IsAcceptable() const;
+
+  // Returns whether the user will see the suggestion in
+  // a "disabled and grayed-out" form.
+  bool HasDeactivatedStyle() const;
 };
 
-std::string_view ConvertIconToPrintableString(Suggestion::Icon icon);
 void PrintTo(const Suggestion& suggestion, std::ostream* os);
 
 }  // namespace autofill

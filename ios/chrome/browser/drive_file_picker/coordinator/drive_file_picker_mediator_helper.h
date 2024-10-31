@@ -11,11 +11,13 @@
 #import <vector>
 
 #import "ios/chrome/browser/drive_file_picker/ui/drive_file_picker_constants.h"
+#import "ios/web/public/web_state_id.h"
 
 struct ChooseFileEvent;
 @class DriveFilePickerItem;
 struct DriveItem;
 struct DriveListQuery;
+@class UIImage;
 @class UTType;
 
 // Returns the list of unified types accepted for `event`.
@@ -29,6 +31,7 @@ void ApplySortToDriveListQuery(DriveItemsSortingType sorting_criteria,
 
 // Appends an extra term in `query` to account for `filter`.
 void ApplyFilterToDriveListQuery(DriveFilePickerFilter filter,
+                                 bool include_folders,
                                  DriveListQuery& query);
 
 // Creates a query accounting for `collection_type`, `folder_identifier`,
@@ -51,6 +54,13 @@ bool DriveFilePickerItemShouldBeEnabled(const DriveItem& item,
 
 // Returns the subtitle which contains the last modified date for `item`.
 NSString* DriveFilePickerItemSubtitleModified(const DriveItem& item);
+
+// Returns the subtitle which contains the date when `item` was last modified by
+// the user.
+NSString* DriveFilePickerItemSubtitleModifiedByMe(const DriveItem& item);
+
+// Returns the subtitle which contains the creation date for `item`.
+NSString* DriveFilePickerItemSubtitleCreated(const DriveItem& item);
 
 // Returns the subtitle which contains the last opened date for `item`.
 NSString* DriveFilePickerItemSubtitleOpened(const DriveItem& item);
@@ -75,7 +85,9 @@ DriveFilePickerItem* DriveItemToDriveFilePickerItem(
     DriveFilePickerCollectionType collection_type,
     DriveItemsSortingType sorting_criteria,
     BOOL should_show_search_items,
-    NSString* search_text);
+    NSString* search_text,
+    UIImage* fetched_icon,
+    NSString* fetched_icon_link);
 
 // Finds a DriveItem within the provided vector based on its identifier.
 std::optional<DriveItem> FindDriveItemFromIdentifier(
@@ -83,6 +95,14 @@ std::optional<DriveItem> FindDriveItemFromIdentifier(
     NSString* identifier);
 
 // Generates the `URL` to which the local copy of a file will be saved.
-NSURL* DriveFilePickerGenerateDownloadFileURL(NSString* download_file_name);
+NSURL* DriveFilePickerGenerateDownloadFileURL(web::WebStateID web_state_id,
+                                              NSString* download_file_name);
+
+// Returns the placeholder icon for `item`.
+UIImage* GetPlaceholderIconForDriveItem(const DriveItem& item);
+
+// Returns the appropriate image link to use for a given `item`.
+// If there is no such link, returns nil instead.
+NSString* GetImageLinkForDriveItem(const DriveItem& item);
 
 #endif  // IOS_CHROME_BROWSER_DRIVE_FILE_PICKER_COORDINATOR_DRIVE_FILE_PICKER_MEDIATOR_HELPER_H_

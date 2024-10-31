@@ -76,9 +76,6 @@ bool IsValidStateChange(LifecycleUnitState from,
           return false;
       }
     }
-    case LifecycleUnitState::THROTTLED: {
-      return false;
-    }
     case LifecycleUnitState::FROZEN: {
       switch (to) {
         // The renderer notifies the browser that the page was unfrozen after
@@ -116,55 +113,14 @@ StateChangeReason DiscardReasonToStateChangeReason(
     case LifecycleUnitDiscardReason::URGENT:
       return StateChangeReason::SYSTEM_MEMORY_PRESSURE;
     case LifecycleUnitDiscardReason::PROACTIVE:
-      return StateChangeReason::BROWSER_INITIATED;
     case LifecycleUnitDiscardReason::SUGGESTED:
+    case LifecycleUnitDiscardReason::FROZEN_WITH_GROWING_MEMORY:
       return StateChangeReason::BROWSER_INITIATED;
   }
 }
 
 }  // namespace
 
-class TabLifecycleUnitExternalImpl : public TabLifecycleUnitExternal {
- public:
-  explicit TabLifecycleUnitExternalImpl(
-      TabLifecycleUnitSource::TabLifecycleUnit* tab_lifecycle_unit)
-      : tab_lifecycle_unit_(tab_lifecycle_unit) {}
-
-  // TabLifecycleUnitExternal:
-
-  content::WebContents* GetWebContents() const override {
-    return tab_lifecycle_unit_->web_contents();
-  }
-
-  bool IsAutoDiscardable() const override {
-    return tab_lifecycle_unit_->IsAutoDiscardable();
-  }
-
-  void SetAutoDiscardable(bool auto_discardable) override {
-    tab_lifecycle_unit_->SetAutoDiscardable(auto_discardable);
-  }
-
-  bool DiscardTab(LifecycleUnitDiscardReason reason,
-                  uint64_t memory_footprint_estimate) override {
-    return tab_lifecycle_unit_->Discard(reason, memory_footprint_estimate);
-  }
-
-  bool IsDiscarded() const override {
-    return tab_lifecycle_unit_->GetState() == LifecycleUnitState::DISCARDED;
-  }
-
-  int GetDiscardCount() const override {
-    return tab_lifecycle_unit_->GetDiscardCount();
-  }
-
-  base::Time GetLastFocusedTime() const override {
-    return tab_lifecycle_unit_->GetLastFocusedTime();
-  }
-
- private:
-  raw_ptr<TabLifecycleUnitSource::TabLifecycleUnit> tab_lifecycle_unit_ =
-      nullptr;
-};
 
 TabLifecycleUnitSource::TabLifecycleUnit::TabLifecycleUnit(
     TabLifecycleUnitSource* source,
@@ -237,7 +193,16 @@ void TabLifecycleUnitSource::TabLifecycleUnit::SetFocused(bool focused) {
       // might not be if this is invoked as part of reloading the tab explicitly
       // and we haven't been notified of the ongoing load yet
       // (crbug.com/40075246).
-      if (web_contents()->WasDiscarded()) {
+      //
+      // With "WebContentsDiscard", loading on activation occurs from:
+      //     content::NavigationControllerImpl::SetActive
+      //     content::WebContentsImpl::UpdateVisibilityAndNotifyPageAndView
+      //     content::WebContentsImpl::UpdateWebContentsVisibility
+      // With `content::NavigationControllerImpl::needs_reload_` having been
+      // set from `content::FrameTree::Discard`. So it is undesired to trigger
+      // it explicitly from here.
+      if (web_contents()->WasDiscarded() &&
+          !base::FeatureList::IsEnabled(features::kWebContentsDiscard)) {
         bool loaded = Load();
         DCHECK(loaded);
       }
@@ -281,10 +246,7 @@ void TabLifecycleUnitSource::TabLifecycleUnit::UpdateLifecycleState(
 
 TabLifecycleUnitExternal*
 TabLifecycleUnitSource::TabLifecycleUnit::AsTabLifecycleUnitExternal() {
-  // Create an impl the first time this is called.
-  if (!external_impl_)
-    external_impl_ = std::make_unique<TabLifecycleUnitExternalImpl>(this);
-  return external_impl_.get();
+  return this;
 }
 
 std::u16string TabLifecycleUnitSource::TabLifecycleUnit::GetTitle() const {
@@ -650,6 +612,21 @@ bool TabLifecycleUnitSource::TabLifecycleUnit::Discard(
   return true;
 }
 
+content::WebContents* TabLifecycleUnitSource::TabLifecycleUnit::GetWebContents()
+    const {
+  return web_contents();
+}
+
+bool TabLifecycleUnitSource::TabLifecycleUnit::IsDiscarded() const {
+  return GetState() == LifecycleUnitState::DISCARDED;
+}
+
+bool TabLifecycleUnitSource::TabLifecycleUnit::DiscardTab(
+    mojom::LifecycleUnitDiscardReason reason,
+    uint64_t memory_footprint_estimate) {
+  return Discard(reason, memory_footprint_estimate);
+}
+
 TabLifecycleUnitSource* TabLifecycleUnitSource::TabLifecycleUnit::GetTabSource()
     const {
   return static_cast<TabLifecycleUnitSource*>(GetSource());
@@ -741,12 +718,14 @@ void TabLifecycleUnitSource::TabLifecycleUnit::CheckDeviceUsage(
     DecisionDetails* decision_details) const {
   DCHECK(decision_details);
 
-  if (web_contents()->IsConnectedToUsbDevice()) {
+  if (web_contents()->IsCapabilityActive(
+          content::WebContents::CapabilityType::kUSB)) {
     decision_details->AddReason(
         DecisionFailureReason::LIVE_STATE_USING_WEB_USB);
   }
 
-  if (web_contents()->IsConnectedToBluetoothDevice()) {
+  if (web_contents()->IsCapabilityActive(
+          content::WebContents::CapabilityType::kBluetoothConnected)) {
     decision_details->AddReason(
         DecisionFailureReason::LIVE_STATE_USING_BLUETOOTH);
   }

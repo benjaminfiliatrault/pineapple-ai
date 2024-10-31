@@ -79,6 +79,9 @@
       profileManager->GetProfileAttributesStorage();
   // The profile doesn't exist. Once the profile is created,
   // `item.attachedGaiaId` needs to be attached to the new profile.
+  // TODO(crbug.com/331783685): This is currently redundant with
+  // AccountProfileMapper::Assigner. Figure out where this logic should live,
+  // and clean up the other place.
   do {
     profileName = base::Uuid::GenerateRandomV4().AsLowercaseString();
   } while (profileStorage->HasProfileWithName(profileName));
@@ -145,6 +148,9 @@
   }
   // For each identity that is not attached to a profile yet, the hosted
   // domain needs to be loaded.
+  // TODO(crbug.com/331783685): This is currently redundant with
+  // AccountProfileMapper::Assigner. Figure out where this logic should live,
+  // and clean up the other place.
   for (id<SystemIdentity> identity in _accountManagerService
            ->GetAllIdentities()) {
     std::string gaiaID = base::SysNSStringToUTF8(identity.gaiaID);
@@ -256,7 +262,7 @@
   item.profileName = base::SysUTF8ToNSString(profileName);
   item.attachedGaiaId = base::SysUTF8ToNSString(gaiaID);
   item.active = [item.profileName isEqualToString:_activeProfileName];
-  if (profileName == kIOSChromeInitialBrowserState) {
+  if (profileName == kIOSChromeInitialProfile) {
     // TODO(crbug.com/331783685): Remove assumption that "Default" is the
     // personal profile.
     item.displayName = @"Personal profile";

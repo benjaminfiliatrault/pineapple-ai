@@ -88,8 +88,8 @@ void ScrollMarkerGroupPseudoElement::ActivateScrollMarker(
   }
   mojom::blink::ScrollIntoViewParamsPtr params =
       scroll_into_view_util::CreateScrollIntoViewParams(
-          *scroll_marker->OriginatingElement()->GetComputedStyle());
-  scroll_marker->OriginatingElement()->ScrollIntoViewNoVisualUpdate(
+          *scroll_marker->UltimateOriginatingElement()->GetComputedStyle());
+  scroll_marker->UltimateOriginatingElement()->ScrollIntoViewNoVisualUpdate(
       std::move(params));
   GetDocument().SetFocusedElement(scroll_marker,
                                   FocusParams(SelectionBehaviorOnFocus::kNone,
@@ -131,7 +131,7 @@ void ScrollMarkerGroupPseudoElement::ClearFocusGroup() {
 bool ScrollMarkerGroupPseudoElement::UpdateSelectedScrollMarker() {
   // Implements scroll tracking for scroll marker controls as per
   // https://drafts.csswg.org/css-overflow-5/#scroll-container-scroll.
-  Element* originating_element = OriginatingElement();
+  Element* originating_element = UltimateOriginatingElement();
   if (!originating_element) {
     return false;
   }
@@ -146,10 +146,12 @@ bool ScrollMarkerGroupPseudoElement::UpdateSelectedScrollMarker() {
       selected = scroll_marker;
     }
     const LayoutBox* target_box =
-        scroll_marker->OriginatingElement()->GetLayoutBox();
+        scroll_marker->UltimateOriginatingElement()->GetLayoutBox();
     if (!target_box) {
       continue;
     }
+    const LayoutBox* scroll_marker_box = scroll_marker->GetLayoutBox();
+    CHECK(scroll_marker_box);
     PhysicalBoxStrut scroll_margin =
         target_box->Style() ? target_box->Style()->ScrollMarginStrut()
                             : PhysicalBoxStrut();
@@ -161,7 +163,7 @@ bool ScrollMarkerGroupPseudoElement::UpdateSelectedScrollMarker() {
             ? kIgnoreStickyOffset
             : 0;
     PhysicalRect rect_to_scroll = scroller->AbsoluteToLocalRect(
-        target_box->AbsoluteBoundingBoxRectForScrollIntoView(), flag);
+        scroll_marker_box->AbsoluteBoundingBoxRectForScrollIntoView(), flag);
     rect_to_scroll.Expand(scroll_margin);
     ScrollableArea* scrollable_area = scroller->GetScrollableArea();
     CHECK(scrollable_area);

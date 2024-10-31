@@ -15,6 +15,7 @@
 #include "components/sync/service/configure_context.h"
 #include "components/sync/service/data_type_controller.h"
 #include "components/sync/service/data_type_manager.h"
+#include "components/sync/service/data_type_status_table.h"
 #include "components/sync/service/model_load_manager.h"
 
 namespace syncer {
@@ -50,7 +51,7 @@ class DataTypeManagerImpl : public DataTypeManager,
   DataTypeSet GetRegisteredDataTypes() const override;
   DataTypeSet GetDataTypesForTransportOnlyMode() const override;
   DataTypeSet GetActiveDataTypes() const override;
-  DataTypeSet GetPurgedDataTypes() const override;
+  DataTypeSet GetStoppedDataTypesExcludingNigori() const override;
   DataTypeSet GetActiveProxyDataTypes() const override;
   DataTypeSet GetTypesWithPendingDownloadForInitialSync() const override;
   DataTypeSet GetDataTypesWithPermanentErrors() const override;
@@ -62,6 +63,9 @@ class DataTypeManagerImpl : public DataTypeManager,
       base::OnceCallback<void(std::map<DataType, LocalDataDescription>)>
           callback) override;
   void TriggerLocalDataMigration(DataTypeSet types) override;
+  void TriggerLocalDataMigration(
+      std::map<DataType, std::vector<syncer::LocalDataItemModel::DataId>> items)
+      override;
   State state() const override;
   TypeStatusMapForDebugging GetTypeStatusMapForDebugging(
       DataTypeSet throttled_types,
@@ -71,38 +75,16 @@ class DataTypeManagerImpl : public DataTypeManager,
   void GetEntityCountsForDebugging(
       base::RepeatingCallback<void(const TypeEntitiesCount&)> callback)
       const override;
-  const DataTypeController::TypeMap& GetControllerMap() const override;
+  DataTypeController* GetControllerForTest(DataType type) override;
 
   // `ModelLoadManagerDelegate` implementation.
   void OnAllDataTypesReadyForConfigure() override;
-  void OnSingleDataTypeWillStop(DataType type, const SyncError& error) override;
+  void OnSingleDataTypeWillStop(DataType type,
+                                const std::optional<SyncError>& error) override;
 
   bool needs_reconfigure_for_test() const { return needs_reconfigure_; }
 
  private:
-  enum DataTypeConfigState {
-    CONFIGURE_ACTIVE,    // Actively being configured. Data of such types
-                         // will be downloaded if not present locally.
-    CONFIGURE_INACTIVE,  // Already configured or to be configured in future.
-                         // Data of such types is left as it is, no
-                         // downloading or purging.
-    DISABLED,            // Not syncing. Disabled by user.
-    FATAL,               // Not syncing due to unrecoverable error.
-    CRYPTO,              // Not syncing due to a cryptographer error.
-    UNREADY,             // Not syncing due to transient error.
-  };
-  using DataTypeConfigStateMap = std::map<DataType, DataTypeConfigState>;
-
-  // Return data types in `state_map` that match `state`.
-  static DataTypeSet GetDataTypesInState(
-      DataTypeConfigState state,
-      const DataTypeConfigStateMap& state_map);
-
-  // Set state of `types` in `state_map` to `state`.
-  static void SetDataTypesState(DataTypeConfigState state,
-                                DataTypeSet types,
-                                DataTypeConfigStateMap* state_map);
-
   // Prepare the parameters for the configurer's configuration.
   DataTypeConfigurer::ConfigureParams PrepareConfigureParams();
 
@@ -131,9 +113,6 @@ class DataTypeManagerImpl : public DataTypeManager,
 
   // Calls data type controllers of requested types to connect.
   void ConnectDataTypes();
-
-  DataTypeConfigStateMap BuildDataTypeConfigStateMap(
-      const DataTypeSet& types_being_configured) const;
 
   // Start configuration of next set of types in `configuration_types_queue_`
   // (if any exist, does nothing otherwise).

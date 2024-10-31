@@ -152,8 +152,10 @@ bool IsOnDeviceModelEnabled(ModelBasedCapabilityKey feature) {
     case ModelBasedCapabilityKey::kTabOrganization:
     case ModelBasedCapabilityKey::kWallpaperSearch:
     case ModelBasedCapabilityKey::kTextSafety:
+    case ModelBasedCapabilityKey::kBlingPrototyping:
       return false;
     case ModelBasedCapabilityKey::kHistorySearch:
+    case ModelBasedCapabilityKey::kHistoryQueryIntent:
     case ModelBasedCapabilityKey::kPromptApi:
     case ModelBasedCapabilityKey::kSummarize:
       return true;
@@ -179,11 +181,14 @@ bool IsOnDeviceModelAdaptationEnabled(ModelBasedCapabilityKey feature) {
       return true;
     case ModelBasedCapabilityKey::kHistorySearch:
       return true;
+    case ModelBasedCapabilityKey::kHistoryQueryIntent:
+      return true;
     case ModelBasedCapabilityKey::kFormsAnnotations:
     case ModelBasedCapabilityKey::kFormsPredictions:
     case ModelBasedCapabilityKey::kTabOrganization:
     case ModelBasedCapabilityKey::kWallpaperSearch:
     case ModelBasedCapabilityKey::kTextSafety:
+    case ModelBasedCapabilityKey::kBlingPrototyping:
       return false;
   }
 }

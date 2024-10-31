@@ -8,14 +8,21 @@ import 'chrome://resources/ash/common/cr_elements/cros_color_overrides.css.js';
 import 'chrome://resources/ash/common/cr_elements/icons.html.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
-import '../strings.m.js';
+import '/strings.m.js';
 
 import {isRTL} from '//resources/js/util.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {ScreenSwitchEvents} from './graduation_app.js';
+import {ScreenSwitchedEvent, ScreenSwitchEvents} from './graduation_app.js';
 import {getTemplate} from './graduation_takeout_ui.html.js';
+import {getGraduationUiHandler} from './graduation_ui_handler.js';
+
+declare global {
+  interface HTMLElementEventMap {
+    'newwindow': chrome.webviewTag.NewWindowEvent;
+  }
+}
 
 /**
  * The base URL of the banner shown in Takeout indicating that the user has
@@ -58,10 +65,23 @@ export class GraduationTakeoutUi extends PolymerElement {
 
   override ready() {
     super.ready();
-    const webviewUrl = loadTimeData.getString('webviewUrl');
+
     this.webview =
         this.shadowRoot!.querySelector<chrome.webviewTag.WebView>('webview')!;
 
+    this.configureWebviewListeners_();
+
+    this.addEventListener(ScreenSwitchedEvent, () => {
+      this.shadowRoot!.querySelector<HTMLElement>('#backButton')!.focus();
+    });
+
+    // The webview source should be set after all event listeners are created
+    // because the webview starts loading immediately after it is set.
+    const webviewUrl = loadTimeData.getString('webviewUrl');
+    this.webview.src = webviewUrl.toString();
+  }
+
+  private configureWebviewListeners_(): void {
     this.webview.addEventListener('contentload', () => {
       this.webviewLoading = false;
     });
@@ -74,6 +94,12 @@ export class GraduationTakeoutUi extends PolymerElement {
       }));
     });
 
+    this.webview.addEventListener(
+        'newwindow', (e: chrome.webviewTag.NewWindowEvent) => {
+          // Allow the webview to open links in a new tab.
+          window.open(e.targetUrl);
+        });
+
     /**
      * The done button is made visible when the image shown at the end of the
      * Takeout flow is displayed to the user.
@@ -81,15 +107,10 @@ export class GraduationTakeoutUi extends PolymerElement {
     this.webview.request.onCompleted.addListener((details: any) => {
       if (details.statusCode === 200 &&
           details.url.startsWith(TAKEOUT_COMPLETED_BANNER_BASE_URL)) {
+        getGraduationUiHandler().onTransferComplete();
         this.takeoutFlowCompleted = true;
       }
     }, {urls: ['<all_urls>']});
-
-    this.webview.src = webviewUrl.toString();
-  }
-
-  setWebviewForTest(webview: chrome.webviewTag.WebView) {
-    this.webview = webview;
   }
 
   private getBackButtonIcon_(): string {

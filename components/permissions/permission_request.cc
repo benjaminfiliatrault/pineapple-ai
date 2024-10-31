@@ -82,9 +82,6 @@ PermissionRequest::GetDialogAnnotatedMessageText(
           embedding_origin, url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC);
 
   switch (request_type()) {
-    case RequestType::kAccessibilityEvents:
-      message_id = IDS_ACCESSIBILITY_EVENTS_INFOBAR_TEXT;
-      break;
     case RequestType::kArSession:
       message_id = IDS_AR_INFOBAR_TEXT;
       break;
@@ -98,6 +95,8 @@ PermissionRequest::GetDialogAnnotatedMessageText(
       // Handled by an override in `QuotaPermissionRequest`.
       NOTREACHED_IN_MIGRATION();
       break;
+    case RequestType::kFileSystemAccess:
+      NOTREACHED();
     case RequestType::kHandTracking:
       message_id = IDS_HAND_TRACKING_INFOBAR_TEXT;
       break;
@@ -308,9 +307,6 @@ std::optional<std::u16string> PermissionRequest::GetRequestChipText(
 std::u16string PermissionRequest::GetMessageTextFragment() const {
   int message_id = 0;
   switch (request_type()) {
-    case RequestType::kAccessibilityEvents:
-      message_id = IDS_ACCESSIBILITY_EVENTS_PERMISSION_FRAGMENT;
-      break;
     case RequestType::kArSession:
       message_id = IDS_AR_PERMISSION_FRAGMENT;
       break;

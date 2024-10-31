@@ -13,10 +13,13 @@
 #include "base/observer_list_types.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "base/types/expected.h"
 #include "chromeos/ash/components/boca/proto/session.pb.h"
 #include "chromeos/ash/components/boca/session_api/session_client_impl.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_observer.h"
 #include "components/account_id/account_id.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
+#include "google_apis/common/api_error_codes.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
@@ -26,12 +29,20 @@ class Bundle;
 class CaptionsConfig;
 }  // namespace boca
 
+namespace google_apis {
+enum ApiErrorCode;
+}
+
 namespace ash::boca {
 
 class BocaSessionManager
-    : public chromeos::network_config::CrosNetworkConfigObserver {
+    : public chromeos::network_config::CrosNetworkConfigObserver,
+      public signin::IdentityManager::Observer {
  public:
   inline static constexpr base::TimeDelta kPollingInterval = base::Minutes(5);
+  inline static constexpr char kDummyDeviceId[] = "kDummyDeviceId";
+
+  inline static constexpr char kHomePageTitle[] = "School Tools Home page";
 
   enum class BocaAction {
     kDefault = 0,
@@ -86,7 +97,8 @@ class BocaSessionManager
     // Notifies when session config updated for specific group.
     virtual void OnSessionCaptionConfigUpdated(
         const std::string& group_name,
-        const ::boca::CaptionsConfig& config);
+        const ::boca::CaptionsConfig& config,
+        const std::string& tachyon_group_id);
 
     // Notifies when local caption config updated.
     virtual void OnLocalCaptionConfigUpdated(
@@ -95,14 +107,24 @@ class BocaSessionManager
     // Notifies when session roster updated. Will emit when only elements order
     // changed in the vector too. Deferred to events consumer to decide on
     // the actual action.
-    virtual void OnSessionRosterUpdated(
-        const std::string& group_name,
-        const std::vector<::boca::UserIdentity>& consumers);
+    virtual void OnSessionRosterUpdated(const ::boca::Roster& roster);
+
+    // Notifies when boca app reloaded.
+    virtual void OnAppReloaded();
+    // Notifies when consumer acitivity updated. Will emit when only elements
+    // order changed in the vector too.
+    virtual void OnConsumerActivityUpdated(
+        const std::map<std::string, ::boca::StudentStatus>& activities);
   };
   // CrosNetworkConfigObserver
   void OnNetworkStateChanged(
       chromeos::network_config::mojom::NetworkStatePropertiesPtr network_state)
       override;
+
+  // signin::IdentityManager::Observer
+  void OnRefreshTokenUpdatedForAccount(const CoreAccountInfo& info) override;
+  void OnIdentityManagerShutdown(
+      signin::IdentityManager* identity_manager) override;
 
   void NotifyError(BocaError error);
   void AddObserver(Observer* observer);
@@ -112,20 +134,40 @@ class BocaSessionManager
   virtual void LoadCurrentSession();
   void ParseSessionResponse(base::expected<std::unique_ptr<::boca::Session>,
                                            google_apis::ApiErrorCode> result);
-  virtual void UpdateCurrentSession(std::unique_ptr<::boca::Session> session);
+  // TODO(b/371111860): Remove the dispatch event flag when OnTask
+  // fixes the session handling.
+  virtual void UpdateCurrentSession(std::unique_ptr<::boca::Session> session,
+                                    bool dispatch_event);
   virtual ::boca::Session* GetCurrentSession();
+
+  virtual void UpdateTabActivity(std::u16string title);
 
   // Local events.
   virtual void NotifyLocalCaptionEvents(::boca::CaptionsConfig caption_config);
 
+  // Triggered by SWA delegate to notify app reload events.
+  virtual void NotifyAppReload();
+
   base::ObserverList<Observer>& observers() { return observers_; }
 
+  AccountId& account_id() { return account_id_; }
+
+  SessionClientImpl* session_client_impl() { return session_client_impl_; }
+
  private:
+  SEQUENCE_CHECKER(sequence_checker_);
+
+  void LoadInitialNetworkState();
+  void OnNetworkStateFetched(
+      std::vector<chromeos::network_config::mojom::NetworkStatePropertiesPtr>
+          networks);
   bool IsProfileActive();
+  bool IsSessionActive(::boca::Session* session);
   void NotifySessionUpdate();
   void NotifyOnTaskUpdate();
   void NotifyCaptionConfigUpdate();
   void NotifyRosterUpdate();
+  void NotifyConsumerActivityUpdate();
 
   base::ObserverList<Observer> observers_;
   // Timer used for periodic session polling.
@@ -140,6 +182,7 @@ class BocaSessionManager
       cros_network_config_observer_{this};
   AccountId account_id_;
   raw_ptr<SessionClientImpl> session_client_impl_;
+  raw_ptr<signin::IdentityManager> identity_manager_;
   base::WeakPtrFactory<BocaSessionManager> weak_factory_{this};
 };
 }  // namespace ash::boca

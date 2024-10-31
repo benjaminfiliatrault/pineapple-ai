@@ -208,9 +208,6 @@ void UpdateBundlePathAndCreateStorageLocation(
                 copy_or_move(bundle.path(), /*dev_mode=*/false,
                              Operation::kMove);
                 break;
-              case IwaSourceBundleModeAndFileOp::kDevModeReference:
-                std::move(callback).Run(IwaStorageUnownedBundle{bundle.path()});
-                break;
             }
           },
           [&](const IwaSourceProxy& proxy) {
@@ -304,7 +301,7 @@ KeyRotationData GetKeyRotationData(
       pending_update && IntegrityBlockDataHasRotatedKey(
                             pending_update->integrity_block_data, rotated_key);
 
-  return {.rotated_key = raw_ref(rotated_key),
+  return {.rotated_key = rotated_key,
           .current_installation_has_rk = current_installation_has_rk,
           .pending_update_has_rk = pending_update_has_rk};
 }

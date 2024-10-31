@@ -27,6 +27,7 @@
 
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/renderer/core/animation/css/css_animation_data.h"
 #include "third_party/blink/renderer/core/css/cascade_layer.h"
@@ -54,6 +55,7 @@
 #include "third_party/blink/renderer/core/css/css_rule.h"
 #include "third_party/blink/renderer/core/css/css_rule_list.h"
 #include "third_party/blink/renderer/core/css/css_scope_rule.h"
+#include "third_party/blink/renderer/core/css/css_starting_style_rule.h"
 #include "third_party/blink/renderer/core/css/css_style_rule.h"
 #include "third_party/blink/renderer/core/css/css_style_sheet.h"
 #include "third_party/blink/renderer/core/css/css_supports_rule.h"
@@ -97,6 +99,7 @@
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/inspector/inspected_frames.h"
 #include "third_party/blink/renderer/core/inspector/inspector_contrast.h"
+#include "third_party/blink/renderer/core/inspector/inspector_ghost_rules.h"
 #include "third_party/blink/renderer/core/inspector/inspector_history.h"
 #include "third_party/blink/renderer/core/inspector/inspector_network_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_resource_container.h"
@@ -151,7 +154,7 @@ Element* GetPseudoIdAndTag(Element* element,
   auto* resolved_element = element;
   if (auto* pseudo_element = DynamicTo<PseudoElement>(element)) {
     resolved_element = IsTransitionPseudoElement(pseudo_element->GetPseudoId())
-                           ? pseudo_element->OriginatingElement()
+                           ? pseudo_element->UltimateOriginatingElement()
                            : pseudo_element->ParentOrShadowHostElement();
     // TODO(khushalsagar) : This should never be null.
     if (!resolved_element)
@@ -1240,11 +1243,15 @@ protocol::Response InspectorCSSAgent::getMatchedStylesForNode(
   if (!document.IsActive())
     return protocol::Response::ServerError("Document is not active");
 
+  base::AutoReset<bool> ignore_mutation(&ignore_stylesheet_mutation_, true);
+  InspectorGhostRules ghost_rules;
+
   // The source text of mutable stylesheets needs to be updated
   // to sync the latest changes.
   for (InspectorStyleSheet* stylesheet :
        css_style_sheet_to_inspector_style_sheet_.Values()) {
     stylesheet->SyncTextIfNeeded();
+    ghost_rules.Populate(*stylesheet->PageStyleSheet());
   }
 
   CheckPseudoHasCacheScope check_pseudo_has_cache_scope(
@@ -1253,9 +1260,9 @@ protocol::Response InspectorCSSAgent::getMatchedStylesForNode(
                                   view_transition_name);
 
   // Matched rules.
-  *matched_css_rules =
-      BuildArrayForMatchedRuleList(resolver.MatchedRules(), element,
-                                   element_pseudo_id, view_transition_name);
+  *matched_css_rules = BuildArrayForMatchedRuleList(
+      resolver.MatchedRules(), element, ghost_rules, element_pseudo_id,
+      view_transition_name);
 
   // Inherited styles.
   *inherited_entries =
@@ -1264,7 +1271,7 @@ protocol::Response InspectorCSSAgent::getMatchedStylesForNode(
     std::unique_ptr<protocol::CSS::InheritedStyleEntry> entry =
         protocol::CSS::InheritedStyleEntry::create()
             .setMatchedCSSRules(BuildArrayForMatchedRuleList(
-                match->matched_rules, element, element_pseudo_id,
+                match->matched_rules, element, ghost_rules, element_pseudo_id,
                 view_transition_name))
             .build();
     if (match->element->style() && match->element->style()->length()) {
@@ -1305,7 +1312,7 @@ protocol::Response InspectorCSSAgent::getMatchedStylesForNode(
             .setPseudoType(
                 InspectorDOMAgent::ProtocolPseudoElementType(match->pseudo_id))
             .setMatches(BuildArrayForMatchedRuleList(
-                match->matched_rules, element, match->pseudo_id,
+                match->matched_rules, element, ghost_rules, match->pseudo_id,
                 match->view_transition_name))
             .build());
     if (match->view_transition_name) {
@@ -1327,7 +1334,7 @@ protocol::Response InspectorCSSAgent::getMatchedStylesForNode(
               .setPseudoType(InspectorDOMAgent::ProtocolPseudoElementType(
                   pseudo_match->pseudo_id))
               .setMatches(BuildArrayForMatchedRuleList(
-                  pseudo_match->matched_rules, element))
+                  pseudo_match->matched_rules, element, ghost_rules))
               .build());
       if (pseudo_match->view_transition_name) {
         parent_pseudo_element_matches->back()->setPseudoIdentifier(
@@ -2764,6 +2771,9 @@ InspectorCSSAgent::BuildContainerQueryObject(CSSContainerRule* rule) {
     }
     container_query_object->setLogicalAxes(logical_proto);
   }
+  if (rule->Selector().SelectsScrollStateContainers()) {
+    container_query_object->setQueriesScrollState(true);
+  }
   return container_query_object;
 }
 
@@ -2862,6 +2872,37 @@ void InspectorCSSAgent::CollectLayersFromRule(
   }
 }
 
+std::unique_ptr<protocol::CSS::CSSStartingStyle>
+InspectorCSSAgent::BuildStartingStyleObject(CSSStartingStyleRule* rule) {
+  std::unique_ptr<protocol::CSS::CSSStartingStyle> starting_style_object =
+      protocol::CSS::CSSStartingStyle::create().build();
+
+  auto it =
+      css_style_sheet_to_inspector_style_sheet_.find(rule->parentStyleSheet());
+  if (it != css_style_sheet_to_inspector_style_sheet_.end()) {
+    InspectorStyleSheet* inspector_style_sheet = it->value;
+    starting_style_object->setStyleSheetId(inspector_style_sheet->Id());
+  }
+
+  InspectorStyleSheet* inspector_style_sheet =
+      BindStyleSheet(rule->parentStyleSheet());
+  starting_style_object->setRange(
+      inspector_style_sheet->RuleHeaderSourceRange(rule));
+
+  return starting_style_object;
+}
+
+void InspectorCSSAgent::CollectStartingStylesFromRule(
+    CSSRule* rule,
+    protocol::Array<protocol::CSS::CSSStartingStyle>* starting_style_list,
+    protocol::Array<protocol::CSS::CSSRuleType>* rule_types) {
+  if (auto* starting_style_rule = DynamicTo<CSSStartingStyleRule>(rule)) {
+    starting_style_list->emplace_back(
+        BuildStartingStyleObject(starting_style_rule));
+    rule_types->emplace_back(protocol::CSS::CSSRuleTypeEnum::StartingStyleRule);
+  }
+}
+
 void InspectorCSSAgent::FillAncestorData(CSSRule* rule,
                                          protocol::CSS::CSSRule* result) {
   auto layers_list =
@@ -2876,6 +2917,8 @@ void InspectorCSSAgent::FillAncestorData(CSSRule* rule,
       std::make_unique<protocol::Array<protocol::CSS::CSSScope>>();
   auto rule_types_list =
       std::make_unique<protocol::Array<protocol::CSS::CSSRuleType>>();
+  auto starting_style_list =
+      std::make_unique<protocol::Array<protocol::CSS::CSSStartingStyle>>();
 
   CSSRule* parent_rule = rule;
   auto nesting_selectors = std::make_unique<protocol::Array<String>>();
@@ -2890,6 +2933,9 @@ void InspectorCSSAgent::FillAncestorData(CSSRule* rule,
                             rule_types_list.get());
     CollectScopesFromRule(parent_rule, scopes_list.get(),
                           rule_types_list.get());
+    CollectStartingStylesFromRule(parent_rule, starting_style_list.get(),
+                                  rule_types_list.get());
+
     if (parent_rule != rule) {
       if (auto* style_rule = DynamicTo<CSSStyleRule>(parent_rule)) {
         nesting_selectors->emplace_back(style_rule->selectorText());
@@ -2919,6 +2965,7 @@ void InspectorCSSAgent::FillAncestorData(CSSRule* rule,
   result->setLayers(std::move(layers_list));
   result->setContainerQueries(std::move(container_queries_list));
   result->setRuleTypes(std::move(rule_types_list));
+  result->setStartingStyles(std::move(starting_style_list));
   if (nesting_selectors->size() > 0) {
     result->setNestingSelectors(std::move(nesting_selectors));
   }
@@ -3145,6 +3192,7 @@ std::unique_ptr<protocol::Array<protocol::CSS::RuleMatch>>
 InspectorCSSAgent::BuildArrayForMatchedRuleList(
     RuleIndexList* rule_list,
     Element* element,
+    const InspectorGhostRules& ghost_rules,
     PseudoId pseudo_id,
     const AtomicString& pseudo_argument) {
   auto result = std::make_unique<protocol::Array<protocol::CSS::RuleMatch>>();
@@ -3175,6 +3223,14 @@ InspectorCSSAgent::BuildArrayForMatchedRuleList(
         BuildObjectForRule(rule, element, pseudo_id, pseudo_argument);
     if (!rule_object)
       continue;
+    if (ghost_rules.Contains(rule)) {
+      protocol::CSS::CSSStyle* style_object = rule_object->getStyle();
+      if (!style_object || !style_object->getCssProperties() ||
+          style_object->getCssProperties()->size() == 0) {
+        // Skip empty ghost rules.
+        continue;
+      }
+    }
 
     // Transform complex rule_indices into client-friendly, compound-basis for
     // matching_selectors.
@@ -3268,6 +3324,12 @@ void InspectorCSSAgent::DidModifyDOMAttr(Element* element) {
 }
 
 void InspectorCSSAgent::DidMutateStyleSheet(CSSStyleSheet* css_style_sheet) {
+  if (ignore_stylesheet_mutation_) {
+    // The mutation comes from InspectorGhostRules. We don't care about these
+    // mutations, because they'll be reverted when getMatchedStylesForNode
+    // returns.
+    return;
+  }
   auto it = css_style_sheet_to_inspector_style_sheet_.find(css_style_sheet);
   if (it == css_style_sheet_to_inspector_style_sheet_.end())
     return;

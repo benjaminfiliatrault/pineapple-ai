@@ -66,7 +66,7 @@ void OnTabOrganizationModelExecutionResult(
     TabOrganizationRequest::BackendFailureCallback on_failure,
     optimization_guide::OptimizationGuideModelExecutionResult result,
     std::unique_ptr<optimization_guide::ModelQualityLogEntry> log_entry) {
-  if (!result.has_value()) {
+  if (!result.response.has_value()) {
     // TODO(b/322206302): remove this when this is fixed in the
     // ModelQualityLogEntry API
     optimization_guide::ModelQualityLogEntry::Upload(std::move(log_entry));
@@ -75,7 +75,8 @@ void OnTabOrganizationModelExecutionResult(
   }
 
   auto response = optimization_guide::ParsedAnyMetadata<
-      optimization_guide::proto::TabOrganizationResponse>(result.value());
+      optimization_guide::proto::TabOrganizationResponse>(
+      result.response.value());
 
   if (!response) {
     optimization_guide::ModelQualityLogEntry::Upload(std::move(log_entry));
@@ -131,7 +132,7 @@ void PerformTabOrganizationExecution(
 
     auto* tab = tab_organization_request.add_tabs();
     tab->set_tab_id(tab_data->tab_id());
-    tab->set_title(base::UTF16ToUTF8(tab_data->web_contents()->GetTitle()));
+    tab->set_title(base::UTF16ToUTF8(tab_data->tab()->contents()->GetTitle()));
     tab->set_url(tab_data->original_url().spec());
   }
 
@@ -161,7 +162,8 @@ void PerformTabOrganizationExecution(
     for (const std::unique_ptr<TabData>& tab_data : group_data->tabs) {
       auto* tab = group->add_tabs();
       tab->set_tab_id(tab_data->tab_id());
-      tab->set_title(base::UTF16ToUTF8(tab_data->web_contents()->GetTitle()));
+      tab->set_title(
+          base::UTF16ToUTF8(tab_data->tab()->contents()->GetTitle()));
       tab->set_url(tab_data->original_url().spec());
     }
   }
@@ -207,7 +209,7 @@ void PerformTabOrganizationExecution(
       OptimizationGuideKeyedServiceFactory::GetForProfile(profile);
   optimization_guide_keyed_service->ExecuteModel(
       optimization_guide::ModelBasedCapabilityKey::kTabOrganization,
-      tab_organization_request,
+      tab_organization_request, /*execution_timeout=*/std::nullopt,
       base::BindOnce(OnTabOrganizationModelExecutionResult, profile,
                      std::move(on_completion), std::move(on_failure)));
 }

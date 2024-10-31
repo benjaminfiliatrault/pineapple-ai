@@ -113,8 +113,11 @@ NullCaptureModeSession::GetWindowsToIgnoreFromWidgets() {
   return std::set<aura::Window*>();
 }
 
-void NullCaptureModeSession::ShowSearchResultsPanel(
-    const gfx::ImageSkia& image) {}
+void NullCaptureModeSession::AddActionButton(
+    views::Button::PressedCallback callback,
+    std::u16string text,
+    const gfx::VectorIcon* icon,
+    const ActionButtonRank rank) {}
 
 void NullCaptureModeSession::InitInternal() {
   layer()->SetName("NullCaptureModeSession");

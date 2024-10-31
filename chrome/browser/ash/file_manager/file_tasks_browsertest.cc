@@ -9,6 +9,7 @@
 #include <string_view>
 #include <unordered_map>
 
+#include "ash/constants/web_app_id_constants.h"
 #include "ash/webui/file_manager/url_constants.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -75,7 +76,6 @@
 #include "chrome/browser/ui/webui/ash/office_fallback/office_fallback_ui.h"
 #include "chrome/browser/web_applications/test/profile_test_helper.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
@@ -110,13 +110,13 @@
 namespace file_manager::file_tasks {
 namespace {
 
+using ash::kMediaAppId;
 using blink::features::kFileHandlingAPI;
 using drive::DriveIntegrationService;
 using drive::util::ConnectionStatus;
 using drive::util::SetDriveConnectionStatusForTesting;
 using extensions::api::file_manager_private::TaskResult;
 using network::TestNetworkConnectionTracker;
-using web_app::kMediaAppId;
 
 const char* blockedUrl = "https://blocked.com";
 
@@ -1050,7 +1050,7 @@ IN_PROC_BROWSER_TEST_F(NonManagedAccount, OfficePwaHandlerHidden) {
        "vnd.openxmlformats-officedocument.wordprocessingml.document"}};
 
   for (FakeOfficeFileType& fake_office_file_type : fake_office_file_types) {
-    file_manager::test::AddFakeWebApp(web_app::kMicrosoft365AppId,
+    file_manager::test::AddFakeWebApp(ash::kMicrosoft365AppId,
                                       fake_office_file_type.mime_type,
                                       fake_office_file_type.file_extension,
                                       "something", true, app_service_proxy());
@@ -1063,7 +1063,7 @@ IN_PROC_BROWSER_TEST_F(NonManagedAccount, OfficePwaHandlerHidden) {
                                             test_file_path);
 
     for (FullTaskDescriptor& task : tasks) {
-      EXPECT_NE(web_app::kMicrosoft365AppId, task.task_descriptor.app_id)
+      EXPECT_NE(ash::kMicrosoft365AppId, task.task_descriptor.app_id)
           << " for extension: " << fake_office_file_type.file_extension;
     }
   }
@@ -1491,8 +1491,8 @@ IN_PROC_BROWSER_TEST_F(DriveTest, OpenDriveOfficeFileInDocsAppWhenInstalled) {
   webapps::AppId docs_app_id = web_app::test::InstallDummyWebApp(
       profile(), "Google Docs",
       GURL("https://docs.google.com/document/?usp=installed_webapp"));
-  ASSERT_EQ(docs_app_id, web_app::kGoogleDocsAppId);
-  apps::AppReadinessWaiter(profile(), web_app::kGoogleDocsAppId).Await();
+  ASSERT_EQ(docs_app_id, ash::kGoogleDocsAppId);
+  apps::AppReadinessWaiter(profile(), ash::kGoogleDocsAppId).Await();
 
   // Check that the apps opens by waiting for it to be not only started and
   // running, but also active and visible.
@@ -1501,7 +1501,7 @@ IN_PROC_BROWSER_TEST_F(DriveTest, OpenDriveOfficeFileInDocsAppWhenInstalled) {
   apps::AppInstanceWaiter waiter(
       apps::AppServiceProxyFactory::GetForProfile(profile())
           ->InstanceRegistry(),
-      web_app::kGoogleDocsAppId, expected_state);
+      ash::kGoogleDocsAppId, expected_state);
   ExecuteFileTask(profile(), CreateWebDriveOfficeTask(), file_urls_,
                   base::DoNothing());
   waiter.Await();
@@ -1582,7 +1582,7 @@ class FakeWebAppPublisher : public apps::AppPublisher {
 
     std::vector<apps::AppPtr> apps;
     auto ms_web_app = std::make_unique<apps::App>(apps::AppType::kWeb,
-                                                  web_app::kMicrosoft365AppId);
+                                                  ash::kMicrosoft365AppId);
     ms_web_app->readiness = apps::Readiness::kReady;
     apps.push_back(std::move(ms_web_app));
     Publish(std::move(apps), apps::AppType::kWeb,
@@ -1866,7 +1866,7 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest, OfficeFallbackTryAgain) {
 
   auto launches = web_app_publisher_->GetLaunches();
   ASSERT_EQ(1u, launches.size());
-  CHECK_EQ(launches[0].app_id, web_app::kMicrosoft365AppId);
+  CHECK_EQ(launches[0].app_id, ash::kMicrosoft365AppId);
   CHECK_EQ(launches[0].intent_url, test::kODFSSampleUrl);
 
   histogram_.ExpectUniqueSample(
@@ -2168,7 +2168,8 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest, CannotShowDuplicateSetupDialogs) {
   navigation_observer_dialog.Wait();
   ASSERT_TRUE(navigation_observer_dialog.last_navigation_succeeded());
 
-  NotificationDisplayService::GetForProfile(profile())->AddObserver(this);
+  NotificationDisplayServiceFactory::GetForProfile(profile())->AddObserver(
+      this);
 
   // Fails to launch a second setup dialog for the same file.
   base::test::TestFuture<TaskResult, std::string> failed_future;
@@ -2230,7 +2231,8 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest, CannotShowDuplicateMoveConfirmation) {
   navigation_observer_dialog.Wait();
   ASSERT_TRUE(navigation_observer_dialog.last_navigation_succeeded());
 
-  NotificationDisplayService::GetForProfile(profile())->AddObserver(this);
+  NotificationDisplayServiceFactory::GetForProfile(profile())->AddObserver(
+      this);
 
   // Fails to launch a second move confirmation dialog for the same file.
   base::test::TestFuture<TaskResult, std::string> failed_future;
@@ -2276,7 +2278,7 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest, OpenDifferentFileFromODFS) {
 
   auto launches = web_app_publisher_->GetLaunches();
   ASSERT_EQ(1u, launches.size());
-  CHECK_EQ(launches[0].app_id, web_app::kMicrosoft365AppId);
+  CHECK_EQ(launches[0].app_id, ash::kMicrosoft365AppId);
   CHECK_EQ(launches[0].intent_url, test::kODFSSampleUrl);
 
   histogram_.ExpectUniqueSample(
@@ -2312,7 +2314,7 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest, OpenSameFileFromODFSTwiceInARow) {
 
   auto launches = web_app_publisher_->GetLaunches();
   ASSERT_EQ(1u, launches.size());
-  CHECK_EQ(launches[0].app_id, web_app::kMicrosoft365AppId);
+  CHECK_EQ(launches[0].app_id, ash::kMicrosoft365AppId);
   CHECK_EQ(launches[0].intent_url, test::kODFSSampleUrl);
 
   // Open the file twice in a row. This should not be blocked since the opens
@@ -2322,7 +2324,7 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest, OpenSameFileFromODFSTwiceInARow) {
 
   launches = web_app_publisher_->GetLaunches();
   ASSERT_EQ(2u, launches.size());
-  CHECK_EQ(launches[1].app_id, web_app::kMicrosoft365AppId);
+  CHECK_EQ(launches[1].app_id, ash::kMicrosoft365AppId);
   CHECK_EQ(launches[1].intent_url, test::kODFSSampleUrl);
 
   histogram_.ExpectUniqueSample(
@@ -2359,7 +2361,8 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest,
   ASSERT_TRUE(event_router);
   event_router->AddCloudOpenTask(odfs_docx_test_file_url_1_);
 
-  NotificationDisplayService::GetForProfile(profile())->AddObserver(this);
+  NotificationDisplayServiceFactory::GetForProfile(profile())->AddObserver(
+      this);
 
   // Fail to execute a duplicate CloudOpenTask for the file.
   base::test::TestFuture<TaskResult, std::string> failed_future;
@@ -2409,9 +2412,9 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest, DISABLED_OpenFilesFromODFS) {
 
   auto launches = web_app_publisher_->GetLaunches();
   ASSERT_EQ(2u, launches.size());
-  CHECK_EQ(launches[0].app_id, web_app::kMicrosoft365AppId);
+  CHECK_EQ(launches[0].app_id, ash::kMicrosoft365AppId);
   CHECK_EQ(launches[0].intent_url, test::kODFSSampleUrl);
-  CHECK_EQ(launches[1].app_id, web_app::kMicrosoft365AppId);
+  CHECK_EQ(launches[1].app_id, ash::kMicrosoft365AppId);
   CHECK_EQ(launches[1].intent_url, test::kODFSSampleUrl);
 
   histogram_.ExpectUniqueSample(
@@ -2480,7 +2483,8 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest,
       base::File::Error::FILE_ERROR_ACCESS_DENIED);
   provided_file_system_->SetReauthenticationRequired(true);
 
-  NotificationDisplayService::GetForProfile(profile())->AddObserver(this);
+  NotificationDisplayServiceFactory::GetForProfile(profile())->AddObserver(
+      this);
 
   web_app_publisher_->ClearPastLaunches();
 
@@ -2510,7 +2514,7 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest,
       ash::cloud_upload::OfficeOneDriveOpenErrors::kGetActionsReauthRequired,
       1);
 
-  NotificationDisplayService::GetForProfile(browser()->profile())
+  NotificationDisplayServiceFactory::GetForProfile(browser()->profile())
       ->RemoveObserver(this);
 }
 
@@ -2526,7 +2530,8 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest, FailToOpenFileFromODFSOtherAccessError) {
       base::File::Error::FILE_ERROR_ACCESS_DENIED);
   provided_file_system_->SetReauthenticationRequired(false);
 
-  NotificationDisplayService::GetForProfile(profile())->AddObserver(this);
+  NotificationDisplayServiceFactory::GetForProfile(profile())->AddObserver(
+      this);
 
   web_app_publisher_->ClearPastLaunches();
 
@@ -2554,7 +2559,7 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest, FailToOpenFileFromODFSOtherAccessError) {
       ash::cloud_upload::kOneDriveErrorMetricName,
       ash::cloud_upload::OfficeOneDriveOpenErrors::kGetActionsAccessDenied, 1);
 
-  NotificationDisplayService::GetForProfile(browser()->profile())
+  NotificationDisplayServiceFactory::GetForProfile(browser()->profile())
       ->RemoveObserver(this);
 }
 
@@ -2587,7 +2592,7 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest, OpenFileFromAndroidOneDriveViaODFS) {
 
   auto launches = web_app_publisher_->GetLaunches();
   ASSERT_EQ(1u, launches.size());
-  CHECK_EQ(launches[0].app_id, web_app::kMicrosoft365AppId);
+  CHECK_EQ(launches[0].app_id, ash::kMicrosoft365AppId);
   // Check that the ODFS URL was opened.
   CHECK_EQ(launches[0].intent_url, test::kODFSSampleUrl);
 
@@ -2639,7 +2644,7 @@ IN_PROC_BROWSER_TEST_F(OneDriveTest,
 
   auto launches = web_app_publisher_->GetLaunches();
   ASSERT_EQ(1u, launches.size());
-  CHECK_EQ(launches[0].app_id, web_app::kMicrosoft365AppId);
+  CHECK_EQ(launches[0].app_id, ash::kMicrosoft365AppId);
   // Check that the ODFS URL was opened.
   CHECK_EQ(launches[0].intent_url, test::kODFSSampleUrl);
 
@@ -2832,8 +2837,8 @@ IN_PROC_BROWSER_TEST_F(OfficeDriveHatsSurvey, OpenInDrive) {
   webapps::AppId docs_app_id = web_app::test::InstallDummyWebApp(
       profile(), "Google Docs",
       GURL("https://docs.google.com/document/?usp=installed_webapp"));
-  ASSERT_EQ(docs_app_id, web_app::kGoogleDocsAppId);
-  apps::AppReadinessWaiter(profile(), web_app::kGoogleDocsAppId).Await();
+  ASSERT_EQ(docs_app_id, ash::kGoogleDocsAppId);
+  apps::AppReadinessWaiter(profile(), ash::kGoogleDocsAppId).Await();
 
   base::test::TestFuture<std::string, ash::cloud_upload::HatsOfficeLaunchingApp>
       hats_survey_executed_future;
@@ -2845,7 +2850,7 @@ IN_PROC_BROWSER_TEST_F(OfficeDriveHatsSurvey, OpenInDrive) {
   apps::AppInstanceWaiter waiter(
       apps::AppServiceProxyFactory::GetForProfile(profile())
           ->InstanceRegistry(),
-      web_app::kGoogleDocsAppId, expected_state);
+      ash::kGoogleDocsAppId, expected_state);
 
   base::test::TestFuture<TaskResult, std::string> task_executed_future;
   ExecuteFileTask(profile(), CreateWebDriveOfficeTask(), file_urls_,
@@ -2856,7 +2861,7 @@ IN_PROC_BROWSER_TEST_F(OfficeDriveHatsSurvey, OpenInDrive) {
 
   // Check that the Drive HaTS survey has been triggered.
   const auto [app_id, launching_app] = hats_survey_executed_future.Get();
-  ASSERT_EQ(app_id, web_app::kGoogleDocsAppId);
+  ASSERT_EQ(app_id, ash::kGoogleDocsAppId);
   ASSERT_EQ(launching_app, ash::cloud_upload::HatsOfficeLaunchingApp::kDrive);
 }
 
@@ -2890,7 +2895,7 @@ IN_PROC_BROWSER_TEST_F(OfficeMS365HatsSurvey, OpenInMS365) {
 
   // Check that the MS365 HaTS survey has been triggered.
   const auto [app_id, launching_app] = hats_survey_executed_future.Get();
-  ASSERT_EQ(app_id, web_app::kMicrosoft365AppId);
+  ASSERT_EQ(app_id, ash::kMicrosoft365AppId);
   ASSERT_EQ(launching_app, ash::cloud_upload::HatsOfficeLaunchingApp::kMS365);
 }
 

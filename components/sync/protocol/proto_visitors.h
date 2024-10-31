@@ -320,6 +320,12 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillWalletSpecifics& proto) {
   VISIT(customer_data);
   VISIT(cloud_token_data);
   VISIT(payment_instrument);
+  VISIT(payment_instrument_creation_option);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::BnplIssuerDetails& proto) {
+  VISIT(issuer_id);
+  VISIT_REP(eligible_price_range);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::BookmarkSpecifics& proto) {
@@ -612,6 +618,12 @@ VISIT_PROTO_FIELDS(const sync_pb::DeviceInfoSpecifics& proto) {
   VISIT(google_play_services_version_info);
   VISIT_ENUM(os_type);
   VISIT_ENUM(device_form_factor);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::EligiblePriceRange& proto) {
+  VISIT(currency);
+  VISIT(min_price_in_micros);
+  VISIT(max_price_in_micros);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::FeatureSpecificFields& proto) {
@@ -1328,6 +1340,7 @@ VISIT_PROTO_FIELDS(const sync_pb::SessionWindow& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::SharedTabGroup& proto) {
   VISIT(title);
   VISIT_ENUM(color);
+  VISIT(originating_tab_group_guid);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::SharedTab& proto) {
@@ -1340,7 +1353,6 @@ VISIT_PROTO_FIELDS(const sync_pb::SharedTab& proto) {
 
 VISIT_PROTO_FIELDS(const sync_pb::SharedTabGroupDataSpecifics& proto) {
   VISIT(guid);
-  VISIT(last_modification_author);
   VISIT(tab_group);
   VISIT(tab);
   VISIT(update_time_windows_epoch_micros);
@@ -1690,6 +1702,11 @@ VISIT_PROTO_FIELDS(const sync_pb::PaymentInstrument& proto) {
   VISIT(iban);
   VISIT(ewallet_details);
   VISIT(device_details);
+  VISIT(bnpl_issuer_details);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::PaymentInstrumentCreationOption& proto) {
+  VISIT(buy_now_pay_later_option);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::BankAccountDetails& proto) {
@@ -1752,6 +1769,7 @@ VISIT_PROTO_FIELDS(const sync_pb::WalletMaskedCreditCard& proto) {
   VISIT_ENUM(virtual_card_enrollment_type);
   VISIT_REP(card_benefit);
   VISIT(product_terms_url);
+  VISIT_ENUM(card_info_retrieval_enrollment_state);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WalletMetadataSpecifics& proto) {

@@ -26,32 +26,9 @@ public class ReauthenticatorBridge {
     private Callback<Boolean> mAuthResultCallback;
 
     private ReauthenticatorBridge(
-            Activity activity,
-            Profile profile,
-            ModalDialogManager modalDialogManager,
-            @DeviceAuthSource int source) {
+            Activity activity, Profile profile, @DeviceAuthSource int source) {
         mNativeReauthenticatorBridge =
                 ReauthenticatorBridgeJni.get().create(this, activity, profile, source);
-    }
-
-    /**
-     * Checks if biometric authentication can be used.
-     *
-     * @return Whether authentication can be used.
-     */
-    public boolean canUseAuthenticationWithBiometric() {
-        return ReauthenticatorBridgeJni.get()
-                .canUseAuthenticationWithBiometric(mNativeReauthenticatorBridge);
-    }
-
-    /**
-     * Checks if biometric or screen lock authentication can be used.
-     *
-     * @return Whether authentication can be used.
-     */
-    public boolean canUseAuthenticationWithBiometricOrScreenLock() {
-        return ReauthenticatorBridgeJni.get()
-                .canUseAuthenticationWithBiometricOrScreenLock(mNativeReauthenticatorBridge);
     }
 
     /**
@@ -94,18 +71,18 @@ public class ReauthenticatorBridge {
      *
      * @param activity Used to display the biometric prompt and modal dialogs.
      * @param profile The profile to which the device authenticator service belongs.
-     * @param modalDialogManager Used to display error dialogs during mandatory auth steps.
+     * @param unused_modalDialogManager Used to display error dialogs during mandatory auth steps.
      * @param source The feature invoking the authentication.
      */
     public static ReauthenticatorBridge create(
             Activity activity,
             Profile profile,
-            ModalDialogManager modalDialogManager,
+            ModalDialogManager unused_modalDialogManager,
             @DeviceAuthSource int source) {
         if (sReauthenticatorBridgeForTesting != null) {
             return sReauthenticatorBridgeForTesting;
         }
-        return new ReauthenticatorBridge(activity, profile, modalDialogManager, source);
+        return new ReauthenticatorBridge(activity, profile, source);
     }
 
     /**
@@ -139,10 +116,6 @@ public class ReauthenticatorBridge {
                 Activity activity,
                 @JniType("Profile*") Profile profile,
                 int source);
-
-        boolean canUseAuthenticationWithBiometric(long nativeReauthenticatorBridge);
-
-        boolean canUseAuthenticationWithBiometricOrScreenLock(long nativeReauthenticatorBridge);
 
         @BiometricStatus
         int getBiometricAvailabilityStatus(long nativeReauthenticatorBridge);

@@ -34,6 +34,8 @@ public class ContentFeatureList {
 
     public static final String MOUSE_AND_TRACKPAD_DROPDOWN_MENU = "MouseAndTrackpadDropdownMenu";
 
+    public static final String INPUT_ON_VIZ = "InputOnViz";
+
     public static final String OPTIMIZE_IMM_HIDE_CALLS = "OptimizeImmHideCalls";
 
     public static final String ONE_TIME_PERMISSION = "OneTimePermission";
@@ -51,4 +53,7 @@ public class ContentFeatureList {
     public static final String WEB_NFC = "WebNFC";
 
     public static final String WEB_IDENTITY_DIGITAL_CREDENTIALS = "WebIdentityDigitalCredentials";
+
+    public static final String PREFETCH_BROWSER_INITIATED_TRIGGERS =
+            "PrefetchBrowserInitiatedTriggers";
 }

@@ -46,6 +46,7 @@
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/style/basic_shapes.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/core/style/grid_area.h"
 #include "third_party/blink/renderer/core/style/named_grid_lines_map.h"
 #include "third_party/blink/renderer/core/style/ordered_named_grid_lines.h"
@@ -55,6 +56,7 @@
 #include "third_party/blink/renderer/core/style/style_overflow_clip_margin.h"
 #include "third_party/blink/renderer/core/style/style_reflection.h"
 #include "third_party/blink/renderer/core/style/style_view_transition_group.h"
+#include "third_party/blink/renderer/core/style/style_view_transition_name.h"
 #include "third_party/blink/renderer/core/style/transform_origin.h"
 #include "third_party/blink/renderer/platform/fonts/font_description.h"
 #include "third_party/blink/renderer/platform/fonts/font_variant_emoji.h"
@@ -265,6 +267,10 @@ class StyleBuilderConverter {
                                                  const CSSValue&);
   static LengthSize ConvertRadius(StyleResolverState&, const CSSValue&);
   static EPaintOrder ConvertPaintOrder(StyleResolverState&, const CSSValue&);
+  static GapColorDataList ConvertGapColorDataList(
+      StyleResolverState&,
+      const CSSValue&,
+      bool for_visited_link = false);
   static ShadowData ConvertShadow(const CSSToLengthConversionData&,
                                   StyleResolverState*,
                                   const CSSValue&);
@@ -371,11 +377,14 @@ class StyleBuilderConverter {
       const StyleResolverState&,
       const CSSValue&);
 
-  static ScopedCSSName* ConvertViewTransitionName(StyleResolverState&,
-                                                  const CSSValue&);
+  static StyleViewTransitionName* ConvertViewTransitionName(StyleResolverState&,
+                                                            const CSSValue&);
   static ScopedCSSNameList* ConvertViewTransitionClass(StyleResolverState&,
                                                        const CSSValue&);
   static StyleViewTransitionGroup ConvertViewTransitionGroup(
+      StyleResolverState&,
+      const CSSValue&);
+  static StyleViewTransitionCaptureMode ConvertViewTransitionCaptureMode(
       StyleResolverState&,
       const CSSValue&);
 

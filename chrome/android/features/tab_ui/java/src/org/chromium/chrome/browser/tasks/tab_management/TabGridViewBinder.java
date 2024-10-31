@@ -14,6 +14,7 @@ import android.util.Size;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewStub;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -98,7 +99,13 @@ class TabGridViewBinder {
             ThumbnailFetcher fetcher = model.get(TabProperties.THUMBNAIL_FETCHER);
             if (fetcher != null) fetcher.cancel();
 
-            setFavicon(tabGridView, model, /* favicon= */ null);
+            ImageView faviconView = (ImageView) tabGridView.fastFindViewById(R.id.tab_favicon);
+            setFavicon(faviconView, model, /* favicon= */ null);
+
+            // Ensure the tab group color view can be attached to a new parent if it exists.
+            FrameLayout container =
+                    (FrameLayout) tabGridView.fastFindViewById(R.id.tab_group_color_view_container);
+            TabCardViewBinderUtils.detachTabGroupColorView(container);
         }
     }
 
@@ -145,6 +152,13 @@ class TabGridViewBinder {
             updateFavicon(view, model);
         } else if (TabProperties.FAVICON_FETCHER == propertyKey) {
             updateFavicon(view, model);
+        } else if (TabProperties.TAB_GROUP_COLOR_VIEW_PROVIDER == propertyKey) {
+            @Nullable
+            TabGroupColorViewProvider provider =
+                    model.get(TabProperties.TAB_GROUP_COLOR_VIEW_PROVIDER);
+            FrameLayout container =
+                    (FrameLayout) view.fastFindViewById(R.id.tab_group_color_view_container);
+            TabCardViewBinderUtils.updateTabGroupColorView(container, provider);
         } else if (TabProperties.CONTENT_DESCRIPTION_STRING == propertyKey) {
             view.setContentDescription(model.get(TabProperties.CONTENT_DESCRIPTION_STRING));
         } else if (TabProperties.GRID_CARD_SIZE == propertyKey) {
@@ -222,10 +236,12 @@ class TabGridViewBinder {
             view.setVisibility(model.get(TabProperties.VISIBILITY));
         } else if (TabProperties.IS_SELECTED == propertyKey
                 || TabProperties.TAB_ACTION_BUTTON_DATA == propertyKey) {
-            updateColorForActionButton(
-                    view,
-                    model.get(TabProperties.IS_INCOGNITO),
-                    model.get(TabProperties.IS_SELECTED));
+            ((TabGridView) view)
+                    .setTabActionButtonTint(
+                            TabUiThemeProvider.getActionButtonTintList(
+                                    view.getContext(),
+                                    model.get(TabProperties.IS_INCOGNITO),
+                                    model.get(TabProperties.IS_SELECTED)));
         } else if (TabProperties.TAB_CARD_LABEL_DATA == propertyKey) {
             updateTabCardLabel(view, model.get(TabProperties.TAB_CARD_LABEL_DATA));
         }
@@ -319,11 +335,10 @@ class TabGridViewBinder {
 
             TextResolver contentDescriptionResolver =
                     (context) -> {
-                        return context.getResources()
-                                .getString(
-                                        R.string.accessibility_tab_price_card,
-                                        priceDrop.previousPrice,
-                                        priceDrop.price);
+                        return context.getString(
+                                R.string.accessibility_tab_price_card,
+                                priceDrop.previousPrice,
+                                priceDrop.price);
                     };
             PriceDropTextResolver priceDropResolver =
                     new PriceDropTextResolver(priceDrop.price, priceDrop.previousPrice);
@@ -401,15 +416,19 @@ class TabGridViewBinder {
     private static void updateFavicon(ViewLookupCachingFrameLayout rootView, PropertyModel model) {
         final TabListFaviconProvider.TabFaviconFetcher fetcher =
                 model.get(TabProperties.FAVICON_FETCHER);
+        ImageView faviconView = (ImageView) rootView.fastFindViewById(R.id.tab_favicon);
         if (fetcher == null) {
-            setFavicon(rootView, model, null);
+            faviconView.setVisibility(View.GONE);
+            setFavicon(faviconView, model, null);
             return;
         }
+
+        faviconView.setVisibility(View.VISIBLE);
         fetcher.fetch(
                 tabFavicon -> {
                     if (fetcher != model.get(TabProperties.FAVICON_FETCHER)) return;
 
-                    setFavicon(rootView, model, tabFavicon);
+                    setFavicon(faviconView, model, tabFavicon);
                 });
     }
 
@@ -419,10 +438,7 @@ class TabGridViewBinder {
      * #bindCommonProperties}.
      */
     private static void setFavicon(
-            ViewLookupCachingFrameLayout rootView,
-            PropertyModel model,
-            TabListFaviconProvider.TabFavicon favicon) {
-        ImageView faviconView = (ImageView) rootView.fastFindViewById(R.id.tab_favicon);
+            ImageView faviconView, PropertyModel model, TabListFaviconProvider.TabFavicon favicon) {
         if (favicon == null) {
             faviconView.setImageDrawable(null);
             return;
@@ -459,22 +475,15 @@ class TabGridViewBinder {
                         backgroundView.getContext(), isIncognito, isSelected));
     }
 
-    private static void updateColorForActionButton(
-            ViewLookupCachingFrameLayout rootView, boolean isIncognito, boolean isSelected) {
-        ImageView actionButton = (ImageView) rootView.fastFindViewById(R.id.action_button);
-        ImageViewCompat.setImageTintList(
-                actionButton,
-                TabUiThemeProvider.getActionButtonTintList(
-                        actionButton.getContext(), isIncognito, isSelected));
-    }
-
     private static void updateColorForSelectionToggleButton(
             ViewLookupCachingFrameLayout rootView, boolean isIncognito, boolean isSelected) {
         ImageView actionButton = (ImageView) rootView.fastFindViewById(R.id.action_button);
 
         Context context = rootView.getContext();
         Resources res = rootView.getResources();
-        actionButton.getBackground().setLevel(getCheckmarkLevel(res, isSelected));
+        actionButton
+                .getBackground()
+                .setLevel(TabCardViewBinderUtils.getCheckmarkLevel(res, isSelected));
         DrawableCompat.setTintList(
                 actionButton.getBackground().mutate(),
                 TabUiThemeProvider.getToggleActionButtonBackgroundTintList(
@@ -509,13 +518,7 @@ class TabGridViewBinder {
         labelView.setData(tabCardLabelData);
     }
 
-    private static int getCheckmarkLevel(Resources res, boolean isSelected) {
-        return isSelected
-                ? res.getInteger(R.integer.list_item_level_selected)
-                : res.getInteger(R.integer.list_item_level_default);
-    }
-
-    static void setThumbnailFeatureForTesting(ThumbnailFetcher fetcher) {
+    static void setThumbnailFetcherForTesting(ThumbnailFetcher fetcher) {
         sThumbnailFetcherForTesting = fetcher;
         ResettersForTesting.register(() -> sThumbnailFetcherForTesting = null);
     }

@@ -12,9 +12,9 @@
 #import "base/observer_list.h"
 #import "ios/chrome/browser/main/model/browser_web_state_list_delegate.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 
+class ProfileIOS;
 @class SceneState;
 
 // BrowserImpl is the concrete implementation of the Browser interface.
@@ -39,9 +39,6 @@ class BrowserImpl final : public Browser, public BrowserWebStateListDelegate {
 
   // Browser.
   Type type() const override;
-  // TODO(crbug.com/358301380): After all usage has changed to GetProfile(),
-  // remove this method.
-  ProfileIOS* GetBrowserState() final;
   ProfileIOS* GetProfile() final;
   WebStateList* GetWebStateList() final;
   CommandDispatcher* GetCommandDispatcher() final;

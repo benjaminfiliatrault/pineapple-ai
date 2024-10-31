@@ -19,6 +19,7 @@
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">קטלאנית</translation>
 <translation id="1168100932582989117">‏שרתי שמות Google</translation>
+<translation id="1170788066030116158">תאריך הצילום</translation>
 <translation id="1172970565351728681">נותרו כ-<ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">שינוי שם</translation>
 <translation id="1173916544412572294">‏רשת <ph name="NETWORK_INDEX" /> מתוך <ph name="NETWORK_COUNT" />,‏ <ph name="PHONE_NAME" />,‏ <ph name="CONNECTION_STATUS" />, עוצמת האות: ‎<ph name="SIGNAL_STRENGTH" />%‎, סוללת הטלפון: ‎<ph name="BATTERY_STATUS" />%‎, פרטים</translation>
@@ -582,6 +583,7 @@
 <translation id="5447680084201416734">אין מספיק נפח אחסון פנוי.</translation>
 <translation id="5449551289610225147">סיסמה לא חוקית</translation>
 <translation id="5459064203055649751">כבר קיים קובץ בשם '<ph name="FILENAME" />'. רוצה להחליף אותו בקובץ שבחרת להעביר?</translation>
+<translation id="5462378611565326489">‏שירות OneDrive לא זמין כשהמכשיר במצב אופליין.</translation>
 <translation id="5463231940765244860">הזנת הקוד</translation>
 <translation id="5469868506864199649">איטלקית</translation>
 <translation id="5473333559083690127">יש להזין שוב את קוד האימות החדש</translation>

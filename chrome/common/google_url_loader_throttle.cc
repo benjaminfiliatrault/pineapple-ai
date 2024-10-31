@@ -211,7 +211,11 @@ void GoogleURLLoaderThrottle::WillStartRequest(
   is_main_frame_navigation_ =
       request->is_outermost_main_frame &&
       request->destination == network::mojom::RequestDestination::kDocument;
-  sends_cookies_ = request->SendsCookies();
+  // TODO(crbug.com/372169462): `request->SendsCookies()` cannot be used for now
+  // because it excludes `kSameOrigin` requests.
+  sends_cookies_ =
+      request->credentials_mode == network::mojom::CredentialsMode::kInclude ||
+      request->credentials_mode == network::mojom::CredentialsMode::kSameOrigin;
   if (sends_cookies_) {
     RequestBoundSessionStatus status = GetRequestBoundSessionStatus(
         request->url, dynamic_params_->bound_session_throttler_params);
@@ -369,10 +373,10 @@ void GoogleURLLoaderThrottle::ResumeOrCancelRequest(
   CHECK(bound_session_request_throttled_start_time_.has_value());
   base::TimeDelta duration =
       base::TimeTicks::Now() - *bound_session_request_throttled_start_time_;
-  UMA_HISTOGRAM_MEDIUM_TIMES(
+  DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES(
       "Signin.BoundSessionCredentials.DeferredRequestDelay", duration);
   if (is_main_frame_navigation_) {
-    UMA_HISTOGRAM_MEDIUM_TIMES(
+    DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES(
         "Signin.BoundSessionCredentials.DeferredNavigationRequestDelay",
         duration);
   }

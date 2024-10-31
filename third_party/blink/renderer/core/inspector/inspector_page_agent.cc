@@ -28,11 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/inspector/inspector_page_agent.h"
 
 #include <memory>
@@ -178,7 +173,8 @@ Resource* CachedResource(LocalFrame* frame,
   Resource* cached_resource = document->Fetcher()->CachedResource(url);
   if (!cached_resource) {
     cached_resource = MemoryCache::Get()->ResourceForURL(
-        url, document->Fetcher()->GetCacheIdentifier(url));
+        url, document->Fetcher()->GetCacheIdentifier(
+                 url, /*skip_service_worker=*/false));
   }
   if (!cached_resource)
     cached_resource = loader->ResourceForURL(url);
@@ -1563,7 +1559,7 @@ InspectorPageAgent::BuildObjectForResourceTree(LocalFrame* frame) {
             .setContentSize(cached_resource->GetResponse().DecodedBodyLength())
             .build();
     std::optional<base::Time> last_modified =
-        cached_resource->GetResponse().LastModified();
+        cached_resource->GetResponse().LastModified(*frame->GetDocument());
     if (last_modified) {
       resource_object->setLastModified(
           last_modified.value().InSecondsFSinceUnixEpoch());

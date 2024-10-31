@@ -42,8 +42,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/crash_upload_list/crash_upload_list.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
-#include "chrome/browser/dips/dips_service.h"
-#include "chrome/browser/dips/dips_service_factory.h"
+#include "chrome/browser/dips/dips_service_impl.h"
 #include "chrome/browser/dips/dips_utils.h"
 #include "chrome/browser/domain_reliability/service_factory.h"
 #include "chrome/browser/downgrade/user_data_downgrade.h"
@@ -187,7 +186,7 @@
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/user_annotations/user_annotations_service_factory.h"
-#include "chrome/browser/user_education/browser_feature_promo_storage_service.h"
+#include "chrome/browser/user_education/browser_user_education_storage_service.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -612,7 +611,7 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
     // Clear any stored User Education session data. Note that we can't clear a
     // specific date range, as this is used for longitudinal metrics reporting,
     // so selectively deleting entries would make the telemetry invalid.
-    BrowserFeaturePromoStorageService::ClearUsageHistory(profile_);
+    BrowserUserEducationStorageService::ClearUsageHistory(profile_);
 #endif
 
     // Cleared for DATA_TYPE_HISTORY, DATA_TYPE_COOKIES and DATA_TYPE_PASSWORDS.
@@ -904,8 +903,7 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
   }
 
   if (dips_mask != DIPSEventRemovalType::kNone) {
-    auto* dips_service = DIPSServiceFactory::GetForBrowserContext(profile_);
-    if (dips_service) {
+    if (DIPSServiceImpl* dips_service = DIPSServiceImpl::Get(profile_)) {
       dips_service->RemoveEvents(delete_begin_, delete_end_,
                                  filter_builder->BuildNetworkServiceFilter(),
                                  dips_mask);

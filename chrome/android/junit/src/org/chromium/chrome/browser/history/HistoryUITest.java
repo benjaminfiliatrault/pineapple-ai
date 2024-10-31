@@ -90,6 +90,7 @@ import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.favicon.LargeIconBridgeJni;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.search_engines.TemplateUrlService;
+import org.chromium.components.signin.test.util.TestAccounts;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.components.user_prefs.UserPrefsJni;
 import org.chromium.ui.base.PageTransition;
@@ -960,7 +961,7 @@ public class HistoryUITest {
     private void signOut() {
         // Clear supervised user id.
         doReturn("").when(mPrefService).getString(Pref.SUPERVISED_USER_ID);
-        mAccountManagerTestRule.removeAccount(AccountManagerTestRule.TEST_ACCOUNT_1.getId());
+        mAccountManagerTestRule.removeAccount(TestAccounts.ACCOUNT1.getId());
     }
 
     private void performMenuAction(int menuItemId) {

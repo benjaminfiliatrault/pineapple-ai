@@ -47,23 +47,32 @@
   <message desc="Error message for general error in generative AI features." name="IDS_RECORDER_GEN_AI_ERROR_GENERAL_LABEL">
     Something went wrong
   </message>
+  <message desc="Error message for too-long transcript input for summary." name="IDS_RECORDER_GEN_AI_ERROR_SUMMARY_TRANSCRIPT_TOO_LONG_LABEL">
+    Can’t summarize a transcript longer than <ph name="MAX_WORD_LENGTH">$1<ex>1461</ex></ph> words
+  </message>
+  <message desc="Error message for too-short transcript input for summary." name="IDS_RECORDER_GEN_AI_ERROR_SUMMARY_TRANSCRIPT_TOO_SHORT_LABEL">
+    Can’t summarize a transcript fewer than <ph name="MIN_WORD_LENGTH">$1<ex>150</ex></ph> words
+  </message>
   <message desc="Error message for trust and safety related error for summary generative AI feature." name="IDS_RECORDER_GEN_AI_ERROR_SUMMARY_TRUST_AND_SAFETY_LABEL">
     Can’t create summary for this content
   </message>
+  <message desc="Error message for too-long transcript input for title suggestion." name="IDS_RECORDER_GEN_AI_ERROR_TITLE_SUGGESTION_TRANSCRIPT_TOO_LONG_LABEL">
+    Can’t create names for a transcript longer than <ph name="MAX_WORD_LENGTH">$1<ex>1461</ex></ph> words
+  </message>
+  <message desc="Error message for too-short transcript input for title suggestion." name="IDS_RECORDER_GEN_AI_ERROR_TITLE_SUGGESTION_TRANSCRIPT_TOO_SHORT_LABEL">
+    Can’t create names for a transcript fewer than <ph name="MIN_WORD_LENGTH">$1<ex>150</ex></ph> words
+  </message>
   <message desc="Error message for trust and safety related error for title suggestion generative AI feature." name="IDS_RECORDER_GEN_AI_ERROR_TITLE_SUGGESTION_TRUST_AND_SAFETY_LABEL">
     Can’t create recording names for this content
-  </message>
-  <message desc="Error message for too-long transcript length in generative AI features." name="IDS_RECORDER_GEN_AI_ERROR_TRANSCRIPTION_TOO_LONG_LABEL">
-    For now, a transcript longer than <ph name="MAX_WORD_LENGTH">$1<ex>1461</ex></ph> words is not supported
-  </message>
-  <message desc="Error message for too-short transcript length in generative AI features." name="IDS_RECORDER_GEN_AI_ERROR_TRANSCRIPTION_TOO_SHORT_LABEL">
-    For now, a transcript fewer than <ph name="MIN_WORD_LENGTH">$1<ex>150</ex></ph> words is not supported
   </message>
   <message desc="Badge for experimental state of generative AI features." name="IDS_RECORDER_GEN_AI_EXPERIMENT_BADGE">
     Experiment
   </message>
   <message desc="Link to more information about generative AI disclaimer." name="IDS_RECORDER_GEN_AI_LEARN_MORE_LINK">
     Learn more
+  </message>
+  <message desc="Tooltip of the link to more information about generative AI disclaimer." name="IDS_RECORDER_GEN_AI_LEARN_MORE_LINK_TOOLTIP">
+    Learn more about Generative AI
   </message>
   <message desc="Accessibility label of the landmark for the list of recordings in the main page." name="IDS_RECORDER_MAIN_RECORDINGS_LIST_LANDMARK_ARIA_LABEL">
     List of audio recordings
@@ -81,7 +90,7 @@
     Press to record
   </message>
   <message desc="Tooltip of the combobox to choose microphone to use in recording session." meaning="Microphone device to use in recordding session." name="IDS_RECORDER_MIC_SELECTION_MENU_BUTTON_TOOLTIP">
-    Mic
+    Mic options
   </message>
   <message desc="Label of the option to include system audio in the recording." name="IDS_RECORDER_MIC_SELECTION_MENU_CHROMEBOOK_AUDIO_OPTION">
     Chromebook audio
@@ -165,8 +174,8 @@ Download the transcription model (up to 100MB) to get these transcriptions.
   <message desc="Label of the menu item to show recording details in playback page." name="IDS_RECORDER_PLAYBACK_MENU_SHOW_DETAIL_OPTION">
     More details
   </message>
-  <message desc="Tooltip of the button to toggle mute on and off for the playback." meaning="Toggle mute for recording playback." name="IDS_RECORDER_PLAYBACK_MUTE_BUTTON_TOOLTIP">
-    Toggle mute
+  <message desc="Tooltip of the button to mute the playback." name="IDS_RECORDER_PLAYBACK_MUTE_BUTTON_TOOLTIP">
+    Turn off volume
   </message>
   <message desc="Tooltip of the button to pause the recording playback." meaning="Pause the audio recording playback." name="IDS_RECORDER_PLAYBACK_PAUSE_BUTTON_TOOLTIP">
     Pause
@@ -189,6 +198,9 @@ Download the transcription model (up to 100MB) to get these transcriptions.
   <message desc="Accessibility label of the landmark for recording transcript in playback page." meaning="Transcript of the audio recording." name="IDS_RECORDER_PLAYBACK_TRANSCRIPT_LANDMARK_ARIA_LABEL">
     Transcript
   </message>
+  <message desc="Tooltip of the button to unmute the playback." name="IDS_RECORDER_PLAYBACK_UNMUTE_BUTTON_TOOLTIP">
+    Turn on volume
+  </message>
   <message desc="Accessibility label of the volume slider for the playback." meaning="Set the playback volume." name="IDS_RECORDER_PLAYBACK_VOLUME_ARIA_LABEL">
     Volume
   </message>
@@ -200,6 +212,9 @@ Download the transcription model (up to 100MB) to get these transcriptions.
   </message>
   <message desc="Accessibility label of the button to pause the recording." meaning="Pause the audio recording." name="IDS_RECORDER_RECORDING_ITEM_PAUSE_BUTTON_ARIA_LABEL">
     Pause <ph name="RECORDING_NAME">$1<ex>Audio recording</ex></ph>
+  </message>
+  <message desc="Tooltip of the button to pause the recording." name="IDS_RECORDER_RECORDING_ITEM_PAUSE_BUTTON_TOOLTIP">
+    Pause
   </message>
   <message desc="Accessibility label of the button to play the recording." meaning="Play the audio recording." name="IDS_RECORDER_RECORDING_ITEM_PLAY_BUTTON_ARIA_LABEL">
     Play <ph name="RECORDING_NAME">$1<ex>Audio recording</ex></ph>
@@ -276,6 +291,9 @@ Download the transcription model (up to 100MB) to get these transcriptions.
   <message desc="Button to save and exit in the exit recording dialog." name="IDS_RECORDER_RECORD_EXIT_DIALOG_SAVE_AND_EXIT_BUTTON">
     Save and exit
   </message>
+  <message desc="Tooltip of the button to hide the live transcription of the recording." name="IDS_RECORDER_RECORD_HIDE_TRANSCRIPT_BUTTON_TOOLTIP">
+    Hide transcript
+  </message>
   <message desc="Label of the recording creation date on the recording info dialog." name="IDS_RECORDER_RECORD_INFO_DIALOG_DATE_LABEL">
     Date created
   </message>
@@ -300,11 +318,17 @@ Download the transcription model (up to 100MB) to get these transcriptions.
   <message desc="Label of the menu item to toggle whether transcription is enabled while recording." name="IDS_RECORDER_RECORD_MENU_TOGGLE_TRANSCRIPTION_OPTION">
     Create transcript
   </message>
-  <message desc="Tooltip of the button to toggle mute on microphone on and off while recording." name="IDS_RECORDER_RECORD_MUTE_BUTTON_TOOLTIP">
-    Toggle mute on microphone
+  <message desc="Tooltip of the button to mute the microphone while recording." name="IDS_RECORDER_RECORD_MUTE_BUTTON_TOOLTIP">
+    Turn off mic
   </message>
   <message desc="Tooltip of the button to pause the ongoing recording." meaning="Pause the ongoing audio recording session." name="IDS_RECORDER_RECORD_PAUSE_BUTTON_TOOLTIP">
     Pause
+  </message>
+  <message desc="Tooltip of the button to resume the paused recording." name="IDS_RECORDER_RECORD_RESUME_BUTTON_TOOLTIP">
+    Resume
+  </message>
+  <message desc="Tooltip of the button to show the live transcription of the recording." name="IDS_RECORDER_RECORD_SHOW_TRANSCRIPT_BUTTON_TOOLTIP">
+    Show transcript
   </message>
   <message desc="Button to stop audio recording." meaning="Finish an audio recording session." name="IDS_RECORDER_RECORD_STOP_BUTTON">
     Stop recording
@@ -327,8 +351,8 @@ Download the transcription model (up to 100MB) to get these transcriptions.
   <message desc="Header when transcription is off in the transcription view while recording." name="IDS_RECORDER_RECORD_TRANSCRIPTION_OFF_HEADER">
     Transcript is off
   </message>
-  <message desc="Tooltip of the button to show or hide the live transcription of the recording." name="IDS_RECORDER_RECORD_TRANSCRIPT_BUTTON_TOOLTIP">
-    Transcript
+  <message desc="Tooltip of the button to unmute the microphone while recording." name="IDS_RECORDER_RECORD_UNMUTE_BUTTON_TOOLTIP">
+    Turn on mic
   </message>
   <message desc="Header of the settings." name="IDS_RECORDER_SETTINGS_HEADER">
     Recorder settings

@@ -6,24 +6,45 @@
 
 #include <string>
 
+#include "ash/public/cpp/lobster/lobster_metrics_state_enums.h"
 #include "ash/public/cpp/lobster/lobster_session.h"
+#include "ash/public/cpp/new_window_delegate.h"
 #include "base/base64.h"
 #include "base/strings/strcat.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/profiles/profile.h"
+#include "url/url_constants.h"
 
 namespace ash {
+
+namespace {
 
 base::FilePath GetDownloadDirectoryForProfile(Profile* profile) {
   return DownloadPrefs::FromBrowserContext(profile)
       ->GetDefaultDownloadDirectoryForProfile();
 }
 
+bool IsUrlAllowed(const GURL& url) {
+  return url.SchemeIs(url::kHttpsScheme) ||
+         url.spec().starts_with("chrome://os-settings/systemPreferences");
+}
+
+}  // namespace
+
 LobsterPageHandler::LobsterPageHandler(LobsterSession* active_session,
                                        Profile* profile)
-    : session_(active_session), profile_(profile) {}
+    : session_(active_session), profile_(profile) {
+  CHECK(session_);
+}
 
 LobsterPageHandler::~LobsterPageHandler() = default;
+
+void LobsterPageHandler::BindInterface(
+    mojo::PendingReceiver<lobster::mojom::UntrustedLobsterPageHandler>
+        pending_receiver) {
+  receiver_.reset();
+  receiver_.Bind(std::move(pending_receiver));
+}
 
 void LobsterPageHandler::DownloadCandidate(uint32_t candidate_id,
                                            DownloadCandidateCallback callback) {
@@ -98,6 +119,28 @@ void LobsterPageHandler::SubmitFeedback(uint32_t candidate_id,
                                         SubmitFeedbackCallback callback) {
   std::move(callback).Run(
       /*success=*/session_->SubmitFeedback(candidate_id, description));
+}
+
+void LobsterPageHandler::ShowUI() {
+  session_->ShowUI();
+}
+
+void LobsterPageHandler::CloseUI() {
+  session_->CloseUI();
+}
+
+void LobsterPageHandler::EmitMetricEvent(LobsterMetricState metric_event) {
+  session_->RecordWebUIMetricEvent(metric_event);
+}
+
+void LobsterPageHandler::OpenUrlInNewWindow(const GURL& url) {
+  if (!IsUrlAllowed(url)) {
+    mojo::ReportBadMessage("Invalid URL scheme. Only HTTPS is allowed.");
+    return;
+  }
+  ash::NewWindowDelegate::GetPrimary()->OpenUrl(
+      url, ash::NewWindowDelegate::OpenUrlFrom::kUnspecified,
+      ash::NewWindowDelegate::Disposition::kNewForegroundTab);
 }
 
 }  // namespace ash

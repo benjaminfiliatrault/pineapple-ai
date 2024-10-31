@@ -18,19 +18,17 @@ BASE_FEATURE(kArcExchangeVersionOnMojoHandshake,
 // action to start it later in an on-demand manner. Already enabled by default
 // for managed users. In V2, it will be expand to more users such as unmanaged
 // users.
-BASE_FEATURE(kArcOnDemandV2,
-             "ArcOnDemandV2",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kArcOnDemandV2, "ArcOnDemandV2", base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls whether ARC should be activated on any app launches. If set to
 // false, inactive_interval will be checked.
 const base::FeatureParam<bool> kArcOnDemandActivateOnAppLaunch{
-    &kArcOnDemandV2, "activate_on_app_launch", true};
+    &kArcOnDemandV2, "activate_on_app_launch", false};
 
 // Controls how long of invactivity are allowed before ARC on Demand is
 // triggered.
 const base::FeatureParam<base::TimeDelta> kArcOnDemandInactiveInterval{
-    &kArcOnDemandV2, "inactive_interval", base::Days(0)};
+    &kArcOnDemandV2, "inactive_interval", base::Days(7)};
 
 // Controls whether to start ARC with the GKI kernel.
 BASE_FEATURE(kArcVmGki,
@@ -132,7 +130,7 @@ BASE_FEATURE(kEnableArcVmDataMigration,
 // for certain types of ARC error dialogs).
 BASE_FEATURE(kEnableFriendlierErrorDialog,
              "FriendlierErrorDialog",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls whether WebView Zygote is lazily initialized in ARC.
 BASE_FEATURE(kEnableLazyWebViewInit,
@@ -153,17 +151,6 @@ BASE_FEATURE(kEnableLazyWebViewInit,
 //    so the Tast test uses the updated ArcEnablePerVmCoreScheduling setting.
 BASE_FEATURE(kEnablePerVmCoreScheduling,
              "ArcEnablePerVmCoreScheduling",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Controls whether app permissions are read-only in the App Management page.
-// Only applies on Android T+.
-BASE_FEATURE(kEnableReadOnlyPermissions,
-             "ArcEnableReadOnlyPermissions",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Controls whether we should delegate audio focus requests from ARC to Chrome.
-BASE_FEATURE(kEnableUnifiedAudioFocusFeature,
-             "ArcEnableUnifiedAudioFocus",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls whether ARC handles unmanaged->managed account transition.
@@ -201,11 +188,6 @@ BASE_FEATURE(kExtendServiceAnrTimeout,
 // like USB flash drives and SD cards.
 BASE_FEATURE(kExternalStorageAccess,
              "ArcExternalStorageAccess",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Controls whether new UI style for ARC ghost window.
-BASE_FEATURE(kGhostWindowNewStyle,
-             "ArcGhostWindowNewStyle",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Used for overriding config params for the virtio-blk feature above.
@@ -271,21 +253,10 @@ BASE_FEATURE(kIgnoreHoverEventAnr,
              "IgnoreHoverEventAnr",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enables/disables ghost when user launch ARC app from shelf/launcher when
-// App already ready for launch.
-BASE_FEATURE(kInstantResponseWindowOpen,
-             "ArcInstantResponseWindowOpen",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables/disables mlock() of guest memory for ARCVM.
 // Often used in combination with kGuestZram.
 BASE_FEATURE(kLockGuestMemory,
              "ArcLockGuestMemory",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Controls keyboard shortcut helper integration feature in ARC.
-BASE_FEATURE(kKeyboardShortcutHelperIntegrationFeature,
-             "ArcKeyboardShortcutHelperIntegration",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls ARCVM MGLRU reclaim feature.
@@ -325,13 +296,6 @@ BASE_FEATURE(kOutOfProcessVideoDecoding,
 // Settings page.
 BASE_FEATURE(kPerAppLanguage,
              "PerAppLanguage",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Controls ARC picture-in-picture feature. If this is enabled, then Android
-// will control which apps can enter PIP. If this is disabled, then ARC PIP
-// will be disabled.
-BASE_FEATURE(kPictureInPictureFeature,
-             "ArcPictureInPicture",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kResizeCompat,
@@ -394,30 +358,17 @@ BASE_FEATURE(kSyncInstallPriority,
              "ArcSyncInstallPriority",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// When enabled, touch screen emulation for compatibility is enabled on specific
-// apps.
-BASE_FEATURE(kTouchscreenEmulation,
-             "ArcTouchscreenEmulation",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // When enabled, ARC will not be throttled when there is active audio stream
 // from ARC.
-BASE_FEATURE(kUnthrottleOnActiveAudio,
-             "ArcUnthrottleOnActiveAudio",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kUnthrottleOnActiveAudioV2,
+             "ArcUnthrottleOnActiveAudioV2",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls ARC USB Storage UI feature.
 // When enabled, chrome://settings and Files.app will ask if the user wants
 // to expose USB storage devices to ARC.
 BASE_FEATURE(kUsbStorageUIFeature,
              "ArcUsbStorageUI",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Controls ARC dalvik memory profile in ARCVM.
-// When enabled, Android tries to use dalvik memory profile tuned based on the
-// device memory size.
-BASE_FEATURE(kUseDalvikMemoryProfile,
-             "ArcUseDalvikMemoryProfile",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls whether the system/vendor images are mounted without specifying a

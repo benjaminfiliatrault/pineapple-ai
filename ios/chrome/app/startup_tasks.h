@@ -7,15 +7,14 @@
 
 #import <Foundation/Foundation.h>
 
-#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
+class ProfileIOS;
 
 // Class handling all startup tasks.
 @interface StartupTasks : NSObject
 
-// Asynchronously finishes the browser state initialization by starting the
+// Asynchronously finishes the profile initialization by starting the
 // deferred task runners.
-+ (void)scheduleDeferredBrowserStateInitialization:
-    (ChromeBrowserState*)browserState;
++ (void)scheduleDeferredProfileInitialization:(ProfileIOS*)profile;
 // Starts Omaha and, if first run, sets install time.  For official builds only.
 - (void)initializeOmaha;
 // Registers to receive UIApplicationWillResignActiveNotification.

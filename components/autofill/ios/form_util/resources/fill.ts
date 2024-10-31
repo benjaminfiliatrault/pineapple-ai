@@ -4,7 +4,6 @@
 
 import '//components/autofill/ios/form_util/resources/fill_util.js';
 
-import {registerChildFrame} from '//components/autofill/ios/form_util/resources/child_frame_registration_lib.js';
 import * as fillConstants from '//components/autofill/ios/form_util/resources/fill_constants.js';
 import {inferLabelFromNext} from '//components/autofill/ios/form_util/resources/fill_element_inference.js';
 import * as inferenceUtil from '//components/autofill/ios/form_util/resources/fill_element_inference_util.js';
@@ -13,7 +12,7 @@ import {gCrWeb} from '//ios/web/public/js_messaging/resources/gcrweb.js';
 
 // This file provides methods used to fill forms in JavaScript.
 
-// Requires functions from form.ts.
+// Requires functions from form.ts and child_frame_registration_lib.ts.
 
 declare global {
   // Defines an additional property, `__gcrweb`, on the Window object.
@@ -291,7 +290,7 @@ function formOrFieldsetsToFormData(
   }
 
   // Extract the frame tokens of `iframeElements`.
-  if (childFrames.length != iframeElements.length) {
+  if (childFrames.length !== iframeElements.length) {
     // `extractFieldsFromControlElements` should create one entry in
     // `childFrames` for each entry in `iframeElements`. If this hasn't
     // happened, attempting to process the frames will cause errors, so early
@@ -301,7 +300,8 @@ function formOrFieldsetsToFormData(
   for (let j = 0; j < iframeElements.length; ++j) {
     const frame = iframeElements[j]!;
 
-    childFrames[j]!['token'] = registerChildFrame(frame);
+    childFrames[j]!['token'] =
+        gCrWeb.remoteFrameRegistration.registerChildFrame(frame);
   }
 
   // Loop through the form control elements, extracting the label text from
@@ -353,7 +353,7 @@ function formOrFieldsetsToFormData(
   // Protect against custom implementation of Array.toJSON in host pages.
   (form.fields as any).toJSON = null;
 
-  form.frame_id = gCrWeb.message.getFrameId();
+  form.host_frame = gCrWeb.message.getFrameId();
 
   if (childFrames.length > 0) {
     form.child_frames = childFrames;
@@ -411,7 +411,7 @@ gCrWeb.fill.webFormElementToFormData = function(
 
   form.renderer_id = gCrWeb.fill.getUniqueID(formElement);
 
-  form.frame_id = frame.__gCrWeb.message.getFrameId();
+  form.host_frame = frame.__gCrWeb.message.getFrameId();
 
   // Note different from form_autofill_util.cc version of this method, which
   // computes |form.action| using document.completeURL(form_element.action())
@@ -422,10 +422,12 @@ gCrWeb.fill.webFormElementToFormData = function(
 
   const controlElements = gCrWeb.form.getFormControlElements(formElement);
 
+  // TODO(crbug.com/372688163): Handle page world submissions of forms
+  // containing iframes.
   const iframeElements =
-    gCrWeb.autofill_form_features.isAutofillAcrossIframesEnabled() ?
-    gCrWeb.form.getIframeElements(formElement) :
-    [];
+      gCrWeb.autofill_form_features?.isAutofillAcrossIframesEnabled() ?
+      gCrWeb.form.getIframeElements(formElement) :
+      [];
 
   return formOrFieldsetsToFormData(
       formElement, formControlElement, /*fieldsets=*/[], controlElements,

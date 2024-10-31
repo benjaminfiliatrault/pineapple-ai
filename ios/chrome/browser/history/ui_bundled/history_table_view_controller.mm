@@ -64,6 +64,7 @@
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/navigation/referrer.h"
 #import "ios/web/public/web_state.h"
+#import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/strings/grit/ui_strings.h"
@@ -376,6 +377,14 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   }
 }
 
+- (void)historyWasDeleted {
+  // If history has been deleted, reload history filtering for the current
+  // results. This only observes local changes to history, i.e. removing
+  // history via delete browsing data.
+  self.filterQueryResult = YES;
+  [self showHistoryMatchingQuery:nil];
+}
+
 #pragma mark - UISearchResultsUpdating
 
 - (void)updateSearchResultsForSearchController:
@@ -530,7 +539,9 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     }
     id<QuickDeleteCommands> quickDeleteHandler = HandlerForProtocol(
         self.browser->GetCommandDispatcher(), QuickDeleteCommands);
-    [quickDeleteHandler showQuickDeleteAndCanPerformTabsClosureAnimation:NO];
+    [quickDeleteHandler
+        showQuickDeleteAndCanPerformTabsClosureAnimation:
+            ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET];
     return;
   }
 

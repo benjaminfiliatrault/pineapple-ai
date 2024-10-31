@@ -383,7 +383,9 @@ public class NavigationHandlerTest {
                 () -> {
                     // Right swipe on a rendered page to initiate overscroll glow.
                     mNavigationHandler.onDown();
-                    mNavigationHandler.triggerUi(BackGestureEventSwipeEdge.RIGHT);
+                    mNavigationHandler.triggerUi(
+                            BackGestureEventSwipeEdge.RIGHT,
+                            NavigationHandler.TriggerUiCallSource.ON_SCROLL);
 
                     // Test that a release without preceding pull requests works
                     // without crashes.
@@ -399,6 +401,9 @@ public class NavigationHandlerTest {
     @Test
     @SmallTest
     @DisableIf.Device(DeviceFormFactor.TABLET) // https://crbug.com/338972492
+    @CommandLineFlags.Add({
+        "disable-features=BackForwardTransitions"
+    }) // TODO(https://crbug.com/367792374): Re-enable once the test is fixed.
     public void testSwipeNavigateOnNativePage() {
         HistogramWatcher histogramWatcher =
                 HistogramWatcher.newBuilder()
@@ -480,11 +485,10 @@ public class NavigationHandlerTest {
         mNavUtils.swipeFromLeftEdge();
 
         // Assert that the new tab was closed and the old tab is the current tab again.
-        CriteriaHelper.pollUiThread(() -> !newTab.isInitialized());
+        CriteriaHelper.pollUiThread(() -> (oldTab == currentTab()));
         Assert.assertNull(
                 "Not supposed to trigger an animation when closing tab",
                 mNavigationHandler.getTabOnBackGestureHandlerForTesting());
-        Assert.assertEquals(oldTab, currentTab());
         Assert.assertEquals(
                 "Chrome should remain in foreground",
                 ActivityState.RESUMED,
@@ -502,7 +506,10 @@ public class NavigationHandlerTest {
         // handler action delegate) is destroyed.
         Assert.assertTrue(
                 ThreadUtils.runOnUiThreadBlocking(
-                        () -> mNavigationHandler.triggerUi(BackGestureEventSwipeEdge.LEFT)));
+                        () ->
+                                mNavigationHandler.triggerUi(
+                                        BackGestureEventSwipeEdge.LEFT,
+                                        NavigationHandler.TriggerUiCallSource.ON_SCROLL)));
 
         // Just check we're still on the same URL.
         Assert.assertEquals(
@@ -520,7 +527,10 @@ public class NavigationHandlerTest {
         // page. Make sure this won't crash after the current tab is destroyed.
         Assert.assertFalse(
                 ThreadUtils.runOnUiThreadBlocking(
-                        () -> mNavigationHandler.triggerUi(BackGestureEventSwipeEdge.LEFT)));
+                        () ->
+                                mNavigationHandler.triggerUi(
+                                        BackGestureEventSwipeEdge.LEFT,
+                                        NavigationHandler.TriggerUiCallSource.ON_SCROLL)));
     }
 
     @Test

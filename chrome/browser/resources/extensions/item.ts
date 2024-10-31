@@ -6,10 +6,10 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import 'chrome://resources/cr_elements/cr_tooltip/cr_tooltip.js';
-import 'chrome://resources/cr_elements/icons_lit.html.js';
+import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/js/action_link.js';
 import './icons.html.js';
-import './strings.m.js';
+import '/strings.m.js';
 import 'chrome://resources/cr_elements/cr_icon/cr_icon.js';
 
 import type {ChromeEvent} from '/tools/typescript/definitions/chrome_event.js';
@@ -21,7 +21,7 @@ import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
 import {getCss} from './item.css.js';
 import {getHtml} from './item.html.js';
-import {ItemMixinLit} from './item_mixin_lit.js';
+import {ItemMixin} from './item_mixin.js';
 import {computeInspectableViewLabel, createDummyExtensionInfo, EnableControl, getEnableControl, getEnableToggleAriaLabel, getEnableToggleTooltipText, getItemSource, getItemSourceString, isEnabled, sortViews, SourceType, userCanChangeEnablement} from './item_util.js';
 import {Mv2ExperimentStage} from './mv2_deprecation_util.js';
 import {navigation, Page} from './navigation_helper.js';
@@ -59,6 +59,53 @@ export interface ItemDelegate {
       ChromeEvent<(data: chrome.developerPrivate.EventData) => void>;
 }
 
+export class FakeChromeEvent {
+  addListener(_listener: Function) {}
+  removeListener(_listener: Function) {}
+  callListeners(..._args: any[]) {}
+}
+
+export class DummyItemDelegate {
+  deleteItem(_id: string) {}
+  deleteItems(_ids: string[]) {
+    return Promise.resolve();
+  }
+  uninstallItem(_id: string) {
+    return Promise.resolve();
+  }
+  setItemEnabled(_id: string, _isEnabled: boolean) {}
+  setItemAllowedIncognito(_id: string, _isAllowedIncognito: boolean) {}
+  setItemAllowedOnFileUrls(_id: string, _isAllowedOnFileUrls: boolean) {}
+  setItemHostAccess(
+      _id: string, _hostAccess: chrome.developerPrivate.HostAccess) {}
+  setItemCollectsErrors(_id: string, _collectsErrors: boolean) {}
+  inspectItemView(_id: string, _view: chrome.developerPrivate.ExtensionView) {}
+  openUrl(_url: string) {}
+  reloadItem(_id: string) {
+    return Promise.resolve();
+  }
+  repairItem(_id: string) {}
+  showItemOptionsPage(_extension: chrome.developerPrivate.ExtensionInfo) {}
+  showInFolder(_id: string) {}
+  getExtensionSize(_id: string) {
+    return Promise.resolve('');
+  }
+  addRuntimeHostPermission(_id: string, _host: string) {
+    return Promise.resolve();
+  }
+  removeRuntimeHostPermission(_id: string, _host: string) {
+    return Promise.resolve();
+  }
+  setItemSafetyCheckWarningAcknowledged(
+      _id: string, _reason: chrome.developerPrivate.SafetyCheckWarningReason) {}
+  setShowAccessRequestsInToolbar(_id: string, _showRequests: boolean) {}
+  setItemPinnedToToolbar(_id: string, _pinnedToToolbar: boolean) {}
+  recordUserAction(_metricName: string) {}
+  getItemStateChangedTarget() {
+    return new FakeChromeEvent();
+  }
+}
+
 export interface ExtensionsItemElement {
   $: {
     a11yAssociation: HTMLElement,
@@ -69,7 +116,7 @@ export interface ExtensionsItemElement {
   };
 }
 
-const ExtensionsItemElementBase = I18nMixinLit(ItemMixinLit(CrLitElement));
+const ExtensionsItemElementBase = I18nMixinLit(ItemMixin(CrLitElement));
 
 export class ExtensionsItemElement extends ExtensionsItemElementBase {
   static get is() {

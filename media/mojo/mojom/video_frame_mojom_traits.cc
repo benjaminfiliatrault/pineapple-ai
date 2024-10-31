@@ -125,81 +125,40 @@ media::mojom::VideoFrameDataPtr MakeVideoFrameData(
             std::move(region), std::move(strides), std::move(offsets)));
   }
 
-  // STORAGE_GPU_MEMORY_BUFFER may carry meaningful or dummy mailbox,
-  // we should only access it when there are textures.
-  gpu::MailboxHolder mailbox_holder;
-  if (input->HasTextures()) {
-    mailbox_holder = input->mailbox_holder(/*texture_index=*/0);
-  }
-
   if (input->HasMappableGpuBuffer()) {
     auto gpu_memory_buffer_handle = input->GetGpuMemoryBufferHandle();
 
+    // STORAGE_GPU_MEMORY_BUFFER may carry meaningful or dummy shared_image.
     std::optional<gpu::ExportedSharedImage> shared_image;
+    gpu::SyncToken sync_token;
     if (input->HasSharedImage()) {
-      // `input` is either empty or of size 1 with
-      // GpuMemoryBufferSharedImageVideoFrameData.
-      CHECK(input->HasTextures());
       shared_image = input->shared_image()->Export();
+      sync_token = input->acquire_sync_token();
     }
 
-    CHECK(input->HasSharedImage() || mailbox_holder.mailbox.IsZero());
     return media::mojom::VideoFrameData::NewGpuMemoryBufferSharedImageData(
         media::mojom::GpuMemoryBufferSharedImageVideoFrameData::New(
             std::move(gpu_memory_buffer_handle), std::move(shared_image),
-            std::move(mailbox_holder.sync_token),
-            mailbox_holder.texture_target));
-  } else if (input->HasTextures()) {
-    if (input->HasSharedImage()) {
-      gpu::ExportedSharedImage shared_image = input->shared_image()->Export();
-      return media::mojom::VideoFrameData::NewSharedImageData(
-          media::mojom::SharedImageVideoFrameData::New(
-              std::move(shared_image), std::move(mailbox_holder.sync_token),
-              std::move(mailbox_holder.texture_target),
-              std::move(input->ycbcr_info())));
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
-    } else {
-      return media::mojom::VideoFrameData::NewMailboxData(
-          media::mojom::MailboxVideoFrameData::New(
-              std::move(mailbox_holder), std::move(input->ycbcr_info())));
-#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
-    }
+            std::move(sync_token)));
   }
 
-  NOTREACHED_IN_MIGRATION() << "Unsupported VideoFrame conversion";
-  return nullptr;
+  if (input->HasSharedImage()) {
+    gpu::ExportedSharedImage shared_image = input->shared_image()->Export();
+    return media::mojom::VideoFrameData::NewSharedImageData(
+        media::mojom::SharedImageVideoFrameData::New(
+            std::move(shared_image), input->acquire_sync_token(),
+            std::move(input->ycbcr_info())));
+  }
+
+  if (input->storage_type() == media::VideoFrame::STORAGE_OPAQUE) {
+    return media::mojom::VideoFrameData::NewOpaqueData(
+        media::mojom::OpaqueVideoFrameData::New());
+  }
+
+  NOTREACHED() << "Unsupported VideoFrame conversion";
 }
 
 }  // namespace
-
-// static
-media::mojom::SharedImageFormatType EnumTraits<
-    media::mojom::SharedImageFormatType,
-    media::SharedImageFormatType>::ToMojom(media::SharedImageFormatType type) {
-  switch (type) {
-    case media::SharedImageFormatType::kSharedImageFormat:
-      return media::mojom::SharedImageFormatType::kSharedImageFormat;
-    case media::SharedImageFormatType::kSharedImageFormatExternalSampler:
-      return media::mojom::SharedImageFormatType::
-          kSharedImageFormatExternalSampler;
-  }
-}
-
-// static
-bool EnumTraits<media::mojom::SharedImageFormatType,
-                media::SharedImageFormatType>::
-    FromMojom(media::mojom::SharedImageFormatType input,
-              media::SharedImageFormatType* out) {
-  switch (input) {
-    case media::mojom::SharedImageFormatType::kSharedImageFormat:
-      *out = media::SharedImageFormatType::kSharedImageFormat;
-      return true;
-    case media::mojom::SharedImageFormatType::kSharedImageFormatExternalSampler:
-      *out = media::SharedImageFormatType::kSharedImageFormatExternalSampler;
-      return true;
-  }
-  return false;
-}
 
 // static
 media::mojom::VideoFrameDataPtr StructTraits<media::mojom::VideoFrameDataView,
@@ -360,24 +319,6 @@ bool StructTraits<media::mojom::VideoFrameDataView,
     frame = media::VideoFrame::WrapExternalGpuMemoryBuffer(
         visible_rect, natural_size, std::move(gpu_memory_buffer), shared_image,
         sync_token, base::NullCallback(), timestamp);
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
-  } else if (data.is_mailbox_data()) {
-    media::mojom::MailboxVideoFrameDataDataView mailbox_data;
-    data.GetMailboxDataDataView(&mailbox_data);
-
-    gpu::MailboxHolder mailbox_holder;
-    if (!mailbox_data.ReadMailboxHolder(&mailbox_holder))
-      return false;
-
-    std::optional<gpu::VulkanYCbCrInfo> ycbcr_info;
-    if (!mailbox_data.ReadYcbcrData(&ycbcr_info))
-      return false;
-
-    frame = media::VideoFrame::WrapOOPVDMailbox(
-        format, mailbox_holder, media::VideoFrame::ReleaseMailboxCB(),
-        coded_size, visible_rect, natural_size, timestamp);
-    frame->set_ycbcr_info(ycbcr_info);
-#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   } else if (data.is_shared_image_data()) {
     media::mojom::SharedImageVideoFrameDataDataView shared_image_data;
     data.GetSharedImageDataDataView(&shared_image_data);
@@ -403,6 +344,11 @@ bool StructTraits<media::mojom::VideoFrameDataView,
         coded_size, visible_rect, natural_size, timestamp);
 
     frame->set_ycbcr_info(ycbcr_info);
+  } else if (data.is_opaque_data()) {
+    DCHECK(metadata.tracking_token.has_value());
+    frame = media::VideoFrame::WrapTrackingToken(
+        format, *metadata.tracking_token, coded_size, visible_rect,
+        natural_size, timestamp);
   } else {
     // TODO(sandersd): Switch on the union tag to avoid this ugliness?
     NOTREACHED();
@@ -423,12 +369,6 @@ bool StructTraits<media::mojom::VideoFrameDataView,
   if (!input.ReadHdrMetadata(&hdr_metadata))
     return false;
   frame->set_hdr_metadata(std::move(hdr_metadata));
-
-  media::SharedImageFormatType shared_image_format_type;
-  if (!input.ReadSharedImageFormatType(&shared_image_format_type)) {
-    return false;
-  }
-  frame->set_shared_image_format_type(shared_image_format_type);
 
   *output = std::move(frame);
   return true;

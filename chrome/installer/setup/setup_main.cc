@@ -22,6 +22,7 @@
 #include "base/at_exit.h"
 #include "base/clang_profiling_buildflags.h"
 #include "base/command_line.h"
+#include "base/containers/span.h"
 #include "base/dcheck_is_on.h"
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
@@ -859,18 +860,19 @@ int EnableSystemTracing(const installer::InstallerState& installer_state,
   base::FilePath tracing_service_exe(installer::GetTracingServicePath(
       installer_state.target_path(), current_version));
 
-  // If the command line includes "--developer", register tracing_service.exe in
-  // the current executable's directory. This is intended for use by developers
-  // who wish to run the browser in their development directory and have it use
-  // a tracing service from the same directory. Use with caution: this will
-  // likely break tracing for a normal installation of the same browser (e.g.,
-  // stable Google Chrome if running a branded build), and may be overwritten by
-  // an update of the same browser.
+  // If the command line includes "--developer", register
+  // elevated_tracing_service.exe in the current executable's directory. This is
+  // intended for use by developers who wish to run the browser in their
+  // development directory and have it use a tracing service from the same
+  // directory. Use with caution: this will likely break tracing for a normal
+  // installation of the same browser (e.g., stable Google Chrome if running a
+  // branded build), and may be overwritten by an update of the same browser.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           installer::switches::kDeveloper)) {
     base::FilePath dir_exe;
     if (base::PathService::Get(base::DIR_EXE, &dir_exe)) {
-      tracing_service_exe = dir_exe.Append(installer::kTracingServiceExe);
+      tracing_service_exe =
+          dir_exe.Append(installer::kElevatedTracingServiceExe);
     }
   }
 
@@ -1202,7 +1204,7 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
                  << " must contain an absolute path";
       *exit_code = installer::CONFIGURE_APP_CONTAINER_SANDBOX_FAILED;
     } else if (installer::ConfigureAppContainerSandbox(
-                   std::array<const base::FilePath*, 1>{&path})) {
+                   base::span_from_ref(&path))) {
       *exit_code = installer::CONFIGURE_APP_CONTAINER_SANDBOX_SUCCESS;
     } else {
       *exit_code = installer::CONFIGURE_APP_CONTAINER_SANDBOX_FAILED;

@@ -51,6 +51,7 @@ class SelectType;
 class V8UnionHTMLElementOrLong;
 class V8UnionHTMLOptGroupElementOrHTMLOptionElement;
 class HTMLSelectedOptionElement;
+class SelectDescendantsObserver;
 
 class CORE_EXPORT HTMLSelectElement final
     : public HTMLFormControlElementWithState,
@@ -189,6 +190,7 @@ class CORE_EXPORT HTMLSelectElement final
   // Text starting offset in RTL.
   LayoutUnit ClientPaddingRight() const;
   void SelectOptionByPopup(int list_index);
+  void SelectOptionByPopup(HTMLOptionElement* option);
   void SelectMultipleOptionsByPopup(const Vector<int>& list_indices);
   // A popup is canceled when the popup was hidden without selecting an item.
   void PopupDidCancel();
@@ -223,7 +225,8 @@ class CORE_EXPORT HTMLSelectElement final
 
   bool IsRichlyEditableForAccessibility() const override { return false; }
 
-  bool IsValidCommand(HTMLElement& invoker, CommandEventType command) override;
+  bool IsValidBuiltinCommand(HTMLElement& invoker,
+                             CommandEventType command) override;
   bool HandleCommandInternal(HTMLElement& invoker,
                              CommandEventType command) override;
 
@@ -381,6 +384,8 @@ class CORE_EXPORT HTMLSelectElement final
 
   Member<SelectType> select_type_;
   int index_to_select_on_cancel_;
+
+  Member<SelectDescendantsObserver> descendants_observer_;
 
   friend class ListBoxSelectType;
   friend class MenuListSelectType;

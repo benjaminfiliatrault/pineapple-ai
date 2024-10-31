@@ -177,8 +177,7 @@ bool ComputeExtensionID(const base::Value::Dict& manifest,
   // reloading the extension.
   *extension_id = crx_file::id_util::GenerateIdForPath(path);
   if (extension_id->empty()) {
-    NOTREACHED_IN_MIGRATION() << "Could not create ID from path.";
-    return false;
+    NOTREACHED() << "Could not create ID from path.";
   }
   return true;
 }
@@ -279,14 +278,16 @@ scoped_refptr<Extension> Extension::Create(const base::FilePath& path,
   scoped_refptr<Extension> extension = new Extension(path, std::move(manifest));
   extension->install_warnings_.swap(install_warnings);
 
+  // Some manifest parsing may require the dynamic URL to be present on the
+  // extension; instantiate it now.
+  extension->guid_ = base::Uuid::GenerateRandomV4();
+  extension->dynamic_url_ = Extension::GetBaseURLFromExtensionId(
+      extension->guid_.AsLowercaseString());
+
   if (!extension->InitFromValue(flags, &error)) {
     *utf8_error = base::UTF16ToUTF8(error);
     return nullptr;
   }
-
-  extension->guid_ = base::Uuid::GenerateRandomV4();
-  extension->dynamic_url_ = Extension::GetBaseURLFromExtensionId(
-      extension->guid_.AsLowercaseString());
 
   return extension;
 }

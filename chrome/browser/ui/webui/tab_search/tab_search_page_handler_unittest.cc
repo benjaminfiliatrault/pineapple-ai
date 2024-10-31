@@ -22,6 +22,8 @@
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
 #include "chrome/browser/ui/tabs/organization/tab_declutter_controller.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
@@ -66,8 +68,8 @@ constexpr char kTabName6[] = "Tab 6";
 
 class MockTabDeclutterController : public tabs::TabDeclutterController {
  public:
-  explicit MockTabDeclutterController(TabStripModel* tab_strip_model)
-      : TabDeclutterController(tab_strip_model) {}
+  explicit MockTabDeclutterController(BrowserWindowInterface* browser)
+      : TabDeclutterController(browser) {}
 
   MOCK_METHOD(std::vector<tabs::TabModel*>, GetStaleTabs, (), (override));
 };
@@ -92,7 +94,9 @@ class MockPage : public tab_search::mojom::Page {
   MOCK_METHOD(void, TabsChanged, (tab_search::mojom::ProfileDataPtr));
   MOCK_METHOD(void, TabUpdated, (tab_search::mojom::TabUpdateInfoPtr));
   MOCK_METHOD(void, TabsRemoved, (tab_search::mojom::TabsRemovedInfoPtr));
-  MOCK_METHOD(void, TabSearchTabIndexChanged, (int32_t));
+  MOCK_METHOD(void,
+              TabSearchSectionChanged,
+              (tab_search::mojom::TabSearchSection));
   MOCK_METHOD(void,
               TabOrganizationFeatureChanged,
               (tab_search::mojom::TabOrganizationFeature));
@@ -186,13 +190,13 @@ class TabSearchPageHandlerTest : public BrowserWithTestWindowTest {
     browser3()->tab_strip_model()->CloseAllTabs();
     browser4()->tab_strip_model()->CloseAllTabs();
     browser5()->tab_strip_model()->CloseAllTabs();
-    browser2_.reset();
-    browser3_.reset();
-    browser4_.reset();
+    handler_.reset();
+    webui_controller_.reset();
     browser5_.reset();
+    browser4_.reset();
+    browser3_.reset();
+    browser2_.reset();
     web_contents_.reset();
-    // Ensure destructor is called
-    handler_ = nullptr;
     BrowserWithTestWindowTest::TearDown();
   }
 
@@ -859,12 +863,12 @@ TEST_F(TabSearchPageHandlerTest, RecentlyClosedSectionExpandedUserPref) {
 TEST_F(TabSearchPageHandlerTest, TabDataToMojo) {
   AddTabWithTitle(browser1(), GURL(kTabUrl1), kTabName1);
   std::unique_ptr<TabData> tab_data = std::make_unique<TabData>(
-      browser1()->tab_strip_model(),
-      browser1()->tab_strip_model()->GetWebContentsAt(0));
+      browser1()->tab_strip_model()->GetTabAtIndex(0));
   tab_search::mojom::TabPtr mojo_tab_ptr =
       handler()->GetMojoForTabData(tab_data.get());
 
-  EXPECT_EQ(mojo_tab_ptr->url, tab_data->web_contents()->GetLastCommittedURL());
+  EXPECT_EQ(mojo_tab_ptr->url,
+            tab_data->tab()->contents()->GetLastCommittedURL());
   int tab_id = extensions::ExtensionTabUtil::GetTabId(
       browser1()->tab_strip_model()->GetWebContentsAt(0));
   handler()->CloseTab(tab_id);
@@ -930,16 +934,21 @@ class TabSearchPageHandlerDeclutterTest : public TabSearchPageHandlerTest {
     tab_strip_model_delegate_ = std::make_unique<TestTabStripModelDelegate>();
     tab_strip_model_ = std::make_unique<TabStripModel>(
         tab_strip_model_delegate_.get(), testing_profile_.get());
-    tab_declutter_controller_ =
-        std::make_unique<MockTabDeclutterController>(tab_strip_model_.get());
-    webui_controller()->InstallTabDeclutterController(
-        tab_declutter_controller());
+
+    browser_window_interface_ = std::make_unique<MockBrowserWindowInterface>();
+    ON_CALL(*browser_window_interface_, GetTabStripModel)
+        .WillByDefault(::testing::Return(tab_strip_model_.get()));
+
+    tab_declutter_controller_ = std::make_unique<MockTabDeclutterController>(
+        browser_window_interface_.get());
+    tab_declutter_controller_->DidBecomeActive(browser_window_interface_.get());
+    handler()->SetTabDeclutterControllerForTesting(
+        tab_declutter_controller_.get());
   }
 
   void TearDown() override {
     // Remove the tab declutter observation first.
-    webui_controller()->InstallTabDeclutterController(nullptr);
-    handler()->RemoveDeclutterObserverForTesting();
+    handler()->SetTabDeclutterControllerForTesting(nullptr);
 
     tab_declutter_controller_.reset();
     tab_strip_model_.reset();
@@ -960,10 +969,12 @@ class TabSearchPageHandlerDeclutterTest : public TabSearchPageHandlerTest {
   std::unique_ptr<TestTabStripModelDelegate> tab_strip_model_delegate_;
   std::unique_ptr<TabStripModel> tab_strip_model_;
   std::unique_ptr<MockTabDeclutterController> tab_declutter_controller_;
+  std::unique_ptr<MockBrowserWindowInterface> browser_window_interface_;
   tabs::PreventTabFeatureInitialization prevent_;
 };
 
 TEST_F(TabSearchPageHandlerDeclutterTest, TabDeclutterFindStaleTabs) {
+  EXPECT_CALL(page_, StaleTabsChanged(_)).Times(1);
   std::vector<tabs::TabModel*> stale_tabs_raw_ptr;
 
   for (int i = 0; i < 4; ++i) {
@@ -990,8 +1001,7 @@ TEST_F(TabSearchPageHandlerDeclutterTest, TabDeclutterFindStaleTabs) {
 }
 
 TEST_F(TabSearchPageHandlerDeclutterTest, TabDeclutterObserverTest) {
-  handler()->TabDeclutterControllerInstalled();
-
+  EXPECT_CALL(page_, StaleTabsChanged(_)).Times(2);
   std::vector<tabs::TabModel*> stale_tabs_raw_ptr;
 
   for (int i = 0; i < 4; ++i) {
@@ -1012,10 +1022,54 @@ TEST_F(TabSearchPageHandlerDeclutterTest, TabDeclutterObserverTest) {
   tab_declutter_controller()->SetTimerForTesting(
       task_runner->GetMockTickClock(), task_runner);
 
-  EXPECT_CALL(page_, StaleTabsChanged(_)).Times(2);
 
   task_runner->FastForwardBy(
-      tab_declutter_controller()->declutter_timer_interval_minutes());
+      tab_declutter_controller()->declutter_timer_interval());
+}
+
+TEST_F(TabSearchPageHandlerDeclutterTest, TabDeclutterStaleTabChanges) {
+  EXPECT_CALL(page_, StaleTabsChanged(_)).Times(::testing::AtLeast(1));
+  std::vector<tabs::TabModel*> stale_tabs_raw_ptr;
+
+  // Create 10 stale tabs.
+  for (int i = 0; i < 10; ++i) {
+    std::unique_ptr<tabs::TabModel> tab_model =
+        std::make_unique<tabs::TabModel>(
+            content::WebContents::Create(
+                content::WebContents::CreateParams(testing_profile())),
+            fake_tab_strip_model());
+    stale_tabs_raw_ptr.push_back(tab_model.get());
+    fake_tab_strip_model()->AppendTab(std::move(tab_model), false);
+  }
+
+  EXPECT_CALL(*tab_declutter_controller(), GetStaleTabs())
+      .WillRepeatedly(testing::Return(stale_tabs_raw_ptr));
+
+  tab_search::mojom::PageHandler::GetStaleTabsCallback callback =
+      base::BindLambdaForTesting(
+          [&](std::vector<tab_search::mojom::TabPtr> stale_tabs) {
+            EXPECT_EQ(10u, stale_tabs.size());
+          });
+
+  handler()->GetStaleTabs(std::move(callback));
+
+  // Make a stale tab a part of a group. It should remove it from the internal
+  // stale tab list.
+  fake_tab_strip_model()->AddToNewGroup({1});
+  EXPECT_EQ(handler()->stale_tabs_for_testing().size(), 9u);
+
+  // Make a stale tab pinned. It should remove it from the internal stale tab
+  // list.
+  fake_tab_strip_model()->SetTabPinned(2, true);
+  EXPECT_EQ(handler()->stale_tabs_for_testing().size(), 8u);
+
+  // Activate a stale tab. It should remove it from the internal stale tab list.
+  fake_tab_strip_model()->ActivateTabAt(3);
+  EXPECT_EQ(handler()->stale_tabs_for_testing().size(), 7u);
+
+  // Detach a stale tab. It should remove it from the internal stale tab list.
+  fake_tab_strip_model()->CloseWebContentsAt(4, TabCloseTypes::CLOSE_NONE);
+  EXPECT_EQ(handler()->stale_tabs_for_testing().size(), 6u);
 }
 
 }  // namespace

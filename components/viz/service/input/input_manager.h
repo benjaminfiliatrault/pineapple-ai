@@ -16,7 +16,12 @@
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/frame_sinks/frame_sink_observer.h"
 #include "components/viz/service/input/render_input_router_delegate_impl.h"
+#include "components/viz/service/input/render_input_router_support_base.h"
 #include "gpu/ipc/common/surface_handle.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "components/viz/service/input/android_input_callback.h"
+#endif
 
 namespace input {
 class TouchEmulator;
@@ -27,6 +32,7 @@ namespace viz {
 struct FrameSinkMetadata {
   explicit FrameSinkMetadata(
       uint32_t grouping_id,
+      std::unique_ptr<RenderInputRouterSupportBase> support,
       std::unique_ptr<RenderInputRouterDelegateImpl> delegate);
 
   FrameSinkMetadata(const FrameSinkMetadata&) = delete;
@@ -38,12 +44,17 @@ struct FrameSinkMetadata {
   ~FrameSinkMetadata();
 
   uint32_t grouping_id;
+  std::unique_ptr<RenderInputRouterSupportBase> rir_support;
   std::unique_ptr<RenderInputRouterDelegateImpl> rir_delegate;
 };
 
 class VIZ_SERVICE_EXPORT InputManager
     : public FrameSinkObserver,
-      public input::RenderWidgetHostInputEventRouter::Delegate {
+      public input::RenderWidgetHostInputEventRouter::Delegate,
+#if BUILDFLAG(IS_ANDROID)
+      public AndroidInputCallbackClient,
+#endif
+      public RenderInputRouterSupportBase::Delegate {
  public:
   explicit InputManager(FrameSinkManagerImpl* frame_sink_manager);
 
@@ -66,9 +77,31 @@ class VIZ_SERVICE_EXPORT InputManager
   // RenderWidgetHostInputEventRouter::Delegate implementation.
   input::TouchEmulator* GetTouchEmulator(bool create_if_necessary) override;
 
+  // RenderInputRouterSupportBase::Delegate implementation.
+  const DisplayHitTestQueryMap& GetDisplayHitTestQuery() const override;
+  float GetDeviceScaleFactorForId(const FrameSinkId& frame_sink_id) override;
+  FrameSinkId GetRootCompositorFrameSinkId(
+      const FrameSinkId& child_frame_sink_id) override;
+  RenderInputRouterSupportBase* GetParentRenderInputRouterSupport(
+      const FrameSinkId& frame_sink_id) override;
+  RenderInputRouterSupportBase* GetRootRenderInputRouterSupport(
+      const FrameSinkId& frame_sink_id) override;
+
+#if BUILDFLAG(IS_ANDROID)
+  // AndroidInputCallbackClient implementation.
+  bool OnMotionEvent(AInputEvent*,
+                     const FrameSinkId& root_frame_sink_id) override;
+#endif
+
  private:
+  std::unique_ptr<RenderInputRouterSupportBase> MakeRenderInputRouterSupport(
+      input::RenderInputRouter* rir,
+      const FrameSinkId& frame_sink_id);
+
+#if BUILDFLAG(IS_ANDROID)
   void CreateAndroidInputReceiver(const FrameSinkId& frame_sink_id,
                                   const gpu::SurfaceHandle& surface_handle);
+#endif  // BUILDFLAG(IS_ANDROID)
 
   friend class MockInputManager;
 

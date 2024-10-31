@@ -10,16 +10,21 @@
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
 #import "components/lens/lens_overlay_permission_utils.h"
+#import "components/variations/scoped_variations_ids_provider.h"
 #import "ios/chrome/browser/lens_overlay/model/lens_overlay_tab_helper.h"
 #import "ios/chrome/browser/lens_overlay/ui/lens_overlay_consent_view_controller.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_position_browser_agent.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/lens_overlay_commands.h"
+#import "ios/chrome/browser/shared/public/commands/load_query_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -36,6 +41,7 @@
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
+#import "third_party/ocmock/OCMock/OCMock.h"
 #import "ui/base/device_form_factor.h"
 
 using base::test::ios::kWaitForUIElementTimeout;
@@ -66,16 +72,18 @@ class LensOverlayCoordinatorTest : public PlatformTest {
     TestProfileIOS::Builder builder;
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        AuthenticationServiceFactory::GetDefaultFactory());
+        AuthenticationServiceFactory::GetFactoryWithDelegate(
+            std::make_unique<FakeAuthenticationServiceDelegate>()));
     profile_ = profile_manager_.AddProfileWithBuilder(std::move(builder));
-
-    AuthenticationServiceFactory::CreateAndInitializeForProfile(
-        profile_, std::make_unique<FakeAuthenticationServiceDelegate>());
 
     AuthenticationService* authentication_service =
         AuthenticationServiceFactory::GetForProfile(profile_);
 
-    browser_ = std::make_unique<TestBrowser>(profile_);
+    SceneState* mock_scene_state = OCMClassMock([SceneState class]);
+    UIWindow* window =
+        [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, 320, 520)];
+    OCMStub([mock_scene_state window]).andReturn(window);
+    browser_ = std::make_unique<TestBrowser>(profile_, mock_scene_state);
     dispatcher_ = [[CommandDispatcher alloc] init];
 
     GetApplicationContext()->GetLocalState()->SetInteger(
@@ -85,6 +93,8 @@ class LensOverlayCoordinatorTest : public PlatformTest {
 
     base_view_controller_ = [[UIViewController alloc] init];
 
+    OmniboxPositionBrowserAgent::CreateForBrowser(browser_.get());
+
     // LensOverlayCoordinator
     coordinator_ = [[LensOverlayCoordinator alloc]
         initWithBaseViewController:base_view_controller_
@@ -92,6 +102,16 @@ class LensOverlayCoordinatorTest : public PlatformTest {
 
     [dispatcher_ startDispatchingToTarget:coordinator_
                               forProtocol:@protocol(LensOverlayCommands)];
+
+    application_handler_ = OCMProtocolMock(@protocol(ApplicationCommands));
+    [browser_->GetCommandDispatcher()
+        startDispatchingToTarget:application_handler_
+                     forProtocol:@protocol(ApplicationCommands)];
+
+    load_query_handler_ = OCMProtocolMock(@protocol(LoadQueryCommands));
+    [browser_->GetCommandDispatcher()
+        startDispatchingToTarget:load_query_handler_
+                     forProtocol:@protocol(LoadQueryCommands)];
 
     // Tab helper
     web_state_ = std::make_unique<web::FakeWebState>();
@@ -158,7 +178,8 @@ class LensOverlayCoordinatorTest : public PlatformTest {
   }
 
  protected:
-  web::WebTaskEnvironment task_environment_;
+  web::WebTaskEnvironment task_environment_{
+      web::WebTaskEnvironment::IOThreadType::REAL_THREAD};
   base::RunLoop run_loop_;
   FakeSnapshotGeneratorDelegate* delegate_;
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
@@ -173,6 +194,10 @@ class LensOverlayCoordinatorTest : public PlatformTest {
   UIViewController* root_view_controller_ = nil;
   id dispatcher_;
   raw_ptr<LensOverlayTabHelper> tab_helper_;
+  id<ApplicationCommands> application_handler_;
+  id<LoadQueryCommands> load_query_handler_;
+  variations::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
+      variations::VariationsIdsProvider::Mode::kUseSignedInState};
 
   void DeliverMemoryWarningNotification() {
     [[NSNotificationCenter defaultCenter]
@@ -187,7 +212,7 @@ TEST_F(LensOverlayCoordinatorTest, ShouldMarkOverlayShownWhenUICreated) {
   [coordinator_ start];
 
   // Then the UI should not be shown to the user.
-  EXPECT_FALSE(tab_helper_->IsLensOverlayShown());
+  EXPECT_FALSE(tab_helper_->IsLensOverlayUIAttachedAndAlive());
 
   // When the coordinator is asked to create and show the UI.
   [HandlerForProtocol(dispatcher_, LensOverlayCommands)
@@ -196,7 +221,7 @@ TEST_F(LensOverlayCoordinatorTest, ShouldMarkOverlayShownWhenUICreated) {
                completion:nil];
 
   // Then the UI should appear created and shown to the user.
-  EXPECT_TRUE(tab_helper_->IsLensOverlayShown());
+  EXPECT_TRUE(tab_helper_->IsLensOverlayUIAttachedAndAlive());
 }
 
 // When the UI is destroyed the overlay should not appear shown.
@@ -211,7 +236,7 @@ TEST_F(LensOverlayCoordinatorTest, ShouldDestroyTheUIUponRequest) {
                completion:nil];
 
   // Then the UI should appear created and shown to the user.
-  EXPECT_TRUE(tab_helper_->IsLensOverlayShown());
+  EXPECT_TRUE(tab_helper_->IsLensOverlayUIAttachedAndAlive());
 
   // When the destroy command is dispatched.
   [HandlerForProtocol(dispatcher_, LensOverlayCommands)
@@ -219,7 +244,7 @@ TEST_F(LensOverlayCoordinatorTest, ShouldDestroyTheUIUponRequest) {
              reason:lens::LensOverlayDismissalSource::kOverlayCloseButton];
 
   // Then the UI should not appear shown anymore.
-  EXPECT_FALSE(tab_helper_->IsLensOverlayShown());
+  EXPECT_FALSE(tab_helper_->IsLensOverlayUIAttachedAndAlive());
 }
 
 // When the UI is not created the `show` command should do nothing.
@@ -296,9 +321,10 @@ TEST_F(LensOverlayCoordinatorTest,
                }];
   run_loop_.Run();
 
-  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForUIElementTimeout, ^bool {
-    return base_view_controller_.presentedViewController != nil;
-  }));
+  EXPECT_TRUE(
+      WaitUntilConditionOrTimeout(kWaitForUIElementTimeout, true, ^bool {
+        return base_view_controller_.presentedViewController != nil;
+      }));
 
   // Then the UI should appear created.
   EXPECT_TRUE([coordinator_ isUICreated]);
@@ -332,13 +358,13 @@ TEST_F(LensOverlayCoordinatorTest,
                }];
 
   run_loop_.Run();
-
-  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForUIElementTimeout, ^bool {
-    return base_view_controller_.presentedViewController != nil;
-  }));
+  EXPECT_TRUE(
+      WaitUntilConditionOrTimeout(kWaitForUIElementTimeout, true, ^bool {
+        return base_view_controller_.presentedViewController != nil;
+      }));
 
   // Then the UI should appear created and shown to the user.
-  EXPECT_TRUE(tab_helper_->IsLensOverlayShown());
+  EXPECT_TRUE(tab_helper_->IsLensOverlayUIAttachedAndAlive());
   EXPECT_TRUE([coordinator_ isUICreated]);
 
   // When UIKit delivers a low-memory warning notification.
@@ -367,15 +393,19 @@ TEST_F(LensOverlayCoordinatorTest, ShouldPresentConsentDialog) {
 
   run_loop_.Run();
 
-  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForUIElementTimeout, ^bool {
-    return coordinator_.viewController.presentedViewController != nil;
-  }));
-
-  UIViewController* presentedVC =
-      [coordinator_.viewController presentedViewController];
-
   EXPECT_TRUE(
-      [presentedVC isKindOfClass:[LensOverlayConsentViewController class]]);
+      WaitUntilConditionOrTimeout(kWaitForUIElementTimeout, true, ^bool {
+        return base_view_controller_.presentedViewController != nil;
+      }));
+
+  // After the overlay is displayed, wait once more for the constent dialog to
+  // be presented.
+  UIViewController* containerVC = base_view_controller_.presentedViewController;
+  EXPECT_TRUE(
+      WaitUntilConditionOrTimeout(kWaitForUIElementTimeout, true, ^bool {
+        return [containerVC.presentedViewController
+            isKindOfClass:[LensOverlayConsentViewController class]];
+      }));
 }
 
 // When the user consent accepted TOS, lens coordinator shouldn't present the
@@ -395,6 +425,11 @@ TEST_F(LensOverlayCoordinatorTest, DoesntPromptForConsentWhenAlreadyReceived) {
                }];
 
   run_loop_.Run();
+
+  EXPECT_TRUE(
+      WaitUntilConditionOrTimeout(kWaitForUIElementTimeout, true, ^bool {
+        return base_view_controller_.presentedViewController != nil;
+      }));
 
   EXPECT_TRUE([coordinator_ isUICreated]);
   UIViewController* presentedVC =

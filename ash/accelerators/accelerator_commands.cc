@@ -29,13 +29,13 @@
 #include "ash/ime/ime_controller_impl.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/media/media_controller_impl.h"
-#include "ash/picker/picker_controller.h"
 #include "ash/public/cpp/accelerator_actions.h"
 #include "ash/public/cpp/annotator/annotator_controller_base.h"
 #include "ash/public/cpp/app_types_util.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/system/toast_data.h"
+#include "ash/quick_insert/quick_insert_controller.h"
 #include "ash/root_window_controller.h"
 #include "ash/rotator/window_rotation.h"
 #include "ash/session/session_controller_impl.h"
@@ -68,6 +68,7 @@
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_session.h"
 #include "ash/wm/overview/overview_utils.h"
+#include "ash/wm/pip/pip_controller.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/snap_group/snap_group.h"
 #include "ash/wm/snap_group/snap_group_controller.h"
@@ -652,6 +653,10 @@ bool CanPerformMagnifierZoom() {
          Shell::Get()->docked_magnifier_controller()->GetEnabled();
 }
 
+bool CanResizePipWindow() {
+  return Shell::Get()->pip_controller()->CanResizePip();
+}
+
 bool CanScreenshot(bool take_screenshot) {
   // |AcceleratorAction::kTakeScreenshot| is allowed when user session is
   // blocked.
@@ -725,12 +730,6 @@ bool CanToggleOverview() {
       return false;
   }
   return true;
-}
-
-bool CanTogglePicker() {
-  CHECK(Shell::HasInstance());
-  return features::IsPickerUpdateEnabled() &&
-         Shell::Get()->picker_controller()->IsFeatureEnabled();
 }
 
 bool CanTogglePrivacyScreen() {
@@ -1155,6 +1154,10 @@ void ResetDisplayZoom() {
   display_manager->ResetDisplayZoom(display.id());
 }
 
+void ResizePipWindow() {
+  Shell::Get()->pip_controller()->HandleKeyboardShortcut();
+}
+
 void RestoreTab() {
   NewWindowDelegate::GetPrimary()->RestoreTab();
 }
@@ -1445,10 +1448,8 @@ void TogglePicker(base::TimeTicks accelerator_timestamp) {
   }
 
   CHECK(Shell::Get()->picker_controller());
-  if (auto* picker_controller = Shell::Get()->picker_controller()) {
-    picker_controller->ToggleWidget(accelerator_timestamp);
-    RecordTogglePickerAcceleratorAction(TogglePickerAction::kTogglePicker);
-  }
+  Shell::Get()->picker_controller()->ToggleWidget(accelerator_timestamp);
+  RecordTogglePickerAcceleratorAction(TogglePickerAction::kTogglePicker);
 }
 
 void EnableSelectToSpeak() {

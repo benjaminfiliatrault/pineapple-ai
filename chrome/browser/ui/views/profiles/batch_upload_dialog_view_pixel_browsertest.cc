@@ -16,6 +16,7 @@
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
+#include "components/sync/base/data_type.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "ui/base/ui_base_switches.h"
@@ -32,36 +33,39 @@ const char kSignedInImageUrl[] = "SIGNED_IN_IMAGE_URL";
 // other tests with more useful functions for testing.
 class BatchUploadDataProviderFake : public BatchUploadDataProvider {
  public:
-  explicit BatchUploadDataProviderFake(BatchUploadDataType type, int item_count)
+  explicit BatchUploadDataProviderFake(syncer::DataType type, int item_count)
       : BatchUploadDataProvider(type),
         item_count_(item_count),
-        section_name_id_(type == BatchUploadDataType::kPasswords
+        section_name_id_(type == syncer::DataType::PASSWORDS
                              ? IDS_BATCH_UPLOAD_SECTION_TITLE_PASSWORDS
                              : IDS_BATCH_UPLOAD_SECTION_TITLE_ADDRESSES),
-        data_name(type == BatchUploadDataType::kPasswords ? "password"
-                                                          : "address") {}
+        data_name(type == syncer::DataType::PASSWORDS ? "password"
+                                                      : "address") {}
 
   bool HasLocalData() const override { return item_count_ > 0; }
 
-  BatchUploadDataContainer GetLocalData() const override {
-    BatchUploadDataContainer container(
-        section_name_id_,
-        /*dialog_subtitle_id=*/IDS_BATCH_UPLOAD_SUBTITLE);
-
+  syncer::LocalDataDescription GetLocalData() const override {
+    syncer::LocalDataDescription data_descriptions;
+    data_descriptions.type = GetDataType();
     // Add arbitrary items.
     for (int i = 0; i < item_count_; ++i) {
-      container.items.push_back(
-          {.id = BatchUploadDataItemModel::Id(i),
-           .title =
-               data_name + "_title_" + base::UTF16ToUTF8(base::FormatNumber(i)),
-           .subtitle = data_name + "_subtitle_" +
-                       base::UTF16ToUTF8(base::FormatNumber(i))});
+      syncer::LocalDataItemModel item;
+      item.id = syncer::LocalDataItemModel::DataId(base::ToString(i));
+      item.icon_url = GetDataType() == syncer::DataType::PASSWORDS
+                          ? GURL("chrome://theme/IDR_PASSWORD_MANAGER_FAVICON")
+                          : GURL();
+      item.title =
+          data_name + "_title_" + base::UTF16ToUTF8(base::FormatNumber(i));
+      item.subtitle =
+          data_name + "_subtitle_" + base::UTF16ToUTF8(base::FormatNumber(i));
+      data_descriptions.local_data_models.push_back(std::move(item));
     }
-    return container;
+    return data_descriptions;
   }
 
-  bool MoveToAccountStorage(const std::vector<BatchUploadDataItemModel::Id>&
-                                item_ids_to_move) override {
+  bool MoveToAccountStorage(
+      const std::vector<syncer::LocalDataItemModel::DataId>& item_ids_to_move)
+      override {
     return true;
   }
 
@@ -74,9 +78,9 @@ class BatchUploadDataProviderFake : public BatchUploadDataProvider {
 struct TestParam {
   std::string test_suffix = "";
   bool use_dark_theme = false;
-  std::vector<std::pair<int, BatchUploadDataType>> section_item_count_name = {
-      {2, BatchUploadDataType::kPasswords},
-      {1, BatchUploadDataType::kAddresses},
+  std::vector<std::pair<int, syncer::DataType>> section_item_count_type = {
+      {2, syncer::DataType::PASSWORDS},
+      {1, syncer::DataType::CONTACT_INFO},
   };
 };
 
@@ -94,13 +98,41 @@ const TestParam kTestParams[] = {
 
     {.test_suffix = "MultipleSectionsScrollbar",
      // Multiple sections with the same type just for testing purposes.
-     .section_item_count_name = {{2, BatchUploadDataType::kPasswords},
-                                 {1, BatchUploadDataType::kPasswords},
-                                 {10, BatchUploadDataType::kAddresses},
-                                 {15, BatchUploadDataType::kAddresses},
-                                 {16, BatchUploadDataType::kAddresses},
-                                 {10, BatchUploadDataType::kPasswords},
-                                 {5, BatchUploadDataType::kPasswords}}},
+     .section_item_count_type = {{2, syncer::DataType::PASSWORDS},
+                                 {1, syncer::DataType::PASSWORDS},
+                                 {10, syncer::DataType::CONTACT_INFO},
+                                 {15, syncer::DataType::CONTACT_INFO},
+                                 {16, syncer::DataType::CONTACT_INFO},
+                                 {10, syncer::DataType::PASSWORDS},
+                                 {5, syncer::DataType::PASSWORDS}}},
+
+    // Hero type means the type will be shown in the subtitle of the dialog.
+    // Password is a hero type.
+    {.test_suffix = "SingleSectionHeroTypeWithOneItem",
+     .section_item_count_type = {{1, syncer::DataType::PASSWORDS}}},
+    {.test_suffix = "SingleSectionHeroTypeWithMultipleItems",
+     .section_item_count_type = {{5, syncer::DataType::PASSWORDS}}},
+
+    // Hero type with multiple sections. Should show "and other items" in the
+    // subtitle of the dialog.
+    {.test_suffix = "MultipleSectionsHeroTypeWithOneItem",
+     .section_item_count_type = {{1, syncer::DataType::PASSWORDS},
+                                 {3, syncer::DataType::CONTACT_INFO}}},
+    {.test_suffix = "MultipleSectionsHeroTypeWithMultipleItems",
+     .section_item_count_type = {{5, syncer::DataType::PASSWORDS},
+                                 {3, syncer::DataType::CONTACT_INFO}}},
+
+    // Addresses is not a hero type. It should not show in the subtitle.
+    {.test_suffix = "SingleSectionNonHeroTypeWithOneItem",
+     .section_item_count_type = {{1, syncer::DataType::CONTACT_INFO}}},
+    {.test_suffix = "SingleSectionNonHeroTypeWithMultipleItems",
+     .section_item_count_type = {{5, syncer::DataType::CONTACT_INFO}}},
+
+    // Addresses is not a hero type. It should not show in the subtitle even if
+    // other hero types exists.
+    {.test_suffix = "MultipleSectionsWithNonHeroTypeAsPrimarySection",
+     .section_item_count_type = {{5, syncer::DataType::CONTACT_INFO},
+                                 {5, syncer::DataType::PASSWORDS}}},
 };
 
 }  // namespace
@@ -110,7 +142,7 @@ class BatchUploadDialogViewPixelTest
       public testing::WithParamInterface<TestParam> {
  public:
   BatchUploadDialogViewPixelTest() {
-    for (const auto& input_section : GetParam().section_item_count_name) {
+    for (const auto& input_section : GetParam().section_item_count_type) {
       fake_providers_.emplace_back(input_section.second, input_section.first);
     }
 
@@ -125,13 +157,13 @@ class BatchUploadDialogViewPixelTest
     set_should_verify_dialog_bounds(false);
   }
 
-  // Gets the list of providers as a list of pointers that
-  // `CreateBatchUploadDialogView` expects.
-  std::vector<raw_ptr<const BatchUploadDataProvider>> GetProvidersPtrVector() {
-    std::vector<raw_ptr<const BatchUploadDataProvider>> ret;
-    std::ranges::transform(
-        fake_providers_, std::back_inserter(ret),
-        [](const BatchUploadDataProviderFake& provider) { return &provider; });
+  // Gets the list of data descriptions from the providers.
+  std::vector<syncer::LocalDataDescription> GetDataDescriptions() {
+    std::vector<syncer::LocalDataDescription> ret;
+    std::ranges::transform(fake_providers_, std::back_inserter(ret),
+                           [](const BatchUploadDataProviderFake& provider) {
+                             return provider.GetLocalData();
+                           });
     return ret;
   }
 
@@ -171,7 +203,7 @@ class BatchUploadDialogViewPixelTest
         views::test::AnyWidgetTestPasskey{}, "BatchUploadDialogView");
 
     BatchUploadDialogView::CreateBatchUploadDialogView(
-        *browser(), /*data_providers_list=*/GetProvidersPtrVector(),
+        *browser(), GetDataDescriptions(),
         /*complete_callback*/ base::DoNothing());
 
     widget_waiter.WaitIfNeededAndGet();

@@ -8,7 +8,6 @@
 #include <optional>
 #include <vector>
 
-#include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
@@ -34,7 +33,10 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
                         public content::WebContentsObserver,
                         public WebAppInstallManagerObserver {
  public:
-  using content::WebContentsUserData<WebAppTabHelper>::CreateForWebContents;
+  // `contents` can be different from `tab->GetContents()` during tab discard.
+  // TODO(https://crbug.com/347770670): This method can be simplified to not
+  // take `contents`.
+  static void Create(tabs::TabInterface* tab, content::WebContents* contents);
 
   // Retrieves the WebAppTabHelper's app ID off |web_contents|, returns
   // nullptr if there is no tab helper or app ID.
@@ -49,6 +51,7 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
       content::WebContents* web_contents);
 #endif
 
+  WebAppTabHelper(tabs::TabInterface* tab, content::WebContents* contents);
   WebAppTabHelper(const WebAppTabHelper&) = delete;
   WebAppTabHelper& operator=(const WebAppTabHelper&) = delete;
   ~WebAppTabHelper() override;
@@ -71,13 +74,17 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
 
   const base::UnguessableToken& GetAudioFocusGroupIdForTesting() const;
 
+  // Returns the installed web app that 'controls' the last committed url of
+  // this tab.
+  // - 'controls' means it's the web app who's scope contains the last committed
+  //    url. If there are multiple web apps that satisfy this constraint, then
+  //    it chooses the one with the longest (aka most specific) scope prefix.
+  // - 'installed' means the web app is
+  //   InstallState::INSTALLED_WITH_OS_INTEGRATION or
+  //   InstallState::INSTALLED_WITHOUT_OS_INTEGRATION (which is usually only
+  //   preinstalled apps). And thus this excludes the
+  //   InstallState::SUGGESTED_FROM_ANOTHER_DEVICE state.
   const std::optional<webapps::AppId> app_id() const { return app_id_; }
-
-  // Returns if this web contents was from an app-like launch from the OS, or if
-  // it was ever in an app window. This is used to determine if app settings
-  // should be shown in the page controls panel.
-  bool acting_as_app() const { return acting_as_app_; }
-  void set_acting_as_app(bool acting_as_app) { acting_as_app_ = acting_as_app; }
 
   bool is_pinned_home_tab() const { return is_pinned_home_tab_; }
   void set_is_pinned_home_tab(bool is_pinned_home_tab) {
@@ -90,21 +97,10 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
   void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) override;
   void PrimaryPageChanged(content::Page& page) override;
-  void DidCloneToNewWebContents(
-      content::WebContents* old_web_contents,
-      content::WebContents* new_web_contents) override;
-
-  // This is done separately from the ctor since WebAppTabHelper is created
-  // before the TabFeatures infrastructure.
-  // TODO(crbug.com/367362321): Migrate WebAppTabHelper to TabFeatures
-  // infrastructure.
-  void InitForTabFeatures(tabs::TabInterface* tab);
 
  private:
   friend class WebAppAudioFocusBrowserTest;
   friend class content::WebContentsUserData<WebAppTabHelper>;
-
-  explicit WebAppTabHelper(content::WebContents* web_contents);
 
   // WebAppInstallManagerObserver:
   void OnWebAppInstalled(const webapps::AppId& installed_app_id) override;
@@ -112,13 +108,7 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
       const webapps::AppId& uninstalled_app_id) override;
   void OnWebAppInstallManagerDestroyed() override;
 
-  // Bounded callbacks from TabInterface
-  void TabDidEnterForeground(tabs::TabInterface* tab);
-  void TabWillEnterBackground(tabs::TabInterface* tab);
-  void WillDetach(tabs::TabInterface* tab,
-                  tabs::TabInterface::DetachReason reason);
-
-  void ResetAppId();
+  void ResetTabSubscriptions(tabs::TabInterface* tab);
 
   // Sets the state of this tab helper. This will call
   // `WebAppUiManager::OnAssociatedAppChanged` if the id has changed, and
@@ -141,13 +131,6 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
   // WebApp associated with this tab.
   std::optional<webapps::AppId> app_id_;
 
-  // True when the associated `WebContents` is acting as an app. Specifically,
-  // this should only be true if `app_id_` is non empty, and the WebContents was
-  // created in response to an app launch, or in some other corner cases such as
-  // when an app is first installed and reparented from tab to window. It should
-  // be false if a user types the app's URL into a normal browser window.
-  bool acting_as_app_ = false;
-
   bool is_in_app_window_ = false;
 
   // True when this tab is the pinned home tab of a tabbed web app.
@@ -164,9 +147,6 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
   base::ScopedObservation<WebAppInstallManager, WebAppInstallManagerObserver>
       observation_{this};
   raw_ptr<WebAppProvider> provider_ = nullptr;
-
-  // Holds subscriptions for TabInterface callbacks.
-  std::vector<base::CallbackListSubscription> tab_subscriptions_;
 
   base::WeakPtrFactory<WebAppTabHelper> weak_factory_{this};
 
